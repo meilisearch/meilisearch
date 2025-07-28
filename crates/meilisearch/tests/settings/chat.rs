@@ -7,9 +7,11 @@ async fn set_reset_chat_issue_5772() {
     let server = Server::new().await;
     let index = server.unique_index();
 
-    let (_, code) = server.set_features(json!({
-        "chatCompletions": true,
-    })).await;
+    let (_, code) = server
+        .set_features(json!({
+            "chatCompletions": true,
+        }))
+        .await;
     snapshot!(code, @r#"200 OK"#);
 
     let (task1, _code) = index.update_settings_chat(json!({

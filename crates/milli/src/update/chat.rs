@@ -57,13 +57,13 @@ impl From<ChatConfig> for ChatSettings {
                     ranking_score_threshold,
                 } = search_parameters;
 
-                if hybrid.is_none() && 
-                   limit.is_none() &&
-                   sort.is_none() &&
-                   distinct.is_none() &&
-                   matching_strategy.is_none() &&
-                   attributes_to_search_on.is_none() &&
-                   ranking_score_threshold.is_none()
+                if hybrid.is_none()
+                    && limit.is_none()
+                    && sort.is_none()
+                    && distinct.is_none()
+                    && matching_strategy.is_none()
+                    && attributes_to_search_on.is_none()
+                    && ranking_score_threshold.is_none()
                 {
                     None
                 } else {
@@ -94,10 +94,8 @@ impl From<ChatSettings> for ChatConfig {
             search_parameters,
         } = settings;
 
-        let prompt = PromptData {
-            template: document_template,
-            max_bytes: document_template_max_bytes,
-        };
+        let prompt =
+            PromptData { template: document_template, max_bytes: document_template_max_bytes };
 
         let search_parameters = match search_parameters {
             Some(params) => SearchParameters {
@@ -115,11 +113,7 @@ impl From<ChatSettings> for ChatConfig {
             None => SearchParameters::default(),
         };
 
-        ChatConfig {
-            description,
-            prompt,
-            search_parameters,
-        }
+        ChatConfig { description, prompt, search_parameters }
     }
 }
 

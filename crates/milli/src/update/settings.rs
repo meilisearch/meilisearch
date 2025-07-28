@@ -1305,10 +1305,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     fn update_chat_config(&mut self) -> Result<bool> {
         match &mut self.chat {
             Setting::Set(settings) => {
-                self.index.put_chat_config(
-                    self.wtxn,
-                    &settings.clone().into(),
-                )?;
+                self.index.put_chat_config(self.wtxn, &settings.clone().into())?;
 
                 Ok(true)
             }
