@@ -419,11 +419,12 @@ impl<'a> Filter<'a> {
             Condition::StartsWith { keyword: _, word } => {
                 // There are two algorithms:
                 //
-                // - The first one looks directly at level 0 of the facet group database.
-                //   This pessimistic approach is more efficient when the value is unique.
-                //
-                // - The second one is recursive over levels.
+                // - The first one is recursive over levels.
                 //   This is more efficient when the prefix is common among many values.
+                //
+                // - The second one looks directly at level 0 of the facet group database.
+                //   This pessimistic approach is more efficient when the value is unique.
+                //   It's used as a fallback.
 
                 let value = crate::normalize_facet(word.value());
 
