@@ -1304,101 +1304,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     fn update_chat_config(&mut self) -> Result<bool> {
         match &mut self.chat {
-            Setting::Set(ChatSettings {
-                description: new_description,
-                document_template: new_document_template,
-                document_template_max_bytes: new_document_template_max_bytes,
-                search_parameters: new_search_parameters,
-            }) => {
-                let ChatConfig { description, prompt, search_parameters } =
-                    self.index.chat_config(self.wtxn)?;
-
-                let description = match new_description {
-                    Setting::Set(new) => new.clone(),
-                    Setting::Reset => Default::default(),
-                    Setting::NotSet => description,
-                };
-
-                let prompt = PromptData {
-                    template: match new_document_template {
-                        Setting::Set(new) => new.clone(),
-                        Setting::Reset => default_template_text().to_string(),
-                        Setting::NotSet => prompt.template.clone(),
-                    },
-                    max_bytes: match new_document_template_max_bytes {
-                        Setting::Set(m) => Some(
-                            NonZeroUsize::new(*m)
-                                .ok_or(InvalidChatSettingsDocumentTemplateMaxBytes)?,
-                        ),
-                        Setting::Reset => Some(default_max_bytes()),
-                        Setting::NotSet => prompt.max_bytes,
-                    },
-                };
-
-                let search_parameters = match new_search_parameters {
-                    Setting::Set(sp) => {
-                        let ChatSearchParams {
-                            hybrid,
-                            limit,
-                            sort,
-                            distinct,
-                            matching_strategy,
-                            attributes_to_search_on,
-                            ranking_score_threshold,
-                        } = sp;
-
-                        SearchParameters {
-                            hybrid: match hybrid {
-                                Setting::Set(hybrid) => Some(crate::index::HybridQuery {
-                                    semantic_ratio: *hybrid.semantic_ratio,
-                                    embedder: hybrid.embedder.clone(),
-                                }),
-                                Setting::Reset => None,
-                                Setting::NotSet => search_parameters.hybrid.clone(),
-                            },
-                            limit: match limit {
-                                Setting::Set(limit) => Some(*limit),
-                                Setting::Reset => None,
-                                Setting::NotSet => search_parameters.limit,
-                            },
-                            sort: match sort {
-                                Setting::Set(sort) => Some(sort.clone()),
-                                Setting::Reset => None,
-                                Setting::NotSet => search_parameters.sort.clone(),
-                            },
-                            distinct: match distinct {
-                                Setting::Set(distinct) => Some(distinct.clone()),
-                                Setting::Reset => None,
-                                Setting::NotSet => search_parameters.distinct.clone(),
-                            },
-                            matching_strategy: match matching_strategy {
-                                Setting::Set(matching_strategy) => Some(*matching_strategy),
-                                Setting::Reset => None,
-                                Setting::NotSet => search_parameters.matching_strategy,
-                            },
-                            attributes_to_search_on: match attributes_to_search_on {
-                                Setting::Set(attributes_to_search_on) => {
-                                    Some(attributes_to_search_on.clone())
-                                }
-                                Setting::Reset => None,
-                                Setting::NotSet => {
-                                    search_parameters.attributes_to_search_on.clone()
-                                }
-                            },
-                            ranking_score_threshold: match ranking_score_threshold {
-                                Setting::Set(rst) => Some(*rst),
-                                Setting::Reset => None,
-                                Setting::NotSet => search_parameters.ranking_score_threshold,
-                            },
-                        }
-                    }
-                    Setting::Reset => Default::default(),
-                    Setting::NotSet => search_parameters,
-                };
-
+            Setting::Set(settings) => {
                 self.index.put_chat_config(
                     self.wtxn,
-                    &ChatConfig { description, prompt, search_parameters },
+                    &settings.clone().into(),
                 )?;
 
                 Ok(true)

@@ -55,9 +55,7 @@ async fn set_reset_chat_issue_5772() {
       "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
       "documentTemplateMaxBytes": 400,
       "searchParameters": {
-        "limit": 16,
-        "sort": [],
-        "attributesToSearchOn": []
+        "limit": 16
       }
     }
     "#);
