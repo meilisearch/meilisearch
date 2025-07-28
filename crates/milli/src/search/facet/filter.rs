@@ -18,6 +18,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
 };
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
+use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
 use crate::{
     distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
     FilterableAttributesFeatures, FilterableAttributesRule, Index, InternalError, Result,
@@ -416,7 +417,43 @@ impl<'a> Filter<'a> {
                 return Ok(docids);
             }
             Condition::StartsWith { keyword: _, word } => {
+                // There are two algorithms:
+                //
+                // - The first one looks directly at level 0 of the facet group database.
+                //   This pessimistic approach is more efficient when the value is unique.
+                //
+                // - The second one is recursive over levels.
+                //   This is more efficient when the prefix is common among many values.
+
                 let value = crate::normalize_facet(word.value());
+
+                if value.len() <= 6 {
+                    // 6 is abitrary, but it works well in practice
+                    let mut value2 = value.as_bytes().to_owned();
+                    if let Some(last) = value2.last_mut() {
+                        if *last != 255 {
+                            *last += 1;
+                            if let Ok(value2) = String::from_utf8(value2) {
+                                // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
+                                // We just increase the last letter to find the upper bound.
+                                // The result could be invalid utf8, so it can fallback.
+                                let mut docids = RoaringBitmap::new();
+                                find_docids_of_facet_within_bounds(
+                                    rtxn,
+                                    strings_db,
+                                    field_id,
+                                    &Included(&value),
+                                    &Excluded(&value2),
+                                    universe,
+                                    &mut docids,
+                                )?;
+
+                                return Ok(docids);
+                            }
+                        }
+                    }
+                }
+
                 let base = FacetGroupKey { field_id, level: 0, left_bound: value.as_str() };
                 let docids = strings_db
                     .prefix_iter(rtxn, &base)?
