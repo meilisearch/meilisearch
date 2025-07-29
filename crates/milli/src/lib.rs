@@ -53,7 +53,7 @@ pub use search::new::{
 };
 use serde_json::Value;
 pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
-pub use {charabia as tokenizer, hannoy, heed, rhai};
+pub use {arroy, charabia as tokenizer, hannoy, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::attribute_patterns::{AttributePatterns, PatternMatch};

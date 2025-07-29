@@ -2,7 +2,8 @@ use heed::RwTxn;
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
-use crate::{database_stats::DatabaseStats, FieldDistribution, Index, Result};
+use crate::database_stats::DatabaseStats;
+use crate::{FieldDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'i> {
     wtxn: &'t mut RwTxn<'i>,
@@ -45,7 +46,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_hannoy,
+            vector_store,
             embedder_category_id: _,
             documents,
         } = self.index;
@@ -88,7 +89,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         field_id_docid_facet_f64s.clear(self.wtxn)?;
         field_id_docid_facet_strings.clear(self.wtxn)?;
         // vector
-        vector_hannoy.clear(self.wtxn)?;
+        vector_store.clear(self.wtxn)?;
 
         documents.clear(self.wtxn)?;
 

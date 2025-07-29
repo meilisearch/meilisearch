@@ -76,6 +76,8 @@ pub enum InternalError {
     #[error("Cannot upgrade to the following version: v{0}.{1}.{2}.")]
     CannotUpgradeToVersion(u32, u32, u32),
     #[error(transparent)]
+    ArroyError(#[from] arroy::Error),
+    #[error(transparent)]
     HannoyError(#[from] hannoy::Error),
     #[error(transparent)]
     VectorEmbeddingError(#[from] crate::vector::Error),
@@ -415,6 +417,28 @@ impl From<crate::vector::Error> for Error {
             FaultSource::Runtime => Error::UserError(value.into()),
             FaultSource::Bug => Error::InternalError(value.into()),
             FaultSource::Undecided => Error::UserError(value.into()),
+        }
+    }
+}
+
+impl From<arroy::Error> for Error {
+    fn from(value: arroy::Error) -> Self {
+        match value {
+            arroy::Error::Heed(heed) => heed.into(),
+            arroy::Error::Io(io) => io.into(),
+            arroy::Error::InvalidVecDimension { expected, received } => {
+                Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
+            }
+            arroy::Error::BuildCancelled => Error::InternalError(InternalError::AbortedIndexation),
+            arroy::Error::DatabaseFull
+            | arroy::Error::InvalidItemAppend
+            | arroy::Error::UnmatchingDistance { .. }
+            | arroy::Error::NeedBuild(_)
+            | arroy::Error::MissingKey { .. }
+            | arroy::Error::MissingMetadata(_)
+            | arroy::Error::CannotDecodeKeyMode { .. } => {
+                Error::InternalError(InternalError::ArroyError(value))
+            }
         }
     }
 }

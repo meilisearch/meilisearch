@@ -677,7 +677,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 .get(&embedder_name)
                 .is_some_and(|conf| conf.is_quantized);
             // FIXME: allow customizing distance
-            let writer = VectorStore::new(index.vector_hannoy, infos.embedder_id, binary_quantized);
+            let writer = VectorStore::new(index.vector_store, infos.embedder_id, binary_quantized);
 
             // remove vectors for docids we want them removed
             let merger = remove_vectors_builder.build();
