@@ -15,7 +15,7 @@ use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
-use crate::vector::{Embedder, Embeddings, HannoyWrapper, RuntimeEmbedders};
+use crate::vector::{Embedder, Embeddings, RuntimeEmbedders, VectorStore};
 use crate::{Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
@@ -23,7 +23,7 @@ pub fn write_to_db(
     finished_extraction: &AtomicBool,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    hannoy_writers: &HashMap<u8, (&str, &Embedder, HannoyWrapper, usize)>,
+    hannoy_writers: &HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
 ) -> Result<ChannelCongestion> {
     // Used by by the HannoySetVector to copy the embedding into an
     // aligned memory area, required by arroy to accept a new vector.
@@ -116,7 +116,7 @@ pub fn build_vectors<MSP>(
     progress: &Progress,
     index_embeddings: Vec<IndexEmbeddingConfig>,
     hannoy_memory: Option<usize>,
-    hannoy_writers: &mut HashMap<u8, (&str, &Embedder, HannoyWrapper, usize)>,
+    hannoy_writers: &mut HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
     embeder_actions: Option<&BTreeMap<String, EmbedderAction>>,
     must_stop_processing: &MSP,
 ) -> Result<()>
@@ -181,7 +181,7 @@ pub fn write_from_bbqueue(
     writer_receiver: &mut WriterBbqueueReceiver<'_>,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    hannoy_writers: &HashMap<u8, (&str, &crate::vector::Embedder, HannoyWrapper, usize)>,
+    hannoy_writers: &HashMap<u8, (&str, &crate::vector::Embedder, VectorStore, usize)>,
     aligned_embedding: &mut Vec<f32>,
 ) -> crate::Result<()> {
     while let Some(frame_with_header) = writer_receiver.recv_frame() {
