@@ -21,14 +21,14 @@ use crate::routes::indexes::proxy::error::{ProxyDocumentChangeError, ReqwestErro
 use crate::routes::SummarizedTaskView;
 
 pub enum Body<T: serde::Serialize> {
-    File(File),
+    NdJsonPayload(File),
     Inline(T),
     None,
 }
 
 impl Body<()> {
     pub fn with_file(file: File) -> Self {
-        Self::File(file)
+        Self::NdJsonPayload(file)
     }
 
     pub fn none() -> Self {
@@ -65,8 +65,15 @@ pub async fn proxy<T: serde::Serialize>(
                 .expect("inconsistent `network.sharding` and `network.self`")
                 .to_owned();
 
+            let content_type = match &body {
+                // for file bodies, force x-ndjson
+                Body::NdJsonPayload(_) => Some(b"application/x-ndjson".as_slice()),
+                // otherwise get content type from request
+                _ => req.headers().get(CONTENT_TYPE).map(|h| h.as_bytes()),
+            };
+
             let body = match body {
-                Body::File(file) => Some(Bytes::from_owner(unsafe {
+                Body::NdJsonPayload(file) => Some(Bytes::from_owner(unsafe {
                     memmap2::Mmap::map(&file).map_err(|err| {
                         MeilisearchHttpError::from_milli(err.into(), Some(index_uid.to_owned()))
                     })?
@@ -110,11 +117,15 @@ pub async fn proxy<T: serde::Serialize>(
                         let deadline =
                             std::time::Instant::now() + std::time::Duration::from_secs(100);
 
+                        let content_type = content_type.map(|b| b.to_owned());
+
                         backoff::future::retry(backoff::ExponentialBackoff::default(), move || {
                             let url = url.clone();
                             let client = client.clone();
                             let url_encoded_this = url_encoded_this.clone();
                             let url_encoded_task_uid = url_encoded_task_uid.clone();
+                            let content_type = content_type.clone();
+
                             let body = body.clone();
                             let api_key = api_key.clone();
                             let method = method.clone();
@@ -123,6 +134,7 @@ pub async fn proxy<T: serde::Serialize>(
                                 try_proxy(
                                     method,
                                     &url,
+                                    content_type.as_deref(),
                                     api_key.as_deref(),
                                     &client,
                                     deadline,
@@ -201,6 +213,7 @@ fn from_old_http_method(method: &actix_http::Method) -> reqwest::Method {
 async fn try_proxy(
     method: reqwest::Method,
     url: &str,
+    content_type: Option<&[u8]>,
     api_key: Option<&str>,
     client: &reqwest::Client,
     deadline: std::time::Instant,
@@ -215,7 +228,11 @@ async fn try_proxy(
     let request = if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
     let request = request.header(PROXY_ORIGIN_TASK_UID_HEADER, url_encoded_task_uid);
     let request = request.header(PROXY_ORIGIN_REMOTE_HEADER, url_encoded_this);
-    let request = request.header(CONTENT_TYPE.as_str(), "application/x-ndjson");
+    let request = if let Some(content_type) = content_type {
+        request.header(CONTENT_TYPE.as_str(), content_type)
+    } else {
+        request
+    };
 
     let response = request.send().await;
     let response = match response {
