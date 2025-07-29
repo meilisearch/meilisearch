@@ -42,6 +42,9 @@ pub struct Task {
 
     pub status: Status,
     pub kind: KindWithContent,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<TaskNetwork>,
 }
 
 impl Task {
@@ -735,6 +738,35 @@ pub enum Details {
         from: (u32, u32, u32),
         to: (u32, u32, u32),
     },
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(untagged, rename_all = "camelCase")]
+pub enum TaskNetwork {
+    Origin { origin: Origin },
+    Remotes { remote_tasks: BTreeMap<String, RemoteTask> },
+}
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+pub struct Origin {
+    pub remote_name: String,
+    pub task_uid: usize,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteTask {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    task_uid: Option<TaskId>,
+    error: Option<ResponseError>,
+}
+
+impl From<Result<TaskId, ResponseError>> for RemoteTask {
+    fn from(res: Result<TaskId, ResponseError>) -> RemoteTask {
+        match res {
+            Ok(task_uid) => RemoteTask { task_uid: Some(task_uid), error: None },
+            Err(err) => RemoteTask { task_uid: None, error: Some(err) },
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
