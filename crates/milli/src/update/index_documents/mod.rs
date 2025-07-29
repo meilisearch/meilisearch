@@ -39,7 +39,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::db::EmbedderInfo;
-use crate::vector::{HannoyWrapper, RuntimeEmbedders};
+use crate::vector::{RuntimeEmbedders, VectorStore};
 use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
@@ -494,7 +494,7 @@ where
                     },
                 )?;
                 let reader =
-                    HannoyWrapper::new(self.index.vector_hannoy, index, action.was_quantized);
+                    VectorStore::new(self.index.vector_hannoy, index, action.was_quantized);
                 let Some(dim) = reader.dimensions(self.wtxn)? else {
                     continue;
                 };
@@ -523,7 +523,7 @@ where
             let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
             pool.install(|| {
-                let mut writer = HannoyWrapper::new(vector_hannoy, embedder_index, was_quantized);
+                let mut writer = VectorStore::new(vector_hannoy, embedder_index, was_quantized);
                 writer.build_and_quantize(
                     wtxn,
                     // In the settings we don't have any progress to share

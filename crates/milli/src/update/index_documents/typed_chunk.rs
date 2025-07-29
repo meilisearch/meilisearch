@@ -27,7 +27,7 @@ use crate::update::index_documents::helpers::{
 };
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::db::{EmbeddingStatusDelta, IndexEmbeddingConfig};
-use crate::vector::HannoyWrapper;
+use crate::vector::VectorStore;
 use crate::{
     lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
     Result, SerializationError, U8StrStrCodec,
@@ -677,8 +677,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 .get(&embedder_name)
                 .is_some_and(|conf| conf.is_quantized);
             // FIXME: allow customizing distance
-            let writer =
-                HannoyWrapper::new(index.vector_hannoy, infos.embedder_id, binary_quantized);
+            let writer = VectorStore::new(index.vector_hannoy, infos.embedder_id, binary_quantized);
 
             // remove vectors for docids we want them removed
             let merger = remove_vectors_builder.build();

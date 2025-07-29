@@ -14,7 +14,7 @@ use crate::constants::RESERVED_VECTORS_FIELD_NAME;
 use crate::documents::FieldIdMapper;
 use crate::vector::db::{EmbeddingStatus, IndexEmbeddingConfig};
 use crate::vector::parsed_vectors::{RawVectors, RawVectorsError, VectorOrArrayOfVectors};
-use crate::vector::{Embedding, HannoyWrapper, RuntimeEmbedders};
+use crate::vector::{Embedding, RuntimeEmbedders, VectorStore};
 use crate::{DocumentId, Index, InternalError, Result, UserError};
 
 #[derive(Serialize)]
@@ -121,7 +121,7 @@ impl<'t> VectorDocumentFromDb<'t> {
         status: &EmbeddingStatus,
     ) -> Result<VectorEntry<'t>> {
         let reader =
-            HannoyWrapper::new(self.index.vector_hannoy, embedder_id, config.config.quantized());
+            VectorStore::new(self.index.vector_hannoy, embedder_id, config.config.quantized());
         let vectors = reader.item_vectors(self.rtxn, self.docid)?;
 
         Ok(VectorEntry {
