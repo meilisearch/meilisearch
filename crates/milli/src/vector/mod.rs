@@ -41,6 +41,10 @@ pub type Embedding = Vec<f32>;
 pub const REQUEST_PARALLELISM: usize = 40;
 pub const MAX_COMPOSITE_DISTANCE: f32 = 0.01;
 
+const HANNOY_EF_CONSTRUCTION: usize = 48;
+const HANNOY_M: usize = 16;
+const HANNOY_M0: usize = 32;
+
 pub struct HannoyWrapper {
     quantized: bool,
     embedder_index: u8,
@@ -147,7 +151,10 @@ impl HannoyWrapper {
             if self.quantized {
                 let writer = hannoy::Writer::new(self.quantized_db(), index, dimension);
                 if writer.need_build(wtxn)? {
-                    writer.builder(rng).ef_construction(48).build::<16, 32>(wtxn)?
+                    writer
+                        .builder(rng)
+                        .ef_construction(HANNOY_EF_CONSTRUCTION)
+                        .build::<HANNOY_M, HANNOY_M0>(wtxn)?
                 } else if writer.is_empty(wtxn)? {
                     continue;
                 }
@@ -173,8 +180,8 @@ impl HannoyWrapper {
                         .available_memory(hannoy_memory.unwrap_or(usize::MAX))
                         // .progress(|step| progress.update_progress_from_hannoy(step))
                         // .cancel(cancel)
-                        .ef_construction(48)
-                        .build::<16, 32>(wtxn)?;
+                        .ef_construction(HANNOY_EF_CONSTRUCTION)
+                        .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
                 } else if writer.is_empty(wtxn)? {
                     continue;
                 }
