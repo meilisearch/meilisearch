@@ -30,6 +30,7 @@ use crate::Opt;
 
 pub mod documents;
 pub mod facet_search;
+mod proxy;
 pub mod search;
 mod search_analytics;
 #[cfg(test)]
@@ -38,6 +39,8 @@ pub mod settings;
 mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
+
+pub use proxy::{PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER};
 
 #[derive(OpenApi)]
 #[openapi(
