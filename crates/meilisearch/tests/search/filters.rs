@@ -788,7 +788,7 @@ async fn vector_filter_missing_fragment() {
 }
 
 #[actix_rt::test]
-async fn vector_filter_non_existant_embedder() {
+async fn vector_filter_nonexistent_embedder() {
     let index = shared_index_for_fragments().await;
 
     let (value, _code) = index
