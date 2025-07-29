@@ -1183,7 +1183,7 @@ pub async fn delete_documents_batch(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, Deserr, ToSchema)]
+#[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct DocumentDeletionByFilter {
@@ -1275,7 +1275,7 @@ pub async fn delete_documents_by_filter(
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[derive(Debug, Deserr, ToSchema)]
+#[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentEditionByFunction {
     /// A string containing a RHAI function.

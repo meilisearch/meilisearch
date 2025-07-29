@@ -180,7 +180,7 @@ pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
         .is_some_and(|s| s.to_lowercase() == "true"))
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
     /// The task unique identifier.
@@ -194,7 +194,10 @@ pub struct SummarizedTaskView {
     #[serde(rename = "type")]
     kind: Kind,
     /// The date on which the task was enqueued.
-    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
+    #[serde(
+        serialize_with = "time::serde::rfc3339::serialize",
+        deserialize_with = "time::serde::rfc3339::deserialize"
+    )]
     enqueued_at: OffsetDateTime,
 }
 
