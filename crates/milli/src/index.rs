@@ -31,7 +31,7 @@ use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
-use crate::vector::{Embedding, HannoyStats, HannoyWrapper};
+use crate::vector::{Embedding, HannoyStats, VectorStore};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -237,7 +237,7 @@ impl Index {
         // vector stuff
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
-        let vector_hannoy = env.create_database(&mut wtxn, Some(VECTOR_HANNOY))?;
+        let vector_hannoy = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
@@ -1772,7 +1772,7 @@ impl Index {
         for config in embedders.embedding_configs(rtxn)? {
             let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
             let has_fragments = config.config.embedder_options.has_fragments();
-            let reader = HannoyWrapper::new(
+            let reader = VectorStore::new(
                 self.vector_hannoy,
                 embedder_info.embedder_id,
                 config.config.quantized(),
@@ -1798,7 +1798,7 @@ impl Index {
         for config in embedding_configs.embedding_configs(rtxn)? {
             let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
             let reader =
-                HannoyWrapper::new(self.vector_hannoy, embedder_id, config.config.quantized());
+                VectorStore::new(self.vector_hannoy, embedder_id, config.config.quantized());
             reader.aggregate_stats(rtxn, &mut stats)?;
         }
         Ok(stats)
