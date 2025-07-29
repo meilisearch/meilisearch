@@ -1,6 +1,5 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
-use crate::milli::progress::EmbedderStats;
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Bound;
 use std::sync::Arc;
@@ -15,6 +14,7 @@ use meilisearch_types::tasks::{
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
+use crate::milli::progress::EmbedderStats;
 use crate::{Error, Result, Task, TaskId, BEI128};
 
 /// This structure contains all the information required to write a batch in the database without reading the tasks.
@@ -377,6 +377,7 @@ impl crate::IndexScheduler {
                 details,
                 status,
                 kind,
+                network: _,
             } = task;
             assert_eq!(uid, task.uid);
             if task.status != Status::Enqueued {

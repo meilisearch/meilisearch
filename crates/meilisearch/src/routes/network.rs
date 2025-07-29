@@ -12,9 +12,9 @@ use meilisearch_types::error::deserr_codes::{
     InvalidNetworkUrl, InvalidNetworkWriteApiKey,
 };
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::features::{Network as DbNetwork, Remote as DbRemote};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::network::{Network as DbNetwork, Remote as DbRemote};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
