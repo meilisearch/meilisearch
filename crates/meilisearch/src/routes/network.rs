@@ -51,7 +51,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     get,
     path = "",
     tag = "Network",
-    security(("Bearer" = ["network.get", "network.*", "*"])),
+    security(("Bearer" = ["network.get", "*"])),
     responses(
         (status = OK, description = "Known nodes are returned", body = Network, content_type = "application/json", example = json!(
             {
