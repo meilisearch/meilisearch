@@ -3745,6 +3745,7 @@ dependencies = [
  "actix-web-lab",
  "anyhow",
  "async-openai",
+ "backoff",
  "brotli",
  "bstr",
  "build-info",
@@ -3988,6 +3989,7 @@ dependencies = [
  "time",
  "tokenizers",
  "tracing",
+ "twox-hash",
  "ureq",
  "url",
  "utoipa",
@@ -6429,6 +6431,12 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "twox-hash"
+version = "2.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b907da542cbced5261bd3256de1b3a1bf340a3d37f93425a07362a1d687de56"
 
 [[package]]
 name = "typeid"
