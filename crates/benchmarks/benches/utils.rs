@@ -123,6 +123,7 @@ pub fn base_setup(conf: &Conf) -> Index {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )
         .unwrap();
 
