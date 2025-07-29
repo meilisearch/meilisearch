@@ -132,7 +132,8 @@ async fn remote_sharding() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -140,7 +141,8 @@ async fn remote_sharding() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
@@ -148,7 +150,8 @@ async fn remote_sharding() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms2",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -934,7 +937,8 @@ async fn error_unregistered_remote() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -942,7 +946,8 @@ async fn error_unregistered_remote() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -1052,7 +1057,8 @@ async fn error_no_weighted_score() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -1060,7 +1066,8 @@ async fn error_no_weighted_score() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -1185,7 +1192,8 @@ async fn error_bad_response() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -1193,7 +1201,8 @@ async fn error_bad_response() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -1322,7 +1331,8 @@ async fn error_bad_request() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -1330,7 +1340,8 @@ async fn error_bad_request() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -1452,7 +1463,8 @@ async fn error_bad_request_facets_by_index() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -1460,7 +1472,8 @@ async fn error_bad_request_facets_by_index() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -1593,7 +1606,8 @@ async fn error_bad_request_facets_by_index_facet() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -1601,7 +1615,8 @@ async fn error_bad_request_facets_by_index_facet() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -1743,7 +1758,8 @@ async fn error_remote_does_not_answer() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -1751,7 +1767,8 @@ async fn error_remote_does_not_answer() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -1944,7 +1961,8 @@ async fn error_remote_404() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -1952,7 +1970,8 @@ async fn error_remote_404() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -2139,7 +2158,8 @@ async fn error_remote_sharding_auth() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -2147,7 +2167,8 @@ async fn error_remote_sharding_auth() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -2299,7 +2320,8 @@ async fn remote_sharding_auth() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -2307,7 +2329,8 @@ async fn remote_sharding_auth() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -2454,7 +2477,8 @@ async fn error_remote_500() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -2462,7 +2486,8 @@ async fn error_remote_500() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -2633,7 +2658,8 @@ async fn error_remote_500_once() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -2641,7 +2667,8 @@ async fn error_remote_500_once() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
