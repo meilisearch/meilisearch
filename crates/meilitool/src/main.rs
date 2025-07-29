@@ -660,10 +660,10 @@ fn hair_dryer(
                 match part {
                     IndexPart::Hannoy => {
                         let mut count = 0;
-                        let total = index.vector_hannoy.len(&rtxn)?;
+                        let total = index.vector_store.len(&rtxn)?;
                         eprintln!("Hair drying hannoy for {uid}...");
                         for (i, result) in index
-                            .vector_hannoy
+                            .vector_store
                             .remap_types::<Bytes, Bytes>()
                             .iter(&rtxn)?
                             .enumerate()

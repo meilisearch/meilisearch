@@ -82,13 +82,12 @@ pub fn v1_10_to_v1_11(
             try_opening_poly_database(&index_env, &index_wtxn, db_name::VECTOR_STORE)
                 .with_context(|| format!("while updating date format for index `{uid}`"))?;
 
-        // meilisearch_types::milli::hannoy::upgrade::cosine_from_0_4_to_0_5(
-        //     &index_rtxn,
-        //     index_read_database.remap_types(),
-        //     &mut index_wtxn,
-        //     index_write_database.remap_types(),
-        // )?;
-        unimplemented!("Hannoy doesn't support upgrading");
+        meilisearch_types::milli::arroy::upgrade::cosine_from_0_4_to_0_5(
+            &index_rtxn,
+            index_read_database.remap_types(),
+            &mut index_wtxn,
+            index_write_database.remap_types(),
+        )?;
 
         index_wtxn.commit()?;
     }
