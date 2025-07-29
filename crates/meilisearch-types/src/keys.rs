@@ -365,6 +365,12 @@ pub enum Action {
     #[serde(rename = "*.get")]
     #[deserr(rename = "*.get")]
     AllGet,
+    #[serde(rename = "webhooks.get")]
+    #[deserr(rename = "webhooks.get")]
+    WebhooksGet,
+    #[serde(rename = "webhooks.update")]
+    #[deserr(rename = "webhooks.update")]
+    WebhooksUpdate,
 }
 
 impl Action {
@@ -416,6 +422,8 @@ impl Action {
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
             ALL_GET => Some(Self::AllGet),
+            WEBHOOKS_GET => Some(Self::WebhooksGet),
+            WEBHOOKS_UPDATE => Some(Self::WebhooksUpdate),
             _otherwise => None,
         }
     }
@@ -463,6 +471,8 @@ impl Action {
             ChatsDelete => false,
             ChatsSettingsGet => true,
             ChatsSettingsUpdate => false,
+            WebhooksGet => true,
+            WebhooksUpdate => false,
         }
     }
 
@@ -522,6 +532,9 @@ pub mod actions {
     pub const CHATS_SETTINGS_ALL: u8 = ChatsSettingsAll.repr();
     pub const CHATS_SETTINGS_GET: u8 = ChatsSettingsGet.repr();
     pub const CHATS_SETTINGS_UPDATE: u8 = ChatsSettingsUpdate.repr();
+
+    pub const WEBHOOKS_GET: u8 = WebhooksGet.repr();
+    pub const WEBHOOKS_UPDATE: u8 = WebhooksUpdate.repr();
 }
 
 #[cfg(test)]
@@ -577,6 +590,8 @@ pub(crate) mod test {
         assert!(ChatsSettingsGet.repr() == 42 && CHATS_SETTINGS_GET == 42);
         assert!(ChatsSettingsUpdate.repr() == 43 && CHATS_SETTINGS_UPDATE == 43);
         assert!(AllGet.repr() == 44 && ALL_GET == 44);
+        assert!(WebhooksGet.repr() == 45 && WEBHOOKS_GET == 45);
+        assert!(WebhooksUpdate.repr() == 46 && WEBHOOKS_UPDATE == 46);
     }
 
     #[test]
