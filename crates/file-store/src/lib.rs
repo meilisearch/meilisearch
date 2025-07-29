@@ -148,11 +148,10 @@ impl File {
         Ok(Self { path: PathBuf::new(), file: None })
     }
 
-    pub fn persist(self) -> Result<()> {
-        if let Some(file) = self.file {
-            file.persist(&self.path)?;
-        }
-        Ok(())
+    pub fn persist(self) -> Result<Option<StdFile>> {
+        let Some(file) = self.file else { return Ok(None) };
+
+        Ok(Some(file.persist(&self.path)?))
     }
 }
 
