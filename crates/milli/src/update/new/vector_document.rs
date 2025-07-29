@@ -149,7 +149,7 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
                     name,
                     entry_from_raw_value(value, false).map_err(|_| {
                         InternalError::Serialization(crate::SerializationError::Decoding {
-                            db_name: Some(crate::index::db_name::VECTOR_HANNOY),
+                            db_name: Some(crate::index::db_name::VECTOR_STORE),
                         })
                     })?,
                 ))
@@ -167,7 +167,7 @@ impl<'t> VectorDocument<'t> for VectorDocumentFromDb<'t> {
                 Some(embedding_from_doc) => {
                     Some(entry_from_raw_value(embedding_from_doc, false).map_err(|_| {
                         InternalError::Serialization(crate::SerializationError::Decoding {
-                            db_name: Some(crate::index::db_name::VECTOR_HANNOY),
+                            db_name: Some(crate::index::db_name::VECTOR_STORE),
                         })
                     })?)
                 }
