@@ -113,7 +113,7 @@ pub mod db_name {
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
-    pub const VECTOR_HANNOY: &str = "vector-hannoy";
+    pub const VECTOR_STORE: &str = "vector-arroy";
     pub const DOCUMENTS: &str = "documents";
 }
 const NUMBER_OF_DBS: u32 = 25;
