@@ -45,13 +45,13 @@ const HANNOY_EF_CONSTRUCTION: usize = 48;
 const HANNOY_M: usize = 16;
 const HANNOY_M0: usize = 32;
 
-pub struct HannoyWrapper {
+pub struct VectorStore {
     quantized: bool,
     embedder_index: u8,
     database: hannoy::Database<Unspecified>,
 }
 
-impl HannoyWrapper {
+impl VectorStore {
     pub fn new(
         database: hannoy::Database<Unspecified>,
         embedder_index: u8,
