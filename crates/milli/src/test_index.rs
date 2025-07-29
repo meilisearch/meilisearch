@@ -19,9 +19,7 @@ use crate::update::{
 };
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
-use crate::{
-    db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult, UserError,
-};
+use crate::{db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult};
 
 pub(crate) struct TempIndex {
     pub inner: Index,
