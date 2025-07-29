@@ -119,9 +119,9 @@ fn evaluate_inner(
                         .collect(),
                 })?;
 
-            let user_provided_docsids = embedder_info.embedding_status.user_provided_docids();
+            let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
             arroy_wrapper.items_in_store(rtxn, fragment_config.id, |bitmap| {
-                bitmap.clone() - user_provided_docsids
+                bitmap.clone() - user_provided_docids
             })?
         }
         VectorFilter::DocumentTemplate => {
@@ -129,14 +129,14 @@ fn evaluate_inner(
                 return Ok(RoaringBitmap::new());
             }
 
-            let user_provided_docsids = embedder_info.embedding_status.user_provided_docids();
+            let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
             let mut stats = ArroyStats::default();
             arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
-            stats.documents - user_provided_docsids.clone()
+            stats.documents - user_provided_docids.clone()
         }
         VectorFilter::UserProvided => {
-            let user_provided_docsids = embedder_info.embedding_status.user_provided_docids();
-            user_provided_docsids.clone()
+            let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
+            user_provided_docids.clone()
         }
         VectorFilter::Regenerate => {
             let mut stats = ArroyStats::default();
