@@ -235,9 +235,11 @@ InvalidDocumentFields                          , InvalidRequest       , BAD_REQU
 InvalidDocumentRetrieveVectors                 , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentEditionFunction                 , InvalidRequest       , BAD_REQUEST ;
+InconsistentDocumentChangeHeaders              , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentSort                            , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST ;
+InvalidHeaderValue                             , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions                        , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorsType                             , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                              , InvalidRequest       , BAD_REQUEST ;
@@ -266,7 +268,9 @@ InvalidMultiSearchRemote                       , InvalidRequest       , BAD_REQU
 InvalidMultiSearchWeight                       , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkRemotes                          , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSelf                             , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkSharding                         , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSearchApiKey                     , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkWriteApiKey                      , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkUrl                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToSearchOn              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop                  , InvalidRequest       , BAD_REQUEST ;
