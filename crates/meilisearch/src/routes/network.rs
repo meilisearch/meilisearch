@@ -8,7 +8,8 @@ use index_scheduler::IndexScheduler;
 use itertools::{EitherOrBoth, Itertools};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
-    InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf, InvalidNetworkUrl,
+    InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf, InvalidNetworkSharding,
+    InvalidNetworkUrl, InvalidNetworkWriteApiKey,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::features::{Network as DbNetwork, Remote as DbRemote};
@@ -57,9 +58,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             {
             "self": "ms-0",
             "remotes": {
-            "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset },
-            "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()) },
-            "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()) },
+                "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset, write_api_key: Setting::Reset },
+                "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()), write_api_key: Setting::Set("bar".into()) },
+                "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
         }
     })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -88,9 +89,9 @@ async fn get_network(
 #[schema(rename_all = "camelCase")]
 pub struct Remote {
     #[schema(value_type = Option<String>, example = json!({
-        "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset },
-        "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()) },
-        "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()) },
+        "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset, write_api_key: Setting::Reset },
+        "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()), write_api_key: Setting::Set("bar".into()) },
+        "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
     }))]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkUrl>)]
     #[serde(default)]
@@ -99,6 +100,10 @@ pub struct Remote {
     #[deserr(default, error = DeserrJsonError<InvalidNetworkSearchApiKey>)]
     #[serde(default)]
     pub search_api_key: Setting<String>,
+    #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkWriteApiKey>)]
+    #[serde(default)]
+    pub write_api_key: Setting<String>,
 }
 
 #[derive(Debug, Deserr, ToSchema, Serialize)]
@@ -114,6 +119,10 @@ pub struct Network {
     #[serde(default, rename = "self")]
     #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
     pub local: Setting<String>,
+    #[schema(value_type = Option<bool>, example = json!(true))]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkSharding>)]
+    pub sharding: Setting<bool>,
 }
 
 impl Remote {
@@ -136,6 +145,7 @@ impl Remote {
                     Ok(url)
                 })?,
             search_api_key: self.search_api_key.set(),
+            write_api_key: self.write_api_key.set(),
         })
     }
 }
@@ -174,9 +184,9 @@ impl Aggregate for PatchNetworkAnalytics {
             {
                 "self": "ms-0",
                 "remotes": {
-                "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset },
-                "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()) },
-                "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()) },
+                    "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset, write_api_key: Setting::Reset },
+                    "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()), write_api_key: Setting::Set("bar".into()) },
+                    "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
             }
         })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
@@ -207,6 +217,19 @@ async fn patch_network(
         Setting::NotSet => old_network.local,
     };
 
+    let merged_sharding = match new_network.sharding {
+        Setting::Set(new_sharding) => new_sharding,
+        Setting::Reset => false,
+        Setting::NotSet => old_network.sharding,
+    };
+
+    if merged_sharding && merged_self.is_none() {
+        return Err(ResponseError::from_msg(
+            "`.sharding`: enabling the sharding requires `.self` to be set\n  - Hint: Disable `sharding` or set `self` to a value.".into(),
+            meilisearch_types::error::Code::InvalidNetworkSharding,
+        ));
+    }
+
     let merged_remotes = match new_network.remotes {
         Setting::Set(new_remotes) => {
             let mut merged_remotes = BTreeMap::new();
@@ -217,9 +240,17 @@ async fn patch_network(
             {
                 match either_or_both {
                     EitherOrBoth::Both((key, old), (_, Some(new))) => {
-                        let DbRemote { url: old_url, search_api_key: old_search_api_key } = old;
+                        let DbRemote {
+                            url: old_url,
+                            search_api_key: old_search_api_key,
+                            write_api_key: old_write_api_key,
+                        } = old;
 
-                        let Remote { url: new_url, search_api_key: new_search_api_key } = new;
+                        let Remote {
+                            url: new_url,
+                            search_api_key: new_search_api_key,
+                            write_api_key: new_write_api_key,
+                        } = new;
 
                         let merged = DbRemote {
                             url: match new_url {
@@ -246,6 +277,11 @@ async fn patch_network(
                                 Setting::Set(new_search_api_key) => Some(new_search_api_key),
                                 Setting::Reset => None,
                                 Setting::NotSet => old_search_api_key,
+                            },
+                            write_api_key: match new_write_api_key {
+                                Setting::Set(new_write_api_key) => Some(new_write_api_key),
+                                Setting::Reset => None,
+                                Setting::NotSet => old_write_api_key,
                             },
                         };
                         merged_remotes.insert(key, merged);
@@ -274,7 +310,8 @@ async fn patch_network(
         &req,
     );
 
-    let merged_network = DbNetwork { local: merged_self, remotes: merged_remotes };
+    let merged_network =
+        DbNetwork { local: merged_self, remotes: merged_remotes, sharding: merged_sharding };
     index_scheduler.put_network(merged_network.clone())?;
     debug!(returns = ?merged_network, "Patch network");
     Ok(HttpResponse::Ok().json(merged_network))
