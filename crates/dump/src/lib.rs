@@ -10,7 +10,7 @@ use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
 use meilisearch_types::tasks::{
-    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
+    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId, TaskNetwork,
 };
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
@@ -94,6 +94,8 @@ pub struct TaskDump {
         default
     )]
     pub finished_at: Option<OffsetDateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<TaskNetwork>,
 }
 
 // A `Kind` specific version made for the dump. If modified you may break the dump.
@@ -172,6 +174,7 @@ impl From<Task> for TaskDump {
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
+            network: task.network,
         }
     }
 }
