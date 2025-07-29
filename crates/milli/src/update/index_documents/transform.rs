@@ -842,7 +842,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     action.write_back()
                 {
                     let reader = VectorStore::new(
-                        self.index.vector_hannoy,
+                        self.index.vector_store,
                         *embedder_id,
                         action.was_quantized,
                     );
@@ -950,7 +950,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 continue;
             };
             let hannoy =
-                VectorStore::new(self.index.vector_hannoy, infos.embedder_id, was_quantized);
+                VectorStore::new(self.index.vector_store, infos.embedder_id, was_quantized);
             let Some(dimensions) = hannoy.dimensions(wtxn)? else {
                 continue;
             };

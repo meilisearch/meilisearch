@@ -130,7 +130,7 @@ where
 
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
 
-        let vector_arroy = index.vector_hannoy;
+        let vector_arroy = index.vector_store;
         let hannoy_writers: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
             .iter()
@@ -343,7 +343,7 @@ fn hannoy_writers_from_embedder_actions<'indexer>(
     embedders: &'indexer RuntimeEmbedders,
     index_embedder_category_ids: &'indexer std::collections::HashMap<String, u8>,
 ) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, VectorStore, usize)>> {
-    let vector_arroy = index.vector_hannoy;
+    let vector_arroy = index.vector_store;
 
     embedders
         .inner_as_ref()
@@ -385,7 +385,7 @@ where
         let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() else {
             continue;
         };
-        let reader = VectorStore::new(index.vector_hannoy, *embedder_id, action.was_quantized);
+        let reader = VectorStore::new(index.vector_store, *embedder_id, action.was_quantized);
         let Some(dimensions) = reader.dimensions(wtxn)? else {
             continue;
         };
@@ -401,7 +401,7 @@ where
         let Some(infos) = index.embedding_configs().embedder_info(wtxn, embedder_name)? else {
             continue;
         };
-        let arroy = VectorStore::new(index.vector_hannoy, infos.embedder_id, was_quantized);
+        let arroy = VectorStore::new(index.vector_store, infos.embedder_id, was_quantized);
         let Some(dimensions) = arroy.dimensions(wtxn)? else {
             continue;
         };
