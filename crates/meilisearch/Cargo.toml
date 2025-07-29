@@ -51,6 +51,7 @@ lazy_static = "1.5.0"
 liquid = "0.26.11"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
+memmap2 = "0.9.7"
 mimalloc = { version = "0.1.47", default-features = false }
 mime = "0.3.17"
 num_cpus = "1.17.0"

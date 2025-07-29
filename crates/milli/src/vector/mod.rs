@@ -823,6 +823,25 @@ pub enum EmbedderOptions {
 }
 
 impl EmbedderOptions {
+    pub fn has_fragments(&self) -> bool {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => false,
+            EmbedderOptions::Rest(embedder_options) => {
+                !embedder_options.indexing_fragments.is_empty()
+            }
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.index {
+                    !embedder_options.indexing_fragments.is_empty()
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     pub fn indexing_fragments(&self) -> Vec<String> {
         match &self {
             EmbedderOptions::HuggingFace(_)

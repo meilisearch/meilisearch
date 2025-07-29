@@ -4,8 +4,8 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
 {
   "results": [
     {
-      "uid": 25,
-      "batchUid": 24,
+      "uid": 31,
+      "batchUid": 30,
       "indexUid": null,
       "status": "succeeded",
       "type": "upgradeDatabase",
@@ -19,6 +19,118 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "enqueuedAt": "[date]",
       "startedAt": "[date]",
       "finishedAt": "[date]"
+    },
+    {
+      "uid": 30,
+      "batchUid": 29,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.067201S",
+      "enqueuedAt": "2025-07-07T13:43:08.772432Z",
+      "startedAt": "2025-07-07T13:43:08.772854Z",
+      "finishedAt": "2025-07-07T13:43:08.840055Z"
+    },
+    {
+      "uid": 29,
+      "batchUid": 28,
+      "indexUid": "mieli",
+      "status": "succeeded",
+      "type": "indexDeletion",
+      "canceledBy": null,
+      "details": {
+        "deletedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.012727S",
+      "enqueuedAt": "2025-07-07T13:42:50.744793Z",
+      "startedAt": "2025-07-07T13:42:50.745461Z",
+      "finishedAt": "2025-07-07T13:42:50.758188Z"
+    },
+    {
+      "uid": 28,
+      "batchUid": 27,
+      "indexUid": "kefir",
+      "status": "failed",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 0
+      },
+      "error": {
+        "message": "Index `kefir`: Bad embedder configuration in the document with id: `2`. Could not parse `._vectors.doggo_embedder`: trailing characters at line 1 column 13",
+        "code": "invalid_vectors_type",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#invalid_vectors_type"
+      },
+      "duration": "PT0.059920S",
+      "enqueuedAt": "2025-07-07T13:42:15.624598Z",
+      "startedAt": "2025-07-07T13:42:15.625413Z",
+      "finishedAt": "2025-07-07T13:42:15.685333Z"
+    },
+    {
+      "uid": 27,
+      "batchUid": 26,
+      "indexUid": "mieli",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.088879S",
+      "enqueuedAt": "2025-07-07T13:40:01.46081Z",
+      "startedAt": "2025-07-07T13:40:01.461741Z",
+      "finishedAt": "2025-07-07T13:40:01.55062Z"
+    },
+    {
+      "uid": 26,
+      "batchUid": 25,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 1,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "PT0.312911S",
+      "enqueuedAt": "2025-07-07T13:32:46.13871Z",
+      "startedAt": "2025-07-07T13:32:46.139785Z",
+      "finishedAt": "2025-07-07T13:32:46.452696Z"
+    },
+    {
+      "uid": 25,
+      "batchUid": 24,
+      "indexUid": "kefir",
+      "status": "succeeded",
+      "type": "settingsUpdate",
+      "canceledBy": null,
+      "details": {
+        "embedders": {
+          "doggo_embedder": {
+            "source": "huggingFace",
+            "model": "sentence-transformers/all-MiniLM-L6-v2",
+            "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+            "documentTemplate": "{{doc.description}}"
+          }
+        }
+      },
+      "error": null,
+      "duration": "PT0.247378S",
+      "enqueuedAt": "2025-07-07T13:28:27.390054Z",
+      "startedAt": "2025-07-07T13:28:27.391344Z",
+      "finishedAt": "2025-07-07T13:28:27.638722Z"
     },
     {
       "uid": 24,
@@ -264,134 +376,10 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "enqueuedAt": "2025-01-16T17:02:52.527382964Z",
       "startedAt": "2025-01-16T17:02:52.539749853Z",
       "finishedAt": "2025-01-16T17:02:52.547390016Z"
-    },
-    {
-      "uid": 11,
-      "batchUid": 11,
-      "indexUid": "kefir",
-      "status": "succeeded",
-      "type": "settingsUpdate",
-      "canceledBy": null,
-      "details": {
-        "searchCutoffMs": 8000
-      },
-      "error": null,
-      "duration": "PT0.007307840S",
-      "enqueuedAt": "2025-01-16T17:01:14.100316617Z",
-      "startedAt": "2025-01-16T17:01:14.112756687Z",
-      "finishedAt": "2025-01-16T17:01:14.120064527Z"
-    },
-    {
-      "uid": 10,
-      "batchUid": 10,
-      "indexUid": "kefir",
-      "status": "succeeded",
-      "type": "settingsUpdate",
-      "canceledBy": null,
-      "details": {
-        "faceting": {
-          "maxValuesPerFacet": 99
-        },
-        "pagination": {
-          "maxTotalHits": 15
-        }
-      },
-      "error": null,
-      "duration": "PT0.007391353S",
-      "enqueuedAt": "2025-01-16T17:00:29.188815062Z",
-      "startedAt": "2025-01-16T17:00:29.201180268Z",
-      "finishedAt": "2025-01-16T17:00:29.208571621Z"
-    },
-    {
-      "uid": 9,
-      "batchUid": 9,
-      "indexUid": "kefir",
-      "status": "succeeded",
-      "type": "settingsUpdate",
-      "canceledBy": null,
-      "details": {
-        "faceting": {
-          "maxValuesPerFacet": 100
-        },
-        "pagination": {
-          "maxTotalHits": 1000
-        }
-      },
-      "error": null,
-      "duration": "PT0.007445825S",
-      "enqueuedAt": "2025-01-16T17:00:15.759501709Z",
-      "startedAt": "2025-01-16T17:00:15.77629445Z",
-      "finishedAt": "2025-01-16T17:00:15.783740275Z"
-    },
-    {
-      "uid": 8,
-      "batchUid": 8,
-      "indexUid": "kefir",
-      "status": "succeeded",
-      "type": "settingsUpdate",
-      "canceledBy": null,
-      "details": {
-        "typoTolerance": {
-          "minWordSizeForTypos": {
-            "oneTypo": 4
-          },
-          "disableOnWords": [
-            "kefir"
-          ],
-          "disableOnAttributes": [
-            "surname"
-          ]
-        }
-      },
-      "error": null,
-      "duration": "PT0.012020083S",
-      "enqueuedAt": "2025-01-16T16:59:42.727292501Z",
-      "startedAt": "2025-01-16T16:59:42.744086671Z",
-      "finishedAt": "2025-01-16T16:59:42.756106754Z"
-    },
-    {
-      "uid": 7,
-      "batchUid": 7,
-      "indexUid": "kefir",
-      "status": "succeeded",
-      "type": "settingsUpdate",
-      "canceledBy": null,
-      "details": {
-        "typoTolerance": {
-          "minWordSizeForTypos": {
-            "oneTypo": 4
-          }
-        }
-      },
-      "error": null,
-      "duration": "PT0.007440092S",
-      "enqueuedAt": "2025-01-16T16:58:41.203145044Z",
-      "startedAt": "2025-01-16T16:58:41.2155771Z",
-      "finishedAt": "2025-01-16T16:58:41.223017192Z"
-    },
-    {
-      "uid": 6,
-      "batchUid": 6,
-      "indexUid": "kefir",
-      "status": "succeeded",
-      "type": "settingsUpdate",
-      "canceledBy": null,
-      "details": {
-        "synonyms": {
-          "boubou": [
-            "kefir"
-          ]
-        }
-      },
-      "error": null,
-      "duration": "PT0.007565161S",
-      "enqueuedAt": "2025-01-16T16:54:51.927866243Z",
-      "startedAt": "2025-01-16T16:54:51.940332781Z",
-      "finishedAt": "2025-01-16T16:54:51.947897942Z"
     }
   ],
-  "total": 24,
+  "total": 30,
   "limit": 20,
-  "from": 25,
-  "next": 5
+  "from": 31,
+  "next": 11
 }
