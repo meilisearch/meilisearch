@@ -1,6 +1,6 @@
 pub use error::ProxySearchError;
 use error::ReqwestErrorWithoutUrl;
-use meilisearch_types::features::Remote;
+use meilisearch_types::network::Remote;
 use rand::Rng as _;
 use reqwest::{Client, Response, StatusCode};
 use serde::de::DeserializeOwned;

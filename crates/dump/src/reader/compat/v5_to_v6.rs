@@ -161,6 +161,7 @@ impl CompatV5ToV6 {
                     enqueued_at: task_view.enqueued_at,
                     started_at: task_view.started_at,
                     finished_at: task_view.finished_at,
+                    network: None,
                 };
 
                 (task, content_file)

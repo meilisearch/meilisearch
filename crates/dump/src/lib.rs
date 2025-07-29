@@ -253,11 +253,12 @@ pub(crate) mod test {
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::{Network, Remote, RuntimeTogglableFeatures};
+    use meilisearch_types::features::RuntimeTogglableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
     use meilisearch_types::milli::{self, FilterableAttributesRule};
+    use meilisearch_types::network::{Network, Remote};
     use meilisearch_types::settings::{Checked, FacetingSettings, Settings};
     use meilisearch_types::task_view::DetailsView;
     use meilisearch_types::tasks::{BatchStopReason, Details, Kind, Status};
@@ -386,6 +387,7 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
                     started_at: Some(datetime!(2022-11-20 0:00 UTC)),
                     finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+                    network: None,
                 },
                 None,
             ),
@@ -410,6 +412,7 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
                     started_at: None,
                     finished_at: None,
+                    network: None,
                 },
                 Some(vec![
                     json!({ "id": 4, "race": "leonberg" }).as_object().unwrap().clone(),
@@ -429,6 +432,7 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-15 0:00 UTC),
                     started_at: None,
                     finished_at: None,
+                    network: None,
                 },
                 None,
             ),
@@ -541,7 +545,8 @@ pub(crate) mod test {
     fn create_test_network() -> Network {
         Network {
             local: Some("myself".to_string()),
-            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()) }},
+            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
+            sharding: false,
         }
     }
 
