@@ -493,8 +493,7 @@ where
                         key: None,
                     },
                 )?;
-                let reader =
-                    VectorStore::new(self.index.vector_hannoy, index, action.was_quantized);
+                let reader = VectorStore::new(self.index.vector_store, index, action.was_quantized);
                 let Some(dim) = reader.dimensions(self.wtxn)? else {
                     continue;
                 };
@@ -504,7 +503,7 @@ where
 
         for (embedder_name, dimension) in dimension {
             let wtxn = &mut *self.wtxn;
-            let vector_hannoy = self.index.vector_hannoy;
+            let vector_hannoy = self.index.vector_store;
             let cancel = &self.should_abort;
 
             let embedder_index =

@@ -1,4 +1,4 @@
-use hannoy::distances::Cosine;
+use arroy::distances::Cosine;
 use heed::RwTxn;
 
 use super::UpgradeIndex;
@@ -25,13 +25,12 @@ impl UpgradeIndex for Latest_V1_13_To_Latest_V1_14 {
         progress.update_progress(VectorStore::UpdateInternalVersions);
 
         let rtxn = index.read_txn()?;
-        // hannoy::upgrade::from_0_5_to_0_6::<Cosine>(
-        //     &rtxn,
-        //     index.vector_hannoy.remap_data_type(),
-        //     wtxn,
-        //     index.vector_hannoy.remap_data_type(),
-        // )?;
-        unimplemented!("upgrade hannoy");
+        arroy::upgrade::from_0_5_to_0_6::<Cosine>(
+            &rtxn,
+            index.vector_store.remap_types(),
+            wtxn,
+            index.vector_store.remap_types(),
+        )?;
 
         Ok(false)
     }

@@ -180,7 +180,7 @@ pub struct Index {
     /// Maps an embedder name to its id in the hannoy store.
     pub(crate) embedder_category_id: Database<Unspecified, Unspecified>,
     /// Vector store based on hannoy™.
-    pub vector_hannoy: hannoy::Database<Unspecified>,
+    pub vector_store: hannoy::Database<Unspecified>,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
@@ -264,7 +264,7 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_hannoy,
+            vector_store: vector_hannoy,
             embedder_category_id,
             documents,
         };
@@ -1773,7 +1773,7 @@ impl Index {
             let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
             let has_fragments = config.config.embedder_options.has_fragments();
             let reader = VectorStore::new(
-                self.vector_hannoy,
+                self.vector_store,
                 embedder_info.embedder_id,
                 config.config.quantized(),
             );
@@ -1798,7 +1798,7 @@ impl Index {
         for config in embedding_configs.embedding_configs(rtxn)? {
             let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
             let reader =
-                VectorStore::new(self.vector_hannoy, embedder_id, config.config.quantized());
+                VectorStore::new(self.vector_store, embedder_id, config.config.quantized());
             reader.aggregate_stats(rtxn, &mut stats)?;
         }
         Ok(stats)
@@ -1842,7 +1842,7 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_hannoy,
+            vector_store: vector_hannoy,
             embedder_category_id,
             documents,
         } = self;
