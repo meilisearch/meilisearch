@@ -66,6 +66,11 @@ impl IndexScheduler {
             }
             IndexOperation::DocumentOperation { index_uid, primary_key, operations, mut tasks } => {
                 progress.update_progress(DocumentOperationProgress::RetrievingConfig);
+
+                let network = self.network();
+
+                let shards = network.shards();
+
                 // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.
                 // this is made difficult by the fact we're doing private clones of the index scheduler and sending it
                 // to a fresh thread.
@@ -130,6 +135,7 @@ impl IndexScheduler {
                         &mut new_fields_ids_map,
                         &|| must_stop_processing.get(),
                         progress.clone(),
+                        shards.as_ref(),
                     )
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
 
