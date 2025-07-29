@@ -931,9 +931,6 @@ async fn vector_filter_specific_fragment() {
           "name": "kefir"
         },
         {
-          "name": "echo"
-        },
-        {
           "name": "intel"
         },
         {
@@ -944,7 +941,7 @@ async fn vector_filter_specific_fragment() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 3
     }
     "#);
 }

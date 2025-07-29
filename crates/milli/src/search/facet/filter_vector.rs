@@ -119,7 +119,10 @@ fn evaluate_inner(
                         .collect(),
                 })?;
 
-            arroy_wrapper.items_in_store(rtxn, fragment_config.id, |bitmap| bitmap.clone())?
+            let user_provided_docsids = embedder_info.embedding_status.user_provided_docids();
+            arroy_wrapper.items_in_store(rtxn, fragment_config.id, |bitmap| {
+                bitmap.clone() - user_provided_docsids
+            })?
         }
         VectorFilter::DocumentTemplate => {
             if !embedding_config.fragments.as_slice().is_empty() {
