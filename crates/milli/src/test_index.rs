@@ -1340,11 +1340,10 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     assert!(results.candidates.is_empty());
 
     let mut search = index.search(&rtxn);
-    let results = search
-        .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
-        .execute()
-        .unwrap_err();
-    assert!(matches!(results, Error::UserError(UserError::InvalidFilter(_))));
+    let results =
+        dbg!(search.filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()).execute())
+            .unwrap();
+    assert!(results.candidates.is_empty());
 
     index
         .update_settings(|settings| {
@@ -1375,6 +1374,6 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     let results = search
         .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
         .execute()
-        .unwrap_err();
-    assert!(matches!(results, Error::UserError(UserError::InvalidFilter(_))));
+        .unwrap();
+    assert!(results.candidates.is_empty());
 }
