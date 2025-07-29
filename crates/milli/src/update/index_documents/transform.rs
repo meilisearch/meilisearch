@@ -32,7 +32,7 @@ use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::{RemoveFragments, WriteBackToDocuments};
-use crate::vector::HannoyWrapper;
+use crate::vector::VectorStore;
 use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, Index, Result};
 
 pub struct TransformOutput {
@@ -834,14 +834,14 @@ impl<'a, 'i> Transform<'a, 'i> {
             None
         };
 
-        let readers: BTreeMap<&str, (HannoyWrapper, &RoaringBitmap)> = settings_diff
+        let readers: BTreeMap<&str, (VectorStore, &RoaringBitmap)> = settings_diff
             .embedding_config_updates
             .iter()
             .filter_map(|(name, action)| {
                 if let Some(WriteBackToDocuments { embedder_id, user_provided }) =
                     action.write_back()
                 {
-                    let reader = HannoyWrapper::new(
+                    let reader = VectorStore::new(
                         self.index.vector_hannoy,
                         *embedder_id,
                         action.was_quantized,
@@ -950,7 +950,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 continue;
             };
             let hannoy =
-                HannoyWrapper::new(self.index.vector_hannoy, infos.embedder_id, was_quantized);
+                VectorStore::new(self.index.vector_hannoy, infos.embedder_id, was_quantized);
             let Some(dimensions) = hannoy.dimensions(wtxn)? else {
                 continue;
             };

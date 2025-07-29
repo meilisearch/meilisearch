@@ -24,7 +24,7 @@ use crate::progress::{EmbedderStats, Progress};
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
-use crate::vector::{Embedder, HannoyWrapper, RuntimeEmbedders};
+use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
 use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
 
 pub(crate) mod de;
@@ -144,7 +144,7 @@ where
                     })?;
 
                 let dimensions = runtime.embedder.dimensions();
-                let writer = HannoyWrapper::new(vector_arroy, embedder_index, runtime.is_quantized);
+                let writer = VectorStore::new(vector_arroy, embedder_index, runtime.is_quantized);
 
                 Ok((
                     embedder_index,
@@ -342,7 +342,7 @@ fn hannoy_writers_from_embedder_actions<'indexer>(
     embedder_actions: &'indexer BTreeMap<String, EmbedderAction>,
     embedders: &'indexer RuntimeEmbedders,
     index_embedder_category_ids: &'indexer std::collections::HashMap<String, u8>,
-) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, HannoyWrapper, usize)>> {
+) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, VectorStore, usize)>> {
     let vector_arroy = index.vector_hannoy;
 
     embedders
@@ -362,7 +362,7 @@ fn hannoy_writers_from_embedder_actions<'indexer>(
                     )));
                 };
                 let writer =
-                    HannoyWrapper::new(vector_arroy, embedder_category_id, action.was_quantized);
+                    VectorStore::new(vector_arroy, embedder_category_id, action.was_quantized);
                 let dimensions = runtime.embedder.dimensions();
                 Some(Ok((
                     embedder_category_id,
@@ -385,7 +385,7 @@ where
         let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() else {
             continue;
         };
-        let reader = HannoyWrapper::new(index.vector_hannoy, *embedder_id, action.was_quantized);
+        let reader = VectorStore::new(index.vector_hannoy, *embedder_id, action.was_quantized);
         let Some(dimensions) = reader.dimensions(wtxn)? else {
             continue;
         };
@@ -401,7 +401,7 @@ where
         let Some(infos) = index.embedding_configs().embedder_info(wtxn, embedder_name)? else {
             continue;
         };
-        let arroy = HannoyWrapper::new(index.vector_hannoy, infos.embedder_id, was_quantized);
+        let arroy = VectorStore::new(index.vector_hannoy, infos.embedder_id, was_quantized);
         let Some(dimensions) = arroy.dimensions(wtxn)? else {
             continue;
         };
