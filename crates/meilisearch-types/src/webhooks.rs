@@ -10,7 +10,7 @@ pub struct Webhook {
     pub headers: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Webhooks {
     #[serde(default)]

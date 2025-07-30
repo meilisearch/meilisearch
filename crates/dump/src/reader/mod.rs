@@ -138,6 +138,13 @@ impl DumpReader {
             DumpReader::Compat(compat) => compat.network(),
         }
     }
+
+    pub fn webhooks(&self) -> Option<&v6::Webhooks> {
+        match self {
+            DumpReader::Current(current) => current.webhooks(),
+            DumpReader::Compat(compat) => compat.webhooks(),
+        }
+    }
 }
 
 impl From<V6Reader> for DumpReader {
