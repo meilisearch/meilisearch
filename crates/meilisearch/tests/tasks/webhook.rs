@@ -172,3 +172,58 @@ async fn reserved_names() {
     }
     "#);
 }
+
+#[actix_web::test]
+async fn over_limits() {
+    let server = Server::new().await;
+
+    // Too many webhooks
+    for i in 0..20 {
+        let (_value, code) = server
+            .set_webhooks(json!({ "webhooks": { format!("webhook_{i}"): { "url": "http://localhost:8080" } } }))
+            .await;
+        snapshot!(code, @"200 OK");
+    }
+    let (value, code) = server
+        .set_webhooks(json!({ "webhooks": { "webhook_21": { "url": "http://localhost:8080" } } }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Defining too many webhooks would crush the server. Please limit the number of webhooks to 20. You may use a third-party proxy server to dispatch events to more than 20 endpoints.",
+      "code": "invalid_webhooks",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhooks"
+    }
+    "#);
+
+    // Reset webhooks
+    let (value, code) = server.set_webhooks(json!({ "webhooks": null })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "webhooks": {}
+    }
+    "#);
+
+    // Test too many headers
+    for i in 0..200 {
+        let header_name = format!("header_{i}");
+        let (_value, code) = server
+            .set_webhooks(json!({ "webhooks": { "webhook": { "url": "http://localhost:8080", "headers": { header_name: "value" } } } }))
+            .await;
+        snapshot!(code, @"200 OK");
+    }
+    let (value, code) = server
+        .set_webhooks(json!({ "webhooks": { "webhook": { "url": "http://localhost:8080", "headers": { "header_201": "value" } } } }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Too many headers for the webhook `webhook`. Please limit the number of headers to 200.",
+      "code": "invalid_webhooks_headers",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
+    }
+    "#);
+}
