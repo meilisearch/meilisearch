@@ -129,7 +129,7 @@ enum WebhooksError {
     TooManyWebhooks,
     #[error("Too many headers for the webhook `{0}`. Please limit the number of headers to 200.")]
     TooManyHeaders(String),
-    #[error("Cannot edit webhook `{0}`. Webhooks prefixed with an underscore are special and may not be modified using the API.")]
+    #[error("Cannot edit webhook `{0}`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.")]
     ReservedWebhook(String),
 }
 

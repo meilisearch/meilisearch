@@ -8,7 +8,7 @@ use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
 use actix_web::web::{Bytes, Data};
 use actix_web::{post, App, HttpRequest, HttpResponse, HttpServer};
-use meili_snap::snapshot;
+use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use tokio::sync::mpsc;
 use url::Url;
@@ -128,11 +128,11 @@ async fn test_cli_webhook() {
 
     let (webhooks, code) = server.get_webhooks().await;
     snapshot!(code, @"200 OK");
-    snapshot!(webhooks, @r#"
+    snapshot!(json_string!(webhooks, { ".webhooks._cli.url" => "[ignored]" }), @r#"
     {
       "webhooks": {
         "_cli": {
-          "url": "http://127.0.0.1:51503/",
+          "url": "[ignored]",
           "headers": {
             "Authorization": "Bearer a-secret-token"
           }
@@ -142,4 +142,33 @@ async fn test_cli_webhook() {
     "#);
 
     server_handle.abort();
+}
+
+#[actix_web::test]
+async fn reserved_names() {
+    let server = Server::new().await;
+
+    let (value, code) = server
+        .set_webhooks(json!({ "webhooks": { "_cli": { "url": "http://localhost:8080" } } }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Cannot edit webhook `_cli`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.",
+      "code": "reserved_webhook",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#reserved_webhook"
+    }
+    "#);
+
+    let (value, code) = server.set_webhooks(json!({ "webhooks": { "_cli": null } })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Cannot edit webhook `_cli`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.",
+      "code": "reserved_webhook",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#reserved_webhook"
+    }
+    "#);
 }
