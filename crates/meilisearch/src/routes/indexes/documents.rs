@@ -1077,7 +1077,15 @@ async fn document_addition(
 
     if network.sharding {
         if let Some(file) = file {
-            proxy(&index_scheduler, &index_uid, req, network, Body::with_file(file), &task).await?;
+            proxy(
+                &index_scheduler,
+                &index_uid,
+                req,
+                network,
+                Body::with_ndjson_payload(file),
+                &task,
+            )
+            .await?;
         }
     }
 
