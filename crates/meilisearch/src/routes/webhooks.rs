@@ -129,6 +129,8 @@ enum WebhooksError {
     TooManyWebhooks,
     #[error("Too many headers for the webhook `{0}`. Please limit the number of headers to 200.")]
     TooManyHeaders(String),
+    #[error("Cannot edit webhook `{0}`. Webhooks prefixed with an underscore are special and may not be modified using the API.")]
+    ReservedWebhook(String),
 }
 
 impl ErrorCode for WebhooksError {
@@ -139,6 +141,7 @@ impl ErrorCode for WebhooksError {
             WebhooksError::TooManyHeaders(_) => {
                 meilisearch_types::error::Code::InvalidWebhooksHeaders
             }
+            WebhooksError::ReservedWebhook(_) => meilisearch_types::error::Code::ReservedWebhook,
         }
     }
 }
@@ -186,6 +189,10 @@ async fn patch_webhooks(
         old_webhook: Option<Webhook>,
         new_webhook: WebhookSettings,
     ) -> Result<Webhook, WebhooksError> {
+        if name.starts_with('_') {
+            return Err(WebhooksError::ReservedWebhook(name.to_owned()));
+        }
+
         let (old_url, mut headers) =
             old_webhook.map(|w| (Some(w.url), w.headers)).unwrap_or((None, BTreeMap::new()));
 
@@ -215,6 +222,10 @@ async fn patch_webhooks(
             Setting::Reset => BTreeMap::new(),
         };
 
+        if headers.len() > 200 {
+            return Err(WebhooksError::TooManyHeaders(name.to_owned()));
+        }
+
         Ok(Webhook { url, headers })
     }
 
@@ -225,9 +236,6 @@ async fn patch_webhooks(
                     Setting::Set(new_webhook) => {
                         let old_webhook = webhooks.remove(&name);
                         let webhook = merge_webhook(&name, old_webhook, new_webhook)?;
-                        if webhook.headers.len() > 200 {
-                            return Err(WebhooksError::TooManyHeaders(name).into());
-                        }
                         webhooks.insert(name.clone(), webhook);
                     }
                     Setting::Reset => {

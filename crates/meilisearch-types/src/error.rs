@@ -422,7 +422,8 @@ InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQU
 // Webhooks
 InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
 InvalidWebhooksUrl                             , InvalidRequest       , BAD_REQUEST ;
-InvalidWebhooksHeaders                         , InvalidRequest       , BAD_REQUEST
+InvalidWebhooksHeaders                         , InvalidRequest       , BAD_REQUEST ;
+ReservedWebhook                                , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
