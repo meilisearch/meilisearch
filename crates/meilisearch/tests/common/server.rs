@@ -182,6 +182,10 @@ impl Server<Owned> {
         self.service.patch("/network", value).await
     }
 
+    pub async fn set_webhooks(&self, value: Value) -> (Value, StatusCode) {
+        self.service.patch("/webhooks", value).await
+    }
+
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
         self.service.get("/metrics").await
     }
@@ -446,6 +450,10 @@ impl<State> Server<State> {
 
     pub async fn get_network(&self) -> (Value, StatusCode) {
         self.service.get("/network").await
+    }
+
+    pub async fn get_webhooks(&self) -> (Value, StatusCode) {
+        self.service.get("/webhooks").await
     }
 }
 

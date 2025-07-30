@@ -68,12 +68,13 @@ async fn create_webhook_server() -> WebhookHandle {
 }
 
 #[actix_web::test]
-async fn test_basic_webhook() {
+async fn test_cli_webhook() {
     let WebhookHandle { server_handle, url, mut receiver } = create_webhook_server().await;
 
     let db_path = tempfile::tempdir().unwrap();
     let server = Server::new_with_options(Opt {
         task_webhook_url: Some(Url::parse(&url).unwrap()),
+        task_webhook_authorization_header: Some(String::from("Bearer a-secret-token")),
         ..default_settings(db_path.path())
     })
     .await
@@ -124,6 +125,21 @@ async fn test_basic_webhook() {
     }
 
     assert!(nb_tasks == 5, "We should have received the 5 tasks but only received {nb_tasks}");
+
+    let (webhooks, code) = server.get_webhooks().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(webhooks, @r#"
+    {
+      "webhooks": {
+        "_cli": {
+          "url": "http://127.0.0.1:51503/",
+          "headers": {
+            "Authorization": "Bearer a-secret-token"
+          }
+        }
+      }
+    }
+    "#);
 
     server_handle.abort();
 }
