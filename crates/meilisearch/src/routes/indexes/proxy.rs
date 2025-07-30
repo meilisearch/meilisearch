@@ -88,7 +88,7 @@ pub async fn proxy<T: serde::Serialize>(
 
             let mut in_flight_remote_queries = BTreeMap::new();
             let client = reqwest::ClientBuilder::new()
-                .connect_timeout(std::time::Duration::from_millis(200))
+                .connect_timeout(std::time::Duration::from_secs(3))
                 .build()
                 .unwrap();
 
@@ -114,12 +114,13 @@ pub async fn proxy<T: serde::Serialize>(
                         let url_encoded_this = urlencoding::encode(&this).into_owned();
                         let url_encoded_task_uid = task.uid.to_string(); // it's url encoded i promize
 
-                        let deadline =
-                            std::time::Instant::now() + std::time::Duration::from_secs(100);
-
                         let content_type = content_type.map(|b| b.to_owned());
 
-                        backoff::future::retry(backoff::ExponentialBackoff::default(), move || {
+                        let backoff = backoff::ExponentialBackoffBuilder::new()
+                            .with_max_elapsed_time(Some(std::time::Duration::from_secs(25)))
+                            .build();
+
+                        backoff::future::retry(backoff, move || {
                             let url = url.clone();
                             let client = client.clone();
                             let url_encoded_this = url_encoded_this.clone();
@@ -137,7 +138,6 @@ pub async fn proxy<T: serde::Serialize>(
                                     content_type.as_deref(),
                                     api_key.as_deref(),
                                     &client,
-                                    deadline,
                                     &url_encoded_this,
                                     &url_encoded_task_uid,
                                     body,
@@ -216,14 +216,11 @@ async fn try_proxy(
     content_type: Option<&[u8]>,
     api_key: Option<&str>,
     client: &reqwest::Client,
-    deadline: std::time::Instant,
     url_encoded_this: &str,
     url_encoded_task_uid: &str,
     body: Option<Bytes>,
 ) -> Result<SummarizedTaskView, backoff::Error<ProxyDocumentChangeError>> {
-    let timeout = deadline.saturating_duration_since(std::time::Instant::now());
-
-    let request = client.request(method, url).timeout(timeout);
+    let request = client.request(method, url).timeout(std::time::Duration::from_secs(30));
     let request = if let Some(body) = body { request.body(body) } else { request };
     let request = if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
     let request = request.header(PROXY_ORIGIN_TASK_UID_HEADER, url_encoded_task_uid);
@@ -254,7 +251,7 @@ async fn try_proxy(
         }
         status_code if status_code.is_client_error() => {
             let response = parse_error(response).await;
-            return Err(backoff::Error::transient(ProxyDocumentChangeError::BadRequest {
+            return Err(backoff::Error::Permanent(ProxyDocumentChangeError::BadRequest {
                 status_code,
                 response,
             }));
