@@ -240,6 +240,7 @@ impl IndexScheduler {
             + IndexMapper::nb_db()
             + features::FeatureData::nb_db()
             + 1 // chat-prompts
+            + 1 // persisted
     }
 
     /// Create an index scheduler and start its run loop.

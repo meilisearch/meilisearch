@@ -62,9 +62,12 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     }
     snap.push_str("\n----------------------------------------------------------------------\n");
 
-    snap.push_str("### Persisted:\n");
-    snap.push_str(&snapshot_persisted_db(&rtxn, persisted));
-    snap.push_str("----------------------------------------------------------------------\n");
+    let persisted_db_snapshot = snapshot_persisted_db(&rtxn, persisted);
+    if !persisted_db_snapshot.is_empty() {
+        snap.push_str("### Persisted:\n");
+        snap.push_str(&persisted_db_snapshot);
+        snap.push_str("----------------------------------------------------------------------\n");
+    }
 
     snap.push_str("### All Tasks:\n");
     snap.push_str(&snapshot_all_tasks(&rtxn, queue.tasks.all_tasks));
