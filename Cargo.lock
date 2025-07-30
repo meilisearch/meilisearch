@@ -2603,23 +2603,18 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.0.1"
-source = "git+https://github.com/nnethercott/hannoy?tag=v0.0.1#d51750cd5612b6875375f5f4ad3928c87d55ee38"
+source = "git+https://github.com/Kerollmops/hannoy?branch=release-0.0.2#f016685623dadf20bd75df0748b45643d326b146"
 dependencies = [
  "bytemuck",
  "byteorder",
- "enum-iterator",
  "hashbrown 0.15.4",
  "heed",
- "memmap2",
  "min-max-heap",
- "nohash",
- "ordered-float 5.0.0",
  "page_size",
  "papaya",
  "rand 0.8.5",
  "rayon",
  "roaring",
- "tempfile",
  "thiserror 2.0.12",
  "tinyvec",
  "tracing",
