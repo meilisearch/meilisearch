@@ -27,7 +27,7 @@ pub enum Body<T: serde::Serialize> {
 }
 
 impl Body<()> {
-    pub fn with_file(file: File) -> Self {
+    pub fn with_ndjson_payload(file: File) -> Self {
         Self::NdJsonPayload(file)
     }
 
