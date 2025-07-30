@@ -13,6 +13,7 @@ pub mod routes;
 pub mod search;
 pub mod search_queue;
 
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
@@ -48,6 +49,7 @@ use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::versioning::{
     create_current_version_file, get_version, VersionFileError, VERSION_MINOR, VERSION_PATCH,
 };
+use meilisearch_types::webhooks::Webhook;
 use meilisearch_types::{compression, heed, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
@@ -223,8 +225,6 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         indexes_path: opt.db_path.join("indexes"),
         snapshots_path: opt.snapshot_dir.clone(),
         dumps_path: opt.dump_dir.clone(),
-        webhook_url: opt.task_webhook_url.as_ref().map(|url| url.to_string()),
-        webhook_authorization_header: opt.task_webhook_authorization_header.clone(),
         task_db_size: opt.max_task_db_size.as_u64() as usize,
         index_base_map_size: opt.max_index_size.as_u64() as usize,
         enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
@@ -325,6 +325,30 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
                 }
             })
             .unwrap();
+    }
+
+    // We set the webhook url
+    let cli_webhook = opt.task_webhook_url.as_ref().map(|u| Webhook {
+        url: u.to_string(),
+        headers: {
+            let mut headers = BTreeMap::new();
+            if let Some(value) = &opt.task_webhook_authorization_header {
+                headers.insert(String::from("Authorization"), value.to_string());
+            }
+            headers
+        },
+    });
+    let mut webhooks = index_scheduler.webhooks();
+    if webhooks.webhooks.get("_cli") != cli_webhook.as_ref() {
+        match cli_webhook {
+            Some(webhook) => {
+                webhooks.webhooks.insert("_cli".to_string(), webhook);
+            }
+            None => {
+                webhooks.webhooks.remove("_cli");
+            }
+        }
+        index_scheduler.put_webhooks(webhooks)?;
     }
 
     Ok((index_scheduler, auth_controller))

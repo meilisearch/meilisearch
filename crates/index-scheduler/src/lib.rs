@@ -107,10 +107,6 @@ pub struct IndexSchedulerOptions {
     pub snapshots_path: PathBuf,
     /// The path to the folder containing the dumps.
     pub dumps_path: PathBuf,
-    /// The URL on which we must send the tasks statuses
-    pub webhook_url: Option<String>,
-    /// The value we will send into the Authorization HTTP header on the webhook URL
-    pub webhook_authorization_header: Option<String>,
     /// The maximum size, in bytes, of the task index.
     pub task_db_size: usize,
     /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
