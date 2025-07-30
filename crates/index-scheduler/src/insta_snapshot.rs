@@ -26,11 +26,11 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         version,
         queue,
         scheduler,
+        persisted,
 
         index_mapper,
         features: _,
-        webhook_url: _,
-        webhook_authorization_header: _,
+        cached_webhooks: _,
         test_breakpoint_sdr: _,
         planned_failures: _,
         run_loop_iteration: _,
@@ -61,6 +61,10 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         snap.push_str(&snapshot_batch(&batch.to_batch()));
     }
     snap.push_str("\n----------------------------------------------------------------------\n");
+
+    snap.push_str("### Persisted:\n");
+    snap.push_str(&snapshot_persisted_db(&rtxn, persisted));
+    snap.push_str("----------------------------------------------------------------------\n");
 
     snap.push_str("### All Tasks:\n");
     snap.push_str(&snapshot_all_tasks(&rtxn, queue.tasks.all_tasks));
@@ -200,6 +204,16 @@ pub fn snapshot_date_db(rtxn: &RoTxn, db: Database<BEI128, CboRoaringBitmapCodec
     snap
 }
 
+pub fn snapshot_persisted_db(rtxn: &RoTxn, db: &Database<Str, Str>) -> String {
+    let mut snap = String::new();
+    let iter = db.iter(rtxn).unwrap();
+    for next in iter {
+        let (key, value) = next.unwrap();
+        snap.push_str(&format!("{key}: {value}\n"));
+    }
+    snap
+}
+
 pub fn snapshot_task(task: &Task) -> String {
     let mut snap = String::new();
     let Task {
@@ -311,6 +325,7 @@ pub fn snapshot_status(
     }
     snap
 }
+
 pub fn snapshot_kind(rtxn: &RoTxn, db: Database<SerdeBincode<Kind>, RoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
@@ -331,6 +346,7 @@ pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>)
     }
     snap
 }
+
 pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();

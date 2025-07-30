@@ -168,7 +168,7 @@ impl Aggregate for PatchNetworkAnalytics {
     path = "",
     tag = "Network",
     request_body = Network,
-    security(("Bearer" = ["network.update", "network.*", "*"])),
+    security(("Bearer" = ["network.update", "*"])),
     responses(
         (status = OK, description = "New network state is returned",  body = Network, content_type = "application/json", example = json!(
             {

@@ -15,6 +15,7 @@ pub mod star_or;
 pub mod task_view;
 pub mod tasks;
 pub mod versioning;
+pub mod webhooks;
 pub use milli::{heed, Index};
 use uuid::Uuid;
 pub use versioning::VERSION_FILE_NAME;

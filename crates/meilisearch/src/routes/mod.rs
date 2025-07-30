@@ -70,6 +70,7 @@ mod swap_indexes;
 pub mod tasks;
 #[cfg(test)]
 mod tasks_test;
+mod webhooks;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -89,6 +90,7 @@ mod tasks_test;
         (path = "/experimental-features", api = features::ExperimentalFeaturesApi),
         (path = "/export", api = export::ExportApi),
         (path = "/network", api = network::NetworkApi),
+        (path = "/webhooks", api = webhooks::WebhooksApi),
     ),
     paths(get_health, get_version, get_stats),
     tags(
@@ -120,7 +122,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/experimental-features").configure(features::configure))
         .service(web::scope("/network").configure(network::configure))
         .service(web::scope("/export").configure(export::configure))
-        .service(web::scope("/chats").configure(chats::configure));
+        .service(web::scope("/chats").configure(chats::configure))
+        .service(web::scope("/webhooks").configure(webhooks::configure));
 
     #[cfg(feature = "swagger")]
     {
