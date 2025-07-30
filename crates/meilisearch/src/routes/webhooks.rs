@@ -125,12 +125,20 @@ impl Aggregate for PatchWebhooksAnalytics {
 enum WebhooksError {
     #[error("The URL for the webhook `{0}` is missing.")]
     MissingUrl(String),
+    #[error("Defining too many webhooks would crush the server. Please limit the number of webhooks to 20. You may use a third-party proxy server to dispatch events to more than 20 endpoints.")]
+    TooManyWebhooks,
+    #[error("Too many headers for the webhook `{0}`. Please limit the number of headers to 200.")]
+    TooManyHeaders(String),
 }
 
 impl ErrorCode for WebhooksError {
     fn error_code(&self) -> meilisearch_types::error::Code {
         match self {
             WebhooksError::MissingUrl(_) => meilisearch_types::error::Code::InvalidWebhooksUrl,
+            WebhooksError::TooManyWebhooks => meilisearch_types::error::Code::InvalidWebhooks,
+            WebhooksError::TooManyHeaders(_) => {
+                meilisearch_types::error::Code::InvalidWebhooksHeaders
+            }
         }
     }
 }
@@ -217,6 +225,9 @@ async fn patch_webhooks(
                     Setting::Set(new_webhook) => {
                         let old_webhook = webhooks.remove(&name);
                         let webhook = merge_webhook(&name, old_webhook, new_webhook)?;
+                        if webhook.headers.len() > 200 {
+                            return Err(WebhooksError::TooManyHeaders(name).into());
+                        }
                         webhooks.insert(name.clone(), webhook);
                     }
                     Setting::Reset => {
@@ -229,6 +240,10 @@ async fn patch_webhooks(
         Setting::Reset => webhooks.clear(),
         Setting::NotSet => (),
     };
+
+    if webhooks.len() > 20 {
+        return Err(WebhooksError::TooManyWebhooks.into());
+    }
 
     analytics.publish(PatchWebhooksAnalytics, &req);
 
