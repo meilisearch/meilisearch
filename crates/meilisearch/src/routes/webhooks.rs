@@ -189,10 +189,6 @@ async fn patch_webhooks(
         old_webhook: Option<Webhook>,
         new_webhook: WebhookSettings,
     ) -> Result<Webhook, WebhooksError> {
-        if name.starts_with('_') {
-            return Err(WebhooksError::ReservedWebhook(name.to_owned()));
-        }
-
         let (old_url, mut headers) =
             old_webhook.map(|w| (Some(w.url), w.headers)).unwrap_or((None, BTreeMap::new()));
 
@@ -232,6 +228,10 @@ async fn patch_webhooks(
     match new_webhooks {
         Setting::Set(new_webhooks) => {
             for (name, new_webhook) in new_webhooks {
+                if name.starts_with('_') {
+                    return Err(WebhooksError::ReservedWebhook(name).into());
+                }
+
                 match new_webhook {
                     Setting::Set(new_webhook) => {
                         let old_webhook = webhooks.remove(&name);
