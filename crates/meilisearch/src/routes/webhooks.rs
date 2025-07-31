@@ -6,9 +6,7 @@ use deserr::actix_web::AwebJson;
 use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::deserr_codes::{
-    InvalidWebhooks, InvalidWebhooksHeaders, InvalidWebhooksUrl,
-};
+use meilisearch_types::error::deserr_codes::{InvalidWebhooksHeaders, InvalidWebhooksUrl};
 use meilisearch_types::error::{ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
@@ -25,7 +23,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_webhooks, patch_webhooks, get_webhook),
+    paths(get_webhooks, patch_webhooks, get_webhook, post_webhook),
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
@@ -38,13 +36,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_webhooks))
-            .route(web::patch().to(SeqHandler(patch_webhooks))),
+            .route(web::patch().to(SeqHandler(patch_webhooks)))
+            .route(web::post().to(SeqHandler(post_webhook))),
     )
     .service(web::resource("/{uuid}").route(web::get().to(get_webhook)));
 }
 
 #[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError<InvalidWebhooks>, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 struct WebhookSettings {
@@ -64,16 +63,17 @@ struct WebhookSettings {
 #[schema(rename_all = "camelCase")]
 struct WebhooksSettings {
     #[schema(value_type = Option<BTreeMap<String, WebhookSettings>>)]
-    #[deserr(default, error = DeserrJsonError<InvalidWebhooks>)]
     #[serde(default)]
     webhooks: Setting<BTreeMap<Uuid, Setting<WebhookSettings>>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 struct WebhookWithMetadata {
     uuid: Uuid,
     is_editable: bool,
+    #[schema(value_type = WebhookSettings)]
     #[serde(flatten)]
     webhook: Webhook,
 }
@@ -138,11 +138,16 @@ async fn get_webhooks(
 #[derive(Serialize, Default)]
 pub struct PatchWebhooksAnalytics {
     patch_webhooks_count: usize,
+    post_webhook_count: usize,
 }
 
 impl PatchWebhooksAnalytics {
     pub fn patch_webhooks() -> Self {
-        PatchWebhooksAnalytics { patch_webhooks_count: 1 }
+        PatchWebhooksAnalytics { patch_webhooks_count: 1, ..Default::default() }
+    }
+
+    pub fn post_webhook() -> Self {
+        PatchWebhooksAnalytics { post_webhook_count: 1, ..Default::default() }
     }
 }
 
@@ -154,6 +159,7 @@ impl Aggregate for PatchWebhooksAnalytics {
     fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(PatchWebhooksAnalytics {
             patch_webhooks_count: self.patch_webhooks_count + new.patch_webhooks_count,
+            post_webhook_count: self.post_webhook_count + new.post_webhook_count,
         })
     }
 
@@ -185,7 +191,7 @@ impl ErrorCode for WebhooksError {
                 meilisearch_types::error::Code::InvalidWebhooksHeaders
             }
             WebhooksError::ReservedWebhook(_) => meilisearch_types::error::Code::ReservedWebhook,
-            WebhooksError::WebhookNotFound(_) => meilisearch_types::error::Code::InvalidWebhooks,
+            WebhooksError::WebhookNotFound(_) => meilisearch_types::error::Code::WebhookNotFound,
         }
     }
 }
@@ -318,7 +324,7 @@ fn patch_webhooks_inner(
 
 #[utoipa::path(
     get,
-    path = "/{name}",
+    path = "/{uuid}",
     tag = "Webhooks",
     security(("Bearer" = ["webhooks.get", "*.get", "*"])),
     responses(
@@ -352,4 +358,45 @@ async fn get_webhook(
         is_editable: uuid != Uuid::nil(),
         webhook,
     }))
+}
+
+#[utoipa::path(
+    post,
+    path = "",
+    tag = "Webhooks",
+    request_body = WebhookSettings,
+    security(("Bearer" = ["webhooks.update", "*"])),
+    responses(
+        (status = 201, description = "Webhook created successfully", body = WebhookWithMetadata, content_type = "application/json", example = json!({
+            "uuid": "550e8400-e29b-41d4-a716-446655440000",
+            "url": "https://your.site/on-tasks-completed",
+            "headers": {
+                "Authorization": "Bearer a-secret-token"
+            },
+            "isEditable": true
+        })),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
+        (status = 400, description = "Bad request", body = ResponseError, content_type = "application/json"),
+    )
+)]
+async fn post_webhook(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
+    webhook_settings: AwebJson<WebhookSettings, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let uuid = Uuid::new_v4();
+
+    let webhooks = patch_webhooks_inner(
+        &index_scheduler,
+        WebhooksSettings {
+            webhooks: Setting::Set(BTreeMap::from([(uuid, Setting::Set(webhook_settings.0))])),
+        },
+    )?;
+    let webhook = webhooks.webhooks.get(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?.clone();
+
+    analytics.publish(PatchWebhooksAnalytics::post_webhook(), &req);
+
+    debug!(returns = ?webhook, "Created webhook {}", uuid);
+    Ok(HttpResponse::Created().json(WebhookWithMetadata { uuid, is_editable: true, webhook }))
 }
