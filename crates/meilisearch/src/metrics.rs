@@ -38,7 +38,10 @@ lazy_static! {
         )
         .expect("Can't create a metric");
     pub static ref MEILISEARCH_CHAT_TOKENS_TOTAL: IntCounterVec = register_int_counter_vec!(
-        opts!("meilisearch_chat_tokens_total", "Total number of tokens consumed (prompt + completion)"),
+        opts!(
+            "meilisearch_chat_tokens_total",
+            "Total number of tokens consumed (prompt + completion)"
+        ),
         &["workspace", "model"]
     )
     .expect("Can't create a metric");
