@@ -115,10 +115,10 @@ async fn single_receives_data() {
     }
     "#);
 
-    let index = server.index("tamo");
     // May be flaky: we're relying on the fact that while the first document addition is processed, the other
     // operations will be received and will be batched together. If it doesn't happen it's not a problem
     // the rest of the test won't assume anything about the number of tasks per batch.
+    let index = server.index("tamo");
     for i in 0..5 {
         let (_, _status) = index.add_documents(json!({ "id": i, "doggo": "bone" }), None).await;
     }
@@ -162,6 +162,53 @@ async fn single_receives_data() {
     assert!(nb_tasks == 5, "We should have received the 5 tasks but only received {nb_tasks}");
 
     server_handle.abort();
+}
+
+#[actix_web::test]
+async fn multiple_receive_data() {
+    let server = Server::new().await;
+
+    let WebhookHandle { server_handle: handle1, url: url1, receiver: mut receiver1 } =
+        create_webhook_server().await;
+    let WebhookHandle { server_handle: handle2, url: url2, receiver: mut receiver2 } =
+        create_webhook_server().await;
+    let WebhookHandle { server_handle: handle3, url: url3, receiver: mut receiver3 } =
+        create_webhook_server().await;
+
+    for url in [url1, url2, url3] {
+        let (value, code) = server.create_webhook(json!({ "url": url })).await;
+        snapshot!(code, @"201 Created");
+        snapshot!(json_string!(value, { ".uuid" => "[uuid]", ".url" => "[ignored]" }), @r#"
+        {
+          "uuid": "[uuid]",
+          "isEditable": true,
+          "url": "[ignored]",
+          "headers": {}
+        }
+        "#);
+    }
+    let index = server.index("tamo");
+    let (_, status) = index.add_documents(json!({ "id": 1, "doggo": "bone" }), None).await;
+    snapshot!(status, @"202 Accepted");
+
+    let mut count1 = 0;
+    let mut count2 = 0;
+    let mut count3 = 0;
+    while count1 == 0 || count2 == 0 || count3 == 0 {
+        tokio::select! {
+            msg = receiver1.recv() => { if msg.is_some() { count1 += 1; } },
+            msg = receiver2.recv() => { if msg.is_some() { count2 += 1; } },
+            msg = receiver3.recv() => { if msg.is_some() { count3 += 1; } },
+        }
+    }
+
+    assert_eq!(count1, 1);
+    assert_eq!(count2, 1);
+    assert_eq!(count3, 1);
+
+    handle1.abort();
+    handle2.abort();
+    handle3.abort();
 }
 
 #[actix_web::test]
