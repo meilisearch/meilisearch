@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use actix_web::web::{self, Data};
+use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
@@ -24,7 +24,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_webhooks, patch_webhooks),
+    paths(get_webhooks, patch_webhooks, get_webhook),
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
@@ -37,7 +37,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_webhooks))
-            .route(web::patch().to(SeqHandler(patch_webhooks))),
+            .route(web::patch().to(SeqHandler(patch_webhooks)))
+    )
+    .service(
+        web::resource("/{name}")
+            .route(web::get().to(get_webhook))
     );
 }
 
@@ -104,16 +108,29 @@ struct WebhooksSettings {
     webhooks: Setting<BTreeMap<String, Setting<WebhookSettings>>>,
 }
 
-#[derive(Serialize)]
-pub struct PatchWebhooksAnalytics;
+#[derive(Serialize, Default)]
+pub struct PatchWebhooksAnalytics {
+    patch_webhooks_count: usize,
+}
+
+impl PatchWebhooksAnalytics {
+    pub fn patch_webhooks() -> Self {
+        PatchWebhooksAnalytics {
+            patch_webhooks_count: 1,
+            ..Self::default()
+        }
+    }
+}
 
 impl Aggregate for PatchWebhooksAnalytics {
     fn event_name(&self) -> &'static str {
         "Webhooks Updated"
     }
 
-    fn aggregate(self: Box<Self>, _new: Box<Self>) -> Box<Self> {
-        self
+    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
+        Box::new(PatchWebhooksAnalytics {
+            patch_webhooks_count: self.patch_webhooks_count + new.patch_webhooks_count,
+        })
     }
 
     fn into_event(self: Box<Self>) -> serde_json::Value {
@@ -131,6 +148,8 @@ enum WebhooksError {
     TooManyHeaders(String),
     #[error("Cannot edit webhook `{0}`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.")]
     ReservedWebhook(String),
+    #[error("Webhook `{0}` not found.")]
+    WebhookNotFound(String),
 }
 
 impl ErrorCode for WebhooksError {
@@ -142,6 +161,7 @@ impl ErrorCode for WebhooksError {
                 meilisearch_types::error::Code::InvalidWebhooksHeaders
             }
             WebhooksError::ReservedWebhook(_) => meilisearch_types::error::Code::ReservedWebhook,
+            WebhooksError::WebhookNotFound(_) => meilisearch_types::error::Code::InvalidWebhooks,
         }
     }
 }
@@ -182,7 +202,7 @@ async fn patch_webhooks(
 ) -> Result<HttpResponse, ResponseError> {
     let webhooks = patch_webhooks_inner(&index_scheduler, new_webhooks.0)?;
 
-    analytics.publish(PatchWebhooksAnalytics, &req);
+    analytics.publish(PatchWebhooksAnalytics::patch_webhooks(), &req);
 
     Ok(HttpResponse::Ok().json(webhooks))
 }
@@ -270,4 +290,33 @@ fn patch_webhooks_inner(
     debug!(returns = ?webhooks, "Patch webhooks");
 
     Ok(webhooks)
+}
+
+#[utoipa::path(
+    get,
+    path = "/{name}",
+    tag = "Webhooks",
+    security(("Bearer" = ["webhooks.get", "*.get", "*"])),
+    responses(
+        (status = 200, description = "Webhook found", body = WebhookSettings, content_type = "application/json"),
+        (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json"),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
+    ),
+    params(
+        ("name" = String, Path, description = "The name of the webhook")
+    )
+)]
+async fn get_webhook(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_GET }>, Data<IndexScheduler>>,
+    name: Path<String>,
+) -> Result<HttpResponse, ResponseError> {
+    let webhook_name = name.into_inner();
+    let webhooks = index_scheduler.webhooks();
+
+    if let Some(webhook) = webhooks.webhooks.get(&webhook_name) {
+        debug!(returns = ?webhook, "Get webhook {}", webhook_name);
+        Ok(HttpResponse::Ok().json(webhook))
+    } else {
+        Err(WebhooksError::WebhookNotFound(webhook_name).into())
+    }
 }
