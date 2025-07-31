@@ -106,7 +106,13 @@ Run `cargo xtask --help` from the root of the repository to find out what is ava
 #### Update the openAPI file if the API changed
 
 To update the openAPI file in the code, see [sprint_issue.md](https://github.com/meilisearch/meilisearch/blob/main/.github/ISSUE_TEMPLATE/sprint_issue.md#reminders-when-modifying-the-api).
-If you want to update the openAPI file on the [open-api repository](https://github.com/meilisearch/open-api), see [update-openapi-issue.md](https://github.com/meilisearch/engine-team/blob/main/issue-templates/update-openapi-issue.md).
+
+If you want to update the openAPI file on the [open-api repository](https://github.com/meilisearch/open-api):
+- Pull the latest version of the latest rc of Meilisearch `git checkout release-vX.Y.Z; git pull`
+- Starts Meilisearch with the `swagger` feature flag: `cargo run --features swagger`
+- On a browser, open the following URL: http://localhost:7700/scalar
+- Click the « Download openAPI file »
+- Open a PR replacing [this file](https://github.com/meilisearch/open-api/blob/main/open-api.json) with the one downloaded
 
 ### Logging
 
@@ -160,25 +166,37 @@ Some notes on GitHub PRs:
   The draft PRs are recommended when you want to show that you are working on something and make your work visible.
 - The branch related to the PR must be **up-to-date with `main`** before merging. Fortunately, this project uses [GitHub Merge Queues](https://github.blog/news-insights/product-news/github-merge-queue-is-generally-available/) to automatically enforce this requirement without the PR author having to rebase manually.
 
-## Release Process (for internal team only)
-
-Meilisearch tools follow the [Semantic Versioning Convention](https://semver.org/).
-
-### Automation to rebase and Merge the PRs
+## Merging PRs
 
 This project uses GitHub Merge Queues that helps us manage pull requests merging.
 
-### How to Publish a new Release
+Before merging a PR, the maintainer should ensure the following requirements are met
+- Automated tests have been added.
+- If some tests cannot be automated, manual rigorous tests should be applied.
+- ⚠️ If there is an change in the DB: it's mandatory to manually test the `--experimental-dumpless-upgrade` on a DB of the previous Meilisearch minor version (e.g. v1.13 for the v1.14 release).
+- If necessary, the feature have been tested in the Cloud production environment (with [prototypes](./documentation/prototypes.md)) and the Cloud UI is ready.
+- If necessary, the [documentation](https://github.com/meilisearch/documentation) related to the implemented feature in the PR is ready.
+- If necessary, the [integrations](https://github.com/meilisearch/integration-guides) related to the implemented feature in the PR are ready.
 
-The full Meilisearch release process is described in [this guide](https://github.com/meilisearch/engine-team/blob/main/resources/meilisearch-release.md). Please follow it carefully before doing any release.
+## Publish Process (for internal team only)
+
+Meilisearch tools follow the [Semantic Versioning Convention](https://semver.org/).
+
+### How to publish a new release
+
+The full Meilisearch release process is described in [this guide](./documentation/release.md).
 
 ### How to publish a prototype
 
 Depending on the developed feature, you might need to provide a prototyped version of Meilisearch to make it easier to test by the users.
 
 This happens in two steps:
-- [Release the prototype](https://github.com/meilisearch/engine-team/blob/main/resources/prototypes.md#how-to-publish-a-prototype)
-- [Communicate about it](https://github.com/meilisearch/engine-team/blob/main/resources/prototypes.md#communication)
+- [Release the prototype](./documentation/prototypes.md#how-to-publish-a-prototype)
+- [Communicate about it](./documentation/prototypes.md#communication)
+
+### How to implement and publish an experimental feature
+
+Here is our [guidelines and process](./documentation/experimental-features.md) to implement and publish an experimental feature.
 
 ### Release assets
 
