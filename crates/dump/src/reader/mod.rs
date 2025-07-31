@@ -449,7 +449,7 @@ pub(crate) mod test {
         let dump = DumpReader::open(dump).unwrap();
 
         // top level infos
-        insta::assert_snapshot!(dump.date().unwrap(), @"2025-07-31 7:28:28.091553 +00:00:00");
+        insta::assert_snapshot!(dump.date().unwrap(), @"2025-07-31 9:21:30.479544 +00:00:00");
         insta::assert_debug_snapshot!(dump.instance_uid().unwrap(), @r"
         Some(
             cb887dcc-34b3-48d1-addd-9815ae721a81,
@@ -462,23 +462,23 @@ pub(crate) mod test {
         insta::assert_json_snapshot!(webhooks, @r#"
         {
           "webhooks": {
-            "_cli": {
+            "00000000-0000-0000-0000-000000000000": {
               "url": "https://defined-in-dump.com/",
               "headers": {
                 "Authorization": "Bearer defined in dump"
               }
             },
-            "exampleName": {
+            "627ea538-733d-4545-8d2d-03526eb381ce": {
+              "url": "https://example.com/authorization-less",
+              "headers": {}
+            },
+            "771b0a28-ef28-4082-b984-536f82958c65": {
               "url": "https://example.com/hook",
               "headers": {
                 "authorization": "TOKEN"
               }
             },
-            "otherName": {
-              "url": "https://example.com/authorization-less",
-              "headers": {}
-            },
-            "third": {
+            "f3583083-f8a7-4cbf-a5e7-fb3f1e28a7e9": {
               "url": "https://third.com",
               "headers": {}
             }

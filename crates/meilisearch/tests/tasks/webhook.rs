@@ -13,6 +13,7 @@ use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use tokio::sync::mpsc;
 use url::Url;
+use uuid::Uuid;
 
 use crate::common::{self, default_settings, Server};
 use crate::json;
@@ -129,16 +130,18 @@ async fn cli_only() {
 
     let (webhooks, code) = server.get_webhooks().await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(webhooks, { ".webhooks._cli.url" => "[ignored]" }), @r#"
+    snapshot!(json_string!(webhooks, { ".results[].url" => "[ignored]" }), @r#"
     {
-      "webhooks": {
-        "_cli": {
+      "results": [
+        {
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "isEditable": false,
           "url": "[ignored]",
           "headers": {
             "Authorization": "Bearer a-secret-token"
           }
         }
-      }
+      ]
     }
     "#);
 
@@ -163,28 +166,36 @@ async fn cli_with_dumps() {
     snapshot!(code, @"200 OK");
     snapshot!(webhooks, @r#"
     {
-      "webhooks": {
-        "_cli": {
+      "results": [
+        {
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "isEditable": false,
           "url": "http://defined-in-test-cli.com/",
           "headers": {
             "Authorization": "Bearer a-secret-token-defined-in-test-cli"
           }
         },
-        "exampleName": {
+        {
+          "uuid": "627ea538-733d-4545-8d2d-03526eb381ce",
+          "isEditable": true,
+          "url": "https://example.com/authorization-less",
+          "headers": {}
+        },
+        {
+          "uuid": "771b0a28-ef28-4082-b984-536f82958c65",
+          "isEditable": true,
           "url": "https://example.com/hook",
           "headers": {
             "authorization": "TOKEN"
           }
         },
-        "otherName": {
-          "url": "https://example.com/authorization-less",
-          "headers": {}
-        },
-        "third": {
+        {
+          "uuid": "f3583083-f8a7-4cbf-a5e7-fb3f1e28a7e9",
+          "isEditable": true,
           "url": "https://third.com",
           "headers": {}
         }
-      }
+      ]
     }
     "#);
 }
@@ -194,23 +205,23 @@ async fn reserved_names() {
     let server = Server::new().await;
 
     let (value, code) = server
-        .set_webhooks(json!({ "webhooks": { "_cli": { "url": "http://localhost:8080" } } }))
+        .set_webhooks(json!({ "webhooks": { Uuid::nil(): { "url": "http://localhost:8080" } } }))
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Cannot edit webhook `_cli`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.",
+      "message": "Cannot edit webhook `[uuid]`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.",
       "code": "reserved_webhook",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#reserved_webhook"
     }
     "#);
 
-    let (value, code) = server.set_webhooks(json!({ "webhooks": { "_cli": null } })).await;
+    let (value, code) = server.set_webhooks(json!({ "webhooks": { Uuid::nil(): null } })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Cannot edit webhook `_cli`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.",
+      "message": "Cannot edit webhook `[uuid]`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.",
       "code": "reserved_webhook",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#reserved_webhook"
@@ -223,14 +234,14 @@ async fn over_limits() {
     let server = Server::new().await;
 
     // Too many webhooks
-    for i in 0..20 {
+    for _ in 0..20 {
         let (_value, code) = server
-            .set_webhooks(json!({ "webhooks": { format!("webhook_{i}"): { "url": "http://localhost:8080" } } }))
+            .set_webhooks(json!({ "webhooks": { Uuid::new_v4(): { "url": "http://localhost:8080" } } }))
             .await;
         snapshot!(code, @"200 OK");
     }
     let (value, code) = server
-        .set_webhooks(json!({ "webhooks": { "webhook_21": { "url": "http://localhost:8080" } } }))
+        .set_webhooks(json!({ "webhooks": { Uuid::new_v4(): { "url": "http://localhost:8080" } } }))
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
@@ -252,20 +263,21 @@ async fn over_limits() {
     "#);
 
     // Test too many headers
+    let uuid = Uuid::new_v4();
     for i in 0..200 {
         let header_name = format!("header_{i}");
         let (_value, code) = server
-            .set_webhooks(json!({ "webhooks": { "webhook": { "url": "http://localhost:8080", "headers": { header_name: "value" } } } }))
+            .set_webhooks(json!({ "webhooks": { uuid: { "url": "http://localhost:8080", "headers": { header_name: "value" } } } }))
             .await;
         snapshot!(code, @"200 OK");
     }
     let (value, code) = server
-        .set_webhooks(json!({ "webhooks": { "webhook": { "url": "http://localhost:8080", "headers": { "header_201": "value" } } } }))
+        .set_webhooks(json!({ "webhooks": { uuid: { "url": "http://localhost:8080", "headers": { "header_201": "value" } } } }))
         .await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Too many headers for the webhook `webhook`. Please limit the number of headers to 200.",
+      "message": "Too many headers for the webhook `[uuid]`. Please limit the number of headers to 200.",
       "code": "invalid_webhooks_headers",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
