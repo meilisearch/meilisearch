@@ -195,6 +195,11 @@ impl Server<Owned> {
         self.service.get(url).await
     }
 
+    pub async fn delete_webhook(&self, uuid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/webhooks/{}", uuid.as_ref());
+        self.service.delete(url).await
+    }
+
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
         self.service.get("/metrics").await
     }

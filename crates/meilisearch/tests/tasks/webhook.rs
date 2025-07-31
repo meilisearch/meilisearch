@@ -288,7 +288,7 @@ async fn over_limits() {
 }
 
 #[actix_web::test]
-async fn post_and_get() {
+async fn post_get_delete() {
     let server = Server::new().await;
 
     let (value, code) = server
@@ -322,4 +322,10 @@ async fn post_and_get() {
       }
     }
     "#);
+
+    let (_value, code) = server.delete_webhook(uuid).await;
+    snapshot!(code, @"204 No Content");
+
+    let (_value, code) = server.get_webhook(uuid).await;
+    snapshot!(code, @"404 Not Found");
 }

@@ -143,6 +143,7 @@ async fn get_webhooks(
 pub struct PatchWebhooksAnalytics {
     patch_webhooks_count: usize,
     post_webhook_count: usize,
+    delete_webhook_count: usize,
 }
 
 impl PatchWebhooksAnalytics {
@@ -152,6 +153,10 @@ impl PatchWebhooksAnalytics {
 
     pub fn post_webhook() -> Self {
         PatchWebhooksAnalytics { post_webhook_count: 1, ..Default::default() }
+    }
+
+    pub fn delete_webhook() -> Self {
+        PatchWebhooksAnalytics { delete_webhook_count: 1, ..Default::default() }
     }
 }
 
@@ -164,6 +169,7 @@ impl Aggregate for PatchWebhooksAnalytics {
         Box::new(PatchWebhooksAnalytics {
             patch_webhooks_count: self.patch_webhooks_count + new.patch_webhooks_count,
             post_webhook_count: self.post_webhook_count + new.post_webhook_count,
+            delete_webhook_count: self.delete_webhook_count + new.delete_webhook_count,
         })
     }
 
@@ -356,7 +362,6 @@ async fn get_webhook(
 
     let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?;
 
-    debug!(returns = ?webhook, "Get webhook {}", uuid);
     Ok(HttpResponse::Ok().json(WebhookWithMetadata {
         uuid,
         is_editable: uuid != Uuid::nil(),
@@ -401,7 +406,6 @@ async fn post_webhook(
 
     analytics.publish(PatchWebhooksAnalytics::post_webhook(), &req);
 
-    debug!(returns = ?webhook, "Created webhook {}", uuid);
     Ok(HttpResponse::Created().json(WebhookWithMetadata { uuid, is_editable: true, webhook }))
 }
 
@@ -437,8 +441,7 @@ async fn delete_webhook(
         WebhooksSettings { webhooks: Setting::Set(BTreeMap::from([(uuid, Setting::Reset)])) },
     )?;
 
-    analytics.publish(PatchWebhooksAnalytics::patch_webhooks(), &req);
+    analytics.publish(PatchWebhooksAnalytics::delete_webhook(), &req);
 
-    debug!("Deleted webhook {}", uuid);
     Ok(HttpResponse::NoContent().finish())
 }
