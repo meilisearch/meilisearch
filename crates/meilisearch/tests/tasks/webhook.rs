@@ -145,13 +145,14 @@ async fn cli_only() {
     server_handle.abort();
 }
 
-
 #[actix_web::test]
 async fn cli_with_dumps() {
     let db_path = tempfile::tempdir().unwrap();
     let server = Server::new_with_options(Opt {
         task_webhook_url: Some(Url::parse("http://defined-in-test-cli.com").unwrap()),
-        task_webhook_authorization_header: Some(String::from("Bearer a-secret-token-defined-in-test-cli")),
+        task_webhook_authorization_header: Some(String::from(
+            "Bearer a-secret-token-defined-in-test-cli",
+        )),
         import_dump: Some(PathBuf::from("../dump/tests/assets/v6-with-webhooks.dump")),
         ..default_settings(db_path.path())
     })

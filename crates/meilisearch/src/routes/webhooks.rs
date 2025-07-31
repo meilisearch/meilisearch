@@ -16,6 +16,7 @@ use meilisearch_types::webhooks::{Webhook, Webhooks};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
+use uuid::Uuid;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -37,49 +38,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_webhooks))
-            .route(web::patch().to(SeqHandler(patch_webhooks)))
+            .route(web::patch().to(SeqHandler(patch_webhooks))),
     )
-    .service(
-        web::resource("/{name}")
-            .route(web::get().to(get_webhook))
-    );
-}
-
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Webhooks",
-    security(("Bearer" = ["webhooks.get", "*.get", "*"])),
-    responses(
-        (status = OK, description = "Webhooks are returned", body = WebhooksSettings, content_type = "application/json", example = json!({
-            "webhooks": {
-                "name": {
-                    "url": "http://example.com/webhook",
-                },
-                "anotherName": {
-                    "url": "https://your.site/on-tasks-completed",
-                    "headers": {
-                        "Authorization": "Bearer a-secret-token"
-                    }
-                }
-            }
-        })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
-            {
-                "message": "The Authorization header is missing. It must use the bearer authorization method.",
-                "code": "missing_authorization_header",
-                "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
-            }
-        )),
-    )
-)]
-async fn get_webhooks(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_GET }>, Data<IndexScheduler>>,
-) -> Result<HttpResponse, ResponseError> {
-    let webhooks = index_scheduler.webhooks();
-    debug!(returns = ?webhooks, "Get webhooks");
-    Ok(HttpResponse::Ok().json(webhooks))
+    .service(web::resource("/{uuid}").route(web::get().to(get_webhook)));
 }
 
 #[derive(Debug, Deserr, ToSchema)]
@@ -105,7 +66,73 @@ struct WebhooksSettings {
     #[schema(value_type = Option<BTreeMap<String, WebhookSettings>>)]
     #[deserr(default, error = DeserrJsonError<InvalidWebhooks>)]
     #[serde(default)]
-    webhooks: Setting<BTreeMap<String, Setting<WebhookSettings>>>,
+    webhooks: Setting<BTreeMap<Uuid, Setting<WebhookSettings>>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebhookWithMetadata {
+    uuid: Uuid,
+    is_editable: bool,
+    #[serde(flatten)]
+    webhook: Webhook,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WebhookResults {
+    results: Vec<WebhookWithMetadata>,
+}
+
+#[utoipa::path(
+    get,
+    path = "",
+    tag = "Webhooks",
+    security(("Bearer" = ["webhooks.get", "*.get", "*"])),
+    responses(
+        (status = OK, description = "Webhooks are returned", body = WebhooksSettings, content_type = "application/json", example = json!({
+            "results": [
+                {
+                    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+                    "url": "https://your.site/on-tasks-completed",
+                    "headers": {
+                        "Authorization": "Bearer a-secret-token"
+                    },
+                    "isEditable": true
+                },
+                {
+                    "uuid": "550e8400-e29b-41d4-a716-446655440001",
+                    "url": "https://another.site/on-tasks-completed",
+                    "isEditable": true
+                }
+            ]
+        })),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
+async fn get_webhooks(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_GET }>, Data<IndexScheduler>>,
+) -> Result<HttpResponse, ResponseError> {
+    let webhooks = index_scheduler.webhooks();
+    let results = webhooks
+        .webhooks
+        .into_iter()
+        .map(|(uuid, webhook)| WebhookWithMetadata {
+            uuid,
+            is_editable: uuid != Uuid::nil(),
+            webhook,
+        })
+        .collect::<Vec<_>>();
+    let results = WebhookResults { results };
+    debug!(returns = ?results, "Get webhooks");
+    Ok(HttpResponse::Ok().json(results))
 }
 
 #[derive(Serialize, Default)]
@@ -115,10 +142,7 @@ pub struct PatchWebhooksAnalytics {
 
 impl PatchWebhooksAnalytics {
     pub fn patch_webhooks() -> Self {
-        PatchWebhooksAnalytics {
-            patch_webhooks_count: 1,
-            ..Self::default()
-        }
+        PatchWebhooksAnalytics { patch_webhooks_count: 1 }
     }
 }
 
@@ -141,15 +165,15 @@ impl Aggregate for PatchWebhooksAnalytics {
 #[derive(Debug, thiserror::Error)]
 enum WebhooksError {
     #[error("The URL for the webhook `{0}` is missing.")]
-    MissingUrl(String),
+    MissingUrl(Uuid),
     #[error("Defining too many webhooks would crush the server. Please limit the number of webhooks to 20. You may use a third-party proxy server to dispatch events to more than 20 endpoints.")]
     TooManyWebhooks,
     #[error("Too many headers for the webhook `{0}`. Please limit the number of headers to 200.")]
-    TooManyHeaders(String),
+    TooManyHeaders(Uuid),
     #[error("Cannot edit webhook `{0}`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.")]
-    ReservedWebhook(String),
+    ReservedWebhook(Uuid),
     #[error("Webhook `{0}` not found.")]
-    WebhookNotFound(String),
+    WebhookNotFound(Uuid),
 }
 
 impl ErrorCode for WebhooksError {
@@ -175,10 +199,10 @@ impl ErrorCode for WebhooksError {
     responses(
         (status = 200, description = "Returns the updated webhooks", body = WebhooksSettings, content_type = "application/json", example = json!({
             "webhooks": {
-                "name": {
+                "550e8400-e29b-41d4-a716-446655440000": {
                     "url": "http://example.com/webhook",
                 },
-                "anotherName": {
+                "550e8400-e29b-41d4-a716-446655440001": {
                     "url": "https://your.site/on-tasks-completed",
                     "headers": {
                         "Authorization": "Bearer a-secret-token"
@@ -212,7 +236,7 @@ fn patch_webhooks_inner(
     new_webhooks: WebhooksSettings,
 ) -> Result<Webhooks, ResponseError> {
     fn merge_webhook(
-        name: &str,
+        uuid: &Uuid,
         old_webhook: Option<Webhook>,
         new_webhook: WebhookSettings,
     ) -> Result<Webhook, WebhooksError> {
@@ -221,8 +245,8 @@ fn patch_webhooks_inner(
 
         let url = match new_webhook.url {
             Setting::Set(url) => url,
-            Setting::NotSet => old_url.ok_or_else(|| WebhooksError::MissingUrl(name.to_owned()))?,
-            Setting::Reset => return Err(WebhooksError::MissingUrl(name.to_owned())),
+            Setting::NotSet => old_url.ok_or_else(|| WebhooksError::MissingUrl(uuid.to_owned()))?,
+            Setting::Reset => return Err(WebhooksError::MissingUrl(uuid.to_owned())),
         };
 
         let headers = match new_webhook.headers {
@@ -246,7 +270,7 @@ fn patch_webhooks_inner(
         };
 
         if headers.len() > 200 {
-            return Err(WebhooksError::TooManyHeaders(name.to_owned()));
+            return Err(WebhooksError::TooManyHeaders(uuid.to_owned()));
         }
 
         Ok(Webhook { url, headers })
@@ -258,19 +282,19 @@ fn patch_webhooks_inner(
 
     match new_webhooks.webhooks {
         Setting::Set(new_webhooks) => {
-            for (name, new_webhook) in new_webhooks {
-                if name.starts_with('_') {
-                    return Err(WebhooksError::ReservedWebhook(name).into());
+            for (uuid, new_webhook) in new_webhooks {
+                if uuid.is_nil() {
+                    return Err(WebhooksError::ReservedWebhook(uuid).into());
                 }
 
                 match new_webhook {
                     Setting::Set(new_webhook) => {
-                        let old_webhook = webhooks.remove(&name);
-                        let webhook = merge_webhook(&name, old_webhook, new_webhook)?;
-                        webhooks.insert(name.clone(), webhook);
+                        let old_webhook = webhooks.remove(&uuid);
+                        let webhook = merge_webhook(&uuid, old_webhook, new_webhook)?;
+                        webhooks.insert(uuid, webhook);
                     }
                     Setting::Reset => {
-                        webhooks.remove(&name);
+                        webhooks.remove(&uuid);
                     }
                     Setting::NotSet => (),
                 }
@@ -298,25 +322,34 @@ fn patch_webhooks_inner(
     tag = "Webhooks",
     security(("Bearer" = ["webhooks.get", "*.get", "*"])),
     responses(
-        (status = 200, description = "Webhook found", body = WebhookSettings, content_type = "application/json"),
+        (status = 200, description = "Webhook found", body = WebhookSettings, content_type = "application/json", example = json!({
+            "uuid": "550e8400-e29b-41d4-a716-446655440000",
+            "url": "https://your.site/on-tasks-completed",
+            "headers": {
+                "Authorization": "Bearer a-secret"
+            },
+            "isEditable": true
+        })),
         (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json"),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
     ),
     params(
-        ("name" = String, Path, description = "The name of the webhook")
+        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
     )
 )]
 async fn get_webhook(
     index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_GET }>, Data<IndexScheduler>>,
-    name: Path<String>,
+    uuid: Path<Uuid>,
 ) -> Result<HttpResponse, ResponseError> {
-    let webhook_name = name.into_inner();
-    let webhooks = index_scheduler.webhooks();
+    let uuid = uuid.into_inner();
+    let mut webhooks = index_scheduler.webhooks();
 
-    if let Some(webhook) = webhooks.webhooks.get(&webhook_name) {
-        debug!(returns = ?webhook, "Get webhook {}", webhook_name);
-        Ok(HttpResponse::Ok().json(webhook))
-    } else {
-        Err(WebhooksError::WebhookNotFound(webhook_name).into())
-    }
+    let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?;
+
+    debug!(returns = ?webhook, "Get webhook {}", uuid);
+    Ok(HttpResponse::Ok().json(WebhookWithMetadata {
+        uuid,
+        is_editable: uuid != Uuid::nil(),
+        webhook,
+    }))
 }

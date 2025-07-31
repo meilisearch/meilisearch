@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -14,5 +15,5 @@ pub struct Webhook {
 #[serde(rename_all = "camelCase")]
 pub struct Webhooks {
     #[serde(default)]
-    pub webhooks: BTreeMap<String, Webhook>,
+    pub webhooks: BTreeMap<Uuid, Webhook>,
 }

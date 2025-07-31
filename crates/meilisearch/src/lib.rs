@@ -56,6 +56,7 @@ use option::ScheduleSnapshot;
 use search_queue::SearchQueue;
 use tracing::{error, info_span};
 use tracing_subscriber::filter::Targets;
+use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
 
@@ -339,13 +340,13 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         },
     });
     let mut webhooks = index_scheduler.webhooks();
-    if webhooks.webhooks.get("_cli") != cli_webhook.as_ref() {
+    if webhooks.webhooks.get(&Uuid::nil()) != cli_webhook.as_ref() {
         match cli_webhook {
             Some(webhook) => {
-                webhooks.webhooks.insert("_cli".to_string(), webhook);
+                webhooks.webhooks.insert(Uuid::nil(), webhook);
             }
             None => {
-                webhooks.webhooks.remove("_cli");
+                webhooks.webhooks.remove(&Uuid::nil());
             }
         }
         index_scheduler.put_webhooks(webhooks)?;
