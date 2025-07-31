@@ -180,10 +180,17 @@ async fn patch_webhooks(
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let WebhooksSettings { webhooks: new_webhooks } = new_webhooks.0;
-    let Webhooks { mut webhooks } = index_scheduler.webhooks();
-    debug!(parameters = ?new_webhooks, "Patch webhooks");
+    let webhooks = patch_webhooks_inner(&index_scheduler, new_webhooks.0)?;
 
+    analytics.publish(PatchWebhooksAnalytics, &req);
+
+    Ok(HttpResponse::Ok().json(webhooks))
+}
+
+fn patch_webhooks_inner(
+    index_scheduler: &GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
+    new_webhooks: WebhooksSettings,
+) -> Result<Webhooks, ResponseError> {
     fn merge_webhook(
         name: &str,
         old_webhook: Option<Webhook>,
@@ -225,7 +232,11 @@ async fn patch_webhooks(
         Ok(Webhook { url, headers })
     }
 
-    match new_webhooks {
+    debug!(parameters = ?new_webhooks, "Patch webhooks");
+
+    let Webhooks { mut webhooks } = index_scheduler.webhooks();
+
+    match new_webhooks.webhooks {
         Setting::Set(new_webhooks) => {
             for (name, new_webhook) in new_webhooks {
                 if name.starts_with('_') {
@@ -253,10 +264,10 @@ async fn patch_webhooks(
         return Err(WebhooksError::TooManyWebhooks.into());
     }
 
-    analytics.publish(PatchWebhooksAnalytics, &req);
-
     let webhooks = Webhooks { webhooks };
     index_scheduler.put_webhooks(webhooks.clone())?;
+
     debug!(returns = ?webhooks, "Patch webhooks");
-    Ok(HttpResponse::Ok().json(webhooks))
+
+    Ok(webhooks)
 }
