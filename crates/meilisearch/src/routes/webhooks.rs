@@ -23,7 +23,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_webhooks, patch_webhooks, get_webhook, post_webhook),
+    paths(get_webhooks, patch_webhooks, get_webhook, post_webhook, delete_webhook),
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
@@ -39,7 +39,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::patch().to(SeqHandler(patch_webhooks)))
             .route(web::post().to(SeqHandler(post_webhook))),
     )
-    .service(web::resource("/{uuid}").route(web::get().to(get_webhook)));
+    .service(
+        web::resource("/{uuid}")
+            .route(web::get().to(get_webhook))
+            .route(web::delete().to(SeqHandler(delete_webhook))),
+    );
 }
 
 #[derive(Debug, Deserr, ToSchema)]
@@ -399,4 +403,42 @@ async fn post_webhook(
 
     debug!(returns = ?webhook, "Created webhook {}", uuid);
     Ok(HttpResponse::Created().json(WebhookWithMetadata { uuid, is_editable: true, webhook }))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/{uuid}",
+    tag = "Webhooks",
+    security(("Bearer" = ["webhooks.update", "*"])),
+    responses(
+        (status = 204, description = "Webhook deleted successfully"),
+        (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json"),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
+    ),
+    params(
+        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
+    )
+)]
+async fn delete_webhook(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
+    uuid: Path<Uuid>,
+    req: HttpRequest,
+    analytics: Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let uuid = uuid.into_inner();
+
+    let webhooks = index_scheduler.webhooks();
+    if !webhooks.webhooks.contains_key(&uuid) {
+        return Err(WebhooksError::WebhookNotFound(uuid).into());
+    }
+
+    patch_webhooks_inner(
+        &index_scheduler,
+        WebhooksSettings { webhooks: Setting::Set(BTreeMap::from([(uuid, Setting::Reset)])) },
+    )?;
+
+    analytics.publish(PatchWebhooksAnalytics::patch_webhooks(), &req);
+
+    debug!("Deleted webhook {}", uuid);
+    Ok(HttpResponse::NoContent().finish())
 }
