@@ -71,16 +71,49 @@ async fn create_webhook_server() -> WebhookHandle {
 
 #[actix_web::test]
 async fn cli_only() {
-    let WebhookHandle { server_handle, url, mut receiver } = create_webhook_server().await;
-
     let db_path = tempfile::tempdir().unwrap();
     let server = Server::new_with_options(Opt {
-        task_webhook_url: Some(Url::parse(&url).unwrap()),
+        task_webhook_url: Some(Url::parse("https://example-cli.com/").unwrap()),
         task_webhook_authorization_header: Some(String::from("Bearer a-secret-token")),
         ..default_settings(db_path.path())
     })
     .await
     .unwrap();
+
+    let (webhooks, code) = server.get_webhooks().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(webhooks, @r#"
+    {
+      "results": [
+        {
+          "uuid": "00000000-0000-0000-0000-000000000000",
+          "isEditable": false,
+          "url": "https://example-cli.com/",
+          "headers": {
+            "Authorization": "Bearer a-secret-token"
+          }
+        }
+      ]
+    }
+    "#);
+}
+
+#[actix_web::test]
+async fn single_receives_data() {
+    let WebhookHandle { server_handle, url, mut receiver } = create_webhook_server().await;
+
+    let server = Server::new().await;
+
+    let (value, code) = server.create_webhook(json!({ "url": url })).await;
+    snapshot!(code, @"201 Created");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]", ".url" => "[ignored]" }), @r#"
+    {
+      "uuid": "[uuid]",
+      "isEditable": true,
+      "url": "[ignored]",
+      "headers": {}
+    }
+    "#);
 
     let index = server.index("tamo");
     // May be flaky: we're relying on the fact that while the first document addition is processed, the other
@@ -127,23 +160,6 @@ async fn cli_only() {
     }
 
     assert!(nb_tasks == 5, "We should have received the 5 tasks but only received {nb_tasks}");
-
-    let (webhooks, code) = server.get_webhooks().await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(webhooks, { ".results[].url" => "[ignored]" }), @r#"
-    {
-      "results": [
-        {
-          "uuid": "00000000-0000-0000-0000-000000000000",
-          "isEditable": false,
-          "url": "[ignored]",
-          "headers": {
-            "Authorization": "Bearer a-secret-token"
-          }
-        }
-      ]
-    }
-    "#);
 
     server_handle.abort();
 }
