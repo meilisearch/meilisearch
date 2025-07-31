@@ -321,7 +321,14 @@ impl Embedder {
     pub fn prompt_count_in_chunk_hint(&self) -> usize {
         match self.data.request.input_type() {
             InputType::Text => 1,
-            InputType::TextArray => 10,
+            InputType::TextArray => {
+                let chunk_size = std::env::var("MEILI_EMBEDDINGS_CHUNK_SIZE")
+                    .ok()
+                    .and_then(|chunk_size| chunk_size.parse().ok())
+                    .unwrap_or(10);
+                assert!(chunk_size <= 100, "Embedding chunk size cannot exceed 100");
+                chunk_size
+            }
         }
     }
 
