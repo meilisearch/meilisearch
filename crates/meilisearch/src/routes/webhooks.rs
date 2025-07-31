@@ -23,7 +23,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_webhooks, patch_webhooks, get_webhook, post_webhook, delete_webhook),
+    paths(get_webhooks, patch_webhooks, get_webhook, post_webhook, patch_webhook, delete_webhook),
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
@@ -42,6 +42,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(
         web::resource("/{uuid}")
             .route(web::get().to(get_webhook))
+            .route(web::patch().to(SeqHandler(patch_webhook)))
             .route(web::delete().to(SeqHandler(delete_webhook))),
     );
 }
@@ -142,6 +143,7 @@ async fn get_webhooks(
 #[derive(Serialize, Default)]
 pub struct PatchWebhooksAnalytics {
     patch_webhooks_count: usize,
+    patch_webhook_count: usize,
     post_webhook_count: usize,
     delete_webhook_count: usize,
 }
@@ -149,6 +151,10 @@ pub struct PatchWebhooksAnalytics {
 impl PatchWebhooksAnalytics {
     pub fn patch_webhooks() -> Self {
         PatchWebhooksAnalytics { patch_webhooks_count: 1, ..Default::default() }
+    }
+
+    pub fn patch_webhook() -> Self {
+        PatchWebhooksAnalytics { patch_webhook_count: 1, ..Default::default() }
     }
 
     pub fn post_webhook() -> Self {
@@ -168,6 +174,7 @@ impl Aggregate for PatchWebhooksAnalytics {
     fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(PatchWebhooksAnalytics {
             patch_webhooks_count: self.patch_webhooks_count + new.patch_webhooks_count,
+            patch_webhook_count: self.patch_webhook_count + new.patch_webhook_count,
             post_webhook_count: self.post_webhook_count + new.post_webhook_count,
             delete_webhook_count: self.delete_webhook_count + new.delete_webhook_count,
         })
@@ -407,6 +414,50 @@ async fn post_webhook(
     analytics.publish(PatchWebhooksAnalytics::post_webhook(), &req);
 
     Ok(HttpResponse::Created().json(WebhookWithMetadata { uuid, is_editable: true, webhook }))
+}
+
+#[utoipa::path(
+    patch,
+    path = "/{uuid}",
+    tag = "Webhooks",
+    request_body = WebhookSettings,
+    security(("Bearer" = ["webhooks.update", "*"])),
+    responses(
+        (status = 200, description = "Webhook updated successfully", body = WebhookWithMetadata, content_type = "application/json", example = json!({
+            "uuid": "550e8400-e29b-41d4-a716-446655440000",
+            "url": "https://your.site/on-tasks-completed",
+            "headers": {
+                "Authorization": "Bearer a-secret-token"
+            },
+            "isEditable": true
+        })),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
+        (status = 400, description = "Bad request", body = ResponseError, content_type = "application/json"),
+    ),
+    params(
+        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
+    )
+)]
+async fn patch_webhook(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
+    uuid: Path<Uuid>,
+    webhook_settings: AwebJson<WebhookSettings, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let uuid = uuid.into_inner();
+
+    let webhooks = patch_webhooks_inner(
+        &index_scheduler,
+        WebhooksSettings {
+            webhooks: Setting::Set(BTreeMap::from([(uuid, Setting::Set(webhook_settings.0))])),
+        },
+    )?;
+    let webhook = webhooks.webhooks.get(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?.clone();
+
+    analytics.publish(PatchWebhooksAnalytics::patch_webhook(), &req);
+
+    Ok(HttpResponse::Ok().json(WebhookWithMetadata { uuid, is_editable: uuid != Uuid::nil(), webhook }))
 }
 
 #[utoipa::path(
