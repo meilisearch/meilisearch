@@ -154,6 +154,7 @@ fn indexing_songs_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -221,6 +222,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -266,6 +268,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -335,6 +338,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -412,6 +416,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -457,6 +462,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -498,6 +504,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -566,6 +573,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -633,6 +641,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -700,6 +709,7 @@ fn indexing_wiki(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -766,6 +776,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -811,6 +822,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -879,6 +891,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -956,6 +969,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1002,6 +1016,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1044,6 +1059,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1111,6 +1127,7 @@ fn indexing_movies_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1177,6 +1194,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1222,6 +1240,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1290,6 +1309,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1404,6 +1424,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1449,6 +1470,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1490,6 +1512,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1580,6 +1603,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1671,6 +1695,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1754,6 +1779,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1821,6 +1847,7 @@ fn indexing_geo(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1887,6 +1914,7 @@ fn reindexing_geo(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -1932,6 +1960,7 @@ fn reindexing_geo(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 
@@ -2000,6 +2029,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                         &mut new_fields_ids_map,
                         &|| false,
                         Progress::default(),
+                        None,
                     )
                     .unwrap();
 

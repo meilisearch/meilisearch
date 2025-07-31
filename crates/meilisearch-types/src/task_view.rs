@@ -11,6 +11,7 @@ use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
 use crate::tasks::{
     serialize_duration, Details, DetailsExportIndexSettings, IndexSwap, Kind, Status, Task, TaskId,
+    TaskNetwork,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
@@ -51,6 +52,9 @@ pub struct TaskView {
     #[schema(value_type = String, example = json!("2024-08-08_14:12:09.393Z"))]
     #[serde(with = "time::serde::rfc3339::option", default)]
     pub finished_at: Option<OffsetDateTime>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<TaskNetwork>,
 }
 
 impl TaskView {
@@ -68,6 +72,7 @@ impl TaskView {
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
+            network: task.network.clone(),
         }
     }
 }

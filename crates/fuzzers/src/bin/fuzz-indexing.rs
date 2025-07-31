@@ -129,6 +129,7 @@ fn main() {
                                     &mut new_fields_ids_map,
                                     &|| false,
                                     Progress::default(),
+                                    None,
                                 )
                                 .unwrap();
 
