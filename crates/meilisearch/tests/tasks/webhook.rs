@@ -2,6 +2,7 @@
 //! post requests. The webhook handle starts a server and forwards all the
 //! received requests into a channel for you to handle.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use actix_http::body::MessageBody;
@@ -68,7 +69,7 @@ async fn create_webhook_server() -> WebhookHandle {
 }
 
 #[actix_web::test]
-async fn test_cli_webhook() {
+async fn cli_only() {
     let WebhookHandle { server_handle, url, mut receiver } = create_webhook_server().await;
 
     let db_path = tempfile::tempdir().unwrap();
@@ -142,6 +143,49 @@ async fn test_cli_webhook() {
     "#);
 
     server_handle.abort();
+}
+
+
+#[actix_web::test]
+async fn cli_with_dumps() {
+    let db_path = tempfile::tempdir().unwrap();
+    let server = Server::new_with_options(Opt {
+        task_webhook_url: Some(Url::parse("http://defined-in-test-cli.com").unwrap()),
+        task_webhook_authorization_header: Some(String::from("Bearer a-secret-token-defined-in-test-cli")),
+        import_dump: Some(PathBuf::from("../dump/tests/assets/v6-with-webhooks.dump")),
+        ..default_settings(db_path.path())
+    })
+    .await
+    .unwrap();
+
+    let (webhooks, code) = server.get_webhooks().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(webhooks, @r#"
+    {
+      "webhooks": {
+        "_cli": {
+          "url": "http://defined-in-test-cli.com/",
+          "headers": {
+            "Authorization": "Bearer a-secret-token-defined-in-test-cli"
+          }
+        },
+        "exampleName": {
+          "url": "https://example.com/hook",
+          "headers": {
+            "authorization": "TOKEN"
+          }
+        },
+        "otherName": {
+          "url": "https://example.com/authorization-less",
+          "headers": {}
+        },
+        "third": {
+          "url": "https://third.com",
+          "headers": {}
+        }
+      }
+    }
+    "#);
 }
 
 #[actix_web::test]
