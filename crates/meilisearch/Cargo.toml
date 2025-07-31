@@ -170,5 +170,5 @@ german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.20/build.zip"
-sha1 = "82a7ddd7bf14bb5323c3d235d2b62892a98b6a59"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.21/build.zip"
+sha1 = "94f56a8e24e2e3a1bc1bd7d9ceaa23464a5e241a"
