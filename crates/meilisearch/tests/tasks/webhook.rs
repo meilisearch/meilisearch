@@ -329,3 +329,87 @@ async fn post_get_delete() {
     let (_value, code) = server.get_webhook(uuid).await;
     snapshot!(code, @"404 Not Found");
 }
+
+#[actix_web::test]
+async fn patch() {
+    let server = Server::new().await;
+
+    let uuid = Uuid::new_v4().to_string();
+    let (value, code) =
+        server.patch_webhook(&uuid, json!({ "headers": { "authorization": "TOKEN" } })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "The URL for the webhook `[uuid]` is missing.",
+      "code": "invalid_webhooks_url",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_url"
+    }
+    "#);
+
+    let (value, code) =
+        server.patch_webhook(&uuid, json!({ "url": "https://example.com/hook" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    {
+      "uuid": "[uuid]",
+      "isEditable": true,
+      "url": "https://example.com/hook",
+      "headers": {}
+    }
+    "#);
+
+    let (value, code) =
+        server.patch_webhook(&uuid, json!({ "headers": { "authorization": "TOKEN" } })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    {
+      "uuid": "[uuid]",
+      "isEditable": true,
+      "url": "https://example.com/hook",
+      "headers": {
+        "authorization": "TOKEN"
+      }
+    }
+    "#);
+
+    let (value, code) =
+        server.patch_webhook(&uuid, json!({ "headers": { "authorization2": "TOKEN" } })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    {
+      "uuid": "[uuid]",
+      "isEditable": true,
+      "url": "https://example.com/hook",
+      "headers": {
+        "authorization": "TOKEN",
+        "authorization2": "TOKEN"
+      }
+    }
+    "#);
+
+    let (value, code) =
+        server.patch_webhook(&uuid, json!({ "headers": { "authorization": null } })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    {
+      "uuid": "[uuid]",
+      "isEditable": true,
+      "url": "https://example.com/hook",
+      "headers": {
+        "authorization2": "TOKEN"
+      }
+    }
+    "#);
+
+    let (value, code) = server.patch_webhook(&uuid, json!({ "url": null })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "The URL for the webhook `[uuid]` is missing.",
+      "code": "invalid_webhooks_url",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_url"
+    }
+    "#);
+}

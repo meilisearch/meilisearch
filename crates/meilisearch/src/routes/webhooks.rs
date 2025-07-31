@@ -457,7 +457,11 @@ async fn patch_webhook(
 
     analytics.publish(PatchWebhooksAnalytics::patch_webhook(), &req);
 
-    Ok(HttpResponse::Ok().json(WebhookWithMetadata { uuid, is_editable: uuid != Uuid::nil(), webhook }))
+    Ok(HttpResponse::Ok().json(WebhookWithMetadata {
+        uuid,
+        is_editable: uuid != Uuid::nil(),
+        webhook,
+    }))
 }
 
 #[utoipa::path(
