@@ -114,7 +114,7 @@ jobs:
             dep ensure
           fi
       - name: Run integration tests
-        run: go test -v ./...
+        run: go test --race -v ./integration
 
   meilisearch-java-tests:
     needs: define-docker-image
