@@ -747,6 +747,7 @@ pub enum TaskNetwork {
     Remotes { remote_tasks: BTreeMap<String, RemoteTask> },
 }
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(untagged, rename_all = "camelCase")]
 pub struct Origin {
     pub remote_name: String,
     pub task_uid: usize,
