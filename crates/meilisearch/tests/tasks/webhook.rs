@@ -236,7 +236,9 @@ async fn over_limits() {
     // Too many webhooks
     for _ in 0..20 {
         let (_value, code) = server
-            .set_webhooks(json!({ "webhooks": { Uuid::new_v4(): { "url": "http://localhost:8080" } } }))
+            .set_webhooks(
+                json!({ "webhooks": { Uuid::new_v4(): { "url": "http://localhost:8080" } } }),
+            )
             .await;
         snapshot!(code, @"200 OK");
     }
@@ -281,6 +283,43 @@ async fn over_limits() {
       "code": "invalid_webhooks_headers",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
+    }
+    "#);
+}
+
+#[actix_web::test]
+async fn post_and_get() {
+    let server = Server::new().await;
+
+    let (value, code) = server
+        .create_webhook(json!({
+            "url": "https://example.com/hook",
+            "headers": { "authorization": "TOKEN" }
+        }))
+        .await;
+    snapshot!(code, @"201 Created");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    {
+      "uuid": "[uuid]",
+      "isEditable": true,
+      "url": "https://example.com/hook",
+      "headers": {
+        "authorization": "TOKEN"
+      }
+    }
+    "#);
+
+    let uuid = value.get("uuid").unwrap().as_str().unwrap();
+    let (value, code) = server.get_webhook(uuid).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    {
+      "uuid": "[uuid]",
+      "isEditable": true,
+      "url": "https://example.com/hook",
+      "headers": {
+        "authorization": "TOKEN"
+      }
     }
     "#);
 }
