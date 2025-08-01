@@ -80,7 +80,8 @@ impl<P, D> GuardedData<P, D> {
     where
         P: Policy + 'static,
     {
-        tokio::task::spawn_blocking(move || P::authenticate(auth, token.as_ref(), index.as_deref(), ip, referrer))
+        let referrer = referrer.map(|s| s.to_string());
+        tokio::task::spawn_blocking(move || P::authenticate(auth, token.as_ref(), index.as_deref(), ip, referrer.as_deref()))
             .await
             .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))
     }

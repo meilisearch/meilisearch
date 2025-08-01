@@ -11,7 +11,6 @@ use time::macros::{format_description, time};
 use time::{Date, OffsetDateTime, PrimitiveDateTime};
 use utoipa::ToSchema;
 use uuid::Uuid;
-use ipnet;
 
 use crate::deserr::{immutable_field_error, DeserrError, DeserrJsonError};
 use crate::error::deserr_codes::*;
@@ -73,17 +72,16 @@ pub struct CreateApiKey {
 
 impl CreateApiKey {
     pub fn to_key(self) -> Key {
-        let CreateApiKey { description, name, uid, actions, indexes, expires_at, allowed_referrers, allowed_ips } = self;
         let now = OffsetDateTime::now_utc();
         Key {
-            description,
-            name,
-            uid,
-            actions,
-            indexes,
-            expires_at,
-            allowed_referrers,
-            allowed_ips,
+            description: self.description,
+            name: self.name,
+            uid: self.uid,
+            actions: self.actions,
+            indexes: self.indexes,
+            expires_at: self.expires_at,
+            allowed_referrers: self.allowed_referrers,
+            allowed_ips: self.allowed_ips,
             created_at: now,
             updated_at: now,
         }
@@ -197,61 +195,15 @@ impl Key {
 
     /// Check if the request is allowed by this key given an IP and a referrer.
     pub fn is_request_allowed(&self, ip: Option<std::net::IpAddr>, referrer: Option<&str>) -> bool {
-        if let Some(list) = &self.allowed_ips {
-            let ip = match ip {
-                Some(i) => i,
-                None => return false,
-            };
-            if !list.iter().any(|net| ip_in(net, ip)) {
-                return false;
-            }
-        }
-
-        if let Some(list) = &self.allowed_referrers {
-            let referer = match referrer {
-                Some(r) => r,
-                None => return false,
-            };
-            if !list.iter().any(|p| wildcard_match(p, referer)) {
-                return false;
-            }
-        }
-
-        true
+        crate::api_key_restrictions::is_request_allowed(
+            self.allowed_ips.as_ref(),
+            self.allowed_referrers.as_ref(),
+            ip,
+            referrer,
+        )
     }
 }
 
-fn wildcard_match(pattern: &str, value: &str) -> bool {
-    if pattern == "*" {
-        return true;
-    }
-    let mut rest = value;
-    let mut first = true;
-    for part in pattern.split('*') {
-        if part.is_empty() {
-            continue;
-        }
-        if let Some(pos) = rest.find(part) {
-            if first && !pattern.starts_with('*') && pos != 0 {
-                return false;
-            }
-            rest = &rest[pos + part.len()..];
-            first = false;
-        } else {
-            return false;
-        }
-    }
-    if !pattern.ends_with('*') && !rest.is_empty() {
-        return false;
-    }
-    true
-}
-
-fn ip_in(pattern: &str, ip: std::net::IpAddr) -> bool {
-    pattern.parse::<ipnet::IpNet>()
-        .map(|net| net.contains(&ip))
-        .unwrap_or(false)
-}
 
 fn parse_expiration_date(
     string: Option<String>,

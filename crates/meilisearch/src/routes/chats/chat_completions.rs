@@ -256,6 +256,8 @@ async fn process_search_request(
         auth_ctrl,
         auth_token,
         Some(index_uid.as_str()),
+        None, // IP address not available in this context
+        None, // Referrer not available in this context
     )?;
 
     // Tenant token search_rules.

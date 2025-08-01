@@ -15,6 +15,8 @@ pub mod star_or;
 pub mod task_view;
 pub mod tasks;
 pub mod versioning;
+
+pub mod api_key_restrictions;
 pub use milli::{heed, Index};
 use uuid::Uuid;
 pub use versioning::VERSION_FILE_NAME;
