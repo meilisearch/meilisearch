@@ -511,10 +511,10 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Respon
 
     let mut rendered = Value::Null;
     if let Some(input) = query.input {
-        let media = input.inline.unwrap_or_default();
-        let mut object = liquid::to_object(&media).unwrap();
+        let inline = input.inline.unwrap_or_default();
+        let mut object = liquid::to_object(&inline).unwrap();
 
-        if let Some(doc) = media.get("doc") {
+        if let Some(doc) = inline.get("doc") {
             if insert_fields {
                 let fields =
                     get_inline_document_fields(&index, &rtxn, doc)?.map_err(InputConversion)?;
