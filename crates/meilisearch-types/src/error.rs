@@ -418,7 +418,13 @@ InvalidChatCompletionSearchDescriptionPrompt   , InvalidRequest       , BAD_REQU
 InvalidChatCompletionSearchQueryParamPrompt    , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchFilterParamPrompt   , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchIndexUidParamPrompt , InvalidRequest       , BAD_REQUEST ;
-InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST
+InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST ;
+// Webhooks
+InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
+InvalidWebhooksUrl                             , InvalidRequest       , BAD_REQUEST ;
+InvalidWebhooksHeaders                         , InvalidRequest       , BAD_REQUEST ;
+ReservedWebhook                                , InvalidRequest       , BAD_REQUEST ;
+WebhookNotFound                                , InvalidRequest       , NOT_FOUND
 }
 
 impl ErrorCode for JoinError {

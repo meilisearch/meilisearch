@@ -98,8 +98,6 @@ impl IndexScheduler {
             indexes_path: tempdir.path().join("indexes"),
             snapshots_path: tempdir.path().join("snapshots"),
             dumps_path: tempdir.path().join("dumps"),
-            webhook_url: None,
-            webhook_authorization_header: None,
             task_db_size: 1000 * 1000 * 10, // 10 MB, we don't use MiB on purpose.
             index_base_map_size: 1000 * 1000, // 1 MB, we don't use MiB on purpose.
             enable_mdb_writemap: false,

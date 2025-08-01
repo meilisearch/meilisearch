@@ -202,6 +202,10 @@ impl CompatV5ToV6 {
     pub fn network(&self) -> Result<Option<&v6::Network>> {
         Ok(None)
     }
+
+    pub fn webhooks(&self) -> Option<&v6::Webhooks> {
+        None
+    }
 }
 
 pub enum CompatIndexV5ToV6 {

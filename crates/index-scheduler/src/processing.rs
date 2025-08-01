@@ -108,6 +108,7 @@ make_enum_progress! {
         DumpTheBatches,
         DumpTheIndexes,
         DumpTheExperimentalFeatures,
+        DumpTheWebhooks,
         CompressTheDump,
     }
 }

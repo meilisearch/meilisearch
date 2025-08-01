@@ -65,6 +65,7 @@ use meilisearch_types::milli::vector::{
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{KindWithContent, Task};
+use meilisearch_types::webhooks::{Webhook, Webhooks};
 use milli::vector::db::IndexEmbeddingConfig;
 use processing::ProcessingTasks;
 pub use queue::Query;
@@ -80,7 +81,15 @@ use crate::utils::clamp_to_page_size;
 pub(crate) type BEI128 = I128<BE>;
 
 const TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT: u64 = 40;
-const CHAT_SETTINGS_DB_NAME: &str = "chat-settings";
+
+mod db_name {
+    pub const CHAT_SETTINGS: &str = "chat-settings";
+    pub const PERSISTED: &str = "persisted";
+}
+
+mod db_keys {
+    pub const WEBHOOKS: &str = "webhooks";
+}
 
 #[derive(Debug)]
 pub struct IndexSchedulerOptions {
@@ -98,10 +107,6 @@ pub struct IndexSchedulerOptions {
     pub snapshots_path: PathBuf,
     /// The path to the folder containing the dumps.
     pub dumps_path: PathBuf,
-    /// The URL on which we must send the tasks statuses
-    pub webhook_url: Option<String>,
-    /// The value we will send into the Authorization HTTP header on the webhook URL
-    pub webhook_authorization_header: Option<String>,
     /// The maximum size, in bytes, of the task index.
     pub task_db_size: usize,
     /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
@@ -171,10 +176,11 @@ pub struct IndexScheduler {
     /// Whether we should use the old document indexer or the new one.
     pub(crate) experimental_no_edition_2024_for_dumps: bool,
 
-    /// The webhook url we should send tasks to after processing every batches.
-    pub(crate) webhook_url: Option<String>,
-    /// The Authorization header to send to the webhook URL.
-    pub(crate) webhook_authorization_header: Option<String>,
+    /// A database to store single-keyed data that is persisted across restarts.
+    persisted: Database<Str, Str>,
+
+    /// Webhook
+    cached_webhooks: Arc<RwLock<Webhooks>>,
 
     /// A map to retrieve the runtime representation of an embedder depending on its configuration.
     ///
@@ -214,8 +220,8 @@ impl IndexScheduler {
             index_mapper: self.index_mapper.clone(),
             cleanup_enabled: self.cleanup_enabled,
             experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
-            webhook_url: self.webhook_url.clone(),
-            webhook_authorization_header: self.webhook_authorization_header.clone(),
+            persisted: self.persisted,
+            cached_webhooks: self.cached_webhooks.clone(),
             embedders: self.embedders.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -234,6 +240,7 @@ impl IndexScheduler {
             + IndexMapper::nb_db()
             + features::FeatureData::nb_db()
             + 1 // chat-prompts
+            + 1 // persisted
     }
 
     /// Create an index scheduler and start its run loop.
@@ -284,10 +291,16 @@ impl IndexScheduler {
         let version = versioning::Versioning::new(&env, from_db_version)?;
 
         let mut wtxn = env.write_txn()?;
+
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
-        let chat_settings = env.create_database(&mut wtxn, Some(CHAT_SETTINGS_DB_NAME))?;
+        let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
+
+        let persisted = env.create_database(&mut wtxn, Some(db_name::PERSISTED))?;
+        let webhooks_db = persisted.remap_data_type::<SerdeJson<Webhooks>>();
+        let webhooks = webhooks_db.get(&wtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
+
         wtxn.commit()?;
 
         // allow unreachable_code to get rids of the warning in the case of a test build.
@@ -303,8 +316,9 @@ impl IndexScheduler {
             experimental_no_edition_2024_for_dumps: options
                 .indexer_config
                 .experimental_no_edition_2024_for_dumps,
-            webhook_url: options.webhook_url,
-            webhook_authorization_header: options.webhook_authorization_header,
+            persisted,
+            cached_webhooks: Arc::new(RwLock::new(webhooks)),
+
             embedders: Default::default(),
 
             #[cfg(test)]
@@ -754,80 +768,120 @@ impl IndexScheduler {
 
     /// Once the tasks changes have been committed we must send all the tasks that were updated to our webhook if there is one.
     fn notify_webhook(&self, updated: &RoaringBitmap) -> Result<()> {
-        if let Some(ref url) = self.webhook_url {
-            struct TaskReader<'a, 'b> {
-                rtxn: &'a RoTxn<'a>,
-                index_scheduler: &'a IndexScheduler,
-                tasks: &'b mut roaring::bitmap::Iter<'b>,
-                buffer: Vec<u8>,
-                written: usize,
-            }
+        let webhooks = self.cached_webhooks.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if webhooks.webhooks.is_empty() {
+            return Ok(());
+        }
+        let webhooks = Webhooks::clone(&*webhooks);
 
-            impl Read for TaskReader<'_, '_> {
-                fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
-                    if self.buffer.is_empty() {
-                        match self.tasks.next() {
-                            None => return Ok(0),
-                            Some(task_id) => {
-                                let task = self
-                                    .index_scheduler
-                                    .queue
-                                    .tasks
-                                    .get_task(self.rtxn, task_id)
-                                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
-                                    .ok_or_else(|| {
-                                        io::Error::new(
-                                            io::ErrorKind::Other,
-                                            Error::CorruptedTaskQueue,
-                                        )
-                                    })?;
+        struct TaskReader<'a, 'b> {
+            rtxn: &'a RoTxn<'a>,
+            index_scheduler: &'a IndexScheduler,
+            tasks: &'b mut roaring::bitmap::Iter<'b>,
+            buffer: Vec<u8>,
+            written: usize,
+        }
 
-                                serde_json::to_writer(
-                                    &mut self.buffer,
-                                    &TaskView::from_task(&task),
-                                )?;
-                                self.buffer.push(b'\n');
-                            }
+        impl Read for TaskReader<'_, '_> {
+            fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
+                if self.buffer.is_empty() {
+                    match self.tasks.next() {
+                        None => return Ok(0),
+                        Some(task_id) => {
+                            let task = self
+                                .index_scheduler
+                                .queue
+                                .tasks
+                                .get_task(self.rtxn, task_id)
+                                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
+                                .ok_or_else(|| {
+                                    io::Error::new(io::ErrorKind::Other, Error::CorruptedTaskQueue)
+                                })?;
+
+                            serde_json::to_writer(&mut self.buffer, &TaskView::from_task(&task))?;
+                            self.buffer.push(b'\n');
                         }
                     }
+                }
 
-                    let mut to_write = &self.buffer[self.written..];
-                    let wrote = io::copy(&mut to_write, &mut buf)?;
-                    self.written += wrote as usize;
+                let mut to_write = &self.buffer[self.written..];
+                let wrote = io::copy(&mut to_write, &mut buf)?;
+                self.written += wrote as usize;
 
-                    // we wrote everything and must refresh our buffer on the next call
-                    if self.written == self.buffer.len() {
-                        self.written = 0;
-                        self.buffer.clear();
+                // we wrote everything and must refresh our buffer on the next call
+                if self.written == self.buffer.len() {
+                    self.written = 0;
+                    self.buffer.clear();
+                }
+
+                Ok(wrote as usize)
+            }
+        }
+
+        let rtxn = self.env.read_txn()?;
+
+        let task_reader = TaskReader {
+            rtxn: &rtxn,
+            index_scheduler: self,
+            tasks: &mut updated.into_iter(),
+            buffer: Vec::with_capacity(800), // on average a task is around ~600 bytes
+            written: 0,
+        };
+
+        enum EitherRead<'a, T: Read> {
+            Other(Option<T>),
+            Data(&'a [u8]),
+        }
+
+        impl<T: Read> EitherRead<'_, T> {
+            /// A clone that works only once for the Other variant.
+            fn clone(&mut self) -> Self {
+                match self {
+                    Self::Other(r) => {
+                        let r = r.take();
+                        Self::Other(r)
                     }
-
-                    Ok(wrote as usize)
+                    Self::Data(arg0) => Self::Data(arg0),
                 }
             }
+        }
 
-            let rtxn = self.env.read_txn()?;
+        impl<T: Read> Read for EitherRead<'_, T> {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                match self {
+                    EitherRead::Other(Some(reader)) => reader.read(buf),
+                    EitherRead::Other(None) => {
+                        Err(io::Error::new(io::ErrorKind::Other, "No reader available"))
+                    }
+                    EitherRead::Data(data) => data.read(buf),
+                }
+            }
+        }
 
-            let task_reader = TaskReader {
-                rtxn: &rtxn,
-                index_scheduler: self,
-                tasks: &mut updated.into_iter(),
-                buffer: Vec::with_capacity(50), // on average a task is around ~100 bytes
-                written: 0,
-            };
+        let mut reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
 
-            // let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
-            let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
-            let request = ureq::post(url)
+        // When there is more than one webhook, cache the data in memory
+        let mut data;
+        let mut reader = match webhooks.webhooks.len() {
+            1 => EitherRead::Other(Some(reader)),
+            _ => {
+                data = Vec::new();
+                reader.read_to_end(&mut data)?;
+                EitherRead::Data(&data)
+            }
+        };
+
+        for (uuid, Webhook { url, headers }) in webhooks.webhooks.iter() {
+            let mut request = ureq::post(url)
                 .timeout(Duration::from_secs(30))
                 .set("Content-Encoding", "gzip")
                 .set("Content-Type", "application/x-ndjson");
-            let request = match &self.webhook_authorization_header {
-                Some(header) => request.set("Authorization", header),
-                None => request,
-            };
+            for (header_name, header_value) in headers.iter() {
+                request = request.set(header_name, header_value);
+            }
 
-            if let Err(e) = request.send(reader) {
-                tracing::error!("While sending data to the webhook: {e}");
+            if let Err(e) = request.send(reader.clone()) {
+                tracing::error!("While sending data to the webhook {uuid}: {e}");
             }
         }
 
@@ -860,6 +914,20 @@ impl IndexScheduler {
 
     pub fn network(&self) -> Network {
         self.features.network()
+    }
+
+    pub fn put_webhooks(&self, webhooks: Webhooks) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        let webhooks_db = self.persisted.remap_data_type::<SerdeJson<Webhooks>>();
+        webhooks_db.put(&mut wtxn, db_keys::WEBHOOKS, &webhooks)?;
+        wtxn.commit()?;
+        *self.cached_webhooks.write().unwrap() = webhooks;
+        Ok(())
+    }
+
+    pub fn webhooks(&self) -> Webhooks {
+        let webhooks = self.cached_webhooks.read().unwrap_or_else(|poisoned| poisoned.into_inner());
+        Webhooks::clone(&*webhooks)
     }
 
     pub fn embedders(

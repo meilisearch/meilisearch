@@ -206,11 +206,13 @@ pub struct Opt {
     pub env: String,
 
     /// Called whenever a task finishes so a third party can be notified.
+    /// See also the dedicated API `/webhooks`.
     #[clap(long, env = MEILI_TASK_WEBHOOK_URL)]
     pub task_webhook_url: Option<Url>,
 
     /// The Authorization header to send on the webhook URL whenever
     /// a task finishes so a third party can be notified.
+    /// See also the dedicated API `/webhooks`.
     #[clap(long, env = MEILI_TASK_WEBHOOK_AUTHORIZATION_HEADER)]
     pub task_webhook_authorization_header: Option<String>,
 
