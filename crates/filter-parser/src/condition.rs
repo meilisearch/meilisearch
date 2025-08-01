@@ -18,7 +18,7 @@ use nom::sequence::{terminated, tuple};
 use Condition::*;
 
 use crate::error::IResultExt;
-use crate::value::parse_vector_value;
+use crate::value::parse_dotted_value_part;
 use crate::ErrorKind;
 use crate::VectorFilter;
 use crate::{parse_value, FilterCondition, IResult, Span, Token};
@@ -136,13 +136,13 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     // We could use nom's `cut` but it's better to be explicit about the errors
 
     let (input, embedder_name) =
-        parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidEmbedder)?;
+        parse_dotted_value_part(input).map_cut(ErrorKind::VectorFilterInvalidEmbedder)?;
 
     let (input, filter) = alt((
         map(
             preceded(tag(".fragments"), |input| {
                 let (input, _) = tag(".")(input).map_cut(ErrorKind::VectorFilterMissingFragment)?;
-                parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidFragment)
+                parse_dotted_value_part(input).map_cut(ErrorKind::VectorFilterInvalidFragment)
             }),
             VectorFilter::Fragment,
         ),
