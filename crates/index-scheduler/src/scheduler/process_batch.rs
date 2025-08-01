@@ -15,7 +15,7 @@ use super::create_batch::Batch;
 use crate::processing::{
     AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress, FinalizingIndexStep,
     InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
-    UpdateIndexProgress,
+    UpdateIndexProgress, RenameIndexProgress,
 };
 use crate::utils::{
     self, remove_n_tasks_datetime_earlier_than, remove_task_datetime, swap_index_uid_in_task,
@@ -228,6 +228,20 @@ impl IndexScheduler {
                     current_batch,
                     progress,
                 )
+            }
+            Batch::IndexRename { index_uid, new_index_uid, mut task } => {
+                progress.update_progress(RenameIndexProgress::RenamingTheIndex);
+                let mut wtxn = self.env.write_txn()?;
+                self.index_mapper.rename(&mut wtxn, &index_uid, &new_index_uid)?;
+                self.queue.tasks.update_index(&mut wtxn, &new_index_uid, |bm| {
+                    let old = self.queue.tasks.index_tasks(&wtxn, &index_uid).unwrap_or_default();
+                    *bm |= &old;
+                })?;
+                self.queue.tasks.update_index(&mut wtxn, &index_uid, |bm| bm.clear())?;
+                wtxn.commit()?;
+                task.status = Status::Succeeded;
+                task.details = Some(Details::IndexRename(IndexRenameDetails { old_uid: index_uid, new_uid: new_index_uid }));
+                Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::IndexUpdate { index_uid, primary_key, mut task } => {
                 progress.update_progress(UpdateIndexProgress::UpdatingTheIndex);

@@ -141,6 +141,10 @@ pub enum KindWithContent {
         index_uid: String,
         primary_key: Option<String>,
     },
+    IndexRename {
+        index_uid: String,
+        new_index_uid: String,
+    },
     IndexSwap {
         swaps: Vec<IndexSwap>,
     },
@@ -174,6 +178,13 @@ pub struct IndexSwap {
     pub indexes: (String, String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexRenameDetails {
+    pub old_uid: String,
+    pub new_uid: String,
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
@@ -193,6 +204,7 @@ impl KindWithContent {
             KindWithContent::IndexCreation { .. } => Kind::IndexCreation,
             KindWithContent::IndexDeletion { .. } => Kind::IndexDeletion,
             KindWithContent::IndexUpdate { .. } => Kind::IndexUpdate,
+            KindWithContent::IndexRename { .. } => Kind::IndexRename,
             KindWithContent::IndexSwap { .. } => Kind::IndexSwap,
             KindWithContent::TaskCancelation { .. } => Kind::TaskCancelation,
             KindWithContent::TaskDeletion { .. } => Kind::TaskDeletion,
@@ -222,6 +234,7 @@ impl KindWithContent {
             | IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => vec![index_uid],
+            IndexRename { index_uid, new_index_uid } => vec![index_uid, new_index_uid],
             IndexSwap { swaps } => {
                 let mut indexes = HashSet::<&str>::default();
                 for swap in swaps {
@@ -273,6 +286,12 @@ impl KindWithContent {
             KindWithContent::IndexCreation { primary_key, .. }
             | KindWithContent::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
+            }
+            KindWithContent::IndexRename { index_uid, new_index_uid } => {
+                Some(Details::IndexRename {
+                    old_uid: index_uid.clone(),
+                    new_uid: new_index_uid.clone(),
+                })
             }
             KindWithContent::IndexSwap { swaps } => {
                 Some(Details::IndexSwap { swaps: swaps.clone() })
@@ -344,6 +363,12 @@ impl KindWithContent {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             KindWithContent::IndexDeletion { .. } => None,
+            KindWithContent::IndexRename { index_uid, new_index_uid } => {
+                Some(Details::IndexRename {
+                    old_uid: index_uid.clone(),
+                    new_uid: new_index_uid.clone(),
+                })
+            }
             KindWithContent::IndexCreation { primary_key, .. }
             | KindWithContent::IndexUpdate { primary_key, .. } => {
                 Some(Details::IndexInfo { primary_key: primary_key.clone() })
@@ -538,6 +563,7 @@ pub enum Kind {
     IndexCreation,
     IndexDeletion,
     IndexUpdate,
+    IndexRename,
     IndexSwap,
     TaskCancelation,
     TaskDeletion,
@@ -556,7 +582,8 @@ impl Kind {
             | Kind::SettingsUpdate
             | Kind::IndexCreation
             | Kind::IndexDeletion
-            | Kind::IndexUpdate => true,
+            | Kind::IndexUpdate
+            | Kind::IndexRename => true,
             Kind::IndexSwap
             | Kind::TaskCancelation
             | Kind::TaskDeletion
@@ -577,6 +604,7 @@ impl Display for Kind {
             Kind::IndexCreation => write!(f, "indexCreation"),
             Kind::IndexDeletion => write!(f, "indexDeletion"),
             Kind::IndexUpdate => write!(f, "indexUpdate"),
+            Kind::IndexRename => write!(f, "indexRename"),
             Kind::IndexSwap => write!(f, "indexSwap"),
             Kind::TaskCancelation => write!(f, "taskCancelation"),
             Kind::TaskDeletion => write!(f, "taskDeletion"),
@@ -595,6 +623,8 @@ impl FromStr for Kind {
             Ok(Kind::IndexCreation)
         } else if kind.eq_ignore_ascii_case("indexUpdate") {
             Ok(Kind::IndexUpdate)
+        } else if kind.eq_ignore_ascii_case("indexRename") {
+            Ok(Kind::IndexRename)
         } else if kind.eq_ignore_ascii_case("indexSwap") {
             Ok(Kind::IndexSwap)
         } else if kind.eq_ignore_ascii_case("indexDeletion") {
@@ -692,6 +722,7 @@ pub enum Details {
     IndexSwap {
         swaps: Vec<IndexSwap>,
     },
+    IndexRename(IndexRenameDetails),
     Export {
         url: String,
         api_key: Option<String>,
@@ -737,6 +768,7 @@ impl Details {
             Self::SettingsUpdate { .. }
             | Self::IndexInfo { .. }
             | Self::Dump { .. }
+            | Self::IndexRename { .. }
             | Self::Export { .. }
             | Self::UpgradeDatabase { .. }
             | Self::IndexSwap { .. } => (),

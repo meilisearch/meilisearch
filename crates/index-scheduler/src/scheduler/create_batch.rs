@@ -40,6 +40,11 @@ pub(crate) enum Batch {
         primary_key: Option<String>,
         task: Task,
     },
+    IndexRename {
+        index_uid: String,
+        new_index_uid: String,
+        task: Task,
+    },
     IndexDeletion {
         index_uid: String,
         tasks: Vec<Task>,
@@ -108,7 +113,8 @@ impl Batch {
             | Batch::Dump(task)
             | Batch::IndexCreation { task, .. }
             | Batch::Export { task }
-            | Batch::IndexUpdate { task, .. } => {
+            | Batch::IndexUpdate { task, .. }
+            | Batch::IndexRename { task, .. } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
             }
             Batch::SnapshotCreation(tasks)
@@ -153,6 +159,7 @@ impl Batch {
             IndexOperation { op, .. } => Some(op.index_uid()),
             IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
+            | IndexRename { index_uid, .. }
             | IndexDeletion { index_uid, .. } => Some(index_uid),
         }
     }
@@ -171,6 +178,7 @@ impl fmt::Display for Batch {
             Batch::IndexOperation { op, .. } => write!(f, "{op}")?,
             Batch::IndexCreation { .. } => f.write_str("IndexCreation")?,
             Batch::IndexUpdate { .. } => f.write_str("IndexUpdate")?,
+            Batch::IndexRename { .. } => f.write_str("IndexRename")?,
             Batch::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
             Batch::IndexSwap { .. } => f.write_str("IndexSwap")?,
             Batch::Export { .. } => f.write_str("Export")?,
@@ -410,6 +418,16 @@ impl IndexScheduler {
                     _ => unreachable!(),
                 };
                 Ok(Some(Batch::IndexUpdate { index_uid, primary_key, task }))
+            }
+            BatchKind::IndexRename { id } => {
+                let mut task =
+                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
+                current_batch.processing(Some(&mut task));
+                let (new_uid) = match &task.kind {
+                    KindWithContent::IndexRename { new_index_uid, .. } => new_index_uid.clone(),
+                    _ => unreachable!(),
+                };
+                Ok(Some(Batch::IndexRename { index_uid, new_index_uid: new_uid, task }))
             }
             BatchKind::IndexDeletion { ids } => Ok(Some(Batch::IndexDeletion {
                 index_uid,
