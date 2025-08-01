@@ -224,6 +224,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
         let SearchResult {
             hits: _,
             query: _,
+            query_vector: _,
             processing_time_ms,
             hits_info: _,
             semantic_hit_count: _,

@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
 use crate::search::new::{distinct_fid, distinct_single_docid};
 use crate::search::SemanticSearch;
-use crate::vector::SearchQuery;
+use crate::vector::{Embedding, SearchQuery};
 use crate::{Index, MatchingWords, Result, Search, SearchResult};
 
 struct ScoreWithRatioResult {
@@ -16,6 +16,7 @@ struct ScoreWithRatioResult {
     document_scores: Vec<(u32, ScoreWithRatio)>,
     degraded: bool,
     used_negative_operator: bool,
+    query_vector: Option<Embedding>,
 }
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
@@ -85,6 +86,7 @@ impl ScoreWithRatioResult {
             document_scores,
             degraded: results.degraded,
             used_negative_operator: results.used_negative_operator,
+            query_vector: results.query_vector,
         }
     }
 
@@ -186,6 +188,7 @@ impl ScoreWithRatioResult {
                 degraded: vector_results.degraded | keyword_results.degraded,
                 used_negative_operator: vector_results.used_negative_operator
                     | keyword_results.used_negative_operator,
+                query_vector: vector_results.query_vector,
             },
             semantic_hit_count,
         ))
@@ -227,7 +230,14 @@ impl Search<'_> {
         }
 
         // no embedder, no semantic search
-        let Some(SemanticSearch { vector, embedder_name, embedder, quantized, media }) = semantic
+        let Some(SemanticSearch {
+            vector,
+            mut auto_embedded,
+            embedder_name,
+            embedder,
+            quantized,
+            media,
+        }) = semantic
         else {
             return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         };
@@ -250,7 +260,10 @@ impl Search<'_> {
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
 
                 match embedder.embed_search(query, Some(deadline)) {
-                    Ok(embedding) => embedding,
+                    Ok(embedding) => {
+                        auto_embedded = true;
+                        embedding
+                    }
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");
                         return Ok(return_keyword_results(
@@ -264,7 +277,8 @@ impl Search<'_> {
         };
 
         search.semantic = Some(SemanticSearch {
-            vector: Some(vector_query),
+            vector: Some(vector_query.clone()),
+            auto_embedded,
             embedder_name,
             embedder,
             quantized,
@@ -321,6 +335,7 @@ fn return_keyword_results(
         mut document_scores,
         degraded,
         used_negative_operator,
+        query_vector,
     }: SearchResult,
 ) -> (SearchResult, Option<u32>) {
     let (documents_ids, document_scores) = if offset >= documents_ids.len() ||
@@ -347,6 +362,7 @@ fn return_keyword_results(
             document_scores,
             degraded,
             used_negative_operator,
+            query_vector,
         },
         Some(0),
     )
