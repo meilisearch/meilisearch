@@ -5,6 +5,7 @@ use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
+use cellulite::Cellulite;
 use deserr::Deserr;
 use heed::types::*;
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
@@ -114,9 +115,10 @@ pub mod db_name {
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
     pub const VECTOR_ARROY: &str = "vector-arroy";
+    pub const CELLULITE: &str = "cellulite";
     pub const DOCUMENTS: &str = "documents";
 }
-const NUMBER_OF_DBS: u32 = 25;
+const NUMBER_OF_DBS: u32 = 25 + Cellulite::nb_dbs();
 
 #[derive(Clone)]
 pub struct Index {
@@ -182,6 +184,9 @@ pub struct Index {
     /// Vector store based on arroy™.
     pub vector_arroy: arroy::Database<Unspecified>,
 
+    /// Geo store based on cellulite™.
+    pub cellulite: Cellulite,
+
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
 }
@@ -238,6 +243,7 @@ impl Index {
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
         let vector_arroy = env.create_database(&mut wtxn, Some(VECTOR_ARROY))?;
+        let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn)?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
@@ -266,6 +272,7 @@ impl Index {
             field_id_docid_facet_strings,
             vector_arroy,
             embedder_category_id,
+            cellulite,
             documents,
         };
         if this.get_version(&wtxn)?.is_none() && creation {
@@ -1021,6 +1028,13 @@ impl Index {
         let geo_filter =
             self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geo());
         Ok(geo_filter)
+    }
+
+    /// Returns true if the geo sorting feature is enabled.
+    pub fn is_geojson_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geojson_filter =
+            self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geojson());
+        Ok(geojson_filter)
     }
 
     pub fn asc_desc_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
@@ -1842,6 +1856,7 @@ impl Index {
             field_id_docid_facet_strings,
             vector_arroy,
             embedder_category_id,
+            cellulite: _,
             documents,
         } = self;
 
