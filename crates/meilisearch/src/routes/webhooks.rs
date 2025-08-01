@@ -51,7 +51,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
-struct WebhookSettings {
+pub(super) struct WebhookSettings {
     #[schema(value_type = Option<String>)]
     #[deserr(default, error = DeserrJsonError<InvalidWebhooksUrl>)]
     #[serde(default)]
@@ -66,7 +66,7 @@ struct WebhookSettings {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
-struct WebhooksSettings {
+pub(super) struct WebhooksSettings {
     #[schema(value_type = Option<BTreeMap<String, WebhookSettings>>)]
     #[serde(default)]
     webhooks: Setting<BTreeMap<Uuid, Setting<WebhookSettings>>>,
@@ -75,7 +75,7 @@ struct WebhooksSettings {
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
-struct WebhookWithMetadata {
+pub(super) struct WebhookWithMetadata {
     uuid: Uuid,
     is_editable: bool,
     #[schema(value_type = WebhookSettings)]
@@ -83,9 +83,9 @@ struct WebhookWithMetadata {
     webhook: Webhook,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-struct WebhookResults {
+pub(super) struct WebhookResults {
     results: Vec<WebhookWithMetadata>,
 }
 
@@ -95,7 +95,7 @@ struct WebhookResults {
     tag = "Webhooks",
     security(("Bearer" = ["webhooks.get", "*.get", "*"])),
     responses(
-        (status = OK, description = "Webhooks are returned", body = WebhooksSettings, content_type = "application/json", example = json!({
+        (status = OK, description = "Webhooks are returned", body = WebhookResults, content_type = "application/json", example = json!({
             "results": [
                 {
                     "uuid": "550e8400-e29b-41d4-a716-446655440000",
