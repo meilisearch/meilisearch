@@ -202,6 +202,18 @@ use RenderError::*;
 
 impl From<RenderError<'_>> for ResponseError {
     fn from(error: RenderError) -> Self {
+        fn format_span(span: &Span<'_>) -> String {
+            let base_column = span.get_utf8_column();
+            let size = span.fragment().chars().count();
+            format!("`{}` (cols {}:{})", span.fragment(), base_column, base_column + size)
+        }
+
+        fn format_token(token: &Token<'_>) -> String {
+            let base_column = token.original_span().get_utf8_column();
+            let size = token.original_span().fragment().chars().count();
+            format!("`{}` (cols {}:{})", token.value(), base_column, base_column + size)
+        }
+
         match error {
             MultipleTemplates => ResponseError::from_msg(
                 String::from("Cannot provide both an inline template and a template ID."),
@@ -216,7 +228,7 @@ impl From<RenderError<'_>> for ResponseError {
                 Code::InvalidRenderTemplateId,
             ),
             UnknownTemplateRoot(root) => ResponseError::from_msg(
-                format!("Template ID must start with `embedders` or `chatCompletions`, but found `{root}`."),
+                format!("Template ID must start with `embedders` or `chatCompletions`, but found {}.", format_token(&root)),
                 Code::InvalidRenderTemplateId,
             ),
             MissingEmbedderName { mut available } => {
@@ -230,26 +242,29 @@ impl From<RenderError<'_>> for ResponseError {
             EmbedderDoesNotExist { embedder, mut available } => {
                 available.sort_unstable();
                 ResponseError::from_msg(
-                    format!("Embedder `{embedder}` does not exist.\n  Hint: Available embedders are {}.",
+                    format!("Embedder {} does not exist.\n  Hint: Available embedders are {}.",
+                        format_token(&embedder),
                         available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
                     Code::InvalidRenderTemplateId,
                 )
             },
             EmbedderUsesFragments { embedder } => ResponseError::from_msg(
-                format!("Requested document template for embedder `{embedder}` but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead."),
+                format!("Requested document template for embedder {} but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead.", format_token(&embedder)),
                 Code::InvalidRenderTemplateId,
             ),
             MissingTemplateAfterEmbedder { embedder, mut indexing, mut search } => {
                 if indexing.is_empty() && search.is_empty() {
                     ResponseError::from_msg(
-                        format!("Missing template id after embedder `{embedder}`.\n  Hint: Available template: `documentTemplate`."),
+                        format!("Missing template id after embedder {}.\n  Hint: Available template: `documentTemplate`.",
+                            format_token(&embedder)),
                         Code::InvalidRenderTemplateId,
                     )
                 } else {
                     indexing.sort_unstable();
                     search.sort_unstable();
                     ResponseError::from_msg(
-                        format!("Template ID configured with `embedders.{embedder}` but no template kind provided.\n  Hint: Available fragments are {}.",
+                        format!("Template ID configured with embedder {} but no template kind provided.\n  Hint: Available fragments are {}.",
+                            format_token(&embedder),
                             indexing.iter().map(|s| format!("`indexingFragments.{s}`")).chain(
                             search.iter().map(|s| format!("`searchFragments.{s}`"))).collect::<Vec<_>>().join(", ")),
                         Code::InvalidRenderTemplateId,
@@ -259,14 +274,16 @@ impl From<RenderError<'_>> for ResponseError {
             UnknownTemplatePrefix { embedder, found, mut indexing, mut search } => {
                 if indexing.is_empty() && search.is_empty() {
                     ResponseError::from_msg(
-                        format!("Wrong template `{found}` after embedder `{embedder}`.\n  Hint: Available template: `documentTemplate`."),
+                        format!("Wrong template {} after embedder {}.\n  Hint: Available template: `documentTemplate`.", format_token(&found), format_token(&embedder)),
                         Code::InvalidRenderTemplateId,
                     )
                 } else {
                     indexing.sort_unstable();
                     search.sort_unstable();
                     ResponseError::from_msg(
-                        format!("Wrong template `{found}` after embedder `{embedder}`.\n  Hint: Available fragments are {}.",
+                        format!("Wrong template {} after embedder {}.\n  Hint: Available fragments are {}.",
+                            format_token(&found),
+                            format_token(&embedder),
                             indexing.iter().map(|s| format!("`indexingFragments.{s}`")).chain(
                             search.iter().map(|s| format!("`searchFragments.{s}`"))).collect::<Vec<_>>().join(", ")),
                         Code::InvalidRenderTemplateId,
@@ -277,9 +294,10 @@ impl From<RenderError<'_>> for ResponseError {
             MissingFragment { embedder, kind, mut available } => {
                 available.sort_unstable();
                 ResponseError::from_msg(
-                    format!("{} fragment name was not provided.\n  Hint: Available {} fragments for embedder `{embedder}` are {}.",
+                    format!("{} fragment name was not provided.\n  Hint: Available {} fragments for embedder {} are {}.",
                         kind.capitalized(),
                         kind.as_str(),
+                        format_token(&embedder),
                         available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
                     Code::InvalidRenderTemplateId,
                 )
@@ -287,15 +305,17 @@ impl From<RenderError<'_>> for ResponseError {
             FragmentDoesNotExist { embedder, fragment, kind, mut available } => {
                 available.sort_unstable();
                 ResponseError::from_msg(
-                    format!("{} fragment `{fragment}` does not exist for embedder `{embedder}`.\n  Hint: Available {} fragments are {}.",
+                    format!("{} fragment {} does not exist for embedder {}.\n  Hint: Available {} fragments are {}.",
                         kind.capitalized(),
+                        format_token(&fragment),
+                        format_token(&embedder),
                         kind.as_str(),
                         available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
                     Code::InvalidRenderTemplateId,
                 )
             },
             LeftOverToken(token) => ResponseError::from_msg(
-                format!("Leftover token `{token}` after parsing template ID"),
+                format!("Leftover token {} after parsing template ID", format_token(&token)),
                 Code::InvalidRenderTemplateId,
             ),
             MissingChatCompletionTemplate => ResponseError::from_msg(
@@ -303,7 +323,7 @@ impl From<RenderError<'_>> for ResponseError {
                 Code::InvalidRenderTemplateId,
             ),
             UnknownChatCompletionTemplate(id) => ResponseError::from_msg(
-                format!("Unknown chat completion template ID `{id}`. The only available template is `documentTemplate`."),
+                format!("Unknown chat completion template ID {}. The only available template is `documentTemplate`.", format_token(&id)),
                 Code::InvalidRenderTemplateId,
             ),
             DocumentNotFound(doc_id) => ResponseError::from_msg(
@@ -331,11 +351,11 @@ impl From<RenderError<'_>> for ResponseError {
                 Code::InvalidRenderInput,
             ),
             ExpectedDotAfterValue(span) => ResponseError::from_msg(
-                format!("Expected a dot after value, but found `{span}`."),
+                format!("Expected a dot after value, but found {}.", format_span(&span)),
                 Code::InvalidRenderTemplateId,
             ),
             ExpectedValue(span) => ResponseError::from_msg(
-                format!("Expected a value, but found `{span}`."),
+                format!("Expected a value, but found {}.", format_span(&span)),
                 Code::InvalidRenderTemplateId,
             ),
         }
@@ -570,7 +590,7 @@ pub struct RenderQueryTemplate {
     #[deserr(default, error = DeserrJsonError<InvalidRenderTemplateId>)]
     pub id: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidRenderTemplateInline>)]
-    pub inline: Option<serde_json::Value>,
+    pub inline: Option<Value>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema)]
@@ -579,11 +599,11 @@ pub struct RenderQueryInput {
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputDocumentId>)]
     pub document_id: Option<String>,
     #[deserr(default, error = DeserrJsonError<InvalidRenderInputInline>)]
-    pub inline: Option<BTreeMap<String, serde_json::Value>>,
+    pub inline: Option<BTreeMap<String, Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
 pub struct RenderResult {
-    template: serde_json::Value,
-    rendered: serde_json::Value,
+    template: Value,
+    rendered: Value,
 }
