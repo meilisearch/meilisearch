@@ -16,7 +16,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::prompt::{get_document, OwnedFields};
+use meilisearch_types::milli::prompt::{build_doc, build_doc_fields, OwnedFields};
 use meilisearch_types::milli::vector::db::IndexEmbeddingConfig;
 use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
 use meilisearch_types::milli::vector::EmbedderOptions;
@@ -532,12 +532,18 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Respon
         }
 
         if let Some(document_id) = input.document_id {
-            let (document, fields) = get_document(&index, &rtxn, &document_id, insert_fields)?
-                .ok_or_else(|| DocumentNotFound(document_id))?;
-
-            object.insert("doc".into(), document);
-            if let Some(fields) = fields {
+            if insert_fields {
+                let fid_map_with_meta = index.fields_ids_map_with_metadata(&rtxn)?;
+                let (document, fields) =
+                    build_doc_fields(&index, &rtxn, &document_id, &fid_map_with_meta)?
+                        .ok_or_else(|| DocumentNotFound(document_id))?;
+                object.insert("doc".into(), document);
                 object.insert("fields".into(), fields);
+            } else {
+                let fid_map = index.fields_ids_map(&rtxn)?;
+                let document = build_doc(&index, &rtxn, &document_id, &fid_map)?
+                    .ok_or_else(|| DocumentNotFound(document_id))?;
+                object.insert("doc".into(), document);
             }
         }
 

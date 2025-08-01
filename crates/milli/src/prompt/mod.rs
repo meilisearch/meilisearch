@@ -19,7 +19,7 @@ pub use self::context::Context;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::del_add::DelAdd;
 use crate::update::new::document::DocumentFromDb;
-use crate::{GlobalFieldsIdsMap, Index, MetadataBuilder};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index};
 
 pub struct Prompt {
     template: liquid::Template,
@@ -167,18 +167,49 @@ fn truncate(s: &mut String, max_bytes: usize) {
     }
 }
 
-/// Build the liquid objects corresponding to the `doc` and `fields` object of a [`Prompt`] from the given external document id.
-pub fn get_document(
+/// Build the liquid objects corresponding to the `doc` object (without `fields`) of a [`Prompt`] from the given external document id.
+pub fn build_doc(
     index: &Index,
     rtxn: &RoTxn<'_>,
     external_id: &str,
-    with_fields: bool,
+    fid_map: &FieldsIdsMap,
+) -> Result<Option<LiquidValue>, crate::Error> {
+    _build_doc_fields(index, rtxn, external_id, fid_map, None)
+        .map(|opt| opt.map(|(doc, _fields)| doc))
+}
+
+/// Build the liquid objects corresponding to the `doc` and `fields` object of a [`Prompt`] from the given external document id.
+pub fn build_doc_fields(
+    index: &Index,
+    rtxn: &RoTxn<'_>,
+    external_id: &str,
+    fid_map_with_meta: &FieldIdMapWithMetadata,
+) -> Result<Option<(LiquidValue, LiquidValue)>, crate::Error> {
+    _build_doc_fields(
+        index,
+        rtxn,
+        external_id,
+        fid_map_with_meta.as_fields_ids_map(),
+        Some(fid_map_with_meta),
+    )
+    .map(|opt| {
+        opt.map(|(doc, fields)| {
+            (doc, fields.expect("fid_map_with_meta were provided so fields must be Some"))
+        })
+    })
+}
+
+fn _build_doc_fields(
+    index: &Index,
+    rtxn: &RoTxn<'_>,
+    external_id: &str,
+    fid_map: &FieldsIdsMap,
+    fid_map_with_meta: Option<&FieldIdMapWithMetadata>,
 ) -> Result<Option<(LiquidValue, Option<LiquidValue>)>, crate::Error> {
     let Some(internal_id) = index.external_documents_ids().get(rtxn, external_id)? else {
         return Ok(None);
     };
 
-    let fid_map = index.fields_ids_map(rtxn)?;
     let Some(document_from_db) = DocumentFromDb::new(internal_id, rtxn, index, &fid_map)? else {
         return Ok(None);
     };
@@ -186,11 +217,8 @@ pub fn get_document(
     let doc_alloc = Bump::new();
     let parseable_document = ParseableDocument::new(document_from_db, &doc_alloc);
 
-    if with_fields {
-        let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
-        let fid_map_with_meta = FieldIdMapWithMetadata::new(fid_map.clone(), metadata_builder);
-        let fields = OwnedFields::new(&parseable_document, &fid_map_with_meta);
-
+    if let Some(fid_map_with_meta) = fid_map_with_meta {
+        let fields = OwnedFields::new(&parseable_document, fid_map_with_meta);
         Ok(Some((parseable_document.to_value(), Some(fields.to_value()))))
     } else {
         Ok(Some((parseable_document.to_value(), None)))
