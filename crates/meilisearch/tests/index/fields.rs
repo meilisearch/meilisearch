@@ -1,4 +1,4 @@
-use crate::common::{Server, shared_does_not_exists_index};
+use crate::common::{shared_does_not_exists_index, Server};
 use crate::json;
 
 #[actix_rt::test]
@@ -50,16 +50,26 @@ async fn get_fields_with_documents_and_search() {
     assert!(response["total"].as_u64().unwrap() >= 3);
 
     // ensure `id` appears in results
-    let names: Vec<_> = response["results"].as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap()).collect();
+    let names: Vec<_> = response["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap())
+        .collect();
     assert!(names.contains(&"id"));
 
     // search parameter should filter
     let url = format!("/indexes/{}/fields?search=ti*", index.uid);
     let (search_resp, code) = server.service.get(url).await;
     assert_eq!(code, 200);
-    let sr_names: Vec<_> = search_resp["results"].as_array().unwrap().iter().map(|f| f["name"].as_str().unwrap()).collect();
+    let sr_names: Vec<_> = search_resp["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["name"].as_str().unwrap())
+        .collect();
     assert_eq!(sr_names, vec!["title"]);
-} 
+}
 
 #[actix_rt::test]
 async fn fields_after_uploading_recipe_and_settings() {
@@ -162,4 +172,4 @@ async fn fields_after_uploading_recipe_and_settings() {
 
     // check total fields count > 20
     assert!(resp["total"].as_u64().unwrap() > 20);
-} 
+}

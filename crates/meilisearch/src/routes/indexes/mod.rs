@@ -30,6 +30,7 @@ use crate::Opt;
 
 pub mod documents;
 pub mod facet_search;
+pub mod fields;
 pub mod search;
 mod search_analytics;
 #[cfg(test)]
@@ -38,7 +39,6 @@ pub mod settings;
 mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
-pub mod fields;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -74,7 +74,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                     .route(web::delete().to(SeqHandler(delete_index))),
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
-            .service(web::resource("/fields").route(web::get().to(SeqHandler(fields::get_index_fields))))
+            .service(
+                web::resource("/fields").route(web::get().to(SeqHandler(fields::get_index_fields))),
+            )
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
