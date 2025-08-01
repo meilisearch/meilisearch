@@ -610,3 +610,89 @@ async fn embedder_document_template() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn ugly_embedder_and_fragment_names() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    let (_response, code) = server.set_features(json!({"multimodal": true})).await;
+    snapshot!(code, @"200 OK");
+
+    // Set up a mock server for the embedder
+    let mock_server = wiremock::MockServer::start().await;
+    wiremock::Mock::given(wiremock::matchers::method("POST"))
+        .and(wiremock::matchers::path("/"))
+        .respond_with(wiremock::ResponseTemplate::new(200).set_body_json(json!({
+            "data": [0.1, 0.2, 0.3]
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Create an embedder with an ugly name containing quotes and special characters
+    let (response, code) = index
+        .update_settings(json!({
+            "embedders": {
+                "Open AI \"3.1\"": {
+                    "source": "rest",
+                    "url": mock_server.uri(),
+                    "dimensions": 3,
+                    "request": "{{fragment}}",
+                    "response": {
+                        "data": "{{embedding}}"
+                    },
+                    "indexingFragments": {
+                        "ugly fragment \"name\".": {"value": "{{ doc.name }} processed by AI"}
+                    },
+                    "searchFragments": {
+                        "search with [brackets]": {"value": "It's a {{ media.breed }}"}
+                    }
+                },
+            },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    // Test retrieving indexing fragment template with ugly name
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": r#"embedders."Open AI \"3.1\"".indexingFragments."ugly fragment \"name\".""# },
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{{ doc.name }} processed by AI",
+      "rendered": null
+    }
+    "#);
+
+    // Test retrieving search fragment template with ugly name
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": r#"embedders."Open AI \"3.1\"".searchFragments."search with [brackets]""# },
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "It's a {{ media.breed }}",
+      "rendered": null
+    }
+    "#);
+
+    // Test quoting normal parts of the template ID
+    let (value, code) = index
+        .render(json! {{
+            "template": { "id": r#""embedders"."Open AI \"3.1\""."indexingFragments"."ugly fragment \"name\".""# }
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "{{ doc.name }} processed by AI",
+      "rendered": null
+    }
+    "#);
+}
