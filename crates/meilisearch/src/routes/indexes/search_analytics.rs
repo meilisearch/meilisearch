@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 
 use crate::aggregate_methods;
 use crate::analytics::{Aggregate, AggregateMethod};
+use crate::metrics::MEILISEARCH_PERSONALIZED_SEARCH_REQUESTS;
 use crate::search::{
     SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
@@ -94,6 +95,9 @@ pub struct SearchAggregator<Method: AggregateMethod> {
     show_ranking_score_details: bool,
     ranking_score_threshold: bool,
 
+    // personalization
+    total_personalized: usize,
+
     marker: std::marker::PhantomData<Method>,
 }
 
@@ -128,6 +132,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             hybrid,
             ranking_score_threshold,
             locales,
+            personalize,
         } = query;
 
         let mut ret = Self::default();
@@ -200,6 +205,12 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
 
         if let Some(locales) = locales {
             ret.locales = locales.iter().copied().collect();
+        }
+
+        // personalization
+        if personalize.is_some() {
+            ret.total_personalized = 1;
+            MEILISEARCH_PERSONALIZED_SEARCH_REQUESTS.inc();
         }
 
         ret.highlight_pre_tag = *highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
@@ -290,6 +301,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             total_used_negative_operator,
             ranking_score_threshold,
             mut locales,
+            total_personalized,
             marker: _,
         } = *new;
 
@@ -374,6 +386,9 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         // locales
         self.locales.append(&mut locales);
 
+        // personalization
+        self.total_personalized = self.total_personalized.saturating_add(total_personalized);
+
         self
     }
 
@@ -418,6 +433,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             total_used_negative_operator,
             ranking_score_threshold,
             locales,
+            total_personalized,
             marker: _,
         } = *self;
 
@@ -489,6 +505,9 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
                 "show_ranking_score": show_ranking_score,
                 "show_ranking_score_details": show_ranking_score_details,
                 "ranking_score_threshold": ranking_score_threshold,
+            },
+            "personalization": {
+                "total_personalized": total_personalized,
             },
         })
     }
