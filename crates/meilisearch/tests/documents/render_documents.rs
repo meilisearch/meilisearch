@@ -1,4 +1,4 @@
-use crate::common::{shared_index_for_fragments, Server};
+use crate::common::{shared_empty_index, shared_index_for_fragments, Server};
 use crate::json;
 use meili_snap::{json_string, snapshot};
 
@@ -409,6 +409,41 @@ async fn render_inline_document_iko() {
     {
       "template": "It's a {{ media.breed }}",
       "rendered": "It's a jack russell"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn render_doc_not_object() {
+    let index = shared_empty_index().await;
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "inline": "{{ doc }}" },
+            "input": { "inline": { "doc": "that's not an object, that's a string" } },
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "The `doc` field must be a map.",
+      "code": "invalid_render_input",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_input"
+    }
+    "#);
+
+    let (value, code) = index
+        .render(json! {{
+            "template": { "inline": "default" },
+            "input": { "inline": { "doc": null } },
+        }})
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(value, @r#"
+    {
+      "template": "default",
+      "rendered": "default"
     }
     "#);
 }

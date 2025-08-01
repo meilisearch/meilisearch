@@ -16,7 +16,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::prompt::{get_document, get_inline_document_fields};
+use meilisearch_types::milli::prompt::{get_document, OwnedFields};
 use meilisearch_types::milli::vector::db::IndexEmbeddingConfig;
 use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
 use meilisearch_types::milli::vector::EmbedderOptions;
@@ -179,6 +179,7 @@ enum RenderError<'a> {
     ExpectedValue(milli::Span<'a>),
 
     DocumentNotFound(String),
+    DocumentMustBeMap,
     BothInlineDocAndDocId,
     TemplateParsing(json_template::Error),
     TemplateRendering(json_template::Error),
@@ -308,6 +309,10 @@ impl From<RenderError<'_>> for ResponseError {
             DocumentNotFound(doc_id) => ResponseError::from_msg(
                 format!("Document with ID `{doc_id}` not found."),
                 Code::RenderDocumentNotFound,
+            ),
+            DocumentMustBeMap => ResponseError::from_msg(
+                String::from("The `doc` field must be a map."),
+                Code::InvalidRenderInput,
             ),
             BothInlineDocAndDocId => ResponseError::from_msg(
                 String::from("A document id was provided but adding it to the input would overwrite the `doc` field that you already defined inline."),
@@ -477,17 +482,16 @@ fn parse_template_id<'a>(
 }
 
 async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, ResponseError> {
+    let RenderQuery { template, input } = query;
     let rtxn = index.read_txn()?;
-
-    let (template, fields_available) = match (query.template.inline, query.template.id) {
+    let (template, fields_available) = match (template.inline, template.id) {
         (Some(inline), None) => (inline, true),
         (None, Some(id)) => parse_template_id(&index, &rtxn, &id)?,
         (Some(_), Some(_)) => return Err(MultipleTemplates.into()),
         (None, None) => return Err(MissingTemplate.into()),
     };
 
-    let fields_already_present = query
-        .input
+    let fields_already_present = input
         .as_ref()
         .is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("fields").is_some()));
     let fields_unused = match template.as_str() {
@@ -498,11 +502,9 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Respon
         }
         None => true, // non-text templates cannot use `fields`
     };
-    let has_inline_doc = query
-        .input
-        .as_ref()
-        .is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("doc").is_some()));
-    let has_document_id = query.input.as_ref().is_some_and(|i| i.document_id.is_some());
+    let has_inline_doc =
+        input.as_ref().is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("doc").is_some()));
+    let has_document_id = input.as_ref().is_some_and(|i| i.document_id.is_some());
     let has_doc = has_inline_doc || has_document_id;
     let insert_fields = fields_available && has_doc && !fields_unused && !fields_already_present;
     if has_inline_doc && has_document_id {
@@ -510,14 +512,21 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Respon
     }
 
     let mut rendered = Value::Null;
-    if let Some(input) = query.input {
+    if let Some(input) = input {
         let inline = input.inline.unwrap_or_default();
-        let mut object = liquid::to_object(&inline).unwrap();
+        let mut object = liquid::to_object(&inline).map_err(InputConversion)?;
 
-        if let Some(doc) = inline.get("doc") {
-            if insert_fields {
-                let fields =
-                    get_inline_document_fields(&index, &rtxn, doc)?.map_err(InputConversion)?;
+        let doc = match object.get_mut("doc") {
+            Some(liquid::model::Value::Object(doc)) => Some(doc),
+            Some(liquid::model::Value::Nil) => None,
+            None => None,
+            _ => return Err(DocumentMustBeMap.into()),
+        };
+        if insert_fields {
+            if let Some(doc) = doc {
+                let doc = doc.clone();
+                let fid_map_with_meta = index.fields_ids_map_with_metadata(&rtxn)?;
+                let fields = OwnedFields::new(&doc, &fid_map_with_meta);
                 object.insert("fields".into(), fields.to_value());
             }
         }

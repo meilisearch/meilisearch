@@ -13,8 +13,7 @@ pub(crate) use document::{Document, ParseableDocument};
 use error::{NewPromptError, RenderPromptError};
 pub use fields::{BorrowedFields, OwnedFields};
 use heed::RoTxn;
-use liquid::model::Value as LiquidValue;
-use liquid::ValueView;
+use liquid::{model::Value as LiquidValue, ValueView};
 
 pub use self::context::Context;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
@@ -166,23 +165,6 @@ fn truncate(s: &mut String, max_bytes: usize) {
             break;
         }
     }
-}
-
-pub fn get_inline_document_fields(
-    index: &Index,
-    rtxn: &RoTxn<'_>,
-    inline_doc: &serde_json::Value,
-) -> Result<Result<LiquidValue, liquid::Error>, crate::Error> {
-    let fid_map_with_meta = index.fields_ids_map_with_metadata(rtxn)?;
-    let inline_doc = match liquid::to_object(&inline_doc) {
-        Ok(inline_doc) => inline_doc,
-        Err(e) => {
-            return Ok(Err(e));
-        }
-    };
-    let fields = OwnedFields::new(&inline_doc, &fid_map_with_meta);
-
-    Ok(Ok(fields.to_value()))
 }
 
 pub fn get_document(
