@@ -167,6 +167,7 @@ fn truncate(s: &mut String, max_bytes: usize) {
     }
 }
 
+/// Build the liquid objects corresponding to the `doc` and `fields` object of a [`Prompt`] from the given external document id.
 pub fn get_document(
     index: &Index,
     rtxn: &RoTxn<'_>,
