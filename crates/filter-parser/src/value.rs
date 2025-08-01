@@ -80,6 +80,39 @@ pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, 
     }
 }
 
+/// vector_value          = ( non_dot_word | singleQuoted | doubleQuoted)
+pub fn parse_vector_value(input: Span) -> IResult<Token> {
+    pub fn non_dot_word(input: Span) -> IResult<Token> {
+        let (input, word) = take_while1(|c| is_value_component(c) && c != '.')(input)?;
+        Ok((input, word.into()))
+    }
+
+    let (input, value) = alt((
+        delimited(char('\''), cut(|input| quoted_by('\'', input)), cut(char('\''))),
+        delimited(char('"'), cut(|input| quoted_by('"', input)), cut(char('"'))),
+        non_dot_word,
+    ))(input)?;
+
+    match unescaper::unescape(value.value()) {
+        Ok(content) => {
+            if content.len() != value.value().len() {
+                Ok((input, Token::new(value.original_span(), Some(content))))
+            } else {
+                Ok((input, value))
+            }
+        }
+        Err(unescaper::Error::IncompleteStr(_)) => Err(nom::Err::Incomplete(nom::Needed::Unknown)),
+        Err(unescaper::Error::ParseIntError { .. }) => Err(nom::Err::Error(Error::new_from_kind(
+            value.original_span(),
+            ErrorKind::InvalidEscapedNumber,
+        ))),
+        Err(unescaper::Error::InvalidChar { .. }) => Err(nom::Err::Error(Error::new_from_kind(
+            value.original_span(),
+            ErrorKind::MalformedValue,
+        ))),
+    }
+}
+
 /// value          = WS* ( word | singleQuoted | doubleQuoted) WS+
 pub fn parse_value(input: Span) -> IResult<Token> {
     // to get better diagnostic message we are going to strip the left whitespaces from the input right now

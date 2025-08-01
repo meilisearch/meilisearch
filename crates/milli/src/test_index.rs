@@ -1338,10 +1338,9 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     assert!(results.candidates.is_empty());
 
     let mut search = index.search(&rtxn);
-    let results = search
-        .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
-        .execute()
-        .unwrap();
+    let results =
+        dbg!(search.filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()).execute())
+            .unwrap();
     assert!(results.candidates.is_empty());
 
     index

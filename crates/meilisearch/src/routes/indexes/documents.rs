@@ -139,6 +139,8 @@ pub struct DocumentsFetchAggregator<Method: AggregateMethod> {
     per_document_id: bool,
     // if a filter was used
     per_filter: bool,
+    with_vector_filter: bool,
+
     // if documents were sorted
     sort: bool,
 
@@ -166,6 +168,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
         Box::new(Self {
             per_document_id: self.per_document_id | new.per_document_id,
             per_filter: self.per_filter | new.per_filter,
+            with_vector_filter: self.with_vector_filter | new.with_vector_filter,
             sort: self.sort | new.sort,
             retrieve_vectors: self.retrieve_vectors | new.retrieve_vectors,
             max_limit: self.max_limit.max(new.max_limit),
@@ -250,6 +253,7 @@ pub async fn get_document(
             retrieve_vectors: param_retrieve_vectors.0,
             per_document_id: true,
             per_filter: false,
+            with_vector_filter: false,
             sort: false,
             max_limit: 0,
             max_offset: 0,
@@ -475,6 +479,10 @@ pub async fn documents_by_query_post(
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsPOST> {
             per_filter: body.filter.is_some(),
+            with_vector_filter: body
+                .filter
+                .as_ref()
+                .is_some_and(|f| f.to_string().contains("_vectors")),
             sort: body.sort.is_some(),
             retrieve_vectors: body.retrieve_vectors,
             max_limit: body.limit,
@@ -576,6 +584,10 @@ pub async fn get_documents(
     analytics.publish(
         DocumentsFetchAggregator::<DocumentsGET> {
             per_filter: query.filter.is_some(),
+            with_vector_filter: query
+                .filter
+                .as_ref()
+                .is_some_and(|f| f.to_string().contains("_vectors")),
             sort: query.sort.is_some(),
             retrieve_vectors: query.retrieve_vectors,
             max_limit: query.limit,
