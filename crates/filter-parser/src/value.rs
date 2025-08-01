@@ -80,8 +80,8 @@ pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, 
     }
 }
 
-/// vector_value          = ( non_dot_word | singleQuoted | doubleQuoted)
-pub fn parse_vector_value(input: Span) -> IResult<Token> {
+/// dotted_value_part          = ( non_dot_word | singleQuoted | doubleQuoted)
+pub fn parse_dotted_value_part(input: Span) -> IResult<Token> {
     pub fn non_dot_word(input: Span) -> IResult<Token> {
         let (input, word) = take_while1(|c| is_value_component(c) && c != '.')(input)?;
         Ok((input, word.into()))

@@ -26,7 +26,7 @@ async fn wrong_id_prefix() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Template ID must start with `embedders` or `chatCompletions`, but found `wrong`.",
+      "message": "Template ID must start with `embedders` or `chatCompletions`, but found `{wrong}`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -59,7 +59,7 @@ async fn wrong_embedder() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Embedder `wrong` does not exist.\n  Hint: Available embedders are `rest`.",
+      "message": "Embedder `{wrong}` does not exist.\n  Hint: Available embedders are `rest`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -75,7 +75,7 @@ async fn missing_template_kind() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Template ID configured with `embedders.rest` but no template kind provided.\n  Hint: Available fragments are `indexingFragments.basic`, `indexingFragments.withBreed`, `searchFragments.justBreed`, `searchFragments.justName`, `searchFragments.query`.",
+      "message": "Template ID configured with `embedders.{rest}` but no template kind provided.\n  Hint: Available fragments are `indexingFragments.basic`, `indexingFragments.withBreed`, `searchFragments.justBreed`, `searchFragments.justName`, `searchFragments.query`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -92,7 +92,7 @@ async fn wrong_template_kind() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Wrong template `wrong` after embedder `rest`.\n  Hint: Available fragments are `indexingFragments.basic`, `indexingFragments.withBreed`, `searchFragments.justBreed`, `searchFragments.justName`, `searchFragments.query`.",
+      "message": "Wrong template `{wrong}` after embedder `{rest}`.\n  Hint: Available fragments are `indexingFragments.basic`, `indexingFragments.withBreed`, `searchFragments.justBreed`, `searchFragments.justName`, `searchFragments.query`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -109,7 +109,7 @@ async fn document_template_on_fragmented_index() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Requested document template for embedder `rest` but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead.",
+      "message": "Requested document template for embedder `{rest}` but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -126,7 +126,7 @@ async fn missing_fragment_name() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Indexing fragment name was not provided.\n  Hint: Available indexing fragments for embedder `rest` are `basic`, `withBreed`.",
+      "message": "Indexing fragment name was not provided.\n  Hint: Available indexing fragments for embedder `{rest}` are `basic`, `withBreed`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -138,7 +138,7 @@ async fn missing_fragment_name() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Search fragment name was not provided.\n  Hint: Available search fragments for embedder `rest` are `justBreed`, `justName`, `query`.",
+      "message": "Search fragment name was not provided.\n  Hint: Available search fragments for embedder `{rest}` are `justBreed`, `justName`, `query`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -156,7 +156,7 @@ async fn wrong_fragment_name() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Indexing fragment `wrong` does not exist for embedder `rest`.\n  Hint: Available indexing fragments are `basic`, `withBreed`.",
+      "message": "Indexing fragment `{wrong}` does not exist for embedder `{rest}`.\n  Hint: Available indexing fragments are `basic`, `withBreed`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -168,7 +168,7 @@ async fn wrong_fragment_name() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Search fragment `wrong` does not exist for embedder `rest`.\n  Hint: Available search fragments are `justBreed`, `justName`, `query`.",
+      "message": "Search fragment `{wrong}` does not exist for embedder `{rest}`.\n  Hint: Available search fragments are `justBreed`, `justName`, `query`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -188,7 +188,7 @@ async fn leftover_tokens() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Leftover token `leftover` after parsing template ID",
+      "message": "Leftover token `{leftover}` after parsing template ID",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -201,7 +201,7 @@ async fn leftover_tokens() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Leftover token `leftover` after parsing template ID",
+      "message": "Leftover token `{leftover}` after parsing template ID",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -214,7 +214,7 @@ async fn leftover_tokens() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Leftover token `leftover` after parsing template ID",
+      "message": "Leftover token `{leftover}` after parsing template ID",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -274,7 +274,7 @@ async fn wrong_chat_completions_template() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Unknown chat completion template ID `wrong`. The only available template is `documentTemplate`.",
+      "message": "Unknown chat completion template ID `{wrong}`. The only available template is `documentTemplate`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
@@ -603,7 +603,7 @@ async fn embedder_document_template() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Wrong template `wrong` after embedder `rest`.\n  Hint: Available template: `documentTemplate`.",
+      "message": "Wrong template `{wrong}` after embedder `{rest}`.\n  Hint: Available template: `documentTemplate`.",
       "code": "invalid_render_template_id",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"

@@ -20,6 +20,7 @@ use meilisearch_types::milli::prompt::{get_document, get_inline_document_fields}
 use meilisearch_types::milli::vector::db::IndexEmbeddingConfig;
 use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
 use meilisearch_types::milli::vector::EmbedderOptions;
+use meilisearch_types::milli::{Span, Token};
 use meilisearch_types::{heed, milli, Index};
 use serde::Serialize;
 use serde_json::Value;
@@ -133,47 +134,49 @@ impl FragmentKind {
     }
 }
 
-enum RenderError {
+enum RenderError<'a> {
     MultipleTemplates,
     MissingTemplate,
     EmptyTemplateId,
-    UnknownTemplateRoot(String),
+    UnknownTemplateRoot(Token<'a>),
     MissingEmbedderName {
         available: Vec<String>,
     },
     EmbedderDoesNotExist {
-        embedder: String,
+        embedder: Token<'a>,
         available: Vec<String>,
     },
     EmbedderUsesFragments {
-        embedder: String,
+        embedder: Token<'a>,
     },
     MissingTemplateAfterEmbedder {
-        embedder: String,
+        embedder: Token<'a>,
         indexing: Vec<String>,
         search: Vec<String>,
     },
     UnknownTemplatePrefix {
-        embedder: String,
-        found: String,
+        embedder: Token<'a>,
+        found: Token<'a>,
         indexing: Vec<String>,
         search: Vec<String>,
     },
     ReponseError(ResponseError),
     MissingFragment {
-        embedder: String,
+        embedder: Token<'a>,
         kind: FragmentKind,
         available: Vec<String>,
     },
     FragmentDoesNotExist {
-        embedder: String,
-        fragment: String,
+        embedder: Token<'a>,
+        fragment: Token<'a>,
         kind: FragmentKind,
         available: Vec<String>,
     },
-    LeftOverToken(String),
+    LeftOverToken(Token<'a>),
     MissingChatCompletionTemplate,
-    UnknownChatCompletionTemplate(String),
+    UnknownChatCompletionTemplate(Token<'a>),
+    ExpectedDotAfterValue(milli::Span<'a>),
+    ExpectedValue(milli::Span<'a>),
 
     DocumentNotFound(String),
     BothInlineDocAndDocId,
@@ -182,13 +185,13 @@ enum RenderError {
     CouldNotHandleInput,
 }
 
-impl From<heed::Error> for RenderError {
+impl From<heed::Error> for RenderError<'_> {
     fn from(error: heed::Error) -> Self {
         RenderError::ReponseError(error.into())
     }
 }
 
-impl From<milli::Error> for RenderError {
+impl From<milli::Error> for RenderError<'_> {
     fn from(error: milli::Error) -> Self {
         RenderError::ReponseError(error.into())
     }
@@ -196,7 +199,7 @@ impl From<milli::Error> for RenderError {
 
 use RenderError::*;
 
-impl From<RenderError> for ResponseError {
+impl From<RenderError<'_>> for ResponseError {
     fn from(error: RenderError) -> Self {
         match error {
             MultipleTemplates => ResponseError::from_msg(
@@ -322,31 +325,39 @@ impl From<RenderError> for ResponseError {
                 String::from("Could not handle the input provided."),
                 Code::InvalidRenderInput,
             ),
+            ExpectedDotAfterValue(span) => ResponseError::from_msg(
+                format!("Expected a dot after value, but found `{span}`."),
+                Code::InvalidRenderTemplateId,
+            ),
+            ExpectedValue(span) => ResponseError::from_msg(
+                format!("Expected a value, but found `{span}`."),
+                Code::InvalidRenderTemplateId,
+            ),
         }
     }
 }
 
-fn parse_template_id_fragment(
-    name: Option<&str>,
+fn parse_template_id_fragment<'a>(
+    name: Option<Token<'a>>,
     kind: FragmentKind,
     embedding_config: &IndexEmbeddingConfig,
-    embedder_name: &str,
-) -> Result<serde_json::Value, RenderError> {
+    embedder: Token<'a>,
+) -> Result<serde_json::Value, RenderError<'a>> {
     let get_available =
         [EmbedderOptions::indexing_fragments, EmbedderOptions::search_fragments][kind as usize];
     let get_specific =
         [EmbedderOptions::indexing_fragment, EmbedderOptions::search_fragment][kind as usize];
 
-    let fragment_name = name.ok_or_else(|| MissingFragment {
-        embedder: embedder_name.to_string(),
+    let fragment = name.ok_or_else(|| MissingFragment {
+        embedder: embedder.clone(),
         kind,
         available: get_available(&embedding_config.config.embedder_options),
     })?;
 
-    let fragment = get_specific(&embedding_config.config.embedder_options, fragment_name)
+    let fragment = get_specific(&embedding_config.config.embedder_options, fragment.value())
         .ok_or_else(|| FragmentDoesNotExist {
-            embedder: embedder_name.to_string(),
-            fragment: fragment_name.to_string(),
+            embedder,
+            fragment,
             kind,
             available: get_available(&embedding_config.config.embedder_options),
         })?;
@@ -354,83 +365,96 @@ fn parse_template_id_fragment(
     Ok(fragment.clone())
 }
 
-fn parse_template_id(
+fn parse_template_id<'a>(
     index: &Index,
-    rtxn: &RoTxn<'_>,
-    id: &str,
-) -> Result<(serde_json::Value, bool), RenderError> {
-    let mut parts = id.split('.');
+    rtxn: &RoTxn,
+    id: &'a str,
+) -> Result<(serde_json::Value, bool), RenderError<'a>> {
+    let mut input: Span = id.into();
+    let mut next_part = |first: bool| -> Result<Option<Token<'_>>, RenderError<'a>> {
+        if input.is_empty() {
+            return Ok(None);
+        }
+        if !first {
+            if !input.starts_with('.') {
+                return Err(ExpectedDotAfterValue(input));
+            }
+            input = milli::filter_parser::Slice::slice(&input, 1..);
+        }
+        let (remaining, value) = milli::filter_parser::parse_dotted_value_part(input)
+            .map_err(|_| ExpectedValue(input))?;
+        input = remaining;
 
-    let root = parts.next().ok_or(EmptyTemplateId)?;
+        Ok(Some(value))
+    };
 
-    let template = match root {
+    let root = next_part(true)?.ok_or(EmptyTemplateId)?;
+    let template = match root.value() {
         "embedders" => {
             let index_embedding_configs = index.embedding_configs();
             let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
             let get_embedders = || embedding_configs.iter().map(|c| c.name.clone()).collect();
 
-            let embedder =
-                parts.next().ok_or_else(|| MissingEmbedderName { available: get_embedders() })?;
+            let embedder = next_part(false)?
+                .ok_or_else(|| MissingEmbedderName { available: get_embedders() })?;
 
             let embedding_config = embedding_configs
                 .iter()
-                .find(|config| config.name == embedder)
+                .find(|config| config.name == embedder.value())
                 .ok_or_else(|| EmbedderDoesNotExist {
-                    embedder: embedder.to_string(),
+                    embedder: embedder.clone(),
                     available: get_embedders(),
                 })?;
 
             let get_indexing = || embedding_config.config.embedder_options.indexing_fragments();
             let get_search = || embedding_config.config.embedder_options.search_fragments();
 
-            let template_kind = parts.next().ok_or_else(|| MissingTemplateAfterEmbedder {
-                embedder: embedder.to_string(),
+            let template_kind = next_part(false)?.ok_or_else(|| MissingTemplateAfterEmbedder {
+                embedder: embedder.clone(),
                 indexing: get_indexing(),
                 search: get_search(),
             })?;
-            match template_kind {
-                "documentTemplate" | "documenttemplate"
-                    if !embedding_config.fragments.as_slice().is_empty() =>
-                {
-                    return Err(EmbedderUsesFragments { embedder: embedder.to_string() });
+            match template_kind.value() {
+                "documentTemplate" if !embedding_config.fragments.as_slice().is_empty() => {
+                    return Err(EmbedderUsesFragments { embedder });
                 }
-                "documentTemplate" | "documenttemplate" => (
+                "documentTemplate" => (
                     serde_json::Value::String(embedding_config.config.prompt.template.clone()),
                     true,
                 ),
-                "indexingFragments" | "indexingfragments" => (
+                "indexingFragments" => (
                     parse_template_id_fragment(
-                        parts.next(),
+                        next_part(false)?,
                         FragmentKind::Indexing,
                         embedding_config,
                         embedder,
                     )?,
                     false,
                 ),
-                "searchFragments" | "searchfragments" => (
+                "searchFragments" => (
                     parse_template_id_fragment(
-                        parts.next(),
+                        next_part(false)?,
                         FragmentKind::Search,
                         embedding_config,
                         embedder,
                     )?,
                     false,
                 ),
-                found => {
+                _ => {
                     return Err(UnknownTemplatePrefix {
-                        embedder: embedder.to_string(),
-                        found: found.to_string(),
+                        embedder,
+                        found: template_kind,
                         indexing: get_indexing(),
                         search: get_search(),
                     })
                 }
             }
         }
-        "chatCompletions" | "chatcompletions" => {
-            let template_name = parts.next().ok_or(MissingChatCompletionTemplate)?;
+        "chatCompletions" => {
+            let template_name = next_part(false)?.ok_or(MissingChatCompletionTemplate)?;
 
-            if template_name != "documentTemplate" {
-                return Err(UnknownChatCompletionTemplate(template_name.to_string()));
+            if template_name.value() != "documentTemplate" {
+                return Err(UnknownChatCompletionTemplate(template_name));
             }
 
             let chat_config = index.chat_config(rtxn)?;
@@ -438,26 +462,26 @@ fn parse_template_id(
             (serde_json::Value::String(chat_config.prompt.template.clone()), true)
         }
         "" => return Err(EmptyTemplateId),
-        unknown => {
-            return Err(UnknownTemplateRoot(unknown.to_string()));
+        _ => {
+            return Err(UnknownTemplateRoot(root));
         }
     };
 
-    if let Some(next) = parts.next() {
-        return Err(LeftOverToken(next.to_string()));
+    if let Some(next) = next_part(false)? {
+        return Err(LeftOverToken(next));
     }
 
     Ok(template)
 }
 
-async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, RenderError> {
+async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, ResponseError> {
     let rtxn = index.read_txn()?;
 
     let (template, fields_available) = match (query.template.inline, query.template.id) {
         (Some(inline), None) => (inline, true),
         (None, Some(id)) => parse_template_id(&index, &rtxn, &id)?,
-        (Some(_), Some(_)) => return Err(MultipleTemplates),
-        (None, None) => return Err(MissingTemplate),
+        (Some(_), Some(_)) => return Err(MultipleTemplates.into()),
+        (None, None) => return Err(MissingTemplate.into()),
     };
 
     let fields_already_present = query
@@ -474,7 +498,7 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Render
     let insert_fields =
         fields_available && has_doc && fields_probably_used && !fields_already_present;
     if has_inline_doc && has_document_id {
-        return Err(BothInlineDocAndDocId);
+        return Err(BothInlineDocAndDocId.into());
     }
 
     let mut rendered = Value::Null;
