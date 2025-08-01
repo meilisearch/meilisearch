@@ -182,7 +182,7 @@ enum RenderError<'a> {
     BothInlineDocAndDocId,
     TemplateParsing(json_template::Error),
     TemplateRendering(json_template::Error),
-    CouldNotHandleInput,
+    InputConversion(liquid::Error),
 }
 
 impl From<heed::Error> for RenderError<'_> {
@@ -321,8 +321,8 @@ impl From<RenderError<'_>> for ResponseError {
                 format!("Error rendering template: {}", err.rendering_error("input")),
                 Code::TemplateRenderingError,
             ),
-            CouldNotHandleInput => ResponseError::from_msg(
-                String::from("Could not handle the input provided."),
+            InputConversion(err) => ResponseError::from_msg(
+                format!("Error converting input to a liquid object: {err}"),
                 Code::InvalidRenderInput,
             ),
             ExpectedDotAfterValue(span) => ResponseError::from_msg(
@@ -516,8 +516,8 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Respon
 
         if let Some(doc) = media.get("doc") {
             if insert_fields {
-                let fields = get_inline_document_fields(&index, &rtxn, doc)?
-                    .map_err(|_| CouldNotHandleInput)?;
+                let fields =
+                    get_inline_document_fields(&index, &rtxn, doc)?.map_err(InputConversion)?;
                 object.insert("fields".into(), fields.to_value());
             }
         }

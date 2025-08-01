@@ -18,7 +18,6 @@ use liquid::ValueView;
 
 pub use self::context::Context;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
-use crate::prompt::document::JsonDocument;
 use crate::update::del_add::DelAdd;
 use crate::update::new::document::DocumentFromDb;
 use crate::{GlobalFieldsIdsMap, Index, MetadataBuilder};
@@ -173,10 +172,13 @@ pub fn get_inline_document_fields(
     index: &Index,
     rtxn: &RoTxn<'_>,
     inline_doc: &serde_json::Value,
-) -> Result<Result<LiquidValue, ()>, crate::Error> {
+) -> Result<Result<LiquidValue, liquid::Error>, crate::Error> {
     let fid_map_with_meta = index.fields_ids_map_with_metadata(rtxn)?;
-    let Ok(inline_doc) = JsonDocument::new(inline_doc) else {
-        return Ok(Err(()));
+    let inline_doc = match liquid::to_object(&inline_doc) {
+        Ok(inline_doc) => inline_doc,
+        Err(e) => {
+            return Ok(Err(e));
+        }
     };
     let fields = OwnedFields::new(&inline_doc, &fid_map_with_meta);
 

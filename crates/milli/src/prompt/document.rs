@@ -12,7 +12,6 @@ use liquid::{ObjectView, ValueView};
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 
-use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::FieldsIdsMap;
 
@@ -143,110 +142,6 @@ impl ValueView for Document<'_> {
 
 /// Implementation for any type that implements the Document trait
 use crate::update::new::document::Document as DocumentTrait;
-
-pub struct JsonDocument {
-    object: liquid::Object,
-    cached: BTreeMap<String, Box<RawValue>>,
-}
-
-impl JsonDocument {
-    pub fn new(value: &serde_json::Value) -> Result<Self, ()> {
-        let to_string = serde_json::to_string(&value).map_err(|_| ())?;
-        let back_to_value: BTreeMap<String, Box<RawValue>> =
-            serde_json::from_str(&to_string).map_err(|_| ())?;
-        let object = liquid::to_object(&value).map_err(|_| ())?;
-        Ok(Self { object, cached: back_to_value })
-    }
-}
-
-impl std::fmt::Debug for JsonDocument {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.object.fmt(f)
-    }
-}
-
-impl<'a> DocumentTrait<'a> for &'a JsonDocument {
-    fn iter_top_level_fields(
-        &self,
-    ) -> impl Iterator<Item = crate::Result<(&'a str, &'a RawValue)>> {
-        self.cached.iter().filter_map(|(k, v)| {
-            if k == RESERVED_VECTORS_FIELD_NAME || k == RESERVED_GEO_FIELD_NAME {
-                None
-            } else {
-                Some(Ok((k.as_str(), v.as_ref())))
-            }
-        })
-    }
-
-    fn top_level_fields_count(&self) -> usize {
-        self.cached.len()
-            - self.cached.contains_key(RESERVED_VECTORS_FIELD_NAME) as usize
-            - self.cached.contains_key(RESERVED_GEO_FIELD_NAME) as usize
-    }
-
-    fn top_level_field(&self, k: &str) -> crate::Result<Option<&'a RawValue>> {
-        if k == RESERVED_VECTORS_FIELD_NAME || k == RESERVED_GEO_FIELD_NAME {
-            return Ok(None);
-        }
-        Ok(self.cached.get(k).map(|r| r.as_ref()))
-    }
-
-    fn vectors_field(&self) -> crate::Result<Option<&'a RawValue>> {
-        Ok(self.cached.get(RESERVED_VECTORS_FIELD_NAME).map(|r| r.as_ref()))
-    }
-
-    fn geo_field(&self) -> crate::Result<Option<&'a RawValue>> {
-        Ok(self.cached.get(RESERVED_GEO_FIELD_NAME).map(|r| r.as_ref()))
-    }
-}
-
-impl ObjectView for JsonDocument {
-    fn as_value(&self) -> &dyn ValueView {
-        self.object.as_value()
-    }
-    fn size(&self) -> i64 {
-        self.object.size()
-    }
-    fn keys<'k>(&'k self) -> Box<dyn Iterator<Item = KStringCow<'k>> + 'k> {
-        Box::new(self.object.keys().map(|s| s.into()))
-    }
-    fn values<'k>(&'k self) -> Box<dyn Iterator<Item = &'k dyn ValueView> + 'k> {
-        Box::new(self.object.values().map(|v| v.as_view()))
-    }
-    fn iter<'k>(&'k self) -> Box<dyn Iterator<Item = (KStringCow<'k>, &'k dyn ValueView)> + 'k> {
-        Box::new(self.object.iter().map(|(k, v)| (k.into(), v.as_view())))
-    }
-    fn contains_key(&self, index: &str) -> bool {
-        self.object.contains_key(index)
-    }
-    fn get<'s>(&'s self, index: &str) -> Option<&'s dyn ValueView> {
-        self.object.get(index).map(|v| v.as_view())
-    }
-}
-
-impl ValueView for JsonDocument {
-    fn as_debug(&self) -> &dyn fmt::Debug {
-        self.object.as_debug()
-    }
-    fn render(&self) -> DisplayCow<'_> {
-        self.object.render()
-    }
-    fn source(&self) -> DisplayCow<'_> {
-        self.object.source()
-    }
-    fn type_name(&self) -> &'static str {
-        self.object.type_name()
-    }
-    fn query_state(&self, state: State) -> bool {
-        self.object.query_state(state)
-    }
-    fn to_kstr(&self) -> KStringCow<'_> {
-        self.object.to_kstr()
-    }
-    fn to_value(&self) -> LiquidValue {
-        self.object.to_value()
-    }
-}
 
 #[derive(Debug)]
 pub struct ParseableDocument<'a, 'doc, D: DocumentTrait<'a> + Debug> {
