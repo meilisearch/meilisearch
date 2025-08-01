@@ -127,7 +127,7 @@ pub struct ListIndexes {
 }
 
 impl ListIndexes {
-    fn as_pagination(self) -> Pagination {
+    fn into_pagination(self) -> Pagination {
         Pagination { offset: self.offset.0, limit: self.limit.0 }
     }
 }
@@ -184,7 +184,7 @@ pub async fn list_indexes(
             primary_key: stats.primary_key,
         })
         .collect::<Vec<_>>();
-    let ret = (*paginate).clone().as_pagination().format_with(total, indexes);
+    let ret = (*paginate).clone().into_pagination().format_with(total, indexes);
 
     debug!(returns = ?ret, "List indexes");
     Ok(HttpResponse::Ok().json(ret))

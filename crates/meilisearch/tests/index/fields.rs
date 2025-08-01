@@ -21,7 +21,7 @@ async fn get_fields_empty_index() {
     let index = server.unique_index();
     let (task, code) = index.create(None).await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = index.fields().await;
     assert_eq!(code, 200, "{response}");
@@ -42,7 +42,7 @@ async fn get_fields_with_documents_and_search() {
     ]);
     let (task, code) = index.add_documents(docs, Some("id")).await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // fetch fields without any param
     let (response, code) = index.fields().await;
@@ -69,7 +69,7 @@ async fn fields_after_uploading_recipe_and_settings() {
     // create index with primary key `id`
     let (task, code) = index.create(Some("id")).await;
     assert_eq!(code, 202, "{task}");
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // upload recipe document
     let doc = json!([
@@ -103,7 +103,7 @@ async fn fields_after_uploading_recipe_and_settings() {
     ]);
     let (task, code) = index.add_documents(doc, Some("id")).await;
     assert_eq!(code, 202);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // upload settings
     let settings = json!({
@@ -133,7 +133,7 @@ async fn fields_after_uploading_recipe_and_settings() {
     });
     let (task, code) = index.update_settings(settings).await;
     assert_eq!(code, 202);
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // fetch fields - large limit to get all
     let url = format!("/indexes/{}/fields?limit=500", index.uid);

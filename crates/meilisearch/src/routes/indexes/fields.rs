@@ -99,7 +99,7 @@ pub struct ListFields {
 }
 
 impl ListFields {
-    fn as_pagination(self) -> Pagination {
+    fn into_pagination(self) -> Pagination {
         Pagination { offset: self.offset.0, limit: self.limit.0 }
     }
 }
@@ -166,10 +166,10 @@ fn field_satisfies(field: &Field, conds: &[FilterCond]) -> bool {
 
 fn field_matches_search(field_name: &str, search_pattern: &str) -> bool {
     if search_pattern.is_empty() { return true; }
-    if search_pattern.ends_with('*') {
-        field_name.starts_with(&search_pattern[..search_pattern.len() - 1])
-    } else if search_pattern.starts_with('*') {
-        field_name.ends_with(&search_pattern[1..])
+    if let Some(stripped) = search_pattern.strip_suffix('*') {
+        field_name.starts_with(stripped)
+    } else if let Some(stripped) = search_pattern.strip_prefix('*') {
+        field_name.ends_with(stripped)
     } else if search_pattern.contains('*') {
         let parts: Vec<&str> = search_pattern.split('*').collect();
         if parts.len() == 2 { field_name.starts_with(parts[0]) && field_name.ends_with(parts[1]) } else { field_name.contains(&search_pattern.replace('*', "")) }
@@ -189,7 +189,7 @@ fn enrich_field(
 ) -> Field {
     let displayed_enabled = displayed_fields.iter().any(|f| f == "*" || f == &field_name);
     let searchable_enabled = searchable_fields.iter().any(|f| f == "*" || f == &field_name);
-    let distinct_enabled = distinct_field.map_or(false, |df| df == &field_name);
+    let distinct_enabled = distinct_field == Some(&field_name);
 
     let is_filterable = filterable_rules.iter().any(|rule| match rule {
         FilterableAttributesRule::Pattern(p) => p.match_str(&field_name) == milli::PatternMatch::Match,
@@ -285,7 +285,7 @@ pub async fn get_index_fields(
     }
 
     let total = enriched_fields.len();
-    let pagination = (*params).clone().as_pagination();
+    let pagination = (*params).clone().into_pagination();
     let paginated_fields = enriched_fields.into_iter().skip(pagination.offset).take(pagination.limit).collect::<Vec<_>>();
     let ret = pagination.format_with(total, paginated_fields);
     Ok(HttpResponse::Ok().json(ret))
