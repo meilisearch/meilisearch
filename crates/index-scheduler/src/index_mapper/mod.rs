@@ -71,7 +71,7 @@ pub struct IndexMapper {
     /// Path to the folder where the LMDB environments of each index are.
     base_path: PathBuf,
     /// The map size an index is opened with on the first time.
-    index_base_map_size: usize,
+    pub(crate) index_base_map_size: usize,
     /// The quantity by which the map size of an index is incremented upon reopening, in bytes.
     index_growth_amount: usize,
     /// Whether we open a meilisearch index with the MDB_WRITEMAP option or not.
