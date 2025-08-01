@@ -557,7 +557,7 @@ async fn delete_document_by_filter() {
     "###);
 
     let index = shared_does_not_exists_index().await;
-    // index does not exists
+    // index does not exist
     let (response, _code) =
         index.delete_document_by_filter_fail(json!({ "filter": "doggo = bernese"})).await;
     snapshot!(response, @r###"

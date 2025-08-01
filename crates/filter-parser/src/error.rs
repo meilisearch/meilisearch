@@ -42,6 +42,23 @@ pub fn cut_with_err<'a, O>(
     }
 }
 
+pub trait IResultExt<'a> {
+    fn map_cut(self, kind: ErrorKind<'a>) -> Self;
+}
+
+impl<'a, T> IResultExt<'a> for IResult<'a, T> {
+    fn map_cut(self, kind: ErrorKind<'a>) -> Self {
+        self.map_err(move |e: nom::Err<Error<'a>>| {
+            let input = match e {
+                nom::Err::Incomplete(_) => return e,
+                nom::Err::Error(e) => *e.context(),
+                nom::Err::Failure(e) => *e.context(),
+            };
+            nom::Err::Failure(Error::new_from_kind(input, kind))
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct Error<'a> {
     context: Span<'a>,
@@ -61,6 +78,10 @@ pub enum ErrorKind<'a> {
     GeoBoundingBox,
     MisusedGeoRadius,
     MisusedGeoBoundingBox,
+    VectorFilterLeftover,
+    VectorFilterInvalidEmbedder,
+    VectorFilterMissingFragment,
+    VectorFilterInvalidFragment,
     InvalidPrimary,
     InvalidEscapedNumber,
     ExpectedEof,
@@ -168,6 +189,18 @@ impl Display for Error<'_> {
             }
             ErrorKind::MisusedGeoBoundingBox => {
                 writeln!(f, "The `_geoBoundingBox` filter is an operation and can't be used as a value.")?
+            }
+            ErrorKind::VectorFilterLeftover => {
+                writeln!(f, "The vector filter has leftover tokens.")?
+            }
+            ErrorKind::VectorFilterInvalidFragment => {
+                writeln!(f, "The vector filter's fragment is invalid.")?
+            }
+            ErrorKind::VectorFilterMissingFragment => {
+                writeln!(f, "The vector filter is missing a fragment name.")?
+            }
+            ErrorKind::VectorFilterInvalidEmbedder => {
+                writeln!(f, "The vector filter's embedder is invalid.")?
             }
             ErrorKind::ReservedKeyword(word) => {
                 writeln!(f, "`{word}` is a reserved keyword and thus cannot be used as a field name unless it is put inside quotes. Use \"{word}\" or \'{word}\' instead.")?
