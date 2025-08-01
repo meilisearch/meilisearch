@@ -362,6 +362,7 @@ impl From<RenderError<'_>> for ResponseError {
     }
 }
 
+#[allow(clippy::result_large_err)]
 fn parse_template_id_fragment<'a>(
     name: Option<Token<'a>>,
     kind: FragmentKind,
@@ -501,6 +502,7 @@ fn parse_template_id<'a>(
     Ok(template)
 }
 
+#[allow(clippy::result_large_err)]
 async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, ResponseError> {
     let RenderQuery { template, input } = query;
     let rtxn = index.read_txn()?;
