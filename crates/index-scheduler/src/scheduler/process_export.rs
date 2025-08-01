@@ -55,8 +55,8 @@ impl IndexScheduler {
 
             progress.update_progress(VariableNameStep::<ExportIndex>::new(
                 format!("Exporting index `{uid}`"),
-                i as u32,
-                indexes.len() as u32,
+                i as u64,
+                indexes.len() as u64,
             ));
 
             let ExportIndexSettings { filter, override_settings } = export_settings;
@@ -155,7 +155,7 @@ impl IndexScheduler {
             // spawn many threads to process the documents
             drop(index_rtxn);
 
-            let total_documents = universe.len() as u32;
+            let total_documents = universe.len();
             let (step, progress_step) = AtomicDocumentStep::new(total_documents);
             progress.update_progress(progress_step);
 
@@ -163,7 +163,7 @@ impl IndexScheduler {
                 IndexUidPattern::new_unchecked(uid.clone()),
                 DetailsExportIndexSettings {
                     settings: (*export_settings).clone(),
-                    matched_documents: Some(total_documents as u64),
+                    matched_documents: Some(total_documents),
                 },
             );
 
