@@ -2601,6 +2601,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "hannoy"
+version = "0.0.1"
+source = "git+https://github.com/Kerollmops/hannoy?branch=release-0.0.2#d734d5ab13ae34b3ee4d34b9eeb3ed8843cd11c2"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "hashbrown 0.15.4",
+ "heed",
+ "min-max-heap",
+ "page_size",
+ "papaya",
+ "rand 0.8.5",
+ "rayon",
+ "roaring",
+ "thiserror 2.0.12",
+ "tinyvec",
+ "tracing",
+]
+
+[[package]]
 name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3340,7 +3360,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -3950,6 +3970,7 @@ dependencies = [
  "fxhash",
  "geoutils",
  "grenad",
+ "hannoy",
  "hashbrown 0.15.4",
  "heed",
  "hf-hub",
@@ -4018,6 +4039,12 @@ dependencies = [
  "mime",
  "unicase",
 ]
+
+[[package]]
+name = "min-max-heap"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2687e6cf9c00f48e9284cf9fd15f2ef341d03cc7743abf9df4c5f07fdee50b18"
 
 [[package]]
 name = "minimal-lexical"
@@ -4397,6 +4424,16 @@ checksum = "30d5b2194ed13191c1999ae0704b7839fb18384fa22e49b57eeaa97d79ce40da"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "papaya"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f92dd0b07c53a0a0c764db2ace8c541dc47320dad97c2200c2a637ab9dd2328f"
+dependencies = [
+ "equivalent",
+ "seize",
 ]
 
 [[package]]
@@ -5448,6 +5485,16 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.12",
  "time",
+]
+
+[[package]]
+name = "seize"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4b8d813387d566f627f3ea1b914c068aac94c40ae27ec43f5f33bde65abefe7"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

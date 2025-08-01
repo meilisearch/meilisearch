@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use arroy::Distance;
+use hannoy::Distance;
 
 use super::error::CompositeEmbedderContainsHuggingFace;
 use super::{
@@ -324,19 +324,18 @@ fn check_similarity(
     }
 
     for (left, right) in left.into_iter().zip(right) {
-        let left = arroy::internals::UnalignedVector::from_slice(&left);
-        let right = arroy::internals::UnalignedVector::from_slice(&right);
-        let left = arroy::internals::Leaf {
-            header: arroy::distances::Cosine::new_header(&left),
+        let left = hannoy::internals::UnalignedVector::from_slice(&left);
+        let right = hannoy::internals::UnalignedVector::from_slice(&right);
+        let left = hannoy::internals::Item {
+            header: hannoy::distances::Cosine::new_header(&left),
             vector: left,
         };
-        let right = arroy::internals::Leaf {
-            header: arroy::distances::Cosine::new_header(&right),
+        let right = hannoy::internals::Item {
+            header: hannoy::distances::Cosine::new_header(&right),
             vector: right,
         };
 
-        let distance = arroy::distances::Cosine::built_distance(&left, &right);
-
+        let distance = hannoy::distances::Cosine::distance(&left, &right);
         if distance > super::MAX_COMPOSITE_DISTANCE {
             return Err(NewEmbedderError::composite_embedding_value_mismatch(distance, hint));
         }
