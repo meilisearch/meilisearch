@@ -5,7 +5,7 @@
 **/*.json_lines
 **/*.rs.bk
 /*.mdb
-/data.ms
+/*.ms
 /snapshots
 /dumps
 /bench

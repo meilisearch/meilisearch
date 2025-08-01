@@ -15,30 +15,33 @@ lazy_static! {
         "Meilisearch number of degraded search requests"
     ))
     .expect("Can't create a metric");
-    pub static ref MEILISEARCH_CHAT_SEARCH_REQUESTS: IntCounterVec = register_int_counter_vec!(
+    pub static ref MEILISEARCH_CHAT_SEARCHES_TOTAL: IntCounterVec = register_int_counter_vec!(
         opts!(
-            "meilisearch_chat_search_requests",
-            "Meilisearch number of search requests performed by the chat route itself"
+            "meilisearch_chat_searches_total",
+            "Total number of searches performed by the chat route"
         ),
         &["type"]
     )
     .expect("Can't create a metric");
-    pub static ref MEILISEARCH_CHAT_PROMPT_TOKENS_USAGE: IntCounterVec = register_int_counter_vec!(
-        opts!("meilisearch_chat_prompt_tokens_usage", "Meilisearch Chat Prompt Tokens Usage"),
+    pub static ref MEILISEARCH_CHAT_PROMPT_TOKENS_TOTAL: IntCounterVec = register_int_counter_vec!(
+        opts!("meilisearch_chat_prompt_tokens_total", "Total number of prompt tokens consumed"),
         &["workspace", "model"]
     )
     .expect("Can't create a metric");
-    pub static ref MEILISEARCH_CHAT_COMPLETION_TOKENS_USAGE: IntCounterVec =
+    pub static ref MEILISEARCH_CHAT_COMPLETION_TOKENS_TOTAL: IntCounterVec =
         register_int_counter_vec!(
             opts!(
-                "meilisearch_chat_completion_tokens_usage",
-                "Meilisearch Chat Completion Tokens Usage"
+                "meilisearch_chat_completion_tokens_total",
+                "Total number of completion tokens consumed"
             ),
             &["workspace", "model"]
         )
         .expect("Can't create a metric");
-    pub static ref MEILISEARCH_CHAT_TOTAL_TOKENS_USAGE: IntCounterVec = register_int_counter_vec!(
-        opts!("meilisearch_chat_total_tokens_usage", "Meilisearch Chat Total Tokens Usage"),
+    pub static ref MEILISEARCH_CHAT_TOKENS_TOTAL: IntCounterVec = register_int_counter_vec!(
+        opts!(
+            "meilisearch_chat_tokens_total",
+            "Total number of tokens consumed (prompt + completion)"
+        ),
         &["workspace", "model"]
     )
     .expect("Can't create a metric");
