@@ -7,10 +7,10 @@ use bumpalo::Bump;
 use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::proximity::{index_proximity, MAX_DISTANCE};
-use crate::update::new::document::Document;
+use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
+    extract, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
@@ -39,7 +39,7 @@ impl<'extractor> Extractor<'extractor> for WordPairProximityDocidsExtractorData<
     fn process<'doc>(
         &self,
         changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
-        context: &DocumentChangeContext<Self::Data>,
+        context: &DocumentContext<Self::Data>,
     ) -> Result<()> {
         for change in changes {
             let change = change?;
@@ -116,7 +116,7 @@ impl WordPairProximityDocidsExtractor {
     // and to store the docids of the documents that have a number of words in a given field
     // equal to or under than MAX_COUNTED_WORDS.
     fn extract_document_change(
-        context: &DocumentChangeContext<RefCell<BalancedCaches>>,
+        context: &DocumentContext<RefCell<BalancedCaches>>,
         document_tokenizer: &DocumentTokenizer,
         searchable_attributes: Option<&[&str]>,
         document_change: DocumentChange,

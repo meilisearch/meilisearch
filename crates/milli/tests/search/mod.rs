@@ -10,7 +10,7 @@ use maplit::{btreemap, hashset};
 use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, Settings};
-use milli::vector::EmbeddingConfigs;
+use milli::vector::RuntimeEmbedders;
 use milli::{
     AscDesc, Criterion, DocumentId, FilterableAttributesRule, Index, Member, TermsMatchingStrategy,
 };
@@ -63,7 +63,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("america") => vec![S("the united states")],
     });
     builder.set_searchable_fields(vec![S("title"), S("description")]);
-    builder.execute(|_| (), || false, Default::default()).unwrap();
+    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
     wtxn.commit().unwrap();
 
     // index documents
@@ -74,7 +74,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    let embedders = EmbeddingConfigs::default();
+    let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
 
     let mut file = tempfile::tempfile().unwrap();

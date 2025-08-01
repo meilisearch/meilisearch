@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::features::{Network, RuntimeTogglableFeatures};
+use meilisearch_types::features::{ChatCompletionSettings, Network, RuntimeTogglableFeatures};
 use meilisearch_types::keys::Key;
 use meilisearch_types::settings::{Checked, Settings};
 use serde_json::{Map, Value};
@@ -49,6 +49,10 @@ impl DumpWriter {
 
     pub fn create_keys(&self) -> Result<KeyWriter> {
         KeyWriter::new(self.dir.path().to_path_buf())
+    }
+
+    pub fn create_chat_completions_settings(&self) -> Result<ChatCompletionsSettingsWriter> {
+        ChatCompletionsSettingsWriter::new(self.dir.path().join("chat-completions-settings"))
     }
 
     pub fn create_tasks_queue(&self) -> Result<TaskWriter> {
@@ -100,6 +104,24 @@ impl KeyWriter {
 
     pub fn flush(mut self) -> Result<()> {
         self.keys.flush()?;
+        Ok(())
+    }
+}
+
+pub struct ChatCompletionsSettingsWriter {
+    path: PathBuf,
+}
+
+impl ChatCompletionsSettingsWriter {
+    pub(crate) fn new(path: PathBuf) -> Result<Self> {
+        std::fs::create_dir(&path)?;
+        Ok(ChatCompletionsSettingsWriter { path })
+    }
+
+    pub fn push_settings(&mut self, name: &str, settings: &ChatCompletionSettings) -> Result<()> {
+        let mut settings_file = File::create(self.path.join(name).with_extension("json"))?;
+        serde_json::to_writer(&mut settings_file, &settings)?;
+        settings_file.flush()?;
         Ok(())
     }
 }

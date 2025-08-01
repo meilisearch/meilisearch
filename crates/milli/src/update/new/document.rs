@@ -1,7 +1,10 @@
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::RwLock;
 
+use bumpalo::Bump;
 use bumparaw_collections::RawMap;
-use heed::RoTxn;
+use heed::{RoTxn, WithoutTls};
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 
@@ -9,7 +12,14 @@ use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::documents::FieldIdMapper;
-use crate::{DocumentId, GlobalFieldsIdsMap, Index, InternalError, Result, UserError};
+use crate::update::del_add::KvReaderDelAdd;
+use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
+use crate::update::new::vector_document::VectorDocumentFromDb;
+use crate::vector::settings::EmbedderAction;
+use crate::{
+    DocumentId, FieldIdMapWithMetadata, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError,
+    Result, UserError,
+};
 
 /// A view into a document that can represent either the current version from the DB,
 /// the update data from payload or other means, or the merged updated version.
@@ -309,6 +319,7 @@ where
 pub fn write_to_obkv<'s, 'a, 'map, 'buffer>(
     document: &'s impl Document<'s>,
     vector_document: Option<&'s impl VectorDocument<'s>>,
+    embedder_actions: &'a BTreeMap<String, EmbedderAction>,
     fields_ids_map: &'a mut GlobalFieldsIdsMap<'map>,
     mut document_buffer: &'a mut bumpalo::collections::Vec<'buffer, u8>,
 ) -> Result<&'a KvReaderFieldId>
@@ -338,20 +349,39 @@ where
         for res in vector_document.iter_vectors() {
             let (name, entry) = res?;
             if entry.has_configured_embedder {
-                continue; // we don't write vectors with configured embedder in documents
+                if let Some(action) = embedder_actions.get(name) {
+                    if action.write_back().is_some() && !entry.regenerate {
+                        vectors.insert(
+                            name,
+                            serde_json::json!({
+                                "regenerate": entry.regenerate,
+                                // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
+                                "embeddings": entry.embeddings,
+                            }),
+                        );
+                    }
+                }
+            } else {
+                match embedder_actions.get(name) {
+                    Some(action) if action.write_back().is_none() => {
+                        continue;
+                    }
+                    _ => {
+                        vectors.insert(
+                            name,
+                            if entry.implicit {
+                                serde_json::json!(entry.embeddings)
+                            } else {
+                                serde_json::json!({
+                                    "regenerate": entry.regenerate,
+                                    // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
+                                    "embeddings": entry.embeddings,
+                                })
+                            },
+                        );
+                    }
+                }
             }
-            vectors.insert(
-                name,
-                if entry.implicit {
-                    serde_json::json!(entry.embeddings)
-                } else {
-                    serde_json::json!({
-                        "regenerate": entry.regenerate,
-                        // TODO: consider optimizing the shape of embedders here to store an array of f32 rather than a JSON object
-                        "embeddings": entry.embeddings,
-                    })
-                },
-            );
         }
 
         if vectors.is_empty() {
@@ -437,5 +467,233 @@ impl<'doc> Versions<'doc> {
             return None;
         }
         self.data.get(k)
+    }
+}
+
+#[derive(Debug)]
+pub struct KvDelAddDocument<'a, Mapper: FieldIdMapper> {
+    document: &'a obkv::KvReaderU16,
+    side: crate::update::del_add::DelAdd,
+    fields_ids_map: &'a Mapper,
+}
+
+impl<'a, Mapper: FieldIdMapper> KvDelAddDocument<'a, Mapper> {
+    pub fn new(
+        document: &'a obkv::KvReaderU16,
+        side: crate::update::del_add::DelAdd,
+        fields_ids_map: &'a Mapper,
+    ) -> Self {
+        Self { document, side, fields_ids_map }
+    }
+
+    fn get(&self, k: &str) -> Result<Option<&'a RawValue>> {
+        let Some(id) = self.fields_ids_map.id(k) else { return Ok(None) };
+        let Some(value) = self.document.get(id) else { return Ok(None) };
+        let Some(value) = KvReaderDelAdd::from_slice(value).get(self.side) else { return Ok(None) };
+
+        let value = serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+        Ok(Some(value))
+    }
+}
+
+impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
+    fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'a str, &'a RawValue)>> {
+        let mut it = self.document.iter();
+
+        std::iter::from_fn(move || loop {
+            let (fid, value) = it.next()?;
+            let Some(value) = KvReaderDelAdd::from_slice(value).get(self.side) else {
+                continue;
+            };
+            let name = match self.fields_ids_map.name(fid).ok_or(
+                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                    field_id: fid,
+                    process: "getting current document",
+                }),
+            ) {
+                Ok(name) => name,
+                Err(error) => return Some(Err(error.into())),
+            };
+
+            if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
+                continue;
+            }
+
+            let res = (|| {
+                let value =
+                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
+
+                Ok((name, value))
+            })();
+
+            return Some(res);
+        })
+    }
+
+    fn top_level_fields_count(&self) -> usize {
+        let mut it = self.document.iter();
+
+        std::iter::from_fn(move || loop {
+            let (fid, value) = it.next()?;
+            let Some(_) = KvReaderDelAdd::from_slice(value).get(self.side) else {
+                continue;
+            };
+            let name = match self.fields_ids_map.name(fid).ok_or(
+                InternalError::FieldIdMapMissingEntry(crate::FieldIdMapMissingEntry::FieldId {
+                    field_id: fid,
+                    process: "getting current document",
+                }),
+            ) {
+                Ok(name) => name,
+                Err(_) => return Some(()),
+            };
+
+            if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
+                continue;
+            }
+
+            return Some(());
+        })
+        .count()
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'a RawValue>> {
+        if k == RESERVED_VECTORS_FIELD_NAME || k == RESERVED_GEO_FIELD_NAME {
+            return Ok(None);
+        }
+        self.get(k)
+    }
+
+    fn vectors_field(&self) -> Result<Option<&'a RawValue>> {
+        self.get(RESERVED_VECTORS_FIELD_NAME)
+    }
+
+    fn geo_field(&self) -> Result<Option<&'a RawValue>> {
+        self.get(RESERVED_GEO_FIELD_NAME)
+    }
+}
+
+pub struct DocumentIdentifiers<'doc> {
+    docid: DocumentId,
+    external_document_id: &'doc str,
+}
+
+impl<'doc> DocumentIdentifiers<'doc> {
+    pub fn create(docid: DocumentId, external_document_id: &'doc str) -> Self {
+        Self { docid, external_document_id }
+    }
+
+    pub fn docid(&self) -> DocumentId {
+        self.docid
+    }
+
+    pub fn external_document_id(&self) -> &'doc str {
+        self.external_document_id
+    }
+
+    pub fn current<'a, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'a RoTxn,
+        index: &'a Index,
+        mapper: &'a Mapper,
+    ) -> Result<DocumentFromDb<'a, Mapper>> {
+        Ok(DocumentFromDb::new(self.docid, rtxn, index, mapper)?.ok_or(
+            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
+        )?)
+    }
+
+    pub fn current_vectors<'a, Mapper: FieldIdMapper>(
+        &self,
+        rtxn: &'a RoTxn,
+        index: &'a Index,
+        mapper: &'a Mapper,
+        doc_alloc: &'a Bump,
+    ) -> Result<VectorDocumentFromDb<'a>> {
+        Ok(VectorDocumentFromDb::new(self.docid, index, rtxn, mapper, doc_alloc)?.ok_or(
+            crate::error::UserError::UnknownInternalDocumentId { document_id: self.docid },
+        )?)
+    }
+}
+
+pub struct DocumentContext<
+    'doc,             // covariant lifetime of a single `process` call
+    'extractor: 'doc, // invariant lifetime of the extractor_allocs
+    'fid: 'doc,       // invariant lifetime of the new_fields_ids_map
+    'indexer: 'doc,   // covariant lifetime of objects that outlive a single `process` call
+    T: MostlySend,
+> {
+    /// The index we're indexing in
+    pub index: &'indexer Index,
+    /// The fields ids map as it was at the start of this indexing process. Contains at least all top-level fields from documents
+    /// inside of the DB.
+    pub db_fields_ids_map: &'indexer FieldsIdsMap,
+    /// A transaction providing data from the DB before all indexing operations
+    pub rtxn: RoTxn<'indexer, WithoutTls>,
+
+    /// Global field id map that is up to date with the current state of the indexing process.
+    ///
+    /// - Inserting a field will take a lock
+    /// - Retrieving a field may take a lock as well
+    pub new_fields_ids_map: &'doc std::cell::RefCell<GlobalFieldsIdsMap<'fid>>,
+
+    /// Data allocated in this allocator is cleared between each call to `process`.
+    pub doc_alloc: Bump,
+
+    /// Data allocated in this allocator is not cleared between each call to `process`, unless the data spills.
+    pub extractor_alloc: &'extractor Bump,
+
+    /// Pool of doc allocators, used to retrieve the doc allocator we provided for the documents
+    pub doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
+
+    /// Extractor-specific data
+    pub data: &'doc T,
+}
+
+impl<
+        'doc,             // covariant lifetime of a single `process` call
+        'data: 'doc,      // invariant on T lifetime of the datastore
+        'extractor: 'doc, // invariant lifetime of extractor_allocs
+        'fid: 'doc,       // invariant lifetime of fields ids map
+        'indexer: 'doc,   // covariant lifetime of objects that survive a `process` call
+        T: MostlySend,
+    > DocumentContext<'doc, 'extractor, 'fid, 'indexer, T>
+{
+    #[allow(clippy::too_many_arguments)]
+    pub fn new<F>(
+        index: &'indexer Index,
+        db_fields_ids_map: &'indexer FieldsIdsMap,
+        new_fields_ids_map: &'fid RwLock<FieldIdMapWithMetadata>,
+        extractor_allocs: &'extractor ThreadLocal<FullySend<Bump>>,
+        doc_allocs: &'doc ThreadLocal<FullySend<Cell<Bump>>>,
+        datastore: &'data ThreadLocal<T>,
+        fields_ids_map_store: &'doc ThreadLocal<FullySend<RefCell<GlobalFieldsIdsMap<'fid>>>>,
+        init_data: F,
+    ) -> Result<Self>
+    where
+        F: FnOnce(&'extractor Bump) -> Result<T>,
+    {
+        let doc_alloc =
+            doc_allocs.get_or(|| FullySend(Cell::new(Bump::with_capacity(1024 * 1024))));
+        let doc_alloc = doc_alloc.0.take();
+        let fields_ids_map = fields_ids_map_store
+            .get_or(|| RefCell::new(GlobalFieldsIdsMap::new(new_fields_ids_map)).into());
+
+        let fields_ids_map = &fields_ids_map.0;
+        let extractor_alloc = extractor_allocs.get_or_default();
+
+        let data = datastore.get_or_try(move || init_data(&extractor_alloc.0))?;
+
+        let txn = index.read_txn()?;
+        Ok(DocumentContext {
+            index,
+            rtxn: txn,
+            db_fields_ids_map,
+            new_fields_ids_map: fields_ids_map,
+            doc_alloc,
+            extractor_alloc: &extractor_alloc.0,
+            data,
+            doc_allocs,
+        })
     }
 }

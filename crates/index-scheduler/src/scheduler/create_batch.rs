@@ -1,4 +1,5 @@
 use std::fmt;
+use std::io::ErrorKind;
 
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
@@ -45,6 +46,9 @@ pub(crate) enum Batch {
         index_has_been_created: bool,
     },
     IndexSwap {
+        task: Task,
+    },
+    Export {
         task: Task,
     },
     UpgradeDatabase {
@@ -103,6 +107,7 @@ impl Batch {
             Batch::TaskCancelation { task, .. }
             | Batch::Dump(task)
             | Batch::IndexCreation { task, .. }
+            | Batch::Export { task }
             | Batch::IndexUpdate { task, .. } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
             }
@@ -142,6 +147,7 @@ impl Batch {
             | TaskDeletions(_)
             | SnapshotCreation(_)
             | Dump(_)
+            | Export { .. }
             | UpgradeDatabase { .. }
             | IndexSwap { .. } => None,
             IndexOperation { op, .. } => Some(op.index_uid()),
@@ -167,6 +173,7 @@ impl fmt::Display for Batch {
             Batch::IndexUpdate { .. } => f.write_str("IndexUpdate")?,
             Batch::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
             Batch::IndexSwap { .. } => f.write_str("IndexSwap")?,
+            Batch::Export { .. } => f.write_str("Export")?,
             Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
         };
         match index_uid {
@@ -426,9 +433,10 @@ impl IndexScheduler {
     /// 0. We get the *last* task to cancel.
     /// 1. We get the tasks to upgrade.
     /// 2. We get the *next* task to delete.
-    /// 3. We get the *next* snapshot to process.
-    /// 4. We get the *next* dump to process.
-    /// 5. We get the *next* tasks to process for a specific index.
+    /// 3. We get the *next* export to process.
+    /// 4. We get the *next* snapshot to process.
+    /// 5. We get the *next* dump to process.
+    /// 6. We get the *next* tasks to process for a specific index.
     #[tracing::instrument(level = "trace", skip(self, rtxn), target = "indexing::scheduler")]
     pub(crate) fn create_next_batch(
         &self,
@@ -500,7 +508,17 @@ impl IndexScheduler {
             return Ok(Some((Batch::TaskDeletions(tasks), current_batch)));
         }
 
-        // 3. we batch the snapshot.
+        // 3. we batch the export.
+        let to_export = self.queue.tasks.get_kind(rtxn, Kind::Export)? & enqueued;
+        if !to_export.is_empty() {
+            let task_id = to_export.iter().next().expect("There must be at least one export task");
+            let mut task = self.queue.tasks.get_task(rtxn, task_id)?.unwrap();
+            current_batch.processing([&mut task]);
+            current_batch.reason(BatchStopReason::TaskKindCannotBeBatched { kind: Kind::Export });
+            return Ok(Some((Batch::Export { task }, current_batch)));
+        }
+
+        // 4. we batch the snapshot.
         let to_snapshot = self.queue.tasks.get_kind(rtxn, Kind::SnapshotCreation)? & enqueued;
         if !to_snapshot.is_empty() {
             let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_snapshot)?;
@@ -510,7 +528,7 @@ impl IndexScheduler {
             return Ok(Some((Batch::SnapshotCreation(tasks), current_batch)));
         }
 
-        // 4. we batch the dumps.
+        // 5. we batch the dumps.
         let to_dump = self.queue.tasks.get_kind(rtxn, Kind::DumpCreation)? & enqueued;
         if let Some(to_dump) = to_dump.min() {
             let mut task =
@@ -523,7 +541,7 @@ impl IndexScheduler {
             return Ok(Some((Batch::Dump(task), current_batch)));
         }
 
-        // 5. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
+        // 6. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
         let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
         let mut task =
             self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
@@ -577,7 +595,11 @@ impl IndexScheduler {
                 .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))?;
 
             if let Some(uuid) = task.content_uuid() {
-                let content_size = self.queue.file_store.compute_size(uuid)?;
+                let content_size = match self.queue.file_store.compute_size(uuid) {
+                    Ok(content_size) => content_size,
+                    Err(file_store::Error::IoError(err)) if err.kind() == ErrorKind::NotFound => 0,
+                    Err(otherwise) => return Err(otherwise.into()),
+                };
                 total_size = total_size.saturating_add(content_size);
             }
 

@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
@@ -21,6 +22,7 @@ pub type Unchecked = meilisearch_types::settings::Unchecked;
 pub type Task = crate::TaskDump;
 pub type Batch = meilisearch_types::batches::Batch;
 pub type Key = meilisearch_types::keys::Key;
+pub type ChatCompletionSettings = meilisearch_types::features::ChatCompletionSettings;
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
 pub type Network = meilisearch_types::features::Network;
 
@@ -190,6 +192,34 @@ impl V6Reader {
         Box::new(
             (&mut self.keys).lines().map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
         )
+    }
+
+    pub fn chat_completions_settings(
+        &mut self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, ChatCompletionSettings)>> + '_>> {
+        let entries = match fs::read_dir(self.dump.path().join("chat-completions-settings")) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Box::new(std::iter::empty())),
+            Err(e) => return Err(e.into()),
+        };
+        Ok(Box::new(
+            entries
+                .map(|entry| -> Result<Option<_>> {
+                    let entry = entry?;
+                    let file_name = entry.file_name();
+                    let path = Path::new(&file_name);
+                    if entry.file_type()?.is_file() && path.extension() == Some(OsStr::new("json"))
+                    {
+                        let name = path.file_stem().unwrap().to_str().unwrap().to_string();
+                        let file = File::open(entry.path())?;
+                        let settings = serde_json::from_reader(file)?;
+                        Ok(Some((name, settings)))
+                    } else {
+                        Ok(None)
+                    }
+                })
+                .filter_map(|entry| entry.transpose()),
+        ))
     }
 
     pub fn features(&self) -> Option<RuntimeTogglableFeatures> {

@@ -8,10 +8,11 @@ use bumpalo::Bump;
 
 use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
+use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
-    extract, DocumentChangeContext, DocumentChanges, Extractor, IndexingContext,
+    extract, DocumentChanges, Extractor, IndexingContext,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
@@ -226,7 +227,7 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'_> {
     fn process<'doc>(
         &self,
         changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
-        context: &DocumentChangeContext<Self::Data>,
+        context: &DocumentContext<Self::Data>,
     ) -> Result<()> {
         for change in changes {
             let change = change?;
@@ -305,7 +306,7 @@ impl WordDocidsExtractors {
     }
 
     fn extract_document_change(
-        context: &DocumentChangeContext<RefCell<Option<WordDocidsBalancedCaches>>>,
+        context: &DocumentContext<RefCell<Option<WordDocidsBalancedCaches>>>,
         document_tokenizer: &DocumentTokenizer,
         searchable_attributes: Option<&[&str]>,
         document_change: DocumentChange,

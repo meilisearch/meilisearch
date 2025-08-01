@@ -42,7 +42,7 @@ async fn add_remove_user_provided() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
@@ -95,7 +95,7 @@ async fn add_remove_user_provided() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
@@ -138,7 +138,7 @@ async fn add_remove_user_provided() {
 
     let (value, code) = index.delete_document(0).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
@@ -187,7 +187,7 @@ async fn user_provide_mismatched_embedding_dimension() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -218,7 +218,7 @@ async fn user_provide_mismatched_embedding_dimension() {
     ]);
     let (response, code) = index.add_documents(new_document, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(response.uid()).await;
+    let task = server.wait_task(response.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -270,7 +270,7 @@ async fn generate_default_user_provided_documents(server: &Server) -> Index {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     index
 }
@@ -285,7 +285,7 @@ async fn user_provided_embeddings_error() {
         json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": [0, 0, 0] }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -315,7 +315,7 @@ async fn user_provided_embeddings_error() {
     let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": {}}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -346,7 +346,7 @@ async fn user_provided_embeddings_error() {
         json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": "yes please" }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -375,7 +375,7 @@ async fn user_provided_embeddings_error() {
     let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": true, "regenerate": true }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -404,7 +404,7 @@ async fn user_provided_embeddings_error() {
     let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": [true], "regenerate": true }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -433,7 +433,7 @@ async fn user_provided_embeddings_error() {
     let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": [[true]], "regenerate": false }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -462,20 +462,20 @@ async fn user_provided_embeddings_error() {
     let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "embeddings": [23, 0.1, -12], "regenerate": true }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task["status"], @r###""succeeded""###);
 
     let documents =
         json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": false }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task["status"], @r###""succeeded""###);
 
     let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": false, "embeddings": [0.1, [0.2, 0.3]] }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -504,7 +504,7 @@ async fn user_provided_embeddings_error() {
     let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": false, "embeddings": [[0.1, 0.2], 0.3] }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -533,7 +533,7 @@ async fn user_provided_embeddings_error() {
     let documents = json!({"id": 0, "name": "kefir", "_vectors": { "manual": { "regenerate": false, "embeddings": [[0.1, true], 0.3] }}});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -574,7 +574,7 @@ async fn user_provided_vectors_error() {
     let documents = json!([{"id": 40, "name": "kefir"}, {"id": 41, "name": "intel"}, {"id": 42, "name": "max"}, {"id": 43, "name": "venus"}, {"id": 44, "name": "eva"}]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -604,7 +604,7 @@ async fn user_provided_vectors_error() {
     let documents = json!({"id": 42, "name": "kefir", "_vector": { "manaul": [0, 0, 0] }});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -634,7 +634,7 @@ async fn user_provided_vectors_error() {
     let documents = json!({"id": 42, "name": "kefir", "_vectors": { "manaul": [0, 0, 0] }});
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
@@ -667,7 +667,7 @@ async fn clear_documents() {
     let index = generate_default_user_provided_documents(&server).await;
 
     let (value, _code) = index.clear_all_documents().await;
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     // Make sure the documents DB has been cleared
     let (documents, _code) = index
@@ -723,7 +723,7 @@ async fn add_remove_one_vector_4588() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, name: "document-added");
 
     let documents = json!([
@@ -731,7 +731,7 @@ async fn add_remove_one_vector_4588() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, name: "document-deleted");
 
     let (documents, _code) = index

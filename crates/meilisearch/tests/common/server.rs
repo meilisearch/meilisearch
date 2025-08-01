@@ -408,12 +408,12 @@ impl<State> Server<State> {
 
     pub async fn wait_task(&self, update_id: u64) -> Value {
         // try several times to get status, or panic to not wait forever
-        let url = format!("/tasks/{}", update_id);
-        let max_attempts = 400; // 200 seconds total, 0.5s per attempt
+        let url = format!("/tasks/{update_id}");
+        let max_attempts = 400; // 200 seconds in total, 0.5secs per attempt
 
         for i in 0..max_attempts {
-            let (response, status_code) = self.service.get(&url).await;
-            assert_eq!(200, status_code, "response: {}", response);
+            let (response, status_code) = self.service.get(url.clone()).await;
+            assert_eq!(200, status_code, "response: {response}");
 
             if response["status"] == "succeeded" || response["status"] == "failed" {
                 return response;
@@ -464,6 +464,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             skip_index_budget: true,
             // Having 2 threads makes the tests way faster
             max_indexing_threads: MaxThreads::from_str("2").unwrap(),
+            experimental_no_edition_2024_for_settings: false,
         },
         experimental_enable_metrics: false,
         ..Parser::parse_from(None as Option<&str>)

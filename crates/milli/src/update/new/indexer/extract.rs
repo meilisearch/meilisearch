@@ -12,15 +12,18 @@ use super::super::steps::IndexingStep;
 use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
-use crate::index::IndexEmbeddingConfig;
-use crate::progress::EmbedderStats;
-use crate::progress::MergingWordCache;
+use super::settings_changes::settings_change_extract;
+use crate::documents::{FieldIdMapper, PrimaryKey};
+use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::EmbeddingExtractor;
+use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
 use crate::update::new::merger::merge_and_send_rtree;
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
-use crate::vector::EmbeddingConfigs;
-use crate::{Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
+use crate::update::settings::SettingsDelta;
+use crate::vector::db::{EmbedderInfo, IndexEmbeddingConfig};
+use crate::vector::RuntimeEmbedders;
+use crate::{Index, InternalError, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
@@ -28,7 +31,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     indexing_context: IndexingContext<MSP>,
     indexer_span: Span,
     extractor_sender: ExtractorBbqueueSender,
-    embedders: &EmbeddingConfigs,
+    embedders: &RuntimeEmbedders,
     extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
     finished_extraction: &AtomicBool,
     field_distribution: &mut BTreeMap<String, u64>,
@@ -268,14 +271,19 @@ where
             let span = tracing::debug_span!(target: "indexing::documents::merge", "vectors");
             let _entered = span.enter();
 
+            let embedder_configs = index.embedding_configs();
             for config in &mut index_embeddings {
+                let mut infos = embedder_configs.embedder_info(&rtxn, &config.name)?.unwrap();
+
                 'data: for data in datastore.iter_mut() {
                     let data = &mut data.get_mut().0;
-                    let Some(deladd) = data.remove(&config.name) else {
+                    let Some(delta) = data.remove(&config.name) else {
                         continue 'data;
                     };
-                    deladd.apply_to(&mut config.user_provided, modified_docids);
+                    delta.apply_to(&mut infos.embedding_status);
                 }
+
+                extractor_sender.embeddings().embedding_status(&config.name, infos).unwrap();
             }
         }
     }
@@ -313,6 +321,122 @@ where
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
     Result::Ok((facet_field_ids_delta, index_embeddings))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn extract_all_settings_changes<MSP, SD>(
+    indexing_context: IndexingContext<MSP>,
+    indexer_span: Span,
+    extractor_sender: ExtractorBbqueueSender,
+    settings_delta: &SD,
+    extractor_allocs: &mut ThreadLocal<FullySend<Bump>>,
+    finished_extraction: &AtomicBool,
+    field_distribution: &mut BTreeMap<String, u64>,
+    mut index_embeddings: Vec<IndexEmbeddingConfig>,
+    embedder_stats: &EmbedderStats,
+) -> Result<Vec<IndexEmbeddingConfig>>
+where
+    MSP: Fn() -> bool + Sync,
+    SD: SettingsDelta + Sync,
+{
+    // Create the list of document ids to extract
+    let rtxn = indexing_context.index.read_txn()?;
+    let all_document_ids =
+        indexing_context.index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
+    let primary_key =
+        primary_key_from_db(indexing_context.index, &rtxn, &indexing_context.db_fields_ids_map)?;
+    let documents = DocumentsIndentifiers::new(&all_document_ids, primary_key);
+
+    let span =
+        tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
+    let _entered = span.enter();
+
+    update_database_documents(
+        &documents,
+        indexing_context,
+        &extractor_sender,
+        settings_delta,
+        extractor_allocs,
+    )?;
+
+    'vectors: {
+        if settings_delta.embedder_actions().is_empty() {
+            break 'vectors;
+        }
+
+        let embedding_sender = extractor_sender.embeddings();
+
+        // extract the remaining embeddings
+        let extractor = SettingsChangeEmbeddingExtractor::new(
+            settings_delta,
+            embedder_stats,
+            embedding_sender,
+            field_distribution,
+            request_threads(),
+        );
+        let mut datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+        {
+            let span = tracing::debug_span!(target: "indexing::documents::extract", "vectors");
+            let _entered = span.enter();
+
+            settings_change_extract(
+                &documents,
+                &extractor,
+                indexing_context,
+                extractor_allocs,
+                &datastore,
+                IndexingStep::ExtractingEmbeddings,
+            )?;
+        }
+        {
+            let span = tracing::debug_span!(target: "indexing::documents::merge", "vectors");
+            let _entered = span.enter();
+
+            let embedder_configs = indexing_context.index.embedding_configs();
+            for config in &mut index_embeddings {
+                // retrieve infos for existing embedder or create a fresh one
+                let mut infos =
+                    embedder_configs.embedder_info(&rtxn, &config.name)?.unwrap_or_else(|| {
+                        let embedder_id =
+                            *settings_delta.new_embedder_category_id().get(&config.name).unwrap();
+                        EmbedderInfo { embedder_id, embedding_status: Default::default() }
+                    });
+
+                'data: for data in datastore.iter_mut() {
+                    let data = &mut data.get_mut().0;
+                    let Some(delta) = data.remove(&config.name) else {
+                        continue 'data;
+                    };
+                    delta.apply_to(&mut infos.embedding_status);
+                }
+
+                extractor_sender.embeddings().embedding_status(&config.name, infos).unwrap();
+            }
+        }
+    }
+
+    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
+    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+
+    Result::Ok(index_embeddings)
+}
+
+fn primary_key_from_db<'indexer>(
+    index: &'indexer Index,
+    rtxn: &'indexer heed::RoTxn<'_>,
+    fields: &'indexer impl FieldIdMapper,
+) -> Result<PrimaryKey<'indexer>> {
+    let Some(primary_key) = index.primary_key(rtxn)? else {
+        return Err(InternalError::DatabaseMissingEntry {
+            db_name: crate::index::db_name::MAIN,
+            key: Some(crate::index::main_key::PRIMARY_KEY_KEY),
+        }
+        .into());
+    };
+    let Some(primary_key) = PrimaryKey::new(primary_key, fields) else {
+        unreachable!("Primary key must exist at this point");
+    };
+    Ok(primary_key)
 }
 
 fn request_threads() -> &'static ThreadPoolNoAbort {

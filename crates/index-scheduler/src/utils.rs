@@ -278,6 +278,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         K::TaskCancelation { .. }
         | K::TaskDeletion { .. }
         | K::DumpCreation { .. }
+        | K::Export { .. }
         | K::UpgradeDatabase { .. }
         | K::SnapshotCreation => (),
     };
@@ -604,6 +605,9 @@ impl crate::IndexScheduler {
                     }
                     Details::Dump { dump_uid: _ } => {
                         assert_eq!(kind.as_kind(), Kind::DumpCreation);
+                    }
+                    Details::Export { url: _, api_key: _, payload_size: _, indexes: _ } => {
+                        assert_eq!(kind.as_kind(), Kind::Export);
                     }
                     Details::UpgradeDatabase { from: _, to: _ } => {
                         assert_eq!(kind.as_kind(), Kind::UpgradeDatabase);

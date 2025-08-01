@@ -13,9 +13,9 @@ use async_openai::types::{
     ChatCompletionRequestDeveloperMessageContent, ChatCompletionRequestMessage,
     ChatCompletionRequestSystemMessage, ChatCompletionRequestSystemMessageContent,
     ChatCompletionRequestToolMessage, ChatCompletionRequestToolMessageContent,
-    ChatCompletionStreamResponseDelta, ChatCompletionToolArgs, ChatCompletionToolType,
-    CreateChatCompletionRequest, CreateChatCompletionStreamResponse, FinishReason, FunctionCall,
-    FunctionCallStream, FunctionObjectArgs,
+    ChatCompletionStreamOptions, ChatCompletionStreamResponseDelta, ChatCompletionToolArgs,
+    ChatCompletionToolType, CreateChatCompletionRequest, CreateChatCompletionStreamResponse,
+    FinishReason, FunctionCall, FunctionCallStream, FunctionObjectArgs,
 };
 use async_openai::Client;
 use bumpalo::Bump;
@@ -36,6 +36,7 @@ use serde_json::json;
 use tokio::runtime::Handle;
 use tokio::sync::mpsc::error::SendError;
 
+use super::chat_completion_analytics::ChatCompletionAggregator;
 use super::config::Config;
 use super::errors::{MistralError, OpenAiOutsideError, StreamErrorEvent};
 use super::utils::format_documents;
@@ -43,10 +44,15 @@ use super::{
     ChatsParam, MEILI_APPEND_CONVERSATION_MESSAGE_NAME, MEILI_SEARCH_IN_INDEX_FUNCTION_NAME,
     MEILI_SEARCH_PROGRESS_NAME, MEILI_SEARCH_SOURCES_NAME,
 };
+use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{extract_token_from_request, GuardedData, Policy as _};
-use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
+use crate::metrics::{
+    MEILISEARCH_CHAT_COMPLETION_TOKENS_USAGE, MEILISEARCH_CHAT_PROMPT_TOKENS_USAGE,
+    MEILISEARCH_CHAT_SEARCH_REQUESTS, MEILISEARCH_CHAT_TOTAL_TOKENS_USAGE,
+    MEILISEARCH_DEGRADED_SEARCH_REQUESTS,
+};
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
@@ -64,6 +70,7 @@ async fn chat(
     req: HttpRequest,
     search_queue: web::Data<SearchQueue>,
     web::Json(chat_completion): web::Json<CreateChatCompletionRequest>,
+    analytics: web::Data<Analytics>,
 ) -> impl Responder {
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
@@ -76,6 +83,7 @@ async fn chat(
                 &workspace_uid,
                 req,
                 chat_completion,
+                analytics,
             )
             .await,
         )
@@ -88,6 +96,7 @@ async fn chat(
                 &workspace_uid,
                 req,
                 chat_completion,
+                analytics,
             )
             .await,
         )
@@ -281,7 +290,7 @@ async fn process_search_request(
     let output = output?;
     let mut documents = Vec::new();
     if let Ok((ref rtxn, ref search_result)) = output {
-        // aggregate.succeed(search_result);
+        MEILISEARCH_CHAT_SEARCH_REQUESTS.with_label_values(&["internal"]).inc();
         if search_result.degraded {
             MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
         }
@@ -315,8 +324,17 @@ async fn non_streamed_chat(
     workspace_uid: &str,
     req: HttpRequest,
     chat_completion: CreateChatCompletionRequest,
+    analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
+
+    // Create analytics aggregator
+    let aggregate = ChatCompletionAggregator::from_request(
+        &chat_completion.model,
+        chat_completion.messages.len(),
+        false, // non_streamed_chat is not streaming
+    );
+    let start_time = std::time::Instant::now();
 
     if let Some(n) = chat_completion.n.filter(|&n| n != 1) {
         return Err(ResponseError::from_msg(
@@ -414,6 +432,11 @@ async fn non_streamed_chat(
         }
     }
 
+    // Record success in analytics
+    let mut aggregate = aggregate;
+    aggregate.succeed(start_time.elapsed());
+    analytics.publish(aggregate, &req);
+
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -424,6 +447,7 @@ async fn streamed_chat(
     workspace_uid: &str,
     req: HttpRequest,
     mut chat_completion: CreateChatCompletionRequest,
+    analytics: web::Data<Analytics>,
 ) -> Result<impl Responder, ResponseError> {
     index_scheduler.features().check_chat_completions("using the /chats chat completions route")?;
     let filters = index_scheduler.filters();
@@ -445,6 +469,14 @@ async fn streamed_chat(
         }
     };
 
+    // Create analytics aggregator
+    let mut aggregate = ChatCompletionAggregator::from_request(
+        &chat_completion.model,
+        chat_completion.messages.len(),
+        true, // streamed_chat is always streaming
+    );
+    let start_time = std::time::Instant::now();
+
     let config = Config::new(&chat_settings);
     let auth_token = extract_token_from_request(&req)?.unwrap().to_string();
     let system_role = chat_settings.source.system_role(&chat_completion.model);
@@ -460,6 +492,7 @@ async fn streamed_chat(
 
     let (tx, rx) = tokio::sync::mpsc::channel(10);
     let tx = SseEventSender::new(tx);
+    let workspace_uid = workspace_uid.to_string();
     let _join_handle = Handle::current().spawn(async move {
         let client = Client::with_config(config.clone());
         let mut global_tool_calls = HashMap::<u32, Call>::new();
@@ -469,6 +502,7 @@ async fn streamed_chat(
             let output = run_conversation(
                 &index_scheduler,
                 &auth_ctrl,
+                &workspace_uid,
                 &search_queue,
                 &auth_token,
                 &client,
@@ -490,6 +524,10 @@ async fn streamed_chat(
         let _ = tx.stop().await;
     });
 
+    // Record success in analytics after the stream is set up
+    aggregate.succeed(start_time.elapsed());
+    analytics.publish(aggregate, &req);
+
     Ok(Sse::from_infallible_receiver(rx).with_retry_duration(Duration::from_secs(10)))
 }
 
@@ -502,6 +540,7 @@ async fn run_conversation<C: async_openai::config::Config>(
         Data<IndexScheduler>,
     >,
     auth_ctrl: &web::Data<AuthController>,
+    workspace_uid: &str,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
     client: &Client<C>,
@@ -511,13 +550,34 @@ async fn run_conversation<C: async_openai::config::Config>(
     global_tool_calls: &mut HashMap<u32, Call>,
     function_support: FunctionSupport,
 ) -> Result<ControlFlow<Option<FinishReason>, ()>, SendError<Event>> {
+    use DbChatCompletionSource::*;
+
     let mut finish_reason = None;
+    chat_completion.stream_options = match source {
+        OpenAi | AzureOpenAi => Some(ChatCompletionStreamOptions { include_usage: true }),
+        Mistral | VLlm => None,
+    };
+
     // safety: unwrap: can only happens if `stream` was set to `false`
     let mut response = client.chat().create_stream(chat_completion.clone()).await.unwrap();
     while let Some(result) = response.next().await {
         match result {
             Ok(resp) => {
-                let choice = &resp.choices[0];
+                if let Some(usage) = resp.usage.as_ref() {
+                    MEILISEARCH_CHAT_PROMPT_TOKENS_USAGE
+                        .with_label_values(&[workspace_uid, &chat_completion.model])
+                        .inc_by(usage.prompt_tokens as u64);
+                    MEILISEARCH_CHAT_COMPLETION_TOKENS_USAGE
+                        .with_label_values(&[workspace_uid, &chat_completion.model])
+                        .inc_by(usage.completion_tokens as u64);
+                    MEILISEARCH_CHAT_TOTAL_TOKENS_USAGE
+                        .with_label_values(&[workspace_uid, &chat_completion.model])
+                        .inc_by(usage.total_tokens as u64);
+                }
+                let choice = match resp.choices.first() {
+                    Some(choice) => choice,
+                    None => break,
+                };
                 finish_reason = choice.finish_reason;
 
                 let ChatCompletionStreamResponseDelta { ref tool_calls, .. } = &choice.delta;

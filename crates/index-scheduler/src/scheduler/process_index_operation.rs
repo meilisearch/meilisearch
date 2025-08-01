@@ -89,8 +89,9 @@ impl IndexScheduler {
                 let mut content_files_iter = content_files.iter();
                 let mut indexer = indexer::DocumentOperation::new();
                 let embedders = index
+                    .embedding_configs()
                     .embedding_configs(index_wtxn)
-                    .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+                    .map_err(|e| Error::from_milli(e.into(), Some(index_uid.clone())))?;
                 let embedders = self.embedders(index_uid.clone(), embedders)?;
                 for operation in operations {
                     match operation {
@@ -274,8 +275,9 @@ impl IndexScheduler {
                         })
                         .unwrap()?;
                     let embedders = index
+                        .embedding_configs()
                         .embedding_configs(index_wtxn)
-                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+                        .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
                     let embedders = self.embedders(index_uid.clone(), embedders)?;
 
                     progress.update_progress(DocumentEditionProgress::Indexing);
@@ -423,8 +425,9 @@ impl IndexScheduler {
                     indexer.delete_documents_by_docids(to_delete);
                     let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
                     let embedders = index
+                        .embedding_configs()
                         .embedding_configs(index_wtxn)
-                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+                        .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
                     let embedders = self.embedders(index_uid.clone(), embedders)?;
 
                     progress.update_progress(DocumentDeletionProgress::Indexing);
@@ -474,15 +477,11 @@ impl IndexScheduler {
                 }
 
                 progress.update_progress(SettingsProgress::ApplyTheSettings);
-                builder
-                    .execute(
-                        |indexing_step| tracing::debug!(update = ?indexing_step),
-                        || must_stop_processing.get(),
-                        embedder_stats,
-                    )
+                let congestion = builder
+                    .execute(&|| must_stop_processing.get(), progress, embedder_stats)
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
-                Ok((tasks, None))
+                Ok((tasks, congestion))
             }
             IndexOperation::DocumentClearAndSetting {
                 index_uid,

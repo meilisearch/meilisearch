@@ -317,6 +317,9 @@ pub enum Action {
     #[serde(rename = "experimental.update")]
     #[deserr(rename = "experimental.update")]
     ExperimentalFeaturesUpdate,
+    #[serde(rename = "export")]
+    #[deserr(rename = "export")]
+    Export,
     #[serde(rename = "network.get")]
     #[deserr(rename = "network.get")]
     NetworkGet,
@@ -437,6 +440,8 @@ pub mod actions {
     pub const KEYS_DELETE: u8 = KeysDelete.repr();
     pub const EXPERIMENTAL_FEATURES_GET: u8 = ExperimentalFeaturesGet.repr();
     pub const EXPERIMENTAL_FEATURES_UPDATE: u8 = ExperimentalFeaturesUpdate.repr();
+
+    pub const EXPORT: u8 = Export.repr();
 
     pub const NETWORK_GET: u8 = NetworkGet.repr();
     pub const NETWORK_UPDATE: u8 = NetworkUpdate.repr();

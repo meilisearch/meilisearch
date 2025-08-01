@@ -13,7 +13,7 @@ use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, Settings};
-use milli::vector::EmbeddingConfigs;
+use milli::vector::RuntimeEmbedders;
 use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
 use serde_json::Value;
 
@@ -90,7 +90,7 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     (conf.configure)(&mut builder);
 
-    builder.execute(|_| (), || false, Default::default()).unwrap();
+    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
     wtxn.commit().unwrap();
 
     let config = IndexerConfig::default();
@@ -125,7 +125,7 @@ pub fn base_setup(conf: &Conf) -> Index {
         new_fields_ids_map,
         primary_key,
         &document_changes,
-        EmbeddingConfigs::default(),
+        RuntimeEmbedders::default(),
         &|| false,
         &Progress::default(),
         &Default::default(),

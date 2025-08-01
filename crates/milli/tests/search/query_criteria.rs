@@ -8,7 +8,7 @@ use maplit::hashset;
 use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, Settings};
-use milli::vector::EmbeddingConfigs;
+use milli::vector::RuntimeEmbedders;
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
 use rand::Rng;
 use Criterion::*;
@@ -236,7 +236,7 @@ fn criteria_mixup() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(criteria.clone());
-        builder.execute(|_| (), || false, Default::default()).unwrap();
+        builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -276,7 +276,7 @@ fn criteria_ascdesc() {
         S("name"),
         S("age"),
     });
-    builder.execute(|_| (), || false, Default::default()).unwrap();
+    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
 
     wtxn.commit().unwrap();
     let mut wtxn = index.write_txn().unwrap();
@@ -288,7 +288,7 @@ fn criteria_ascdesc() {
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-    let embedders = EmbeddingConfigs::default();
+    let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
 
     let mut file = tempfile::tempfile().unwrap();
@@ -359,7 +359,7 @@ fn criteria_ascdesc() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(vec![criterion.clone()]);
-        builder.execute(|_| (), || false, Default::default()).unwrap();
+        builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();

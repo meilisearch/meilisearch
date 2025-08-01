@@ -32,8 +32,8 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
     ) -> Result<Self> {
         let embedder_index = ctx
             .index
-            .embedder_category_id
-            .get(ctx.txn, embedder_name)?
+            .embedding_configs()
+            .embedder_id(ctx.txn, embedder_name)?
             .ok_or_else(|| crate::UserError::InvalidSearchEmbedder(embedder_name.to_owned()))?;
 
         Ok(Self {
