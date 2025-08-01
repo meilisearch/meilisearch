@@ -371,32 +371,34 @@ fn parse_template_id<'a>(
     id: &'a str,
 ) -> Result<(serde_json::Value, bool), RenderError<'a>> {
     let mut input: Span = id.into();
-    let mut next_part = |first: bool| -> Result<Option<Token<'_>>, RenderError<'a>> {
+    let mut next_part = || -> Result<Option<Token<'_>>, RenderError<'a>> {
         if input.is_empty() {
             return Ok(None);
         }
-        if !first {
-            if !input.starts_with('.') {
-                return Err(ExpectedDotAfterValue(input));
-            }
-            input = milli::filter_parser::Slice::slice(&input, 1..);
-        }
-        let (remaining, value) = milli::filter_parser::parse_dotted_value_part(input)
+        let (mut remaining, value) = milli::filter_parser::parse_dotted_value_part(input)
             .map_err(|_| ExpectedValue(input))?;
+
+        if !remaining.is_empty() {
+            if !remaining.starts_with('.') {
+                return Err(ExpectedDotAfterValue(remaining));
+            }
+            remaining = milli::filter_parser::Slice::slice(&remaining, 1..);
+        }
+
         input = remaining;
 
         Ok(Some(value))
     };
 
-    let root = next_part(true)?.ok_or(EmptyTemplateId)?;
+    let root = next_part()?.ok_or(EmptyTemplateId)?;
     let template = match root.value() {
         "embedders" => {
             let index_embedding_configs = index.embedding_configs();
             let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
             let get_embedders = || embedding_configs.iter().map(|c| c.name.clone()).collect();
 
-            let embedder = next_part(false)?
-                .ok_or_else(|| MissingEmbedderName { available: get_embedders() })?;
+            let embedder =
+                next_part()?.ok_or_else(|| MissingEmbedderName { available: get_embedders() })?;
 
             let embedding_config = embedding_configs
                 .iter()
@@ -409,7 +411,7 @@ fn parse_template_id<'a>(
             let get_indexing = || embedding_config.config.embedder_options.indexing_fragments();
             let get_search = || embedding_config.config.embedder_options.search_fragments();
 
-            let template_kind = next_part(false)?.ok_or_else(|| MissingTemplateAfterEmbedder {
+            let template_kind = next_part()?.ok_or_else(|| MissingTemplateAfterEmbedder {
                 embedder: embedder.clone(),
                 indexing: get_indexing(),
                 search: get_search(),
@@ -424,7 +426,7 @@ fn parse_template_id<'a>(
                 ),
                 "indexingFragments" => (
                     parse_template_id_fragment(
-                        next_part(false)?,
+                        next_part()?,
                         FragmentKind::Indexing,
                         embedding_config,
                         embedder,
@@ -433,7 +435,7 @@ fn parse_template_id<'a>(
                 ),
                 "searchFragments" => (
                     parse_template_id_fragment(
-                        next_part(false)?,
+                        next_part()?,
                         FragmentKind::Search,
                         embedding_config,
                         embedder,
@@ -451,7 +453,7 @@ fn parse_template_id<'a>(
             }
         }
         "chatCompletions" => {
-            let template_name = next_part(false)?.ok_or(MissingChatCompletionTemplate)?;
+            let template_name = next_part()?.ok_or(MissingChatCompletionTemplate)?;
 
             if template_name.value() != "documentTemplate" {
                 return Err(UnknownChatCompletionTemplate(template_name));
@@ -467,7 +469,7 @@ fn parse_template_id<'a>(
         }
     };
 
-    if let Some(next) = next_part(false)? {
+    if let Some(next) = next_part()? {
         return Err(LeftOverToken(next));
     }
 
