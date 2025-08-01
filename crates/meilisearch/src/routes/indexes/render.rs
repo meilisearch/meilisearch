@@ -490,15 +490,21 @@ async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, Respon
         .input
         .as_ref()
         .is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("fields").is_some()));
-    let fields_probably_used = template.as_str().is_none_or(|s| s.contains("fields"));
+    let fields_unused = match template.as_str() {
+        Some(template) => {
+            // might be a false positive if fields appear as a non-variable
+            // it is OK to be over-eager here, it will just translate to more work
+            !template.contains("fields")
+        }
+        None => true, // non-text templates cannot use `fields`
+    };
     let has_inline_doc = query
         .input
         .as_ref()
         .is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("doc").is_some()));
     let has_document_id = query.input.as_ref().is_some_and(|i| i.document_id.is_some());
     let has_doc = has_inline_doc || has_document_id;
-    let insert_fields =
-        fields_available && has_doc && fields_probably_used && !fields_already_present;
+    let insert_fields = fields_available && has_doc && !fields_unused && !fields_already_present;
     if has_inline_doc && has_document_id {
         return Err(BothInlineDocAndDocId.into());
     }
