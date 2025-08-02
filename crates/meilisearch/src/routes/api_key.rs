@@ -10,7 +10,7 @@ use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::keys::{CreateApiKey, Key, PatchApiKey};
+use meilisearch_types::keys::{CreateApiKey, Key, PatchApiKey, RateLimitConfig};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -185,6 +185,11 @@ pub async fn list_api_keys(
     list_api_keys: AwebQueryParameter<ListApiKeys, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let paginate = list_api_keys.into_inner().as_pagination();
+
+    // Extract rate limit info before moving auth_controller
+    let mut response = HttpResponse::Ok();
+    auth_controller.add_rate_limit_headers(&mut response);
+
     let page_view = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let keys = auth_controller.list_keys()?;
         let page_view = paginate
@@ -195,7 +200,7 @@ pub async fn list_api_keys(
     .await
     .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
-    Ok(HttpResponse::Ok().json(page_view))
+    Ok(response.json(page_view))
 }
 
 /// Get an API Key
@@ -249,6 +254,10 @@ pub async fn get_api_key(
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
 
+    // Extract rate limit info before moving auth_controller
+    let mut response = HttpResponse::Ok();
+    auth_controller.add_rate_limit_headers(&mut response);
+
     let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let uid =
             Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
@@ -259,7 +268,7 @@ pub async fn get_api_key(
     .await
     .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
-    Ok(HttpResponse::Ok().json(res))
+    Ok(response.json(res))
 }
 
 /// Update a Key
@@ -316,6 +325,10 @@ pub async fn patch_api_key(
 ) -> Result<HttpResponse, ResponseError> {
     let key = path.into_inner().key;
     let patch_api_key = body.into_inner();
+
+    // Extract rate limit info before moving auth_controller
+    let mut response = HttpResponse::Ok();
+    auth_controller.add_rate_limit_headers(&mut response);
     let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let uid =
             Uuid::parse_str(&key).or_else(|_| auth_controller.get_uid_from_encoded_key(&key))?;
@@ -326,7 +339,7 @@ pub async fn patch_api_key(
     .await
     .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
 
-    Ok(HttpResponse::Ok().json(res))
+    Ok(response.json(res))
 }
 
 /// Delete a key
@@ -394,6 +407,15 @@ pub(super) struct KeyView {
     actions: Vec<Action>,
     /// The indexes accessible with this key.
     indexes: Vec<String>,
+    /// Restrict access to these referrers if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_referrers: Option<Vec<String>>,
+    /// Restrict access to these IPs if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed_ips: Option<Vec<String>>,
+    /// Rate limit configuration for this key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rate_limit: Option<RateLimitConfig>,
     /// The expiration date of the key. Once this timestamp is exceeded the key is not deleted but cannot be used anymore.
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     expires_at: Option<OffsetDateTime>,
@@ -418,6 +440,9 @@ impl KeyView {
             uid: key.uid,
             actions: key.actions,
             indexes: key.indexes.into_iter().map(|x| x.to_string()).collect(),
+            allowed_referrers: key.allowed_referrers,
+            allowed_ips: key.allowed_ips,
+            rate_limit: key.rate_limit,
             expires_at: key.expires_at,
             created_at: key.created_at,
             updated_at: key.updated_at,

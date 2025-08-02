@@ -40,9 +40,13 @@ time = { version = "0.3.41", features = [
     "parsing",
     "macros",
 ] }
-tokio = "1.45"
+tokio = { version = "1.45", features = ["rt", "rt-multi-thread", "sync", "macros", "test-util"] }
 utoipa = { version = "5.4.0", features = ["macros"] }
 uuid = { version = "1.17.0", features = ["serde", "v4"] }
+ipnet = { version = "2.9.0", features = ["serde"] }
+redis = { version = "0.27.6", features = ["tokio-comp", "connection-manager"], optional = true }
+async-trait = "0.1.83"
+log = "0.4.22"
 
 [dev-dependencies]
 # fixed version due to format breakages in v1.40
@@ -50,6 +54,8 @@ insta = "=1.39.0"
 meili-snap = { path = "../meili-snap" }
 
 [features]
+# redis rate limiting support
+redis-rate-limiter = ["dep:redis"]
 # all specialized tokenizations
 all-tokenizations = ["milli/all-tokenizations"]
 

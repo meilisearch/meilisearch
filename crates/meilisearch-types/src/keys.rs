@@ -19,6 +19,17 @@ use crate::index_uid_pattern::{IndexUidPattern, IndexUidPatternFormatError};
 
 pub type KeyId = Uuid;
 
+/// Rate limit configuration for an API key
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, Deserr)]
+#[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase)]
+pub struct RateLimitConfig {
+    /// Maximum number of requests allowed per window
+    pub max_requests: u64,
+    /// Time window in seconds (e.g., 3600 for 1 hour)
+    pub window_seconds: u64,
+}
+
 impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for DeserrJsonError<C> {
     fn merge(
         _self_: Option<Self>,
@@ -60,19 +71,33 @@ pub struct CreateApiKey {
     /// Represent the expiration date and time as RFC 3339 format. `null` equals to no expiration time.
     #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, try_from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
     pub expires_at: Option<OffsetDateTime>,
+    /// Optional list of allowed referrers. Wildcards can be used.
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKey>)]
+    pub allowed_referrers: Option<Vec<String>>,
+    /// Optional list of allowed IP addresses or subnets.
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKey>)]
+    pub allowed_ips: Option<Vec<String>>,
+    /// Optional rate limit configuration.
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKey>)]
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 impl CreateApiKey {
     pub fn to_key(self) -> Key {
-        let CreateApiKey { description, name, uid, actions, indexes, expires_at } = self;
         let now = OffsetDateTime::now_utc();
         Key {
-            description,
-            name,
-            uid,
-            actions,
-            indexes,
-            expires_at,
+            description: self.description,
+            name: self.name,
+            uid: self.uid,
+            actions: self.actions,
+            indexes: self.indexes,
+            expires_at: self.expires_at,
+            allowed_referrers: self.allowed_referrers,
+            allowed_ips: self.allowed_ips,
+            rate_limit: self.rate_limit,
             created_at: now,
             updated_at: now,
         }
@@ -122,6 +147,12 @@ pub struct Key {
     pub indexes: Vec<IndexUidPattern>,
     #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub allowed_referrers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub allowed_ips: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub rate_limit: Option<RateLimitConfig>,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
@@ -139,6 +170,9 @@ impl Key {
             actions: vec![Action::All],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
+            allowed_referrers: None,
+            allowed_ips: None,
+            rate_limit: None,
             created_at: now,
             updated_at: now,
         }
@@ -154,6 +188,9 @@ impl Key {
             actions: vec![Action::Search],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
+            allowed_referrers: None,
+            allowed_ips: None,
+            rate_limit: None,
             created_at: now,
             updated_at: now,
         }
@@ -169,9 +206,22 @@ impl Key {
             actions: vec![Action::ChatCompletions, Action::Search],
             indexes: vec![IndexUidPattern::all()],
             expires_at: None,
+            allowed_referrers: None,
+            allowed_ips: None,
+            rate_limit: None,
             created_at: now,
             updated_at: now,
         }
+    }
+
+    /// Check if the request is allowed by this key given an IP and a referrer.
+    pub fn is_request_allowed(&self, ip: Option<std::net::IpAddr>, referrer: Option<&str>) -> bool {
+        crate::api_key_restrictions::is_request_allowed(
+            self.allowed_ips.as_ref(),
+            self.allowed_referrers.as_ref(),
+            ip,
+            referrer,
+        )
     }
 }
 

@@ -188,6 +188,9 @@ impl CompatV5ToV6 {
                     })
                     .collect(),
                 expires_at: key.expires_at,
+                allowed_referrers: None,
+                allowed_ips: None,
+                rate_limit: None,
                 created_at: key.created_at,
                 updated_at: key.updated_at,
             })
