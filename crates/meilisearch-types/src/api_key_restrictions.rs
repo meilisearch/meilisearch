@@ -62,9 +62,7 @@ fn wildcard_match(pattern: &str, value: &str) -> bool {
 }
 
 fn ip_in(pattern: &str, ip: IpAddr) -> bool {
-    pattern.parse::<ipnet::IpNet>()
-        .map(|net| net.contains(&ip))
-        .unwrap_or(false)
+    pattern.parse::<ipnet::IpNet>().map(|net| net.contains(&ip)).unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -173,18 +171,18 @@ mod tests {
         // Both restrictions must pass
         let allowed_ips = vec!["192.168.1.0/24".to_string()];
         let allowed_refs = vec!["*.example.com".to_string()];
-        
+
         // Both pass
         assert!(is_request_allowed(Some(&allowed_ips), Some(&allowed_refs), ip, ref1));
-        
+
         // IP fails
         let ip2 = Some(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)));
         assert!(!is_request_allowed(Some(&allowed_ips), Some(&allowed_refs), ip2, ref1));
-        
+
         // Referrer fails
         let ref2 = Some("https://other.org");
         assert!(!is_request_allowed(Some(&allowed_ips), Some(&allowed_refs), ip, ref2));
-        
+
         // Both fail
         assert!(!is_request_allowed(Some(&allowed_ips), Some(&allowed_refs), ip2, ref2));
     }

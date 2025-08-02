@@ -3,7 +3,7 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
-use crate::common::{Server, Value};
+use crate::common::Server;
 use crate::json;
 
 #[actix_rt::test]
@@ -67,6 +67,5 @@ async fn add_api_key_with_both_restrictions() {
     assert_eq!(response["allowed_ips"], json!(["192.168.1.0/24"]));
     assert_eq!(response["allowed_referrers"], json!(["*.example.com"]));
 }
-
 
 // TODO: Add tests for actual authentication with IP/referrer restrictions once the Server test infrastructure supports it

@@ -222,6 +222,7 @@ IndexPrimaryKeyMultipleCandidatesFound         , InvalidRequest       , BAD_REQU
 IndexPrimaryKeyNoCandidateFound                , InvalidRequest       , BAD_REQUEST ;
 Internal                                       , Internal             , INTERNAL_SERVER_ERROR ;
 InvalidApiKey                                  , Auth                 , FORBIDDEN ;
+RateLimitExceeded                              , Auth                 , TOO_MANY_REQUESTS ;
 InvalidApiKeyActions                           , InvalidRequest       , BAD_REQUEST ;
 InvalidApiKeyDescription                       , InvalidRequest       , BAD_REQUEST ;
 InvalidApiKeyExpiresAt                         , InvalidRequest       , BAD_REQUEST ;

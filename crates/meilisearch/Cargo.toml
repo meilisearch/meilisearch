@@ -143,6 +143,7 @@ zip = { version = "4.1.0", optional = true }
 
 [features]
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]
+redis-rate-limiter = ["meilisearch-types/redis-rate-limiter"]
 swagger = ["utoipa-scalar"]
 test-ollama = []
 mini-dashboard = [

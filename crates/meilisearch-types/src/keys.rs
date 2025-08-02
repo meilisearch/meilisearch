@@ -19,6 +19,17 @@ use crate::index_uid_pattern::{IndexUidPattern, IndexUidPatternFormatError};
 
 pub type KeyId = Uuid;
 
+/// Rate limit configuration for an API key
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema, Deserr)]
+#[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase)]
+pub struct RateLimitConfig {
+    /// Maximum number of requests allowed per window
+    pub max_requests: u64,
+    /// Time window in seconds (e.g., 3600 for 1 hour)
+    pub window_seconds: u64,
+}
+
 impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for DeserrJsonError<C> {
     fn merge(
         _self_: Option<Self>,
@@ -68,6 +79,10 @@ pub struct CreateApiKey {
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidApiKey>)]
     pub allowed_ips: Option<Vec<String>>,
+    /// Optional rate limit configuration.
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidApiKey>)]
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 impl CreateApiKey {
@@ -82,6 +97,7 @@ impl CreateApiKey {
             expires_at: self.expires_at,
             allowed_referrers: self.allowed_referrers,
             allowed_ips: self.allowed_ips,
+            rate_limit: self.rate_limit,
             created_at: now,
             updated_at: now,
         }
@@ -135,6 +151,8 @@ pub struct Key {
     pub allowed_referrers: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub allowed_ips: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub rate_limit: Option<RateLimitConfig>,
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
     #[serde(with = "time::serde::rfc3339")]
@@ -154,6 +172,7 @@ impl Key {
             expires_at: None,
             allowed_referrers: None,
             allowed_ips: None,
+            rate_limit: None,
             created_at: now,
             updated_at: now,
         }
@@ -171,6 +190,7 @@ impl Key {
             expires_at: None,
             allowed_referrers: None,
             allowed_ips: None,
+            rate_limit: None,
             created_at: now,
             updated_at: now,
         }
@@ -188,6 +208,7 @@ impl Key {
             expires_at: None,
             allowed_referrers: None,
             allowed_ips: None,
+            rate_limit: None,
             created_at: now,
             updated_at: now,
         }
@@ -203,7 +224,6 @@ impl Key {
         )
     }
 }
-
 
 fn parse_expiration_date(
     string: Option<String>,

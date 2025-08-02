@@ -11,6 +11,8 @@ pub enum AuthenticationError {
     IrretrievableState,
     #[error("Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.")]
     MissingMasterKey,
+    #[error("Rate limit exceeded for this API key.")]
+    RateLimitExceeded,
 }
 
 impl ErrorCode for AuthenticationError {
@@ -20,6 +22,7 @@ impl ErrorCode for AuthenticationError {
             AuthenticationError::InvalidToken => Code::InvalidApiKey,
             AuthenticationError::IrretrievableState => Code::Internal,
             AuthenticationError::MissingMasterKey => Code::MissingMasterKey,
+            AuthenticationError::RateLimitExceeded => Code::RateLimitExceeded,
         }
     }
 }

@@ -22,6 +22,7 @@ use bumpalo::Bump;
 use futures::StreamExt;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
+use meilisearch_types::api_key_rate_limiter::RateLimiter;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::{
     ChatCompletionPrompts as DbChatCompletionPrompts,
@@ -66,6 +67,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 async fn chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
+    rate_limiter: web::Data<RateLimiter>,
     chats_param: web::Path<ChatsParam>,
     req: HttpRequest,
     search_queue: web::Data<SearchQueue>,
@@ -79,6 +81,7 @@ async fn chat(
             streamed_chat(
                 index_scheduler,
                 auth_ctrl,
+                rate_limiter,
                 search_queue,
                 &workspace_uid,
                 req,
@@ -92,6 +95,7 @@ async fn chat(
             non_streamed_chat(
                 index_scheduler,
                 auth_ctrl,
+                rate_limiter,
                 search_queue,
                 &workspace_uid,
                 req,
@@ -243,6 +247,7 @@ async fn process_search_request(
         Data<IndexScheduler>,
     >,
     auth_ctrl: web::Data<AuthController>,
+    rate_limiter: web::Data<RateLimiter>,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
     index_uid: String,
@@ -252,8 +257,9 @@ async fn process_search_request(
     let rtxn = index.static_read_txn()?;
     let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
     let mut query = SearchQuery { q, ..SearchQuery::from(search_parameters) };
-    let auth_filter = ActionPolicy::<{ actions::SEARCH }>::authenticate(
+    let (auth_filter, _rate_limit_info) = ActionPolicy::<{ actions::SEARCH }>::authenticate(
         auth_ctrl,
+        rate_limiter,
         auth_token,
         Some(index_uid.as_str()),
         None, // IP address not available in this context
@@ -322,6 +328,7 @@ async fn process_search_request(
 async fn non_streamed_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
+    rate_limiter: web::Data<RateLimiter>,
     search_queue: web::Data<SearchQueue>,
     workspace_uid: &str,
     req: HttpRequest,
@@ -400,6 +407,7 @@ async fn non_streamed_chat(
                         Ok(SearchInIndexParameters { index_uid, q }) => process_search_request(
                             &index_scheduler,
                             auth_ctrl.clone(),
+                            rate_limiter.clone(),
                             &search_queue,
                             auth_token,
                             index_uid,
@@ -445,6 +453,7 @@ async fn non_streamed_chat(
 async fn streamed_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
+    rate_limiter: web::Data<RateLimiter>,
     search_queue: web::Data<SearchQueue>,
     workspace_uid: &str,
     req: HttpRequest,
@@ -504,6 +513,7 @@ async fn streamed_chat(
             let output = run_conversation(
                 &index_scheduler,
                 &auth_ctrl,
+                &rate_limiter,
                 &workspace_uid,
                 &search_queue,
                 &auth_token,
@@ -542,6 +552,7 @@ async fn run_conversation<C: async_openai::config::Config>(
         Data<IndexScheduler>,
     >,
     auth_ctrl: &web::Data<AuthController>,
+    rate_limiter: &web::Data<RateLimiter>,
     workspace_uid: &str,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
@@ -646,6 +657,7 @@ async fn run_conversation<C: async_openai::config::Config>(
                             handle_meili_tools(
                                 index_scheduler,
                                 auth_ctrl,
+                                rate_limiter,
                                 search_queue,
                                 auth_token,
                                 tx,
@@ -689,6 +701,7 @@ async fn handle_meili_tools(
         Data<IndexScheduler>,
     >,
     auth_ctrl: &web::Data<AuthController>,
+    rate_limiter: &web::Data<RateLimiter>,
     search_queue: &web::Data<SearchQueue>,
     auth_token: &str,
     tx: &SseEventSender,
@@ -724,6 +737,7 @@ async fn handle_meili_tools(
             Ok(SearchInIndexParameters { index_uid, q }) => match process_search_request(
                 index_scheduler,
                 auth_ctrl.clone(),
+                (*rate_limiter).clone(),
                 search_queue,
                 auth_token,
                 index_uid,
