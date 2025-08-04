@@ -20,6 +20,7 @@ use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use WebhooksError::*;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -191,13 +192,11 @@ enum WebhooksError {
 impl ErrorCode for WebhooksError {
     fn error_code(&self) -> meilisearch_types::error::Code {
         match self {
-            WebhooksError::MissingUrl(_) => meilisearch_types::error::Code::InvalidWebhooksUrl,
-            WebhooksError::TooManyWebhooks => meilisearch_types::error::Code::InvalidWebhooks,
-            WebhooksError::TooManyHeaders(_) => {
-                meilisearch_types::error::Code::InvalidWebhooksHeaders
-            }
-            WebhooksError::ReservedWebhook(_) => meilisearch_types::error::Code::ReservedWebhook,
-            WebhooksError::WebhookNotFound(_) => meilisearch_types::error::Code::WebhookNotFound,
+            MissingUrl(_) => meilisearch_types::error::Code::InvalidWebhooksUrl,
+            TooManyWebhooks => meilisearch_types::error::Code::InvalidWebhooks,
+            TooManyHeaders(_) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
+            ReservedWebhook(_) => meilisearch_types::error::Code::ReservedWebhook,
+            WebhookNotFound(_) => meilisearch_types::error::Code::WebhookNotFound,
         }
     }
 }
@@ -212,8 +211,8 @@ fn patch_webhook_inner(
 
     let url = match new_webhook.url {
         Setting::Set(url) => url,
-        Setting::NotSet => old_url.ok_or_else(|| WebhooksError::MissingUrl(uuid.to_owned()))?,
-        Setting::Reset => return Err(WebhooksError::MissingUrl(uuid.to_owned())),
+        Setting::NotSet => old_url.ok_or_else(|| MissingUrl(uuid.to_owned()))?,
+        Setting::Reset => return Err(MissingUrl(uuid.to_owned())),
     };
 
     let headers = match new_webhook.headers {
@@ -237,7 +236,7 @@ fn patch_webhook_inner(
     };
 
     if headers.len() > 200 {
-        return Err(WebhooksError::TooManyHeaders(uuid.to_owned()));
+        return Err(TooManyHeaders(uuid.to_owned()));
     }
 
     Ok(Webhook { url, headers })
@@ -271,7 +270,7 @@ async fn get_webhook(
     let uuid = uuid.into_inner();
     let mut webhooks = index_scheduler.webhooks();
 
-    let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?;
+    let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
 
     Ok(HttpResponse::Ok().json(WebhookWithMetadata {
         uuid,
@@ -310,16 +309,16 @@ async fn post_webhook(
 
     let uuid = Uuid::new_v4();
     if webhook_settings.headers.as_ref().set().is_some_and(|h| h.len() > 200) {
-        return Err(WebhooksError::TooManyHeaders(uuid).into());
+        return Err(TooManyHeaders(uuid).into());
     }
 
     let mut webhooks = index_scheduler.webhooks();
     if dbg!(webhooks.webhooks.len() >= 20) {
-        return Err(WebhooksError::TooManyWebhooks.into());
+        return Err(TooManyWebhooks.into());
     }
 
     let webhook = Webhook {
-        url: webhook_settings.url.set().ok_or(WebhooksError::MissingUrl(uuid))?,
+        url: webhook_settings.url.set().ok_or(MissingUrl(uuid))?,
         headers: webhook_settings
             .headers
             .set()
@@ -370,7 +369,7 @@ async fn patch_webhook(
     debug!(parameters = ?(uuid, &webhook_settings), "Patch webhook");
 
     if uuid.is_nil() {
-        return Err(WebhooksError::ReservedWebhook(uuid).into());
+        return Err(ReservedWebhook(uuid).into());
     }
 
     let mut webhooks = index_scheduler.webhooks();
@@ -378,7 +377,7 @@ async fn patch_webhook(
     let webhook = patch_webhook_inner(&uuid, old_webhook, webhook_settings)?;
 
     if webhook.headers.len() > 200 {
-        return Err(WebhooksError::TooManyHeaders(uuid).into());
+        return Err(TooManyHeaders(uuid).into());
     }
 
     webhooks.webhooks.insert(uuid, webhook.clone());
@@ -415,11 +414,11 @@ async fn delete_webhook(
     debug!(parameters = ?uuid, "Delete webhook");
 
     if uuid.is_nil() {
-        return Err(WebhooksError::ReservedWebhook(uuid).into());
+        return Err(ReservedWebhook(uuid).into());
     }
 
     let mut webhooks = index_scheduler.webhooks();
-    webhooks.webhooks.remove(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?;
+    webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
     index_scheduler.put_webhooks(webhooks)?;
 
     analytics.publish(PatchWebhooksAnalytics::delete_webhook(), &req);
