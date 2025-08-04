@@ -1,5 +1,9 @@
 use std::collections::BTreeMap;
 
+use actix_http::header::{
+    HeaderName, HeaderValue, InvalidHeaderName as ActixInvalidHeaderName,
+    InvalidHeaderValue as ActixInvalidHeaderValue,
+};
 use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -13,6 +17,7 @@ use meilisearch_types::milli::update::Setting;
 use meilisearch_types::webhooks::Webhook;
 use serde::Serialize;
 use tracing::debug;
+use url::Url;
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -184,6 +189,12 @@ enum WebhooksError {
     ReservedWebhook(Uuid),
     #[error("Webhook `{0}` not found.")]
     WebhookNotFound(Uuid),
+    #[error("Invalid header name `{0}`: {1}")]
+    InvalidHeaderName(String, ActixInvalidHeaderName),
+    #[error("Invalid header value `{0}`: {1}")]
+    InvalidHeaderValue(String, ActixInvalidHeaderValue),
+    #[error("Invalid URL `{0}`: {1}")]
+    InvalidUrl(String, url::ParseError),
 }
 
 impl ErrorCode for WebhooksError {
@@ -194,6 +205,9 @@ impl ErrorCode for WebhooksError {
             TooManyHeaders(_) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
             ReservedWebhook(_) => meilisearch_types::error::Code::ReservedWebhook,
             WebhookNotFound(_) => meilisearch_types::error::Code::WebhookNotFound,
+            InvalidHeaderName(_, _) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
+            InvalidHeaderValue(_, _) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
+            InvalidUrl(_, _) => meilisearch_types::error::Code::InvalidWebhooksUrl,
         }
     }
 }
@@ -237,6 +251,32 @@ fn patch_webhook_inner(
     }
 
     Ok(Webhook { url, headers })
+}
+
+fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
+    if uuid.is_nil() {
+        return Err(ReservedWebhook(uuid));
+    }
+
+    if webhook.url.is_empty() {
+        return Err(MissingUrl(uuid));
+    }
+
+    if webhook.headers.len() > 200 {
+        return Err(TooManyHeaders(uuid));
+    }
+
+    for (header, value) in &webhook.headers {
+        HeaderName::from_bytes(header.as_bytes())
+            .map_err(|e| InvalidHeaderName(header.to_owned(), e))?;
+        HeaderValue::from_str(value).map_err(|e| InvalidHeaderValue(header.to_owned(), e))?;
+    }
+
+    if let Err(e) = Url::parse(&webhook.url) {
+        return Err(InvalidUrl(webhook.url.to_owned(), e));
+    }
+
+    Ok(())
 }
 
 #[utoipa::path(
@@ -320,6 +360,8 @@ async fn post_webhook(
             .map(|h| h.into_iter().map(|(k, v)| (k, v.set().unwrap_or_default())).collect())
             .unwrap_or_default(),
     };
+
+    check_changed(uuid, &webhook)?;
     webhooks.webhooks.insert(uuid, webhook.clone());
     index_scheduler.put_webhooks(webhooks)?;
 
@@ -363,18 +405,11 @@ async fn patch_webhook(
     let webhook_settings = webhook_settings.into_inner();
     debug!(parameters = ?(uuid, &webhook_settings), "Patch webhook");
 
-    if uuid.is_nil() {
-        return Err(ReservedWebhook(uuid).into());
-    }
-
     let mut webhooks = index_scheduler.webhooks();
     let old_webhook = webhooks.webhooks.remove(&uuid);
     let webhook = patch_webhook_inner(&uuid, old_webhook, webhook_settings)?;
 
-    if webhook.headers.len() > 200 {
-        return Err(TooManyHeaders(uuid).into());
-    }
-
+    check_changed(uuid, &webhook)?;
     webhooks.webhooks.insert(uuid, webhook.clone());
     index_scheduler.put_webhooks(webhooks)?;
 

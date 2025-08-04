@@ -469,3 +469,54 @@ async fn patch() {
     }
     "#);
 }
+
+#[actix_web::test]
+async fn invalid_url_and_headers() {
+    let server = Server::new().await;
+
+    // Test invalid URL format
+    let (value, code) = server.create_webhook(json!({ "url": "not-a-valid-url" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Invalid URL `not-a-valid-url`: relative URL without a base",
+      "code": "invalid_webhooks_url",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_url"
+    }
+    "#);
+
+    // Test invalid header name (containing spaces)
+    let (value, code) = server
+        .create_webhook(json!({
+            "url": "https://example.com/hook",
+            "headers": { "invalid header name": "value" }
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Invalid header name `invalid header name`: invalid HTTP header name",
+      "code": "invalid_webhooks_headers",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
+    }
+    "#);
+
+    // Test invalid header value (containing control characters)
+    let (value, code) = server
+        .create_webhook(json!({
+            "url": "https://example.com/hook",
+            "headers": { "authorization": "token\nwith\nnewlines" }
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Invalid header value `authorization`: failed to parse header value",
+      "code": "invalid_webhooks_headers",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
+    }
+    "#);
+}
