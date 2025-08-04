@@ -125,13 +125,10 @@ async fn get_webhooks(
     let results = webhooks
         .webhooks
         .into_iter()
-        .map(|(uuid, webhook)| WebhookWithMetadata {
-            uuid,
-            is_editable: uuid != Uuid::nil(),
-            webhook,
-        })
+        .map(|(uuid, webhook)| WebhookWithMetadata::from(uuid, webhook))
         .collect::<Vec<_>>();
     let results = WebhookResults { results };
+
     debug!(returns = ?results, "Get webhooks");
     Ok(HttpResponse::Ok().json(results))
 }
@@ -248,7 +245,7 @@ fn patch_webhook_inner(
     tag = "Webhooks",
     security(("Bearer" = ["webhooks.get", "*.get", "*"])),
     responses(
-        (status = 200, description = "Webhook found", body = WebhookSettings, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook found", body = WebhookWithMetadata, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -271,12 +268,10 @@ async fn get_webhook(
     let mut webhooks = index_scheduler.webhooks();
 
     let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
-
-    Ok(HttpResponse::Ok().json(WebhookWithMetadata {
-        uuid,
-        is_editable: uuid != Uuid::nil(),
-        webhook,
-    }))
+    let webhook = WebhookWithMetadata::from(uuid, webhook);
+    
+    debug!(returns = ?webhook, "Get webhook");
+    Ok(HttpResponse::Ok().json(webhook))
 }
 
 #[utoipa::path(
