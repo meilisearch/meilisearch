@@ -210,6 +210,7 @@ impl Search<'_> {
             scoring_strategy: ScoringStrategy::Detailed,
             words_limit: self.words_limit,
             exhaustive_number_hits: self.exhaustive_number_hits,
+            max_total_hits: self.max_total_hits,
             rtxn: self.rtxn,
             index: self.index,
             semantic: self.semantic.clone(),

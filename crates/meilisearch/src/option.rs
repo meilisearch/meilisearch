@@ -68,6 +68,8 @@ const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
 const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
     "MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES";
 const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
+const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
+    "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
@@ -759,6 +761,15 @@ pub struct IndexerOpts {
     #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS)]
     #[serde(default)]
     pub experimental_no_edition_2024_for_settings: bool,
+
+    /// Experimental make dump imports use the old document indexer.
+    ///
+    /// When enabled, Meilisearch will use the old document indexer when importing dumps.
+    ///
+    /// For more information, see <https://github.com/orgs/meilisearch/discussions/851>.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS)]
+    #[serde(default)]
+    pub experimental_no_edition_2024_for_dumps: bool,
 }
 
 impl IndexerOpts {
@@ -769,6 +780,7 @@ impl IndexerOpts {
             max_indexing_threads,
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_dumps,
         } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
@@ -786,6 +798,12 @@ impl IndexerOpts {
             export_to_env_if_not_present(
                 MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS,
                 experimental_no_edition_2024_for_settings.to_string(),
+            );
+        }
+        if experimental_no_edition_2024_for_dumps {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS,
+                experimental_no_edition_2024_for_dumps.to_string(),
             );
         }
     }
@@ -808,6 +826,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             skip_index_budget: other.skip_index_budget,
             experimental_no_edition_2024_for_settings: other
                 .experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_dumps: other.experimental_no_edition_2024_for_dumps,
             chunk_compression_type: Default::default(),
             chunk_compression_level: Default::default(),
             documents_chunk_size: Default::default(),

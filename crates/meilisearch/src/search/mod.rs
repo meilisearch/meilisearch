@@ -16,7 +16,7 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use meilisearch_types::milli::index::{self, SearchParameters};
+use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
@@ -1051,6 +1051,7 @@ pub fn prepare_search<'t>(
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
     search.exhaustive_number_hits(is_finite_pagination);
+    search.max_total_hits(Some(max_total_hits));
     search.scoring_strategy(
         if query.show_ranking_score
             || query.show_ranking_score_details
@@ -1091,7 +1092,7 @@ pub fn prepare_search<'t>(
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
             Ok(sorts) => sorts,
             Err(asc_desc_error) => {
-                return Err(milli::Error::from(SortError::from(asc_desc_error)).into())
+                return Err(SortError::from(asc_desc_error).into_search_error().into())
             }
         };
 
@@ -1527,8 +1528,11 @@ impl<'a> HitMaker<'a> {
                 Some(Value::Object(map)) => map,
                 _ => Default::default(),
             };
-            for (name, (vector, regenerate)) in self.index.embeddings(self.rtxn, id)? {
-                let embeddings = ExplicitVectors { embeddings: Some(vector.into()), regenerate };
+            for (name, EmbeddingsWithMetadata { embeddings, regenerate, has_fragments: _ }) in
+                self.index.embeddings(self.rtxn, id)?
+            {
+                let embeddings =
+                    ExplicitVectors { embeddings: Some(embeddings.into()), regenerate };
                 vectors.insert(
                     name,
                     serde_json::to_value(embeddings).map_err(InternalError::SerdeJson)?,
