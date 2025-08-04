@@ -639,7 +639,7 @@ async fn get_document_s_nested_attributes_to_retrieve() {
 async fn get_documents_displayed_attributes_is_ignored() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    index.load_test_set().await;
+    index.load_test_set(server).await;
     index.update_settings(json!({"displayedAttributes": ["gender"]})).await;
 
     let (response, code) = index.get_all_documents(GetAllDocumentsOptions::default()).await;
