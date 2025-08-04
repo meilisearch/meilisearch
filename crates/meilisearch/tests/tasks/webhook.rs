@@ -273,7 +273,7 @@ async fn reserved_names() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Cannot edit webhook `[uuid]`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.",
+      "message": "Cannot edit webhook `[uuid]`. The webhook defined from the command line cannot be modified using the API.",
       "code": "reserved_webhook",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#reserved_webhook"
@@ -284,7 +284,7 @@ async fn reserved_names() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Cannot edit webhook `[uuid]`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.",
+      "message": "Cannot edit webhook `[uuid]`. The webhook defined from the command line cannot be modified using the API.",
       "code": "reserved_webhook",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#reserved_webhook"
@@ -559,6 +559,88 @@ async fn invalid_uuid() {
       "code": "invalid_webhook_uuid",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
+    }
+    "#);
+}
+
+#[actix_web::test]
+async fn forbidden_fields() {
+    let server = Server::new().await;
+
+    // Test creating webhook with uuid field
+    let custom_uuid = Uuid::new_v4();
+    let (value, code) = server
+        .create_webhook(json!({
+            "url": "https://example.com/hook",
+            "uuid": custom_uuid.to_string(),
+            "headers": { "authorization": "TOKEN" }
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Immutable field `uuid`: expected one of `url`, `headers`",
+      "code": "immutable_webhook_uuid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#immutable_webhook_uuid"
+    }
+    "#);
+
+    // Test creating webhook with isEditable field
+    let (value, code) = server
+        .create_webhook(json!({
+            "url": "https://example.com/hook2",
+            "isEditable": false,
+            "headers": { "authorization": "TOKEN" }
+        }))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Immutable field `isEditable`: expected one of `url`, `headers`",
+      "code": "immutable_webhook_is_editable",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#immutable_webhook_is_editable"
+    }
+    "#);
+
+    // Test patching webhook with uuid field
+    let (value, code) = server
+        .patch_webhook(
+            "uuid-whatever",
+            json!({
+                "uuid": Uuid::new_v4(),
+                "headers": { "new-header": "value" }
+            }),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Immutable field `uuid`: expected one of `url`, `headers`",
+      "code": "immutable_webhook_uuid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#immutable_webhook_uuid"
+    }
+    "#);
+
+    // Test patching webhook with isEditable field
+    let (value, code) = server
+        .patch_webhook(
+            "uuid-whatever",
+            json!({
+                "isEditable": false,
+                "headers": { "another-header": "value" }
+            }),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    {
+      "message": "Immutable field `isEditable`: expected one of `url`, `headers`",
+      "code": "immutable_webhook_is_editable",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#immutable_webhook_is_editable"
     }
     "#);
 }

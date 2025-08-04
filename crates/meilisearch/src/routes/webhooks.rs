@@ -7,12 +7,15 @@ use actix_http::header::{
 };
 use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
+use core::convert::Infallible;
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
+use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use index_scheduler::IndexScheduler;
-use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::deserr_codes::{InvalidWebhooksHeaders, InvalidWebhooksUrl};
-use meilisearch_types::error::{ErrorCode, ResponseError};
+use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError};
+use meilisearch_types::error::deserr_codes::{
+    BadRequest, InvalidWebhooksHeaders, InvalidWebhooksUrl,
+};
+use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::webhooks::Webhook;
@@ -54,7 +57,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 #[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_webhook)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookSettings {
@@ -66,6 +69,22 @@ pub(super) struct WebhookSettings {
     #[deserr(default, error = DeserrJsonError<InvalidWebhooksHeaders>)]
     #[serde(default)]
     headers: Setting<BTreeMap<String, Setting<String>>>,
+}
+
+fn deny_immutable_fields_webhook(
+    field: &str,
+    accepted: &[&str],
+    location: ValuePointerRef,
+) -> DeserrJsonError {
+    match field {
+        "uuid" => immutable_field_error(field, accepted, Code::ImmutableWebhookUuid),
+        "isEditable" => immutable_field_error(field, accepted, Code::ImmutableWebhookIsEditable),
+        _ => deserr::take_cf_content(DeserrJsonError::<BadRequest>::error::<Infallible>(
+            None,
+            deserr::ErrorKind::UnknownKey { key: field, accepted },
+            location,
+        )),
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]

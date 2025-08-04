@@ -425,7 +425,9 @@ InvalidWebhooksUrl                             , InvalidRequest       , BAD_REQU
 InvalidWebhooksHeaders                         , InvalidRequest       , BAD_REQUEST ;
 ReservedWebhook                                , InvalidRequest       , BAD_REQUEST ;
 InvalidWebhookUuid                             , InvalidRequest       , BAD_REQUEST ;
-WebhookNotFound                                , InvalidRequest       , NOT_FOUND
+WebhookNotFound                                , InvalidRequest       , NOT_FOUND ;
+ImmutableWebhookUuid                           , InvalidRequest       , BAD_REQUEST ;
+ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {
