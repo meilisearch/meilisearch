@@ -41,7 +41,7 @@ pub type Embedding = Vec<f32>;
 pub const REQUEST_PARALLELISM: usize = 40;
 pub const MAX_COMPOSITE_DISTANCE: f32 = 0.01;
 
-const HANNOY_EF_CONSTRUCTION: usize = 48;
+const HANNOY_EF_CONSTRUCTION: usize = 125;
 const HANNOY_M: usize = 16;
 const HANNOY_M0: usize = 32;
 
