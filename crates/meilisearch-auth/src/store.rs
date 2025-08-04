@@ -293,6 +293,8 @@ struct KeyMasks {
 
 impl KeyMasks {
     fn is_bitflag_authorized(&self, bitflags: Action) -> bool {
+        // Authorization succeeds when the key's permissions contain all requested permissions.
+        // If any requested permission is missing, the difference will be non-empty.
         bitflags.difference(self.bitflags).is_empty()
     }
 }
