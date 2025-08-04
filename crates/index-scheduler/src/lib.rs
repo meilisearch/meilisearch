@@ -820,58 +820,17 @@ impl IndexScheduler {
 
         let rtxn = self.env.read_txn()?;
 
-        let task_reader = TaskReader {
-            rtxn: &rtxn,
-            index_scheduler: self,
-            tasks: &mut updated.into_iter(),
-            buffer: Vec::with_capacity(800), // on average a task is around ~600 bytes
-            written: 0,
-        };
-
-        enum EitherRead<'a, T: Read> {
-            Other(Option<T>),
-            Data(&'a [u8]),
-        }
-
-        impl<T: Read> EitherRead<'_, T> {
-            /// A clone that works only once for the Other variant.
-            fn clone(&mut self) -> Self {
-                match self {
-                    Self::Other(r) => {
-                        let r = r.take();
-                        Self::Other(r)
-                    }
-                    Self::Data(arg0) => Self::Data(arg0),
-                }
-            }
-        }
-
-        impl<T: Read> Read for EitherRead<'_, T> {
-            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-                match self {
-                    EitherRead::Other(Some(reader)) => reader.read(buf),
-                    EitherRead::Other(None) => {
-                        Err(io::Error::new(io::ErrorKind::Other, "No reader available"))
-                    }
-                    EitherRead::Data(data) => data.read(buf),
-                }
-            }
-        }
-
-        let mut reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
-
-        // When there is more than one webhook, cache the data in memory
-        let mut data;
-        let mut reader = match webhooks.webhooks.len() {
-            1 => EitherRead::Other(Some(reader)),
-            _ => {
-                data = Vec::new();
-                reader.read_to_end(&mut data)?;
-                EitherRead::Data(&data)
-            }
-        };
-
         for (uuid, Webhook { url, headers }) in webhooks.webhooks.iter() {
+            let task_reader = TaskReader {
+                rtxn: &rtxn,
+                index_scheduler: self,
+                tasks: &mut updated.into_iter(),
+                buffer: Vec::with_capacity(800), // on average a task is around ~600 bytes
+                written: 0,
+            };
+
+            let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
+
             let mut request = ureq::post(url)
                 .timeout(Duration::from_secs(30))
                 .set("Content-Encoding", "gzip")
@@ -880,7 +839,7 @@ impl IndexScheduler {
                 request = request.set(header_name, header_value);
             }
 
-            if let Err(e) = request.send(reader.clone()) {
+            if let Err(e) = request.send(reader) {
                 tracing::error!("While sending data to the webhook {uuid}: {e}");
             }
         }

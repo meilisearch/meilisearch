@@ -99,7 +99,6 @@ async fn cli_only() {
 }
 
 #[actix_web::test]
-#[ignore = "Broken"]
 async fn single_receives_data() {
     let WebhookHandle { server_handle, url, mut receiver } = create_webhook_server().await;
 
@@ -166,7 +165,6 @@ async fn single_receives_data() {
 }
 
 #[actix_web::test]
-#[ignore = "Broken"]
 async fn multiple_receive_data() {
     let server = Server::new().await;
 
