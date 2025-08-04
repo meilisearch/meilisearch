@@ -119,6 +119,7 @@ pub struct FacetsUpdate<'i> {
     min_level_size: u8,
     data_size: u64,
 }
+
 impl<'i> FacetsUpdate<'i> {
     pub fn new(
         index: &'i Index,
