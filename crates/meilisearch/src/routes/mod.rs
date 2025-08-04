@@ -41,9 +41,7 @@ use crate::routes::indexes::IndexView;
 use crate::routes::multi_search::SearchResults;
 use crate::routes::network::{Network, Remote};
 use crate::routes::swap_indexes::SwapIndexesPayload;
-use crate::routes::webhooks::{
-    WebhookResults, WebhookSettings, WebhookWithMetadata, WebhooksSettings,
-};
+use crate::routes::webhooks::{WebhookResults, WebhookSettings, WebhookWithMetadata};
 use crate::search::{
     FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
     SearchQueryWithIndex, SearchResultWithIndex, SimilarQuery, SimilarResult,
@@ -104,7 +102,7 @@ mod webhooks;
         url = "/",
         description = "Local server",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhooksSettings, WebhookResults, WebhookWithMetadata))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadata))
 )]
 pub struct MeilisearchApi;
 

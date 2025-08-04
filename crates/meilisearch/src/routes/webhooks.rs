@@ -10,7 +10,7 @@ use meilisearch_types::error::deserr_codes::{InvalidWebhooksHeaders, InvalidWebh
 use meilisearch_types::error::{ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::webhooks::{Webhook, Webhooks};
+use meilisearch_types::webhooks::Webhook;
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
@@ -23,7 +23,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(get_webhooks, patch_webhooks, get_webhook, post_webhook, patch_webhook, delete_webhook),
+    paths(get_webhooks, get_webhook, post_webhook, patch_webhook, delete_webhook),
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
@@ -36,7 +36,6 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::resource("")
             .route(web::get().to(get_webhooks))
-            .route(web::patch().to(SeqHandler(patch_webhooks)))
             .route(web::post().to(SeqHandler(post_webhook))),
     )
     .service(
@@ -62,16 +61,6 @@ pub(super) struct WebhookSettings {
     headers: Setting<BTreeMap<String, Setting<String>>>,
 }
 
-#[derive(Debug, Deserr, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub(super) struct WebhooksSettings {
-    #[schema(value_type = Option<BTreeMap<String, WebhookSettings>>)]
-    #[serde(default)]
-    webhooks: Setting<BTreeMap<Uuid, Setting<WebhookSettings>>>,
-}
-
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -81,6 +70,12 @@ pub(super) struct WebhookWithMetadata {
     #[schema(value_type = WebhookSettings)]
     #[serde(flatten)]
     webhook: Webhook,
+}
+
+impl WebhookWithMetadata {
+    pub fn from(uuid: Uuid, webhook: Webhook) -> Self {
+        Self { uuid, is_editable: uuid != Uuid::nil(), webhook }
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -142,17 +137,12 @@ async fn get_webhooks(
 
 #[derive(Serialize, Default)]
 pub struct PatchWebhooksAnalytics {
-    patch_webhooks_count: usize,
     patch_webhook_count: usize,
     post_webhook_count: usize,
     delete_webhook_count: usize,
 }
 
 impl PatchWebhooksAnalytics {
-    pub fn patch_webhooks() -> Self {
-        PatchWebhooksAnalytics { patch_webhooks_count: 1, ..Default::default() }
-    }
-
     pub fn patch_webhook() -> Self {
         PatchWebhooksAnalytics { patch_webhook_count: 1, ..Default::default() }
     }
@@ -173,7 +163,6 @@ impl Aggregate for PatchWebhooksAnalytics {
 
     fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(PatchWebhooksAnalytics {
-            patch_webhooks_count: self.patch_webhooks_count + new.patch_webhooks_count,
             patch_webhook_count: self.patch_webhook_count + new.patch_webhook_count,
             post_webhook_count: self.post_webhook_count + new.post_webhook_count,
             delete_webhook_count: self.delete_webhook_count + new.delete_webhook_count,
@@ -213,130 +202,45 @@ impl ErrorCode for WebhooksError {
     }
 }
 
-#[utoipa::path(
-    patch,
-    path = "",
-    tag = "Webhooks",
-    request_body = WebhooksSettings,
-    security(("Bearer" = ["webhooks.update", "*"])),
-    responses(
-        (status = 200, description = "Returns the updated webhooks", body = WebhooksSettings, content_type = "application/json", example = json!({
-            "webhooks": {
-                "550e8400-e29b-41d4-a716-446655440000": {
-                    "url": "http://example.com/webhook",
-                },
-                "550e8400-e29b-41d4-a716-446655440001": {
-                    "url": "https://your.site/on-tasks-completed",
-                    "headers": {
-                        "Authorization": "Bearer a-secret-token"
-                    }
-                }
-            }
-        })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!({
-            "message": "The Authorization header is missing. It must use the bearer authorization method.",
-            "code": "missing_authorization_header",
-            "type": "auth",
-            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
-        })),
-    )
-)]
-async fn patch_webhooks(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
-    new_webhooks: AwebJson<WebhooksSettings, DeserrJsonError>,
-    req: HttpRequest,
-    analytics: Data<Analytics>,
-) -> Result<HttpResponse, ResponseError> {
-    let webhooks = patch_webhooks_inner(&index_scheduler, new_webhooks.0)?;
+fn patch_webhook_inner(
+    uuid: &Uuid,
+    old_webhook: Option<Webhook>,
+    new_webhook: WebhookSettings,
+) -> Result<Webhook, WebhooksError> {
+    let (old_url, mut headers) =
+        old_webhook.map(|w| (Some(w.url), w.headers)).unwrap_or((None, BTreeMap::new()));
 
-    analytics.publish(PatchWebhooksAnalytics::patch_webhooks(), &req);
-
-    Ok(HttpResponse::Ok().json(webhooks))
-}
-
-fn patch_webhooks_inner(
-    index_scheduler: &GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
-    new_webhooks: WebhooksSettings,
-) -> Result<Webhooks, ResponseError> {
-    fn merge_webhook(
-        uuid: &Uuid,
-        old_webhook: Option<Webhook>,
-        new_webhook: WebhookSettings,
-    ) -> Result<Webhook, WebhooksError> {
-        let (old_url, mut headers) =
-            old_webhook.map(|w| (Some(w.url), w.headers)).unwrap_or((None, BTreeMap::new()));
-
-        let url = match new_webhook.url {
-            Setting::Set(url) => url,
-            Setting::NotSet => old_url.ok_or_else(|| WebhooksError::MissingUrl(uuid.to_owned()))?,
-            Setting::Reset => return Err(WebhooksError::MissingUrl(uuid.to_owned())),
-        };
-
-        let headers = match new_webhook.headers {
-            Setting::Set(new_headers) => {
-                for (name, value) in new_headers {
-                    match value {
-                        Setting::Set(value) => {
-                            headers.insert(name, value);
-                        }
-                        Setting::NotSet => continue,
-                        Setting::Reset => {
-                            headers.remove(&name);
-                            continue;
-                        }
-                    }
-                }
-                headers
-            }
-            Setting::NotSet => headers,
-            Setting::Reset => BTreeMap::new(),
-        };
-
-        if headers.len() > 200 {
-            return Err(WebhooksError::TooManyHeaders(uuid.to_owned()));
-        }
-
-        Ok(Webhook { url, headers })
-    }
-
-    debug!(parameters = ?new_webhooks, "Patch webhooks");
-
-    let Webhooks { mut webhooks } = index_scheduler.webhooks();
-
-    match new_webhooks.webhooks {
-        Setting::Set(new_webhooks) => {
-            for (uuid, new_webhook) in new_webhooks {
-                if uuid.is_nil() {
-                    return Err(WebhooksError::ReservedWebhook(uuid).into());
-                }
-
-                match new_webhook {
-                    Setting::Set(new_webhook) => {
-                        let old_webhook = webhooks.remove(&uuid);
-                        let webhook = merge_webhook(&uuid, old_webhook, new_webhook)?;
-                        webhooks.insert(uuid, webhook);
-                    }
-                    Setting::Reset => {
-                        webhooks.remove(&uuid);
-                    }
-                    Setting::NotSet => (),
-                }
-            }
-        }
-        Setting::Reset => webhooks.clear(),
-        Setting::NotSet => (),
+    let url = match new_webhook.url {
+        Setting::Set(url) => url,
+        Setting::NotSet => old_url.ok_or_else(|| WebhooksError::MissingUrl(uuid.to_owned()))?,
+        Setting::Reset => return Err(WebhooksError::MissingUrl(uuid.to_owned())),
     };
 
-    if webhooks.len() > 20 {
-        return Err(WebhooksError::TooManyWebhooks.into());
+    let headers = match new_webhook.headers {
+        Setting::Set(new_headers) => {
+            for (name, value) in new_headers {
+                match value {
+                    Setting::Set(value) => {
+                        headers.insert(name, value);
+                    }
+                    Setting::NotSet => continue,
+                    Setting::Reset => {
+                        headers.remove(&name);
+                        continue;
+                    }
+                }
+            }
+            headers
+        }
+        Setting::NotSet => headers,
+        Setting::Reset => BTreeMap::new(),
+    };
+
+    if headers.len() > 200 {
+        return Err(WebhooksError::TooManyHeaders(uuid.to_owned()));
     }
 
-    let webhooks = Webhooks { webhooks };
-    index_scheduler.put_webhooks(webhooks.clone())?;
-
-    debug!(returns = ?webhooks, "Patch webhooks");
-
-    Ok(webhooks)
+    Ok(Webhook { url, headers })
 }
 
 #[utoipa::path(
@@ -401,19 +305,35 @@ async fn post_webhook(
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let uuid = Uuid::new_v4();
+    let webhook_settings = webhook_settings.into_inner();
+    debug!(parameters = ?webhook_settings, "Post webhook");
 
-    let webhooks = patch_webhooks_inner(
-        &index_scheduler,
-        WebhooksSettings {
-            webhooks: Setting::Set(BTreeMap::from([(uuid, Setting::Set(webhook_settings.0))])),
-        },
-    )?;
-    let webhook = webhooks.webhooks.get(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?.clone();
+    let uuid = Uuid::new_v4();
+    if webhook_settings.headers.as_ref().set().is_some_and(|h| h.len() > 200) {
+        return Err(WebhooksError::TooManyHeaders(uuid).into());
+    }
+
+    let mut webhooks = index_scheduler.webhooks();
+    if dbg!(webhooks.webhooks.len() >= 20) {
+        return Err(WebhooksError::TooManyWebhooks.into());
+    }
+
+    let webhook = Webhook {
+        url: webhook_settings.url.set().ok_or(WebhooksError::MissingUrl(uuid))?,
+        headers: webhook_settings
+            .headers
+            .set()
+            .map(|h| h.into_iter().map(|(k, v)| (k, v.set().unwrap_or_default())).collect())
+            .unwrap_or_default(),
+    };
+    webhooks.webhooks.insert(uuid, webhook.clone());
+    index_scheduler.put_webhooks(webhooks)?;
 
     analytics.publish(PatchWebhooksAnalytics::post_webhook(), &req);
 
-    Ok(HttpResponse::Created().json(WebhookWithMetadata { uuid, is_editable: true, webhook }))
+    let response = WebhookWithMetadata::from(uuid, webhook);
+    debug!(returns = ?response, "Post webhook");
+    Ok(HttpResponse::Created().json(response))
 }
 
 #[utoipa::path(
@@ -446,22 +366,29 @@ async fn patch_webhook(
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let uuid = uuid.into_inner();
+    let webhook_settings = webhook_settings.into_inner();
+    debug!(parameters = ?(uuid, &webhook_settings), "Patch webhook");
 
-    let webhooks = patch_webhooks_inner(
-        &index_scheduler,
-        WebhooksSettings {
-            webhooks: Setting::Set(BTreeMap::from([(uuid, Setting::Set(webhook_settings.0))])),
-        },
-    )?;
-    let webhook = webhooks.webhooks.get(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?.clone();
+    if uuid.is_nil() {
+        return Err(WebhooksError::ReservedWebhook(uuid).into());
+    }
+
+    let mut webhooks = index_scheduler.webhooks();
+    let old_webhook = webhooks.webhooks.remove(&uuid);
+    let webhook = patch_webhook_inner(&uuid, old_webhook, webhook_settings)?;
+
+    if webhook.headers.len() > 200 {
+        return Err(WebhooksError::TooManyHeaders(uuid).into());
+    }
+
+    webhooks.webhooks.insert(uuid, webhook.clone());
+    index_scheduler.put_webhooks(webhooks)?;
 
     analytics.publish(PatchWebhooksAnalytics::patch_webhook(), &req);
 
-    Ok(HttpResponse::Ok().json(WebhookWithMetadata {
-        uuid,
-        is_editable: uuid != Uuid::nil(),
-        webhook,
-    }))
+    let response = WebhookWithMetadata::from(uuid, webhook);
+    debug!(returns = ?response, "Patch webhook");
+    Ok(HttpResponse::Ok().json(response))
 }
 
 #[utoipa::path(
@@ -485,18 +412,18 @@ async fn delete_webhook(
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let uuid = uuid.into_inner();
+    debug!(parameters = ?uuid, "Delete webhook");
 
-    let webhooks = index_scheduler.webhooks();
-    if !webhooks.webhooks.contains_key(&uuid) {
-        return Err(WebhooksError::WebhookNotFound(uuid).into());
+    if uuid.is_nil() {
+        return Err(WebhooksError::ReservedWebhook(uuid).into());
     }
 
-    patch_webhooks_inner(
-        &index_scheduler,
-        WebhooksSettings { webhooks: Setting::Set(BTreeMap::from([(uuid, Setting::Reset)])) },
-    )?;
+    let mut webhooks = index_scheduler.webhooks();
+    webhooks.webhooks.remove(&uuid).ok_or(WebhooksError::WebhookNotFound(uuid))?;
+    index_scheduler.put_webhooks(webhooks)?;
 
     analytics.publish(PatchWebhooksAnalytics::delete_webhook(), &req);
 
+    debug!(returns = "No Content", "Delete webhook");
     Ok(HttpResponse::NoContent().finish())
 }

@@ -182,10 +182,6 @@ impl Server<Owned> {
         self.service.patch("/network", value).await
     }
 
-    pub async fn set_webhooks(&self, value: Value) -> (Value, StatusCode) {
-        self.service.patch("/webhooks", value).await
-    }
-
     pub async fn create_webhook(&self, value: Value) -> (Value, StatusCode) {
         self.service.post("/webhooks", value).await
     }
