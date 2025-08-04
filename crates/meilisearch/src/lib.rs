@@ -35,6 +35,7 @@ use extractors::payload::PayloadConfig;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
+use meilisearch_types::api_key_rate_limiter::RateLimiter;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
@@ -127,6 +128,7 @@ pub fn create_app(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     search_queue: Data<SearchQueue>,
+    rate_limiter: Data<RateLimiter>,
     opt: Opt,
     logs: (LogRouteHandle, LogStderrHandle),
     analytics: Data<Analytics>,
@@ -147,6 +149,7 @@ pub fn create_app(
                 index_scheduler.clone(),
                 auth_controller.clone(),
                 search_queue.clone(),
+                rate_limiter.clone(),
                 &opt,
                 logs,
                 analytics.clone(),
@@ -618,6 +621,7 @@ pub fn configure_data(
     index_scheduler: Data<IndexScheduler>,
     auth: Data<AuthController>,
     search_queue: Data<SearchQueue>,
+    rate_limiter: Data<RateLimiter>,
     opt: &Opt,
     (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
     analytics: Data<Analytics>,
@@ -627,6 +631,7 @@ pub fn configure_data(
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(search_queue)
+        .app_data(rate_limiter)
         .app_data(analytics)
         .app_data(web::Data::new(logs_route))
         .app_data(web::Data::new(logs_stderr))

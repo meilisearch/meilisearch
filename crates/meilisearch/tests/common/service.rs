@@ -13,6 +13,7 @@ use meilisearch::analytics::Analytics;
 use meilisearch::search_queue::SearchQueue;
 use meilisearch::{create_app, Opt, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
+use meilisearch_types::api_key_rate_limiter::RateLimiter;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer;
 
@@ -140,6 +141,7 @@ impl Service {
             self.index_scheduler.clone().into(),
             self.auth.clone().into(),
             Data::new(search_queue),
+            Data::new(tokio::runtime::Handle::current().block_on(RateLimiter::new())),
             self.options.clone(),
             (route_layer_handle, stderr_layer_handle),
             Data::new(Analytics::no_analytics()),

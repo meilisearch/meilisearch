@@ -20,6 +20,7 @@ use meilisearch::{
     LogStderrType, Opt, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
+use meilisearch_types::api_key_rate_limiter::RateLimiter;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
@@ -151,6 +152,7 @@ async fn run_http(
     let index_scheduler = Data::from(index_scheduler);
     let auth_controller = Data::from(auth_controller);
     let analytics = Data::from(analytics);
+    let rate_limiter = Data::new(RateLimiter::new().await);
     let search_queue = SearchQueue::new(
         opt.experimental_search_queue_size,
         available_parallelism()
@@ -168,6 +170,7 @@ async fn run_http(
             index_scheduler.clone(),
             auth_controller.clone(),
             search_queue.clone(),
+            rate_limiter.clone(),
             opt.clone(),
             logs.clone(),
             analytics.clone(),

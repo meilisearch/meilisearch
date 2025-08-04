@@ -1,4 +1,5 @@
 mod api_keys;
+mod api_keys_ee;
 mod authorization;
 mod errors;
 mod payload;

@@ -6,11 +6,12 @@ use std::pin::Pin;
 
 use actix_web::http::header::AUTHORIZATION;
 use actix_web::web::Data;
-use actix_web::FromRequest;
+use actix_web::{FromRequest, HttpResponse, HttpResponseBuilder};
 pub use error::AuthenticationError;
 use futures::future::err;
 use futures::Future;
 use meilisearch_auth::{AuthController, AuthFilter};
+use meilisearch_types::api_key_rate_limiter::{RateLimitInfo, RateLimiter};
 use meilisearch_types::error::{Code, ResponseError};
 
 use self::policies::AuthError;
@@ -18,6 +19,7 @@ use self::policies::AuthError;
 pub struct GuardedData<P, D> {
     data: D,
     filters: AuthFilter,
+    rate_limit_info: Option<RateLimitInfo>,
     _marker: PhantomData<P>,
 }
 
@@ -26,10 +28,34 @@ impl<P, D> GuardedData<P, D> {
         &self.filters
     }
 
+    pub fn rate_limit_info(&self) -> Option<&RateLimitInfo> {
+        self.rate_limit_info.as_ref()
+    }
+
+    /// Add rate limit headers to an HTTP response builder
+    pub fn add_rate_limit_headers(&self, response: &mut HttpResponseBuilder) {
+        if let Some(info) = &self.rate_limit_info {
+            response
+                .insert_header(("X-RateLimit-Limit", info.limit.to_string()))
+                .insert_header(("X-RateLimit-Remaining", info.remaining.to_string()))
+                .insert_header(("X-RateLimit-Reset", info.reset_unix.to_string()));
+        }
+    }
+
+    /// Create an HttpResponse with rate limit headers
+    pub fn with_rate_limit_headers<T: serde::Serialize>(&self, data: T) -> HttpResponse {
+        let mut response = HttpResponse::Ok();
+        self.add_rate_limit_headers(&mut response);
+        response.json(data)
+    }
+
     async fn auth_bearer(
         auth: Data<AuthController>,
+        rate_limiter: Data<RateLimiter>,
         token: String,
         index: Option<String>,
+        ip: Option<std::net::IpAddr>,
+        referrer: Option<String>,
         data: Option<D>,
     ) -> Result<Self, ResponseError>
     where
@@ -37,43 +63,66 @@ impl<P, D> GuardedData<P, D> {
     {
         let missing_master_key = auth.get_master_key().is_none();
 
-        match Self::authenticate(auth, token, index).await? {
-            Ok(filters) => match data {
-                Some(data) => Ok(Self { data, filters, _marker: PhantomData }),
+        match Self::authenticate(auth, rate_limiter, token, index, ip, referrer.as_deref()).await? {
+            Ok((filters, rate_limit_info)) => match data {
+                Some(data) => Ok(Self { data, filters, rate_limit_info, _marker: PhantomData }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
             Err(_) if missing_master_key => Err(AuthenticationError::MissingMasterKey.into()),
+            Err(AuthError::RateLimitExceeded) => Err(AuthenticationError::RateLimitExceeded.into()),
             Err(e) => Err(ResponseError::from_msg(e.to_string(), Code::InvalidApiKey)),
         }
     }
 
-    async fn auth_token(auth: Data<AuthController>, data: Option<D>) -> Result<Self, ResponseError>
+    async fn auth_token(
+        auth: Data<AuthController>,
+        rate_limiter: Data<RateLimiter>,
+        ip: Option<std::net::IpAddr>,
+        referrer: Option<String>,
+        data: Option<D>,
+    ) -> Result<Self, ResponseError>
     where
         P: Policy + 'static,
     {
         let missing_master_key = auth.get_master_key().is_none();
 
-        match Self::authenticate(auth, String::new(), None).await? {
-            Ok(filters) => match data {
-                Some(data) => Ok(Self { data, filters, _marker: PhantomData }),
+        match Self::authenticate(auth, rate_limiter, String::new(), None, ip, referrer.as_deref())
+            .await?
+        {
+            Ok((filters, rate_limit_info)) => match data {
+                Some(data) => Ok(Self { data, filters, rate_limit_info, _marker: PhantomData }),
                 None => Err(AuthenticationError::IrretrievableState.into()),
             },
             Err(_) if missing_master_key => Err(AuthenticationError::MissingMasterKey.into()),
+            Err(AuthError::RateLimitExceeded) => Err(AuthenticationError::RateLimitExceeded.into()),
             Err(_) => Err(AuthenticationError::MissingAuthorizationHeader.into()),
         }
     }
 
     async fn authenticate(
         auth: Data<AuthController>,
+        rate_limiter: Data<RateLimiter>,
         token: String,
         index: Option<String>,
-    ) -> Result<Result<AuthFilter, AuthError>, ResponseError>
+        ip: Option<std::net::IpAddr>,
+        referrer: Option<&str>,
+    ) -> Result<Result<(AuthFilter, Option<RateLimitInfo>), AuthError>, ResponseError>
     where
         P: Policy + 'static,
     {
-        tokio::task::spawn_blocking(move || P::authenticate(auth, token.as_ref(), index.as_deref()))
-            .await
-            .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))
+        let referrer = referrer.map(|s| s.to_string());
+        tokio::task::spawn_blocking(move || {
+            P::authenticate(
+                auth,
+                rate_limiter,
+                token.as_ref(),
+                index.as_deref(),
+                ip,
+                referrer.as_deref(),
+            )
+        })
+        .await
+        .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))
     }
 }
 
@@ -94,22 +143,42 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
         req: &actix_web::HttpRequest,
         _payload: &mut actix_web::dev::Payload,
     ) -> Self::Future {
-        match req.app_data::<Data<AuthController>>().cloned() {
-            Some(auth) => match extract_token_from_request(req) {
+        match (
+            req.app_data::<Data<AuthController>>().cloned(),
+            req.app_data::<Data<RateLimiter>>().cloned(),
+        ) {
+            (Some(auth), Some(rate_limiter)) => match extract_token_from_request(req) {
                 Ok(Some(token)) => {
                     // TODO: find a less hardcoded way?
                     let index = req.match_info().get("index_uid");
                     Box::pin(Self::auth_bearer(
                         auth,
+                        rate_limiter,
                         token.to_string(),
                         index.map(String::from),
+                        req.peer_addr().map(|a| a.ip()),
+                        req.headers()
+                            .get("referer")
+                            .or_else(|| req.headers().get("origin"))
+                            .and_then(|v| v.to_str().ok())
+                            .map(String::from),
                         req.app_data::<D>().cloned(),
                     ))
                 }
-                Ok(None) => Box::pin(Self::auth_token(auth, req.app_data::<D>().cloned())),
+                Ok(None) => Box::pin(Self::auth_token(
+                    auth,
+                    rate_limiter,
+                    req.peer_addr().map(|a| a.ip()),
+                    req.headers()
+                        .get("referer")
+                        .or_else(|| req.headers().get("origin"))
+                        .and_then(|v| v.to_str().ok())
+                        .map(String::from),
+                    req.app_data::<D>().cloned(),
+                )),
                 Err(e) => Box::pin(err(e.into())),
             },
-            None => Box::pin(err(AuthenticationError::IrretrievableState.into())),
+            (None, _) | (_, None) => Box::pin(err(AuthenticationError::IrretrievableState.into())),
         }
     }
 }
@@ -136,15 +205,19 @@ pub fn extract_token_from_request(
 pub trait Policy {
     fn authenticate(
         auth: Data<AuthController>,
+        rate_limiter: Data<RateLimiter>,
         token: &str,
         index: Option<&str>,
-    ) -> Result<AuthFilter, policies::AuthError>;
+        ip: Option<std::net::IpAddr>,
+        referrer: Option<&str>,
+    ) -> Result<(AuthFilter, Option<RateLimitInfo>), policies::AuthError>;
 }
 
 pub mod policies {
     use actix_web::web::Data;
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
     use meilisearch_auth::{AuthController, AuthFilter, SearchRules};
+    use meilisearch_types::api_key_rate_limiter::{RateLimitInfo, RateLimiter};
     use meilisearch_types::error::{Code, ErrorCode};
     // reexport actions in policies in order to be used in routes configuration.
     pub use meilisearch_types::keys::{actions, Action};
@@ -181,6 +254,8 @@ pub mod policies {
         CouldNotDecodeTenantToken(jsonwebtoken::errors::Error),
         #[error("Invalid action `{0}`.")]
         InternalInvalidAction(u8),
+        #[error("Rate limit exceeded for this API key.")]
+        RateLimitExceeded,
     }
 
     impl From<jsonwebtoken::errors::Error> for AuthError {
@@ -239,13 +314,16 @@ pub mod policies {
         /// (that may contain more indexes than requested).
         fn authenticate(
             auth: Data<AuthController>,
+            rate_limiter: Data<RateLimiter>,
             token: &str,
             index: Option<&str>,
-        ) -> Result<AuthFilter, AuthError> {
+            ip: Option<std::net::IpAddr>,
+            referrer: Option<&str>,
+        ) -> Result<(AuthFilter, Option<RateLimitInfo>), AuthError> {
             // authenticate if token is the master key.
             // Without a master key, all routes are accessible except the key-related routes.
             if auth.get_master_key().map_or_else(|| !is_keys_action(A), |mk| mk == token) {
-                return Ok(AuthFilter::default());
+                return Ok((AuthFilter::default(), None));
             }
 
             let (key_uuid, search_rules) =
@@ -265,6 +343,21 @@ pub mod policies {
 
             // check that the indexes are allowed
             let action = Action::from_repr(A).ok_or(AuthError::InternalInvalidAction(A))?;
+            let key = auth.get_key(key_uuid).map_err(|_e| AuthError::InvalidApiKey)?;
+
+            // Check rate limiting if configured and collect rate limit info
+            let rate_limit_info = if let Some(rate_limit_config) = &key.rate_limit {
+                if !rate_limiter.is_allowed(key_uuid, rate_limit_config) {
+                    return Err(AuthError::RateLimitExceeded);
+                }
+                Some(rate_limiter.get_rate_limit_info(key_uuid, rate_limit_config))
+            } else {
+                None
+            };
+
+            if !key.is_request_allowed(ip, referrer) {
+                return Err(AuthError::InvalidApiKey);
+            }
             let auth_filter = auth
                 .get_key_filters(key_uuid, search_rules)
                 .map_err(|_e| AuthError::InvalidApiKey)?;
@@ -296,7 +389,7 @@ pub mod policies {
                 }
             }
             if auth.is_key_authorized(key_uuid, action, index).unwrap_or(false) {
-                return Ok(auth_filter);
+                return Ok((auth_filter, rate_limit_info));
             }
 
             Err(AuthError::InvalidApiKey)
