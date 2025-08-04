@@ -186,7 +186,7 @@ enum WebhooksError {
     TooManyWebhooks,
     #[error("Too many headers for the webhook `{0}`. Please limit the number of headers to 200.")]
     TooManyHeaders(Uuid),
-    #[error("Cannot edit webhook `{0}`. Webhooks prefixed with an underscore are reserved and may not be modified using the API.")]
+    #[error("Cannot edit webhook `{0}`. The webhook defined from the command line cannot be modified using the API.")]
     ReservedWebhook(Uuid),
     #[error("Webhook `{0}` not found.")]
     WebhookNotFound(Uuid),
