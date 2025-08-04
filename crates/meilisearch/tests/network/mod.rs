@@ -284,15 +284,13 @@ async fn auth() {
     server.use_api_key(get_network_key.as_str().unwrap());
     let (response, code) = server.get_network().await;
 
-    meili_snap::snapshot!(code, @"403 Forbidden");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
-    {
-      "message": "The provided API key is invalid.",
-      "code": "invalid_api_key",
-      "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
-    }
-    "#);
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+{
+  "self": "master",
+  "remotes": {}
+}
+"###);
 
     // try update with update permission
     server.use_api_key(update_network_key.as_str().unwrap());
@@ -303,15 +301,13 @@ async fn auth() {
         }))
         .await;
 
-    meili_snap::snapshot!(code, @"403 Forbidden");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
-    {
-      "message": "The provided API key is invalid.",
-      "code": "invalid_api_key",
-      "type": "auth",
-      "link": "https://docs.meilisearch.com/errors#invalid_api_key"
-    }
-    "#);
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+{
+  "self": "api_key",
+  "remotes": {}
+}
+"###);
 
     // try with the other's permission
     let (response, code) = server.get_network().await;
