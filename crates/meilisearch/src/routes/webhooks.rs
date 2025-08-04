@@ -89,7 +89,7 @@ pub(super) struct WebhookResults {
     get,
     path = "",
     tag = "Webhooks",
-    security(("Bearer" = ["webhooks.get", "*.get", "*"])),
+    security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
         (status = OK, description = "Webhooks are returned", body = WebhookResults, content_type = "application/json", example = json!({
             "results": [
@@ -243,7 +243,7 @@ fn patch_webhook_inner(
     get,
     path = "/{uuid}",
     tag = "Webhooks",
-    security(("Bearer" = ["webhooks.get", "*.get", "*"])),
+    security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
         (status = 200, description = "Webhook found", body = WebhookWithMetadata, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
@@ -279,7 +279,7 @@ async fn get_webhook(
     path = "",
     tag = "Webhooks",
     request_body = WebhookSettings,
-    security(("Bearer" = ["webhooks.update", "*"])),
+    security(("Bearer" = ["webhooks.create", "webhooks.*", "*"])),
     responses(
         (status = 201, description = "Webhook created successfully", body = WebhookWithMetadata, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
@@ -335,7 +335,7 @@ async fn post_webhook(
     path = "/{uuid}",
     tag = "Webhooks",
     request_body = WebhookSettings,
-    security(("Bearer" = ["webhooks.update", "*"])),
+    security(("Bearer" = ["webhooks.update", "webhooks.*", "*"])),
     responses(
         (status = 200, description = "Webhook updated successfully", body = WebhookWithMetadata, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
@@ -389,7 +389,7 @@ async fn patch_webhook(
     delete,
     path = "/{uuid}",
     tag = "Webhooks",
-    security(("Bearer" = ["webhooks.update", "*"])),
+    security(("Bearer" = ["webhooks.delete", "webhooks.*", "*"])),
     responses(
         (status = 204, description = "Webhook deleted successfully"),
         (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json"),
