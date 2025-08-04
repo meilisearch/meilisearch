@@ -83,7 +83,7 @@ impl HeedAuthStore {
         self.delete_key_from_inverted_db(&mut wtxn, &uid)?;
 
         let key_masks = KeyMasks::from(key.clone());
-        let _ = self.key_actions.put(&mut wtxn, uid.as_bytes(), &key_masks);
+        self.key_actions.put(&mut wtxn, uid.as_bytes(), &key_masks);
         wtxn.commit()?;
         Ok(key)
     }
