@@ -269,7 +269,7 @@ async fn get_webhook(
 
     let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
     let webhook = WebhookWithMetadata::from(uuid, webhook);
-    
+
     debug!(returns = ?webhook, "Get webhook");
     Ok(HttpResponse::Ok().json(webhook))
 }
@@ -294,7 +294,7 @@ async fn get_webhook(
     )
 )]
 async fn post_webhook(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_CREATE }>, Data<IndexScheduler>>,
     webhook_settings: AwebJson<WebhookSettings, DeserrJsonError>,
     req: HttpRequest,
     analytics: Data<Analytics>,
@@ -400,7 +400,7 @@ async fn patch_webhook(
     )
 )]
 async fn delete_webhook(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_DELETE }>, Data<IndexScheduler>>,
     uuid: Path<Uuid>,
     req: HttpRequest,
     analytics: Data<Analytics>,
