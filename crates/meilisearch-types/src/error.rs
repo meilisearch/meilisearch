@@ -424,6 +424,7 @@ InvalidWebhooks                                , InvalidRequest       , BAD_REQU
 InvalidWebhooksUrl                             , InvalidRequest       , BAD_REQUEST ;
 InvalidWebhooksHeaders                         , InvalidRequest       , BAD_REQUEST ;
 ReservedWebhook                                , InvalidRequest       , BAD_REQUEST ;
+InvalidWebhookUuid                             , InvalidRequest       , BAD_REQUEST ;
 WebhookNotFound                                , InvalidRequest       , NOT_FOUND
 }
 

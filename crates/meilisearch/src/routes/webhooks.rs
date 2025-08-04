@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::str::FromStr;
 
 use actix_http::header::{
     HeaderName, HeaderValue, InvalidHeaderName as ActixInvalidHeaderName,
@@ -195,6 +196,8 @@ enum WebhooksError {
     InvalidHeaderValue(String, ActixInvalidHeaderValue),
     #[error("Invalid URL `{0}`: {1}")]
     InvalidUrl(String, url::ParseError),
+    #[error("Invalid UUID: {0}")]
+    InvalidUuid(uuid::Error),
 }
 
 impl ErrorCode for WebhooksError {
@@ -208,6 +211,7 @@ impl ErrorCode for WebhooksError {
             InvalidHeaderName(_, _) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
             InvalidHeaderValue(_, _) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
             InvalidUrl(_, _) => meilisearch_types::error::Code::InvalidWebhooksUrl,
+            InvalidUuid(_) => meilisearch_types::error::Code::InvalidWebhookUuid,
         }
     }
 }
@@ -302,9 +306,9 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
 )]
 async fn get_webhook(
     index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_GET }>, Data<IndexScheduler>>,
-    uuid: Path<Uuid>,
+    uuid: Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
-    let uuid = uuid.into_inner();
+    let uuid = Uuid::from_str(&uuid.into_inner()).map_err(InvalidUuid)?;
     let mut webhooks = index_scheduler.webhooks();
 
     let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
@@ -396,12 +400,12 @@ async fn post_webhook(
 )]
 async fn patch_webhook(
     index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_UPDATE }>, Data<IndexScheduler>>,
-    uuid: Path<Uuid>,
+    uuid: Path<String>,
     webhook_settings: AwebJson<WebhookSettings, DeserrJsonError>,
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let uuid = uuid.into_inner();
+    let uuid = Uuid::from_str(&uuid.into_inner()).map_err(InvalidUuid)?;
     let webhook_settings = webhook_settings.into_inner();
     debug!(parameters = ?(uuid, &webhook_settings), "Patch webhook");
 
@@ -436,11 +440,11 @@ async fn patch_webhook(
 )]
 async fn delete_webhook(
     index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_DELETE }>, Data<IndexScheduler>>,
-    uuid: Path<Uuid>,
+    uuid: Path<String>,
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let uuid = uuid.into_inner();
+    let uuid = Uuid::from_str(&uuid.into_inner()).map_err(InvalidUuid)?;
     debug!(parameters = ?uuid, "Delete webhook");
 
     if uuid.is_nil() {

@@ -520,3 +520,45 @@ async fn invalid_url_and_headers() {
     }
     "#);
 }
+
+#[actix_web::test]
+async fn invalid_uuid() {
+    let server = Server::new().await;
+
+    // Test get webhook with invalid UUID
+    let (value, code) = server.get_webhook("invalid-uuid").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "code": "invalid_webhook_uuid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
+    }
+    "#);
+
+    // Test update webhook with invalid UUID
+    let (value, code) =
+        server.patch_webhook("invalid-uuid", json!({ "url": "https://example.com/hook" })).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "code": "invalid_webhook_uuid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
+    }
+    "#);
+
+    // Test delete webhook with invalid UUID
+    let (value, code) = server.delete_webhook("invalid-uuid").await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r#"
+    {
+      "message": "Invalid UUID: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `i` at 1",
+      "code": "invalid_webhook_uuid",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_uuid"
+    }
+    "#);
+}
