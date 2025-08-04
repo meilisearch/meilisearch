@@ -3,10 +3,8 @@ pub mod index;
 pub mod server;
 pub mod service;
 
-use std::{
-    collections::BTreeMap,
-    fmt::{self, Display},
-};
+use std::collections::BTreeMap;
+use std::fmt::{self, Display};
 
 use actix_http::StatusCode;
 #[allow(unused)]
@@ -17,10 +15,8 @@ use serde::{Deserialize, Serialize};
 #[allow(unused)]
 pub use server::{default_settings, Server};
 use tokio::sync::OnceCell;
-use wiremock::{
-    matchers::{method, path},
-    Mock, MockServer, Request, ResponseTemplate,
-};
+use wiremock::matchers::{method, path};
+use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use crate::common::index::Index;
 
@@ -618,7 +614,7 @@ pub async fn init_fragments_index() -> (Server<Owned>, String, crate::common::Va
     let (value, code) = index.add_documents(documents, None).await;
     assert_eq!(code, StatusCode::ACCEPTED);
 
-    let _task = index.wait_task(value.uid()).await.succeeded();
+    let _task = server.wait_task(value.uid()).await.succeeded();
 
     let uid = index.uid.clone();
     (server, uid, settings)
@@ -683,7 +679,7 @@ pub async fn init_fragments_index_composite() -> (Server<Owned>, String, crate::
     let (value, code) = index.add_documents(documents, None).await;
     assert_eq!(code, StatusCode::ACCEPTED);
 
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     let uid = index.uid.clone();
     (server, uid, settings)

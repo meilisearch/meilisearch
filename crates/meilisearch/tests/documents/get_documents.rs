@@ -87,7 +87,7 @@ async fn get_document() {
 async fn get_document_sorted() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    index.load_test_set().await;
+    index.load_test_set(server).await;
 
     let (task, _status_code) =
         index.update_settings_sortable_attributes(json!(["age", "email", "gender", "name"])).await;
