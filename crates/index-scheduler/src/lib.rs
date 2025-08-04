@@ -766,14 +766,8 @@ impl IndexScheduler {
         Ok(())
     }
 
-    /// Once the tasks changes have been committed we must send all the tasks that were updated to our webhook if there is one.
-    fn notify_webhook(&self, updated: &RoaringBitmap) -> Result<()> {
-        let webhooks = self.cached_webhooks.read().unwrap_or_else(|poisoned| poisoned.into_inner());
-        if webhooks.webhooks.is_empty() {
-            return Ok(());
-        }
-        let webhooks = Webhooks::clone(&*webhooks);
-
+    /// Once the tasks changes have been committed we must send all the tasks that were updated to our webhooks
+    fn notify_webhooks(&self, webhooks: Webhooks, updated: &RoaringBitmap) -> Result<()> {
         struct TaskReader<'a, 'b> {
             rtxn: &'a RoTxn<'a>,
             index_scheduler: &'a IndexScheduler,

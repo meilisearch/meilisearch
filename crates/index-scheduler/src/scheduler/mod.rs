@@ -26,6 +26,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
 use meilisearch_types::milli;
 use meilisearch_types::tasks::Status;
+use meilisearch_types::webhooks::Webhooks;
 use process_batch::ProcessBatchInfo;
 use rayon::current_num_threads;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -446,8 +447,17 @@ impl IndexScheduler {
             Ok(())
         })?;
 
-        // We shouldn't crash the tick function if we can't send data to the webhook.
-        let _ = self.notify_webhook(&ids);
+        // We shouldn't crash the tick function if we can't send data to the webhooks
+        let webhooks = self.cached_webhooks.read().unwrap_or_else(|p| p.into_inner());
+        if !webhooks.webhooks.is_empty() {
+            let webhooks = Webhooks::clone(&*webhooks);
+            let cloned_index_scheduler = self.private_clone();
+            std::thread::spawn(move || {
+                if let Err(e) = cloned_index_scheduler.notify_webhooks(webhooks, &ids) {
+                    tracing::error!("Failure to notify webhooks: {e}");
+                }
+            });
+        }
 
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::AfterProcessing);
