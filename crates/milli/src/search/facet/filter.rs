@@ -416,14 +416,9 @@ impl<'a> Filter<'a> {
                 return Ok(docids);
             }
             Condition::StartsWith { keyword: _, word } => {
-                // There are two algorithms:
-                //
-                // - The first one is recursive over levels.
-                //   This is more efficient when the prefix is common among many values.
-                //
-                // - The second one looks directly at level 0 of the facet group database.
-                //   This pessimistic approach is more efficient when the value is unique.
-                //   It's used as a fallback.
+                // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
+                // We just incremented the last letter to find the upper bound.
+                // The upper bound may not be valid utf8, but lmdb doesn't care as it works over bytes.
 
                 let value = crate::normalize_facet(word.value());
                 let mut value2 = value.as_bytes().to_owned();
@@ -456,9 +451,6 @@ impl<'a> Filter<'a> {
                     }
                 }
 
-                // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
-                // We just incremented the last letter to find the upper bound.
-                // The upper bound may not be valid utf8, but lmdb doesn't care as it works over bytes.
                 let mut docids = RoaringBitmap::new();
                 let bytes_db =
                     index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRef>>();
