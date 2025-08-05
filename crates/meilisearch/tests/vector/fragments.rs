@@ -149,7 +149,7 @@ async fn replace_document() {
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
 
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     // Make sure kefir now has 2 vectors
     let (documents, code) = index

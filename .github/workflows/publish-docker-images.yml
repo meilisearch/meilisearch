@@ -16,6 +16,8 @@ on:
 jobs:
   docker:
     runs-on: docker
+    permissions:
+      id-token: write # This is needed to use Cosign in keyless mode
     steps:
       - uses: actions/checkout@v3
 
@@ -62,6 +64,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # tag=v3.9.2
+
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
@@ -85,6 +90,7 @@ jobs:
 
       - name: Build and push
         uses: docker/build-push-action@v6
+        id: build-and-push
         with:
           push: true
           platforms: linux/amd64,linux/arm64
@@ -93,6 +99,17 @@ jobs:
             COMMIT_SHA=${{ github.sha }}
             COMMIT_DATE=${{ steps.build-metadata.outputs.date }}
             GIT_TAG=${{ github.ref_name }}
+
+      - name: Sign the images with GitHub OIDC Token
+        env:
+          DIGEST: ${{ steps.build-and-push.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          images=""
+          for tag in ${TAGS}; do
+            images+="${tag}@${DIGEST} "
+          done
+          cosign sign --yes ${images}
 
       # /!\ Don't touch this without checking with Cloud team
       - name: Send CI information to Cloud team

@@ -268,21 +268,21 @@ macro_rules! compute_authorized_single_search {
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         let (add_task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(add_task.uid()).await.succeeded();
+        server.wait_task(add_task.uid()).await.succeeded();
         let (update_task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(update_task.uid()).await.succeeded();
+        server.wait_task(update_task.uid()).await.succeeded();
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
         let (add_task2,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(add_task2.uid()).await.succeeded();
+        server.wait_task(add_task2.uid()).await.succeeded();
         let (update_task2,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(update_task2.uid()).await.succeeded();
+        server.wait_task(update_task2.uid()).await.succeeded();
         drop(index);
 
 
@@ -339,21 +339,21 @@ macro_rules! compute_authorized_multiple_search {
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         drop(index);
 
 
@@ -423,21 +423,21 @@ macro_rules! compute_forbidden_single_search {
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         assert_eq!($parent_keys.len(), $failed_query_indexes.len(), "keys != query_indexes");
@@ -499,21 +499,21 @@ macro_rules! compute_forbidden_multiple_search {
         let index = server.index("sales");
         let documents = DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["color"]}))
             .await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         let index = server.index("products");
         let documents = NESTED_DOCUMENTS.clone();
         let (task,_status_code) = index.add_documents(documents, None).await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         let (task,_status_code) = index
             .update_settings(json!({"filterableAttributes": ["doggos"]}))
             .await;
-        index.wait_task(task.uid()).await.succeeded();
+        server.wait_task(task.uid()).await.succeeded();
         drop(index);
 
         assert_eq!($parent_keys.len(), $failed_query_indexes.len(), "keys != query_indexes");

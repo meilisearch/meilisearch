@@ -26,7 +26,7 @@ async fn create_and_delete_index() {
 async fn error_delete_unexisting_index() {
     let server = Server::new_shared();
     let index = shared_does_not_exists_index().await;
-    let (task, code) = index.delete_index_fail().await;
+    let (task, code) = index.delete_index_fail(server).await;
 
     assert_eq!(code, 202);
     server.wait_task(task.uid()).await.failed();

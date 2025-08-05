@@ -51,12 +51,12 @@ async fn perform_snapshot() {
         }))
         .await;
 
-    index.load_test_set().await;
+    index.load_test_set(&server).await;
 
     let (task, code) = server.index("test1").create(Some("prim")).await;
     meili_snap::snapshot!(code, @"202 Accepted");
 
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     // wait for the _next task_ to process, aka the snapshot that should be enqueued at some point
 
@@ -122,19 +122,15 @@ async fn perform_on_demand_snapshot() {
     let server = Server::new_with_options(options).await.unwrap();
 
     let index = server.index("catto");
-    index
-        .update_settings(json! ({
-        "searchableAttributes": [],
-        }))
-        .await;
+    index.update_settings(json! ({ "searchableAttributes": [] })).await;
 
-    index.load_test_set().await;
+    index.load_test_set(&server).await;
 
     let (task, _status_code) = server.index("doggo").create(Some("bone")).await;
-    index.wait_task(task.uid()).await.succeeded();
+    server.wait_task(task.uid()).await.succeeded();
 
     let (task, _status_code) = server.index("doggo").create(Some("bone")).await;
-    index.wait_task(task.uid()).await.failed();
+    server.wait_task(task.uid()).await.failed();
 
     let (task, code) = server.create_snapshot().await;
     snapshot!(code, @"202 Accepted");
@@ -147,7 +143,7 @@ async fn perform_on_demand_snapshot() {
       "enqueuedAt": "[date]"
     }
     "###);
-    let task = index.wait_task(task.uid()).await;
+    let task = server.wait_task(task.uid()).await;
     snapshot!(json_string!(task, { ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]", ".duration" => "[duration]" }), @r###"
     {
       "uid": 4,
@@ -202,4 +198,71 @@ async fn perform_on_demand_snapshot() {
         server.index("doggo").get_all_documents(GetAllDocumentsOptions::default()),
         server.index("doggo").settings(),
     );
+}
+
+#[actix_rt::test]
+#[cfg_attr(target_os = "windows", ignore)]
+async fn snapshotception_issue_4653() {
+    let temp = tempfile::tempdir().unwrap();
+    let snapshot_dir = tempfile::tempdir().unwrap();
+    let options =
+        Opt { snapshot_dir: snapshot_dir.path().to_owned(), ..default_settings(temp.path()) };
+
+    let server = Server::new_with_options(options).await.unwrap();
+
+    let (task, code) = server.create_snapshot().await;
+    snapshot!(code, @"202 Accepted");
+    snapshot!(json_string!(task, { ".enqueuedAt" => "[date]" }), @r###"
+    {
+      "taskUid": 0,
+      "indexUid": null,
+      "status": "enqueued",
+      "type": "snapshotCreation",
+      "enqueuedAt": "[date]"
+    }
+    "###);
+    server.wait_task(task.uid()).await.succeeded();
+
+    let temp = tempfile::tempdir().unwrap();
+    let snapshot_path = snapshot_dir.path().to_owned().join("db.snapshot");
+
+    let options = Opt { import_snapshot: Some(snapshot_path), ..default_settings(temp.path()) };
+    let snapshot_server = Server::new_with_options(options).await.unwrap();
+
+    // The snapshot should have been taken without the snapshot creation task
+    let (tasks, code) = snapshot_server.tasks().await;
+    snapshot!(code, @"200 OK");
+    snapshot!(tasks, @r#"
+    {
+      "results": [],
+      "total": 0,
+      "limit": 20,
+      "from": null,
+      "next": null
+    }
+    "#);
+
+    // Ensure the task is not present in the snapshot
+    let (task, code) = snapshot_server.get_task(0).await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(task, @r#"
+    {
+      "message": "Task `0` not found.",
+      "code": "task_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#task_not_found"
+    }
+    "#);
+
+    // Ensure the batch is also not present
+    let (batch, code) = snapshot_server.get_batch(0).await;
+    snapshot!(code, @"404 Not Found");
+    snapshot!(batch, @r#"
+    {
+      "message": "Batch `0` not found.",
+      "code": "batch_not_found",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#batch_not_found"
+    }
+    "#);
 }

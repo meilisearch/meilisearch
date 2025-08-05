@@ -559,7 +559,7 @@ async fn delete_document_by_filter() {
     let index = shared_does_not_exists_index().await;
     // index does not exist
     let (response, _code) =
-        index.delete_document_by_filter_fail(json!({ "filter": "doggo = bernese"})).await;
+        index.delete_document_by_filter_fail(json!({ "filter": "doggo = bernese"}), server).await;
     snapshot!(response, @r###"
     {
       "uid": "[uid]",
@@ -589,7 +589,7 @@ async fn delete_document_by_filter() {
     // no filterable are set
     let index = shared_empty_index().await;
     let (response, _code) =
-        index.delete_document_by_filter_fail(json!({ "filter": "doggo = bernese"})).await;
+        index.delete_document_by_filter_fail(json!({ "filter": "doggo = bernese"}), server).await;
     snapshot!(response, @r###"
     {
       "uid": "[uid]",
@@ -619,7 +619,7 @@ async fn delete_document_by_filter() {
     // not filterable while there is a filterable attribute
     let index = shared_index_with_documents().await;
     let (response, code) =
-        index.delete_document_by_filter_fail(json!({ "filter": "catto = jorts"})).await;
+        index.delete_document_by_filter_fail(json!({ "filter": "catto = jorts"}), server).await;
     snapshot!(code, @"202 Accepted");
     let response = server.wait_task(response.uid()).await.failed();
     snapshot!(response, @r###"
