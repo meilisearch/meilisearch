@@ -75,10 +75,11 @@ impl DumpWriter {
         Ok(std::fs::write(self.dir.path().join("network.json"), serde_json::to_string(&network)?)?)
     }
 
-    pub fn create_webhooks(&self, webhooks: Webhooks) -> Result<()> {
+    pub fn create_webhooks(&self, mut webhooks: Webhooks) -> Result<()> {
         if webhooks == Webhooks::default() {
             return Ok(());
         }
+        webhooks.webhooks.remove(&Uuid::nil()); // Don't store the cli webhook
         Ok(std::fs::write(
             self.dir.path().join("webhooks.json"),
             serde_json::to_string(&webhooks)?,
