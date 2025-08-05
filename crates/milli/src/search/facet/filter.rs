@@ -433,8 +433,9 @@ impl<'a> Filter<'a> {
                     }
                 };
 
-                if *last == 255 {
-                    // The prefix is invalid utf8, so no documents will match anyway
+                if *last == u8::MAX {
+                    // u8::MAX is a forbidden UTF-8 byte, we're guaranteed it cannot be sent through a filter to meilisearch, but just in case, we're going to return something
+                    tracing::warn!("Found non utf-8 character in filter. That shouldn't be possible");
                     return Ok(RoaringBitmap::new());
                 }
                 *last += 1;
