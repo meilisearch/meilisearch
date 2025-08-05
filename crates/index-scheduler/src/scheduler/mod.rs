@@ -446,16 +446,7 @@ impl IndexScheduler {
             Ok(())
         })?;
 
-        // We shouldn't crash the tick function if we can't send data to the webhooks
-        let webhooks = self.webhooks();
-        if !webhooks.webhooks.is_empty() {
-            let cloned_index_scheduler = self.private_clone();
-            std::thread::spawn(move || {
-                if let Err(e) = cloned_index_scheduler.notify_webhooks(webhooks, &ids) {
-                    tracing::error!("Failure to notify webhooks: {e}");
-                }
-            });
-        }
+        self.notify_webhooks(ids);
 
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::AfterProcessing);
