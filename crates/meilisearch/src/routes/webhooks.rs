@@ -203,7 +203,7 @@ enum WebhooksError {
     MissingUrl(Uuid),
     #[error("Defining too many webhooks would crush the server. Please limit the number of webhooks to 20. You may use a third-party proxy server to dispatch events to more than 20 endpoints.")]
     TooManyWebhooks,
-    #[error("Too many headers for the webhook `{0}`. Please limit the number of headers to 200.")]
+    #[error("Too many headers for the webhook `{0}`. Please limit the number of headers to 200. Hint: To remove an already defined header set its value to `null`")]
     TooManyHeaders(Uuid),
     #[error("Webhook `{0}` is immutable. The webhook defined from the command line cannot be modified using the API.")]
     ImmutableWebhook(Uuid),
