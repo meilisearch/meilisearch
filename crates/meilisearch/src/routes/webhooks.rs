@@ -61,10 +61,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookSettings {
-    #[schema(value_type = Option<String>)]
     #[deserr(default, error = DeserrJsonError<InvalidWebhooksUrl>)]
     #[serde(default)]
-    url: Setting<String>,
+    url: Option<String>,
     #[schema(value_type = Option<BTreeMap<String, String>>, example = json!({"Authorization":"Bearer a-secret-token"}))]
     #[deserr(default, error = DeserrJsonError<InvalidWebhooksHeaders>)]
     #[serde(default)]
@@ -237,19 +236,14 @@ impl ErrorCode for WebhooksError {
 
 fn patch_webhook_inner(
     uuid: &Uuid,
-    old_webhook: Option<Webhook>,
+    old_webhook: Webhook,
     new_webhook: WebhookSettings,
 ) -> Result<Webhook, WebhooksError> {
-    let (old_url, mut headers) =
-        old_webhook.map(|w| (Some(w.url), w.headers)).unwrap_or((None, BTreeMap::new()));
+    let Webhook { url: old_url, mut headers } = old_webhook;
 
-    let url = match new_webhook.url {
-        Setting::Set(url) => url,
-        Setting::NotSet => old_url.ok_or_else(|| MissingUrl(uuid.to_owned()))?,
-        Setting::Reset => return Err(MissingUrl(uuid.to_owned())),
-    };
+    let url = new_webhook.url.unwrap_or(old_url);
 
-    let headers = match new_webhook.headers {
+    match new_webhook.headers {
         Setting::Set(new_headers) => {
             for (name, value) in new_headers {
                 match value {
@@ -263,10 +257,9 @@ fn patch_webhook_inner(
                     }
                 }
             }
-            headers
         }
-        Setting::NotSet => headers,
-        Setting::Reset => BTreeMap::new(),
+        Setting::Reset => headers.clear(),
+        Setting::NotSet => (),
     };
 
     if headers.len() > 200 {
@@ -376,7 +369,7 @@ async fn post_webhook(
     }
 
     let webhook = Webhook {
-        url: webhook_settings.url.set().ok_or(MissingUrl(uuid))?,
+        url: webhook_settings.url.ok_or(MissingUrl(uuid))?,
         headers: webhook_settings
             .headers
             .set()
@@ -429,7 +422,7 @@ async fn patch_webhook(
     debug!(parameters = ?(uuid, &webhook_settings), "Patch webhook");
 
     let mut webhooks = index_scheduler.webhooks();
-    let old_webhook = webhooks.webhooks.remove(&uuid);
+    let old_webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
     let webhook = patch_webhook_inner(&uuid, old_webhook, webhook_settings)?;
 
     check_changed(uuid, &webhook)?;
