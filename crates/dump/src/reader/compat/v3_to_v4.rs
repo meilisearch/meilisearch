@@ -1,3 +1,5 @@
+use std::fs::File;
+
 use super::v2_to_v3::{CompatIndexV2ToV3, CompatV2ToV3};
 use super::v4_to_v5::CompatV4ToV5;
 use crate::reader::{v3, v4, UpdateFile};
@@ -249,6 +251,13 @@ impl CompatIndexV3ToV4 {
             CompatIndexV3ToV4::Compat(compat) => compat
                 .documents()
                 .map(|iter| Box::new(iter) as Box<dyn Iterator<Item = Result<v4::Document>> + '_>),
+        }
+    }
+
+    pub fn documents_file(&self) -> &File {
+        match self {
+            CompatIndexV3ToV4::V3(v3) => v3.documents_file(),
+            CompatIndexV3ToV4::Compat(compat) => compat.documents_file(),
         }
     }
 

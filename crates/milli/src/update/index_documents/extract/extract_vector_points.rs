@@ -23,7 +23,7 @@ use crate::progress::EmbedderStats;
 use crate::prompt::Prompt;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::vector::db::{EmbedderInfo, EmbeddingStatus, EmbeddingStatusDelta};
+use crate::vector::db::{EmbedderInfo, EmbeddingStatusDelta};
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
 use crate::vector::extractor::{Extractor, ExtractorDiff, RequestFragmentExtractor};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
@@ -441,6 +441,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         {
             let embedder_is_manual = matches!(*runtime.embedder, Embedder::UserProvided(_));
 
+            let (old_is_user_provided, old_must_regenerate) =
+                embedder_info.embedding_status.is_user_provided_must_regenerate(docid);
             let (old, new) = parsed_vectors.remove(embedder_name);
             let new_must_regenerate = new.must_regenerate();
             let delta = match action {
@@ -499,16 +501,19 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
                         let is_adding_fragments = has_fragments && !old_has_fragments;
 
-                        if is_adding_fragments {
+                        if !has_fragments {
+                            // removing fragments
+                            regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
+                        } else if is_adding_fragments ||
+                        // regenerate all fragments when going from user provided to ! user provided
+                        old_is_user_provided
+                        {
                             regenerate_all_fragments(
                                 runtime.fragments(),
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
                             )
-                        } else if !has_fragments {
-                            // removing fragments
-                            regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
                         } else {
                             let mut fragment_diff = Vec::new();
                             let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
@@ -600,7 +605,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                 docid,
                 &delta,
                 new_must_regenerate,
-                &embedder_info.embedding_status,
+                old_is_user_provided,
+                old_must_regenerate,
             );
 
             // and we finally push the unique vectors into the writer
@@ -657,10 +663,9 @@ fn push_embedding_status_delta(
     docid: DocumentId,
     delta: &VectorStateDelta,
     new_must_regenerate: bool,
-    embedding_status: &EmbeddingStatus,
+    old_is_user_provided: bool,
+    old_must_regenerate: bool,
 ) {
-    let (old_is_user_provided, old_must_regenerate) =
-        embedding_status.is_user_provided_must_regenerate(docid);
     let new_is_user_provided = match delta {
         VectorStateDelta::NoChange => old_is_user_provided,
         VectorStateDelta::NowRemoved => {

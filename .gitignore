@@ -5,18 +5,24 @@
 **/*.json_lines
 **/*.rs.bk
 /*.mdb
-/data.ms
+/*.ms
 /snapshots
 /dumps
 /bench
 /_xtask_benchmark.ms
 /benchmarks
+.DS_Store
 
 # Snapshots
 ## ... large
 *.full.snap
-##  ... unreviewed
+## ... unreviewed
 *.snap.new
+## ... pending
+*.pending-snap
+
+# Tmp files
+.tmp*
 
 # Database snapshot
 crates/meilisearch/db.snapshot

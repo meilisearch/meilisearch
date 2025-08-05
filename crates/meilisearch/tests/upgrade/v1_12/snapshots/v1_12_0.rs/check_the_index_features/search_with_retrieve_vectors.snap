@@ -1,0 +1,40 @@
+---
+source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
+---
+[
+  {
+    "id": 1,
+    "name": "kefir",
+    "surname": [
+      "kef",
+      "kefkef",
+      "kefirounet",
+      "boubou"
+    ],
+    "age": 1.4,
+    "description": "kefir est un petit chien blanc très mignon",
+    "_vectors": {
+      "doggo_embedder": {
+        "embeddings": "[vector]",
+        "regenerate": true
+      }
+    }
+  },
+  {
+    "id": 2,
+    "name": "intel",
+    "surname": [
+      "untel",
+      "tétel",
+      "iouiou"
+    ],
+    "age": 11.5,
+    "description": "intel est un grand beagle très mignon",
+    "_vectors": {
+      "doggo_embedder": {
+        "embeddings": "[vector]",
+        "regenerate": false
+      }
+    }
+  }
+]

@@ -1,0 +1,23 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+exclude-labels:
+  - 'skip changelog'
+version-resolver:
+  major:
+    labels:
+      - 'breaking-change'
+  minor:
+    labels:
+      - 'enhancement'
+  default: patch
+template: |
+  $CHANGES
+
+  Thanks again to $CONTRIBUTORS! 🎉
+no-changes-template: 'Changes are coming soon 😎'
+sort-direction: 'ascending'
+replacers:
+  - search: '/(?:and )?@dependabot-preview(?:\[bot\])?,?/g'
+    replace: ''
+  - search: '/(?:and )?@dependabot(?:\[bot\])?,?/g'
+    replace: ''

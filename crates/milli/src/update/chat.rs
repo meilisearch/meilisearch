@@ -93,7 +93,7 @@ pub struct ChatSearchParams {
     pub hybrid: Setting<HybridQuery>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
-    #[deserr(default = Setting::Set(20))]
+    #[deserr(default)]
     #[schema(value_type = Option<usize>)]
     pub limit: Setting<usize>,
 

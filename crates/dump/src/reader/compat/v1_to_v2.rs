@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::str::FromStr;
 
 use super::v2_to_v3::CompatV2ToV3;
@@ -92,6 +93,10 @@ impl CompatIndexV1ToV2 {
 
     pub fn documents(&mut self) -> Result<Box<dyn Iterator<Item = Result<Document>> + '_>> {
         self.from.documents().map(|it| Box::new(it) as Box<dyn Iterator<Item = _>>)
+    }
+
+    pub fn documents_file(&self) -> &File {
+        self.from.documents_file()
     }
 
     pub fn settings(&mut self) -> Result<v2::settings::Settings<v2::settings::Checked>> {

@@ -9,7 +9,7 @@ on:
         required: false
         default: nightly
   schedule:
-    - cron: "0 6 * * MON" # Every Monday at 6:00AM
+    - cron: '0 6 * * *' # Every day at 6:00am
 
 env:
   MEILI_MASTER_KEY: 'masterKey'
@@ -114,7 +114,7 @@ jobs:
             dep ensure
           fi
       - name: Run integration tests
-        run: go test -v ./...
+        run: go test --race -v ./integration
 
   meilisearch-java-tests:
     needs: define-docker-image

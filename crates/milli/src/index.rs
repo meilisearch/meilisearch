@@ -1766,20 +1766,22 @@ impl Index {
         &self,
         rtxn: &RoTxn<'_>,
         docid: DocumentId,
-    ) -> Result<BTreeMap<String, (Vec<Embedding>, bool)>> {
+    ) -> Result<BTreeMap<String, EmbeddingsWithMetadata>> {
         let mut res = BTreeMap::new();
         let embedders = self.embedding_configs();
         for config in embedders.embedding_configs(rtxn)? {
             let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
+            let has_fragments = config.config.embedder_options.has_fragments();
             let reader = ArroyWrapper::new(
                 self.vector_arroy,
                 embedder_info.embedder_id,
                 config.config.quantized(),
             );
             let embeddings = reader.item_vectors(rtxn, docid)?;
+            let regenerate = embedder_info.embedding_status.must_regenerate(docid);
             res.insert(
                 config.name.to_owned(),
-                (embeddings, embedder_info.embedding_status.must_regenerate(docid)),
+                EmbeddingsWithMetadata { embeddings, regenerate, has_fragments },
             );
         }
         Ok(res)
@@ -1917,6 +1919,12 @@ impl Index {
 
         Ok(sizes)
     }
+}
+
+pub struct EmbeddingsWithMetadata {
+    pub embeddings: Vec<Embedding>,
+    pub regenerate: bool,
+    pub has_fragments: bool,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
