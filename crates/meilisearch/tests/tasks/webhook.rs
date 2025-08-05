@@ -465,15 +465,13 @@ async fn create_and_patch() {
     "#);
 
     let (value, code) = server.patch_webhook(&uuid, json!({ "url": null })).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
     {
-      "uuid": "81ccb94c-74cf-4d40-8070-492055804693",
-      "isEditable": true,
-      "url": "https://example.com/hook",
-      "headers": {
-        "authorization2": "TOKEN"
-      }
+      "message": "The URL for the webhook `[uuid]` is missing.",
+      "code": "invalid_webhooks_url",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_url"
     }
     "#);
 }

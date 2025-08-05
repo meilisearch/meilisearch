@@ -61,9 +61,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookSettings {
+    #[schema(value_type = Option<String>, example = "https://your.site/on-tasks-completed")]
     #[deserr(default, error = DeserrJsonError<InvalidWebhooksUrl>)]
     #[serde(default)]
-    url: Option<String>,
+    url: Setting<String>,
     #[schema(value_type = Option<BTreeMap<String, String>>, example = json!({"Authorization":"Bearer a-secret-token"}))]
     #[deserr(default, error = DeserrJsonError<InvalidWebhooksHeaders>)]
     #[serde(default)]
@@ -241,7 +242,11 @@ fn patch_webhook_inner(
 ) -> Result<Webhook, WebhooksError> {
     let Webhook { url: old_url, mut headers } = old_webhook;
 
-    let url = new_webhook.url.unwrap_or(old_url);
+    let url = match new_webhook.url {
+        Setting::Set(url) => url,
+        Setting::NotSet => old_url,
+        Setting::Reset => return Err(MissingUrl(uuid.to_owned())),
+    };
 
     match new_webhook.headers {
         Setting::Set(new_headers) => {
@@ -369,7 +374,7 @@ async fn post_webhook(
     }
 
     let webhook = Webhook {
-        url: webhook_settings.url.ok_or(MissingUrl(uuid))?,
+        url: webhook_settings.url.set().ok_or(MissingUrl(uuid))?,
         headers: webhook_settings
             .headers
             .set()
