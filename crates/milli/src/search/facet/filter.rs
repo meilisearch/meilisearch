@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included, Unbounded};
@@ -14,9 +15,7 @@ use super::facet_range_search;
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
-use crate::heed_codec::facet::{
-    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
-};
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
 use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
 use crate::{
@@ -427,44 +426,51 @@ impl<'a> Filter<'a> {
                 //   It's used as a fallback.
 
                 let value = crate::normalize_facet(word.value());
-
                 let mut value2 = value.as_bytes().to_owned();
-                if let Some(last) = value2.last_mut() {
-                    if *last != 255 {
-                        *last += 1;
-                        if let Ok(value2) = String::from_utf8(value2) {
-                            // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
-                            // We just increase the last letter to find the upper bound.
-                            // The result could be invalid utf8, so it can fallback.
-                            let mut docids = RoaringBitmap::new();
-                            find_docids_of_facet_within_bounds(
-                                rtxn,
-                                strings_db,
-                                field_id,
-                                &Included(&value),
-                                &Excluded(&value2),
-                                universe,
-                                &mut docids,
-                            )?;
 
-                            return Ok(docids);
-                        }
+                let last = match value2.last_mut() {
+                    Some(last) => last,
+                    None => {
+                        // The prefix is empty, so all documents that have the field will match.
+                        return index
+                            .exists_faceted_documents_ids(rtxn, field_id)
+                            .map_err(|e| e.into());
+                    }
+                };
+
+                if *last == 255 {
+                    // The prefix is invalid utf8, so no documents will match anyway
+                    return Ok(RoaringBitmap::new());
+                }
+                *last += 1;
+
+                // This is very similar to `heed::Bytes` but its `EItem` is `&[u8]` instead of `[u8]`
+                struct BytesRef;
+                impl<'a> BytesEncode<'a> for BytesRef {
+                    type EItem = &'a [u8];
+
+                    fn bytes_encode(
+                        item: &'a Self::EItem,
+                    ) -> std::result::Result<Cow<'a, [u8]>, heed::BoxedError> {
+                        Ok(Cow::Borrowed(item))
                     }
                 }
 
-                let base = FacetGroupKey { field_id, level: 0, left_bound: value.as_str() };
-                let docids = strings_db
-                    .prefix_iter(rtxn, &base)?
-                    .map(|result| -> Result<RoaringBitmap> {
-                        match result {
-                            Ok((_facet_group_key, FacetGroupValue { bitmap, .. })) => Ok(bitmap),
-                            Err(_e) => Err(InternalError::from(SerializationError::Decoding {
-                                db_name: Some(FACET_ID_STRING_DOCIDS),
-                            })
-                            .into()),
-                        }
-                    })
-                    .union()?;
+                // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
+                // We just incremented the last letter to find the upper bound.
+                // The upper bound may not be valid utf8, but lmdb doesn't care as it works over bytes.
+                let mut docids = RoaringBitmap::new();
+                let bytes_db =
+                    index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRef>>();
+                find_docids_of_facet_within_bounds::<BytesRef>(
+                    rtxn,
+                    bytes_db,
+                    field_id,
+                    &Included(value.as_bytes()),
+                    &Excluded(value2.as_slice()),
+                    universe,
+                    &mut docids,
+                )?;
 
                 return Ok(docids);
             }
