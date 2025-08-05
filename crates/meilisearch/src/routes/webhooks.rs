@@ -13,7 +13,7 @@ use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError};
 use meilisearch_types::error::deserr_codes::{
-    BadRequest, InvalidWebhooksHeaders, InvalidWebhooksUrl,
+    BadRequest, InvalidWebhookHeaders, InvalidWebhookUrl,
 };
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
@@ -62,11 +62,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookSettings {
     #[schema(value_type = Option<String>, example = "https://your.site/on-tasks-completed")]
-    #[deserr(default, error = DeserrJsonError<InvalidWebhooksUrl>)]
+    #[deserr(default, error = DeserrJsonError<InvalidWebhookUrl>)]
     #[serde(default)]
     url: Setting<String>,
     #[schema(value_type = Option<BTreeMap<String, String>>, example = json!({"Authorization":"Bearer a-secret-token"}))]
-    #[deserr(default, error = DeserrJsonError<InvalidWebhooksHeaders>)]
+    #[deserr(default, error = DeserrJsonError<InvalidWebhookHeaders>)]
     #[serde(default)]
     headers: Setting<BTreeMap<String, Setting<String>>>,
 }
@@ -222,14 +222,14 @@ enum WebhooksError {
 impl ErrorCode for WebhooksError {
     fn error_code(&self) -> meilisearch_types::error::Code {
         match self {
-            MissingUrl(_) => meilisearch_types::error::Code::InvalidWebhooksUrl,
+            MissingUrl(_) => meilisearch_types::error::Code::InvalidWebhookUrl,
             TooManyWebhooks => meilisearch_types::error::Code::InvalidWebhooks,
-            TooManyHeaders(_) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
+            TooManyHeaders(_) => meilisearch_types::error::Code::InvalidWebhookHeaders,
             ImmutableWebhook(_) => meilisearch_types::error::Code::ImmutableWebhook,
             WebhookNotFound(_) => meilisearch_types::error::Code::WebhookNotFound,
-            InvalidHeaderName(_, _) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
-            InvalidHeaderValue(_, _) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
-            InvalidUrl(_, _) => meilisearch_types::error::Code::InvalidWebhooksUrl,
+            InvalidHeaderName(_, _) => meilisearch_types::error::Code::InvalidWebhookHeaders,
+            InvalidHeaderValue(_, _) => meilisearch_types::error::Code::InvalidWebhookHeaders,
+            InvalidUrl(_, _) => meilisearch_types::error::Code::InvalidWebhookUrl,
             InvalidUuid(_) => meilisearch_types::error::Code::InvalidWebhookUuid,
         }
     }

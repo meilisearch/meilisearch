@@ -421,8 +421,8 @@ InvalidChatCompletionSearchIndexUidParamPrompt , InvalidRequest       , BAD_REQU
 InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST ;
 // Webhooks
 InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
-InvalidWebhooksUrl                             , InvalidRequest       , BAD_REQUEST ;
-InvalidWebhooksHeaders                         , InvalidRequest       , BAD_REQUEST ;
+InvalidWebhookUrl                              , InvalidRequest       , BAD_REQUEST ;
+InvalidWebhookHeaders                          , InvalidRequest       , BAD_REQUEST ;
 ImmutableWebhook                               , InvalidRequest       , BAD_REQUEST ;
 InvalidWebhookUuid                             , InvalidRequest       , BAD_REQUEST ;
 WebhookNotFound                                , InvalidRequest       , NOT_FOUND ;

@@ -349,9 +349,9 @@ async fn over_limits() {
     snapshot!(value, @r#"
     {
       "message": "Too many headers for the webhook `[uuid]`. Please limit the number of headers to 200. Hint: To remove an already defined header set its value to `null`",
-      "code": "invalid_webhooks_headers",
+      "code": "invalid_webhook_headers",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_headers"
     }
     "#);
 }
@@ -409,9 +409,9 @@ async fn create_and_patch() {
     snapshot!(value, @r#"
     {
       "message": "The URL for the webhook `[uuid]` is missing.",
-      "code": "invalid_webhooks_url",
+      "code": "invalid_webhook_url",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_url"
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_url"
     }
     "#);
 
@@ -475,9 +475,9 @@ async fn create_and_patch() {
     snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
     {
       "message": "The URL for the webhook `[uuid]` is missing.",
-      "code": "invalid_webhooks_url",
+      "code": "invalid_webhook_url",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_url"
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_url"
     }
     "#);
 }
@@ -492,9 +492,9 @@ async fn invalid_url_and_headers() {
     snapshot!(value, @r#"
     {
       "message": "Invalid URL `not-a-valid-url`: relative URL without a base",
-      "code": "invalid_webhooks_url",
+      "code": "invalid_webhook_url",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_url"
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_url"
     }
     "#);
 
@@ -509,9 +509,9 @@ async fn invalid_url_and_headers() {
     snapshot!(value, @r#"
     {
       "message": "Invalid header name `invalid header name`: invalid HTTP header name",
-      "code": "invalid_webhooks_headers",
+      "code": "invalid_webhook_headers",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_headers"
     }
     "#);
 
@@ -526,9 +526,9 @@ async fn invalid_url_and_headers() {
     snapshot!(value, @r#"
     {
       "message": "Invalid header value `authorization`: failed to parse header value",
-      "code": "invalid_webhooks_headers",
+      "code": "invalid_webhook_headers",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
+      "link": "https://docs.meilisearch.com/errors#invalid_webhook_headers"
     }
     "#);
 }
