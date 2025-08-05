@@ -129,6 +129,7 @@ pub enum KindDump {
     },
     IndexUpdate {
         primary_key: Option<String>,
+        new_uid: Option<String>,
     },
     IndexSwap {
         swaps: Vec<IndexSwap>,
@@ -210,8 +211,8 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::IndexCreation { primary_key, .. } => {
                 KindDump::IndexCreation { primary_key }
             }
-            KindWithContent::IndexUpdate { primary_key, .. } => {
-                KindDump::IndexUpdate { primary_key }
+            KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
+                KindDump::IndexUpdate { primary_key, new_uid: new_index_uid }
             }
             KindWithContent::IndexSwap { swaps } => KindDump::IndexSwap { swaps },
             KindWithContent::TaskCancelation { query, tasks } => {

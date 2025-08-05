@@ -264,7 +264,12 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         K::SettingsUpdate { index_uid, .. } => index_uids.push(index_uid),
         K::IndexDeletion { index_uid } => index_uids.push(index_uid),
         K::IndexCreation { index_uid, .. } => index_uids.push(index_uid),
-        K::IndexUpdate { index_uid, .. } => index_uids.push(index_uid),
+        K::IndexUpdate { index_uid, new_index_uid, .. } => {
+            index_uids.push(index_uid);
+            if let Some(new_uid) = new_index_uid {
+                index_uids.push(new_uid);
+            }
+        }
         K::IndexSwap { swaps } => {
             for IndexSwap { indexes: (lhs, rhs) } in swaps.iter_mut() {
                 if lhs == swap.0 || lhs == swap.1 {
@@ -496,9 +501,9 @@ impl crate::IndexScheduler {
                     Details::SettingsUpdate { settings: _ } => {
                         assert_eq!(kind.as_kind(), Kind::SettingsUpdate);
                     }
-                    Details::IndexInfo { primary_key: pk1 } => match &kind {
+                    Details::IndexInfo { primary_key: pk1, .. } => match &kind {
                         KindWithContent::IndexCreation { index_uid, primary_key: pk2 }
-                        | KindWithContent::IndexUpdate { index_uid, primary_key: pk2 } => {
+                        | KindWithContent::IndexUpdate { index_uid, primary_key: pk2, .. } => {
                             self.queue
                                 .tasks
                                 .index_tasks

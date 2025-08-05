@@ -126,12 +126,6 @@ make_enum_progress! {
 }
 
 make_enum_progress! {
-    pub enum RenameIndexProgress {
-        RenamingTheIndex,
-    }
-}
-
-make_enum_progress! {
     pub enum DeleteIndexProgress {
         DeletingTheIndex,
     }

@@ -197,9 +197,10 @@ impl<'a> Dump<'a> {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                     primary_key,
                 },
-                KindDump::IndexUpdate { primary_key } => KindWithContent::IndexUpdate {
+                KindDump::IndexUpdate { primary_key, new_uid } => KindWithContent::IndexUpdate {
                     index_uid: task.index_uid.ok_or(Error::CorruptedDump)?,
                     primary_key,
+                    new_index_uid: new_uid,
                 },
                 KindDump::IndexSwap { swaps } => KindWithContent::IndexSwap { swaps },
                 KindDump::TaskCancelation { query, tasks } => {

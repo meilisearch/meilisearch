@@ -75,7 +75,11 @@ fn idx_create() -> KindWithContent {
 }
 
 fn idx_update() -> KindWithContent {
-    KindWithContent::IndexUpdate { index_uid: String::from("doggo"), primary_key: None }
+    KindWithContent::IndexUpdate {
+        index_uid: String::from("doggo"),
+        primary_key: None,
+        new_index_uid: None,
+    }
 }
 
 fn idx_del() -> KindWithContent {
