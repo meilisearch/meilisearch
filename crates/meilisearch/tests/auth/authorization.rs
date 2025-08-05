@@ -294,7 +294,7 @@ async fn unauthorized_partial_actions() {
     let (response, code) = index.create(Some("id")).await;
     assert_eq!(202, code, "{:?}", &response);
     let task_id = response["taskUid"].as_u64().unwrap();
-    index.wait_task(task_id).await.succeeded();
+    server.wait_task(task_id).await.succeeded();
 
     // When multiple actions are necessary, the server mustn't accept any combination with one action missing.
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
