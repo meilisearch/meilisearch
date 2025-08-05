@@ -1035,7 +1035,7 @@ async fn vector_filter_document_template() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    index.wait_task(value.uid()).await.succeeded();
+    server.wait_task(value.uid()).await.succeeded();
 
     let (value, _code) = index
         .search_post(json!({
