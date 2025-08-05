@@ -327,11 +327,6 @@ async fn binary_quantize_clear_documents() {
     {
       "hits": [],
       "query": "",
-      "queryVector": [
-        1.0,
-        1.0,
-        1.0
-      ],
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,

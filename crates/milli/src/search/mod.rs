@@ -53,6 +53,7 @@ pub struct Search<'a> {
     terms_matching_strategy: TermsMatchingStrategy,
     scoring_strategy: ScoringStrategy,
     words_limit: usize,
+    retrieve_vectors: bool,
     exhaustive_number_hits: bool,
     max_total_hits: Option<usize>,
     rtxn: &'a heed::RoTxn<'a>,
@@ -76,6 +77,7 @@ impl<'a> Search<'a> {
             geo_param: GeoSortParameter::default(),
             terms_matching_strategy: TermsMatchingStrategy::default(),
             scoring_strategy: Default::default(),
+            retrieve_vectors: false,
             exhaustive_number_hits: false,
             max_total_hits: None,
             words_limit: 10,
@@ -188,6 +190,11 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn retrieve_vectors(&mut self, retrieve_vectors: bool) -> &mut Search<'a> {
+        self.retrieve_vectors = retrieve_vectors;
+        self
+    }
+
     /// Forces the search to exhaustively compute the number of candidates,
     /// this will increase the search time but allows finite pagination.
     pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
@@ -277,7 +284,7 @@ impl<'a> Search<'a> {
                 quantized,
                 media: _,
             }) => {
-                if *auto_embedded {
+                if *auto_embedded && self.retrieve_vectors {
                     query_vector = Some(vector.clone());
                 }
                 execute_vector_search(
@@ -359,6 +366,7 @@ impl fmt::Debug for Search<'_> {
             terms_matching_strategy,
             scoring_strategy,
             words_limit,
+            retrieve_vectors,
             exhaustive_number_hits,
             max_total_hits,
             rtxn: _,
@@ -379,6 +387,7 @@ impl fmt::Debug for Search<'_> {
             .field("searchable_attributes", searchable_attributes)
             .field("terms_matching_strategy", terms_matching_strategy)
             .field("scoring_strategy", scoring_strategy)
+            .field("retrieve_vectors", retrieve_vectors)
             .field("exhaustive_number_hits", exhaustive_number_hits)
             .field("max_total_hits", max_total_hits)
             .field("words_limit", words_limit)

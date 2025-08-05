@@ -690,11 +690,6 @@ async fn clear_documents() {
     {
       "hits": [],
       "query": "",
-      "queryVector": [
-        1.0,
-        1.0,
-        1.0
-      ],
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
@@ -754,11 +749,6 @@ async fn add_remove_one_vector_4588() {
         }
       ],
       "query": "",
-      "queryVector": [
-        1.0,
-        1.0,
-        1.0
-      ],
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
