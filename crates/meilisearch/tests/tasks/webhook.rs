@@ -166,8 +166,6 @@ async fn single_receives_data() {
 
 #[actix_web::test]
 async fn multiple_receive_data() {
-    let server = Server::new().await;
-
     let WebhookHandle { server_handle: handle1, url: url1, receiver: mut receiver1 } =
         create_webhook_server().await;
     let WebhookHandle { server_handle: handle2, url: url2, receiver: mut receiver2 } =
@@ -175,7 +173,15 @@ async fn multiple_receive_data() {
     let WebhookHandle { server_handle: handle3, url: url3, receiver: mut receiver3 } =
         create_webhook_server().await;
 
-    for url in [url1, url2, url3] {
+    let db_path = tempfile::tempdir().unwrap();
+    let server = Server::new_with_options(Opt {
+        task_webhook_url: Some(Url::parse(&url3).unwrap()),
+        ..default_settings(db_path.path())
+    })
+    .await
+    .unwrap();
+
+    for url in [url1, url2] {
         let (value, code) = server.create_webhook(json!({ "url": url })).await;
         snapshot!(code, @"201 Created");
         snapshot!(json_string!(value, { ".uuid" => "[uuid]", ".url" => "[ignored]" }), @r#"
