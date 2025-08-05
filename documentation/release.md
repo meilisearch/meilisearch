@@ -7,7 +7,7 @@ This guide is to describe how to make releases for the current repository.
 1. A weekly meeting is done every Monday to define the release and to ensure minimal checks before the release.
 <details>
 <summary>Check out the TODO 👇👇👇</summary>
-- [ ] Define the version of the release (`vX.Y.Z`)
+- [ ] Define the version of the release (`vX.Y.Z`) based on our <a href="https://github.com/meilisearch/meilisearch/blob/main/documentation/versioning-policy.md">Versioning Policy</a></br>.
 - [ ] Manually test `--experimental-dumpless-upgrade` on a DB of the previous Meilisearch minor version</br>
 - [ ] Check recent <a href="https://github.com/meilisearch/meilisearch/actions">automated tests</a> on `main`</br>
     - [ ] Scheduled test suite</br>
