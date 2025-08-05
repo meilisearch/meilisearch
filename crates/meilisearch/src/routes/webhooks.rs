@@ -205,8 +205,8 @@ enum WebhooksError {
     TooManyWebhooks,
     #[error("Too many headers for the webhook `{0}`. Please limit the number of headers to 200.")]
     TooManyHeaders(Uuid),
-    #[error("Cannot edit webhook `{0}`. The webhook defined from the command line cannot be modified using the API.")]
-    ReservedWebhook(Uuid),
+    #[error("Webhook `{0}` is immutable. The webhook defined from the command line cannot be modified using the API.")]
+    ImmutableWebhook(Uuid),
     #[error("Webhook `{0}` not found.")]
     WebhookNotFound(Uuid),
     #[error("Invalid header name `{0}`: {1}")]
@@ -225,7 +225,7 @@ impl ErrorCode for WebhooksError {
             MissingUrl(_) => meilisearch_types::error::Code::InvalidWebhooksUrl,
             TooManyWebhooks => meilisearch_types::error::Code::InvalidWebhooks,
             TooManyHeaders(_) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
-            ReservedWebhook(_) => meilisearch_types::error::Code::ReservedWebhook,
+            ImmutableWebhook(_) => meilisearch_types::error::Code::ImmutableWebhook,
             WebhookNotFound(_) => meilisearch_types::error::Code::WebhookNotFound,
             InvalidHeaderName(_, _) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
             InvalidHeaderValue(_, _) => meilisearch_types::error::Code::InvalidWebhooksHeaders,
@@ -278,7 +278,7 @@ fn patch_webhook_inner(
 
 fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
     if uuid.is_nil() {
-        return Err(ReservedWebhook(uuid));
+        return Err(ImmutableWebhook(uuid));
     }
 
     if webhook.url.is_empty() {
@@ -467,7 +467,7 @@ async fn delete_webhook(
     debug!(parameters = ?uuid, "Delete webhook");
 
     if uuid.is_nil() {
-        return Err(ReservedWebhook(uuid).into());
+        return Err(ImmutableWebhook(uuid).into());
     }
 
     let mut webhooks = index_scheduler.webhooks();
