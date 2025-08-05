@@ -168,6 +168,9 @@ pub struct IndexScheduler {
     /// Whether we should automatically cleanup the task queue or not.
     pub(crate) cleanup_enabled: bool,
 
+    /// Whether we should use the old document indexer or the new one.
+    pub(crate) experimental_no_edition_2024_for_dumps: bool,
+
     /// The webhook url we should send tasks to after processing every batches.
     pub(crate) webhook_url: Option<String>,
     /// The Authorization header to send to the webhook URL.
@@ -210,6 +213,7 @@ impl IndexScheduler {
 
             index_mapper: self.index_mapper.clone(),
             cleanup_enabled: self.cleanup_enabled,
+            experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
             webhook_url: self.webhook_url.clone(),
             webhook_authorization_header: self.webhook_authorization_header.clone(),
             embedders: self.embedders.clone(),
@@ -296,6 +300,9 @@ impl IndexScheduler {
             index_mapper,
             env,
             cleanup_enabled: options.cleanup_enabled,
+            experimental_no_edition_2024_for_dumps: options
+                .indexer_config
+                .experimental_no_edition_2024_for_dumps,
             webhook_url: options.webhook_url,
             webhook_authorization_header: options.webhook_authorization_header,
             embedders: Default::default(),
@@ -592,6 +599,11 @@ impl IndexScheduler {
         let index_tasks = self.queue.tasks.index_tasks(&rtxn, index)?;
         let nbr_index_processing_tasks = processing_tasks.intersection_len(&index_tasks);
         Ok(nbr_index_processing_tasks > 0)
+    }
+
+    /// Whether the index should use the old document indexer.
+    pub fn no_edition_2024_for_dumps(&self) -> bool {
+        self.experimental_no_edition_2024_for_dumps
     }
 
     /// Return the tasks matching the query from the user's point of view along

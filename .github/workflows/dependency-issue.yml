@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Download the issue template
-      run: curl -s https://raw.githubusercontent.com/meilisearch/engine-team/main/issue-templates/dependency-issue.md > $ISSUE_TEMPLATE
+      run: curl -s https://raw.githubusercontent.com/meilisearch/meilisearch/main/.github/templates/dependency-issue.md > $ISSUE_TEMPLATE
     - name: Create issue
       run: |
         gh issue create \

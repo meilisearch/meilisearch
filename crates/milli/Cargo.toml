@@ -40,7 +40,7 @@ indexmap = { version = "2.9.0", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memchr = "2.7.5"
-memmap2 = "0.9.5"
+memmap2 = "0.9.7"
 obkv = "0.3.0"
 once_cell = "1.21.3"
 ordered-float = "5.0.0"

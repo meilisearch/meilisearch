@@ -192,6 +192,14 @@ impl DumpIndexReader {
         }
     }
 
+    /// A reference to a file in the NDJSON format containing all the documents of the index
+    pub fn documents_file(&self) -> &File {
+        match self {
+            DumpIndexReader::Current(v6) => v6.documents_file(),
+            DumpIndexReader::Compat(compat) => compat.documents_file(),
+        }
+    }
+
     pub fn settings(&mut self) -> Result<v6::Settings<v6::Checked>> {
         match self {
             DumpIndexReader::Current(v6) => v6.settings(),

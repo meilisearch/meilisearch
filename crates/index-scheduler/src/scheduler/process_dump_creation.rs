@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 
 use dump::IndexMetadata;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
+use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self};
@@ -227,12 +228,21 @@ impl IndexScheduler {
                         return Err(Error::from_milli(user_err, Some(uid.to_string())));
                     };
 
-                    for (embedder_name, (embeddings, regenerate)) in embeddings {
+                    for (
+                        embedder_name,
+                        EmbeddingsWithMetadata { embeddings, regenerate, has_fragments },
+                    ) in embeddings
+                    {
                         let embeddings = ExplicitVectors {
                             embeddings: Some(VectorOrArrayOfVectors::from_array_of_vectors(
                                 embeddings,
                             )),
-                            regenerate,
+                            regenerate: regenerate &&
+                            // Meilisearch does not handle well dumps with fragments, because as the fragments
+                            // are marked as user-provided,
+                            // all embeddings would be regenerated on any settings change or document update.
+                            // To prevent this, we mark embeddings has non regenerate in this case.
+                            !has_fragments,
                         };
                         vectors.insert(embedder_name, serde_json::to_value(embeddings).unwrap());
                     }
