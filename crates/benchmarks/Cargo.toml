@@ -55,3 +55,7 @@ harness = false
 [[bench]]
 name = "sort"
 harness = false
+
+[[bench]]
+name = "filter_starts_with"
+harness = false
