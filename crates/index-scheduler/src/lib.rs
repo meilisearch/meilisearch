@@ -819,7 +819,7 @@ impl IndexScheduler {
                 rtxn: &rtxn,
                 index_scheduler: self,
                 tasks: &mut updated.into_iter(),
-                buffer: Vec::with_capacity(800), // on average a task is around ~600 bytes
+                buffer: Vec::with_capacity(page_size::get()),
                 written: 0,
             };
 
