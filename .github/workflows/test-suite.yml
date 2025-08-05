@@ -3,7 +3,7 @@ name: Test suite
 on:
   workflow_dispatch:
   schedule:
-    # Everyday at 5:00am
+    # Every day at 5:00am
     - cron: "0 5 * * *"
   pull_request:
   merge_group:
