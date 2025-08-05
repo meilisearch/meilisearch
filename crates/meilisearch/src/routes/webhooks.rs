@@ -364,7 +364,7 @@ async fn post_webhook(
     }
 
     let mut webhooks = index_scheduler.webhooks();
-    if dbg!(webhooks.webhooks.len() >= 20) {
+    if webhooks.webhooks.len() >= 20 {
         return Err(TooManyWebhooks.into());
     }
 
