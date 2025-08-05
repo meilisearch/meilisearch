@@ -203,6 +203,7 @@ struct Infos {
     experimental_composite_embedders: bool,
     experimental_embedding_cache_entries: usize,
     experimental_no_snapshot_compaction: bool,
+    experimental_no_edition_2024_for_dumps: bool,
     experimental_no_edition_2024_for_settings: bool,
     gpu_enabled: bool,
     db_path: bool,
@@ -293,6 +294,7 @@ impl Infos {
             max_indexing_threads,
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_dumps,
         } = indexer_options;
 
         let RuntimeTogglableFeatures {
@@ -329,6 +331,7 @@ impl Infos {
             experimental_composite_embedders: composite_embedders,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_no_edition_2024_for_dumps,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != PathBuf::from("./data.ms"),
             import_dump: import_dump.is_some(),

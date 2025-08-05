@@ -101,6 +101,10 @@ impl<T> Setting<T> {
         matches!(self, Self::NotSet)
     }
 
+    pub const fn is_reset(&self) -> bool {
+        matches!(self, Self::Reset)
+    }
+
     /// If `Self` is `Reset`, then map self to `Set` with the provided `val`.
     pub fn or_reset(self, val: T) -> Self {
         match self {
@@ -554,10 +558,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         match self.searchable_fields {
             Setting::Set(ref fields) => {
                 // Check to see if the searchable fields changed before doing anything else
-                let old_fields = self.index.searchable_fields(self.wtxn)?;
+                let old_fields = self.index.user_defined_searchable_fields(self.wtxn)?;
                 let did_change = {
                     let new_fields = fields.iter().map(String::as_str).collect::<Vec<_>>();
-                    new_fields != old_fields
+                    old_fields.is_none_or(|old| new_fields != old)
                 };
                 if !did_change {
                     return Ok(false);
@@ -1213,6 +1217,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 // new config
                 EitherOrBoth::Right((name, mut setting)) => {
                     tracing::debug!(embedder = name, "new embedder");
+                    // if we are asked to reset an embedder that doesn't exist, just ignore it
+                    if setting.is_reset() {
+                        continue;
+                    }
                     // apply the default source in case the source was not set so that it gets validated
                     crate::vector::settings::EmbeddingSettings::apply_default_source(&mut setting);
                     crate::vector::settings::EmbeddingSettings::apply_default_openai_model(

@@ -50,6 +50,7 @@ jsonwebtoken = "9.3.1"
 lazy_static = "1.5.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
+memmap2 = "0.9.7"
 mimalloc = { version = "0.1.47", default-features = false }
 mime = "0.3.17"
 num_cpus = "1.17.0"
@@ -169,5 +170,5 @@ german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
 
 [package.metadata.mini-dashboard]
-assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.20/build.zip"
-sha1 = "82a7ddd7bf14bb5323c3d235d2b62892a98b6a59"
+assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.2.22/build.zip"
+sha1 = "b70b2036b5f167da9ea0b637da8b320c7ea88254"
