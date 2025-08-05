@@ -146,7 +146,7 @@ pub(super) struct WebhookResults {
 async fn get_webhooks(
     index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_GET }>, Data<IndexScheduler>>,
 ) -> Result<HttpResponse, ResponseError> {
-    let webhooks = index_scheduler.webhooks();
+    let webhooks = index_scheduler.webhooks_view();
     let results = webhooks
         .webhooks
         .into_iter()
@@ -326,7 +326,7 @@ async fn get_webhook(
     uuid: Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let uuid = Uuid::from_str(&uuid.into_inner()).map_err(InvalidUuid)?;
-    let mut webhooks = index_scheduler.webhooks();
+    let mut webhooks = index_scheduler.webhooks_view();
 
     let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
     let webhook = WebhookWithMetadata::from(uuid, webhook);
@@ -368,8 +368,8 @@ async fn post_webhook(
         return Err(TooManyHeaders(uuid).into());
     }
 
-    let mut webhooks = index_scheduler.webhooks();
-    if webhooks.webhooks.len() >= 20 {
+    let mut webhooks = index_scheduler.retrieve_runtime_webhooks();
+    if webhooks.len() >= 20 {
         return Err(TooManyWebhooks.into());
     }
 
@@ -383,8 +383,8 @@ async fn post_webhook(
     };
 
     check_changed(uuid, &webhook)?;
-    webhooks.webhooks.insert(uuid, webhook.clone());
-    index_scheduler.put_webhooks(webhooks)?;
+    webhooks.insert(uuid, webhook.clone());
+    index_scheduler.update_runtime_webhooks(webhooks)?;
 
     analytics.publish(PatchWebhooksAnalytics::post_webhook(), &req);
 
@@ -426,13 +426,17 @@ async fn patch_webhook(
     let webhook_settings = webhook_settings.into_inner();
     debug!(parameters = ?(uuid, &webhook_settings), "Patch webhook");
 
-    let mut webhooks = index_scheduler.webhooks();
-    let old_webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
+    if uuid.is_nil() {
+        return Err(ImmutableWebhook(uuid).into());
+    }
+
+    let mut webhooks = index_scheduler.retrieve_runtime_webhooks();
+    let old_webhook = webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
     let webhook = patch_webhook_inner(&uuid, old_webhook, webhook_settings)?;
 
     check_changed(uuid, &webhook)?;
-    webhooks.webhooks.insert(uuid, webhook.clone());
-    index_scheduler.put_webhooks(webhooks)?;
+    webhooks.insert(uuid, webhook.clone());
+    index_scheduler.update_runtime_webhooks(webhooks)?;
 
     analytics.publish(PatchWebhooksAnalytics::patch_webhook(), &req);
 
@@ -468,9 +472,9 @@ async fn delete_webhook(
         return Err(ImmutableWebhook(uuid).into());
     }
 
-    let mut webhooks = index_scheduler.webhooks();
-    webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
-    index_scheduler.put_webhooks(webhooks)?;
+    let mut webhooks = index_scheduler.retrieve_runtime_webhooks();
+    webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
+    index_scheduler.update_runtime_webhooks(webhooks)?;
 
     analytics.publish(PatchWebhooksAnalytics::delete_webhook(), &req);
 

@@ -493,7 +493,7 @@ fn import_dump(
 
     // 2. Import the webhooks
     if let Some(webhooks) = dump_reader.webhooks() {
-        index_scheduler.put_webhooks(webhooks.clone())?;
+        index_scheduler.update_runtime_webhooks(webhooks.webhooks.clone())?;
     }
 
     // 3. Import the `Key`s.

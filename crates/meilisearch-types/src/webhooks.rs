@@ -11,9 +11,18 @@ pub struct Webhook {
     pub headers: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq)]
+#[derive(Debug, Serialize, Default, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct Webhooks {
+pub struct WebhooksView {
+    #[serde(default)]
+    pub webhooks: BTreeMap<Uuid, Webhook>,
+}
+
+// Same as the WebhooksView instead it should never contains the CLI webhooks.
+// It's the right structure to use in the dump
+#[derive(Debug, Deserialize, Serialize, Default, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhooksDumpView {
     #[serde(default)]
     pub webhooks: BTreeMap<Uuid, Webhook>,
 }

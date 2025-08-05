@@ -272,7 +272,7 @@ impl IndexScheduler {
 
         // 7. Dump the webhooks
         progress.update_progress(DumpCreationProgress::DumpTheWebhooks);
-        let webhooks = self.webhooks();
+        let webhooks = self.webhooks_dump_view();
         dump.create_webhooks(webhooks)?;
 
         let dump_uid = started_at.format(format_description!(

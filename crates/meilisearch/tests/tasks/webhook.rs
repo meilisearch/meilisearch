@@ -283,7 +283,6 @@ async fn reserved_names() {
     let (value, code) = server
         .patch_webhook(Uuid::nil().to_string(), json!({ "url": "http://localhost:8080" }))
         .await;
-    snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
       "message": "Webhook `[uuid]` is immutable. The webhook defined from the command line cannot be modified using the API.",
@@ -292,9 +291,9 @@ async fn reserved_names() {
       "link": "https://docs.meilisearch.com/errors#immutable_webhook"
     }
     "#);
+    snapshot!(code, @"400 Bad Request");
 
     let (value, code) = server.delete_webhook(Uuid::nil().to_string()).await;
-    snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
       "message": "Webhook `[uuid]` is immutable. The webhook defined from the command line cannot be modified using the API.",
@@ -303,6 +302,7 @@ async fn reserved_names() {
       "link": "https://docs.meilisearch.com/errors#immutable_webhook"
     }
     "#);
+    snapshot!(code, @"400 Bad Request");
 }
 
 #[actix_web::test]
