@@ -117,7 +117,7 @@ async fn test_both_apis() {
     ]);
     let (value, code) = index.add_documents(documents, None).await;
     snapshot!(code, @"202 Accepted");
-    let task = index.wait_task(value.uid()).await;
+    let task = server.wait_task(value.uid()).await;
     snapshot!(task, @r###"
     {
       "uid": "[uid]",
