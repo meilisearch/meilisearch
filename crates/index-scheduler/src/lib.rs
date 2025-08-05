@@ -73,6 +73,7 @@ use queue::Queue;
 use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use time::OffsetDateTime;
+use uuid::Uuid;
 use versioning::Versioning;
 
 use crate::index_mapper::IndexMapper;
@@ -107,6 +108,10 @@ pub struct IndexSchedulerOptions {
     pub snapshots_path: PathBuf,
     /// The path to the folder containing the dumps.
     pub dumps_path: PathBuf,
+    /// The webhook url that was set by the CLI.
+    pub cli_webhook_url: Option<String>,
+    /// The Authorization header to send to the webhook URL that was set by the CLI.
+    pub cli_webhook_authorization: Option<String>,
     /// The maximum size, in bytes, of the task index.
     pub task_db_size: usize,
     /// The size, in bytes, with which a meilisearch index is opened the first time of each meilisearch index.
@@ -179,6 +184,10 @@ pub struct IndexScheduler {
     /// A database to store single-keyed data that is persisted across restarts.
     persisted: Database<Str, Str>,
 
+    /// The webhook url that was set by the CLI.
+    cli_webhook_url: Option<String>,
+    /// The Authorization header to send to the webhook URL that was set by the CLI.
+    cli_webhook_authorization: Option<String>,
     /// Webhook
     cached_webhooks: Arc<RwLock<Webhooks>>,
 
@@ -221,7 +230,11 @@ impl IndexScheduler {
             cleanup_enabled: self.cleanup_enabled,
             experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
             persisted: self.persisted,
+
+            cli_webhook_url: self.cli_webhook_url.clone(),
+            cli_webhook_authorization: self.cli_webhook_authorization.clone(),
             cached_webhooks: self.cached_webhooks.clone(),
+
             embedders: self.embedders.clone(),
             #[cfg(test)]
             test_breakpoint_sdr: self.test_breakpoint_sdr.clone(),
@@ -299,7 +312,8 @@ impl IndexScheduler {
 
         let persisted = env.create_database(&mut wtxn, Some(db_name::PERSISTED))?;
         let webhooks_db = persisted.remap_data_type::<SerdeJson<Webhooks>>();
-        let webhooks = webhooks_db.get(&wtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
+        let mut webhooks = webhooks_db.get(&wtxn, db_keys::WEBHOOKS)?.unwrap_or_default();
+        webhooks.webhooks.remove(&Uuid::nil()); // remove the cli webhook if it was saved by mistake
 
         wtxn.commit()?;
 
@@ -317,7 +331,10 @@ impl IndexScheduler {
                 .indexer_config
                 .experimental_no_edition_2024_for_dumps,
             persisted,
+
             cached_webhooks: Arc::new(RwLock::new(webhooks)),
+            cli_webhook_url: options.cli_webhook_url,
+            cli_webhook_authorization: options.cli_webhook_authorization,
 
             embedders: Default::default(),
 
@@ -869,9 +886,10 @@ impl IndexScheduler {
         self.features.network()
     }
 
-    pub fn put_webhooks(&self, webhooks: Webhooks) -> Result<()> {
+    pub fn put_webhooks(&self, mut webhooks: Webhooks) -> Result<()> {
         let mut wtxn = self.env.write_txn()?;
         let webhooks_db = self.persisted.remap_data_type::<SerdeJson<Webhooks>>();
+        webhooks.webhooks.remove(&Uuid::nil()); // the cli webhook must not be saved
         webhooks_db.put(&mut wtxn, db_keys::WEBHOOKS, &webhooks)?;
         wtxn.commit()?;
         *self.cached_webhooks.write().unwrap() = webhooks;
@@ -880,7 +898,15 @@ impl IndexScheduler {
 
     pub fn webhooks(&self) -> Webhooks {
         let webhooks = self.cached_webhooks.read().unwrap_or_else(|poisoned| poisoned.into_inner());
-        Webhooks::clone(&*webhooks)
+        let mut webhooks = Webhooks::clone(&*webhooks);
+        if let Some(url) = self.cli_webhook_url.as_ref().cloned() {
+            let mut headers = BTreeMap::new();
+            if let Some(auth) = self.cli_webhook_authorization.as_ref().cloned() {
+                headers.insert(String::from("Authorization"), auth);
+            }
+            webhooks.webhooks.insert(Uuid::nil(), Webhook { url, headers });
+        }
+        webhooks
     }
 
     pub fn embedders(

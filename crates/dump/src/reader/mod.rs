@@ -458,6 +458,11 @@ pub(crate) mod test {
 
         // webhooks
 
+        // Important note: You might be surprised to see the cli webhook in the dump, as it's not supposed to be saved.
+        // This is because the dump comes from a version that did save it.
+        // It's no longer the case, but that's not what this test is about.
+        // It's ok to see the cli webhook disappear when this test gets updated.
+
         let webhooks = dump.webhooks().unwrap();
         insta::assert_json_snapshot!(webhooks, @r#"
         {
