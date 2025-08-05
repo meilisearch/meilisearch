@@ -265,7 +265,14 @@ async fn cli_with_dumps() {
 
 #[actix_web::test]
 async fn reserved_names() {
-    let server = Server::new().await;
+    let db_path = tempfile::tempdir().unwrap();
+    let server = Server::new_with_options(Opt {
+        task_webhook_url: Some(Url::parse("https://example-cli.com/").unwrap()),
+        task_webhook_authorization_header: Some(String::from("Bearer a-secret-token")),
+        ..default_settings(db_path.path())
+    })
+    .await
+    .unwrap();
 
     let (value, code) = server
         .patch_webhook(Uuid::nil().to_string(), json!({ "url": "http://localhost:8080" }))
@@ -273,10 +280,10 @@ async fn reserved_names() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Cannot edit webhook `[uuid]`. The webhook defined from the command line cannot be modified using the API.",
-      "code": "reserved_webhook",
+      "message": "Webhook `[uuid]` is immutable. The webhook defined from the command line cannot be modified using the API.",
+      "code": "immutable_webhook",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#reserved_webhook"
+      "link": "https://docs.meilisearch.com/errors#immutable_webhook"
     }
     "#);
 
@@ -284,10 +291,10 @@ async fn reserved_names() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Cannot edit webhook `[uuid]`. The webhook defined from the command line cannot be modified using the API.",
-      "code": "reserved_webhook",
+      "message": "Webhook `[uuid]` is immutable. The webhook defined from the command line cannot be modified using the API.",
+      "code": "immutable_webhook",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#reserved_webhook"
+      "link": "https://docs.meilisearch.com/errors#immutable_webhook"
     }
     "#);
 }
@@ -335,7 +342,7 @@ async fn over_limits() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
-      "message": "Too many headers for the webhook `[uuid]`. Please limit the number of headers to 200.",
+      "message": "Too many headers for the webhook `[uuid]`. Please limit the number of headers to 200. Hint: To remove an already defined header set its value to `null`",
       "code": "invalid_webhooks_headers",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_webhooks_headers"
@@ -387,12 +394,11 @@ async fn post_get_delete() {
 }
 
 #[actix_web::test]
-async fn patch() {
+async fn create_and_patch() {
     let server = Server::new().await;
 
-    let uuid = Uuid::new_v4().to_string();
     let (value, code) =
-        server.patch_webhook(&uuid, json!({ "headers": { "authorization": "TOKEN" } })).await;
+        server.create_webhook(json!({ "headers": { "authorization": "TOKEN" } })).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(value, @r#"
     {
@@ -403,9 +409,8 @@ async fn patch() {
     }
     "#);
 
-    let (value, code) =
-        server.patch_webhook(&uuid, json!({ "url": "https://example.com/hook" })).await;
-    snapshot!(code, @"200 OK");
+    let (value, code) = server.create_webhook(json!({ "url": "https://example.com/hook" })).await;
+    snapshot!(code, @"201 Created");
     snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
     {
       "uuid": "[uuid]",
@@ -415,6 +420,7 @@ async fn patch() {
     }
     "#);
 
+    let uuid = value.get("uuid").unwrap().as_str().unwrap();
     let (value, code) =
         server.patch_webhook(&uuid, json!({ "headers": { "authorization": "TOKEN" } })).await;
     snapshot!(code, @"200 OK");
@@ -459,13 +465,15 @@ async fn patch() {
     "#);
 
     let (value, code) = server.patch_webhook(&uuid, json!({ "url": null })).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
     {
-      "message": "The URL for the webhook `[uuid]` is missing.",
-      "code": "invalid_webhooks_url",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_webhooks_url"
+      "uuid": "81ccb94c-74cf-4d40-8070-492055804693",
+      "isEditable": true,
+      "url": "https://example.com/hook",
+      "headers": {
+        "authorization2": "TOKEN"
+      }
     }
     "#);
 }
