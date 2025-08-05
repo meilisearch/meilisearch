@@ -433,6 +433,9 @@ impl Action {
             ALL_GET => Some(Self::AllGet),
             WEBHOOKS_GET => Some(Self::WebhooksGet),
             WEBHOOKS_UPDATE => Some(Self::WebhooksUpdate),
+            WEBHOOKS_DELETE => Some(Self::WebhooksDelete),
+            WEBHOOKS_CREATE => Some(Self::WebhooksCreate),
+            WEBHOOKS_ALL => Some(Self::WebhooksAll),
             _otherwise => None,
         }
     }
