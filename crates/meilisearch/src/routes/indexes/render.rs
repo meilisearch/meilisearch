@@ -391,6 +391,7 @@ fn parse_template_id_fragment<'a>(
     Ok(fragment.clone())
 }
 
+#[allow(clippy::result_large_err)]
 fn parse_template_id<'a>(
     index: &Index,
     rtxn: &RoTxn,
