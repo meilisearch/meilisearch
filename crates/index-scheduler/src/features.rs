@@ -85,7 +85,7 @@ impl RoFeatures {
             Ok(())
         } else {
             Err(FeatureNotEnabledError {
-                disabled_action: "Using `CONTAINS` or `STARTS WITH` in a filter",
+                disabled_action: "Using `CONTAINS` in a filter",
                 feature: "contains filter",
                 issue_link: "https://github.com/orgs/meilisearch/discussions/763",
             }

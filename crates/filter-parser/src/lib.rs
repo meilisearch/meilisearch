@@ -165,9 +165,9 @@ impl<'a> FilterCondition<'a> {
                 | Condition::Exists
                 | Condition::LowerThan(_)
                 | Condition::LowerThanOrEqual(_)
-                | Condition::Between { .. } => None,
-                Condition::Contains { keyword, word: _ }
-                | Condition::StartsWith { keyword, word: _ } => Some(keyword),
+                | Condition::Between { .. }
+                | Condition::StartsWith { .. } => None,
+                Condition::Contains { keyword, word: _ } => Some(keyword),
             },
             FilterCondition::Not(this) => this.use_contains_operator(),
             FilterCondition::Or(seq) | FilterCondition::And(seq) => {
