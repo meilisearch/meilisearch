@@ -9,7 +9,7 @@ on:
         required: false
         default: nightly
   schedule:
-    - cron: "0 6 * * MON" # Every Monday at 6:00AM
+    - cron: '0 6 * * *' # Every day at 6:00am
 
 env:
   MEILI_MASTER_KEY: 'masterKey'
