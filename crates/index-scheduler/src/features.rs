@@ -182,6 +182,7 @@ impl FeatureData {
             ..persisted_features
         }));
 
+        // Once this is stabilized, network should be stored along with webhooks in index-scheduler's persisted database
         let network_db = runtime_features_db.remap_data_type::<SerdeJson<Network>>();
         let network: Network = network_db.get(wtxn, db_keys::NETWORK)?.unwrap_or_default();
 

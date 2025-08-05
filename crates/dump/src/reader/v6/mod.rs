@@ -25,6 +25,7 @@ pub type Key = meilisearch_types::keys::Key;
 pub type ChatCompletionSettings = meilisearch_types::features::ChatCompletionSettings;
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
 pub type Network = meilisearch_types::features::Network;
+pub type Webhooks = meilisearch_types::webhooks::WebhooksDumpView;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
@@ -59,6 +60,7 @@ pub struct V6Reader {
     keys: BufReader<File>,
     features: Option<RuntimeTogglableFeatures>,
     network: Option<Network>,
+    webhooks: Option<Webhooks>,
 }
 
 impl V6Reader {
@@ -93,8 +95,8 @@ impl V6Reader {
             Err(e) => return Err(e.into()),
         };
 
-        let network_file = match fs::read(dump.path().join("network.json")) {
-            Ok(network_file) => Some(network_file),
+        let network = match fs::read(dump.path().join("network.json")) {
+            Ok(network_file) => Some(serde_json::from_reader(&*network_file)?),
             Err(error) => match error.kind() {
                 // Allows the file to be missing, this will only result in all experimental features disabled.
                 ErrorKind::NotFound => {
@@ -104,10 +106,16 @@ impl V6Reader {
                 _ => return Err(error.into()),
             },
         };
-        let network = if let Some(network_file) = network_file {
-            Some(serde_json::from_reader(&*network_file)?)
-        } else {
-            None
+
+        let webhooks = match fs::read(dump.path().join("webhooks.json")) {
+            Ok(webhooks_file) => Some(serde_json::from_reader(&*webhooks_file)?),
+            Err(error) => match error.kind() {
+                ErrorKind::NotFound => {
+                    debug!("`webhooks.json` not found in dump");
+                    None
+                }
+                _ => return Err(error.into()),
+            },
         };
 
         Ok(V6Reader {
@@ -119,6 +127,7 @@ impl V6Reader {
             features,
             network,
             dump,
+            webhooks,
         })
     }
 
@@ -228,6 +237,10 @@ impl V6Reader {
 
     pub fn network(&self) -> Option<&Network> {
         self.network.as_ref()
+    }
+
+    pub fn webhooks(&self) -> Option<&Webhooks> {
+        self.webhooks.as_ref()
     }
 }
 

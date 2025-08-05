@@ -446,8 +446,7 @@ impl IndexScheduler {
             Ok(())
         })?;
 
-        // We shouldn't crash the tick function if we can't send data to the webhook.
-        let _ = self.notify_webhook(&ids);
+        self.notify_webhooks(ids);
 
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::AfterProcessing);

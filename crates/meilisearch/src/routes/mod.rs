@@ -41,6 +41,7 @@ use crate::routes::indexes::IndexView;
 use crate::routes::multi_search::SearchResults;
 use crate::routes::network::{Network, Remote};
 use crate::routes::swap_indexes::SwapIndexesPayload;
+use crate::routes::webhooks::{WebhookResults, WebhookSettings, WebhookWithMetadata};
 use crate::search::{
     FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
     SearchQueryWithIndex, SearchResultWithIndex, SimilarQuery, SimilarResult,
@@ -70,6 +71,7 @@ mod swap_indexes;
 pub mod tasks;
 #[cfg(test)]
 mod tasks_test;
+mod webhooks;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -89,6 +91,7 @@ mod tasks_test;
         (path = "/experimental-features", api = features::ExperimentalFeaturesApi),
         (path = "/export", api = export::ExportApi),
         (path = "/network", api = network::NetworkApi),
+        (path = "/webhooks", api = webhooks::WebhooksApi),
     ),
     paths(get_health, get_version, get_stats),
     tags(
@@ -99,7 +102,7 @@ mod tasks_test;
         url = "/",
         description = "Local server",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadata))
 )]
 pub struct MeilisearchApi;
 
@@ -120,7 +123,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/experimental-features").configure(features::configure))
         .service(web::scope("/network").configure(network::configure))
         .service(web::scope("/export").configure(export::configure))
-        .service(web::scope("/chats").configure(chats::configure));
+        .service(web::scope("/chats").configure(chats::configure))
+        .service(web::scope("/webhooks").configure(webhooks::configure));
 
     #[cfg(feature = "swagger")]
     {
