@@ -457,22 +457,10 @@ pub(crate) mod test {
         ");
 
         // webhooks
-
-        // Important note: You might be surprised to see the cli webhook in the dump, as it's not supposed to be saved.
-        // This is because the dump comes from a version that did save it.
-        // It's no longer the case, but that's not what this test is about.
-        // It's ok to see the cli webhook disappear when this test gets updated.
-
         let webhooks = dump.webhooks().unwrap();
         insta::assert_json_snapshot!(webhooks, @r#"
         {
           "webhooks": {
-            "00000000-0000-0000-0000-000000000000": {
-              "url": "https://defined-in-dump.com/",
-              "headers": {
-                "Authorization": "Bearer defined in dump"
-              }
-            },
             "627ea538-733d-4545-8d2d-03526eb381ce": {
               "url": "https://example.com/authorization-less",
               "headers": {}
