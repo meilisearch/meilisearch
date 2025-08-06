@@ -249,6 +249,11 @@ impl<'a> Index<'a, Owned> {
         self.service.put_encoded(url, settings, self.encoder).await
     }
 
+    pub async fn update_settings_chat(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/chat", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, settings, self.encoder).await
+    }
+
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
         self.service.delete(url).await
