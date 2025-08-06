@@ -1,6 +1,9 @@
 use crate::common::Server;
 use crate::json;
-use meili_snap::snapshot;
+use crate::tasks::OffsetDateTime;
+use meili_snap::{json_string, snapshot};
+use time::format_description::well_known::Rfc3339;
+use urlencoding::encode;
 
 // pub struct Query {
 //     /// The maximum number of tasks to be matched
@@ -94,4 +97,173 @@ async fn delete_task() {
       "next": null
     }
     "#);
+}
+
+// If there is a bug it's caused by a combination of the parameters so let's test them together!
+
+async fn delete_tasks_time_bounds_inner(name: &str) {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // Add documents
+    for i in 0..2 {
+        let (task, code) =
+            index.add_documents(json!([{"id": i, "country": "taiwan"}]), Some("id")).await;
+        snapshot!(code, @r#"202 Accepted"#);
+        server.wait_task(task).await.succeeded();
+    }
+
+    let time1 = OffsetDateTime::now_utc();
+
+    for i in 2..4 {
+        let (task, code) =
+            index.add_documents(json!([{"id": i, "country": "taiwan"}]), Some("id")).await;
+        snapshot!(code, @r#"202 Accepted"#);
+        server.wait_task(task).await.succeeded();
+    }
+
+    let time2 = OffsetDateTime::now_utc();
+
+    for i in 4..6 {
+        let (task, code) =
+            index.add_documents(json!([{"id": i, "country": "taiwan"}]), Some("id")).await;
+        snapshot!(code, @r#"202 Accepted"#);
+        server.wait_task(task).await.succeeded();
+    }
+
+    // Delete tasks with before_enqueued and after_enqueued
+    let (task, code) = index
+        .delete_tasks(dbg!(format!(
+            "before{name}={}&after{name}={}",
+            encode(&time2.format(&Rfc3339).unwrap()),
+            encode(&time1.format(&Rfc3339).unwrap()),
+        )))
+        .await;
+    snapshot!(code, @"200 OK");
+    let value = server.wait_task(task).await.succeeded();
+
+    snapshot!(json_string!(value, {
+        ".details.originalFilter" => "[ignored]",
+        ".uid" => "[ignored]",
+        ".batchUid" => "[ignored]",
+        ".duration" => "[duration]",
+        ".enqueuedAt" => "[date]",
+        ".startedAt" => "[date]",
+        ".finishedAt" => "[date]"
+    }), @r#"
+    {
+      "uid": "[ignored]",
+      "batchUid": "[ignored]",
+      "indexUid": null,
+      "status": "succeeded",
+      "type": "taskDeletion",
+      "canceledBy": null,
+      "details": {
+        "matchedTasks": 2,
+        "deletedTasks": 2,
+        "originalFilter": "[ignored]"
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
+
+    // Check that the task is deleted
+    let (value, code) = index.list_tasks().await;
+    snapshot!(code, @r#"200 OK"#);
+    snapshot!(json_string!(value, {
+        ".results[].uid" => "[ignored]",
+        ".results[].batchUid" => "[ignored]",
+        ".results[].duration" => "[duration]",
+        ".results[].enqueuedAt" => "[date]",
+        ".results[].startedAt" => "[date]",
+        ".results[].finishedAt" => "[date]"
+    }), @r#"
+    {
+      "results": [
+        {
+          "uid": "[ignored]",
+          "batchUid": "[ignored]",
+          "indexUid": "[uuid]",
+          "status": "succeeded",
+          "type": "documentAdditionOrUpdate",
+          "canceledBy": null,
+          "details": {
+            "receivedDocuments": 1,
+            "indexedDocuments": 1
+          },
+          "error": null,
+          "duration": "[duration]",
+          "enqueuedAt": "[date]",
+          "startedAt": "[date]",
+          "finishedAt": "[date]"
+        },
+        {
+          "uid": "[ignored]",
+          "batchUid": "[ignored]",
+          "indexUid": "[uuid]",
+          "status": "succeeded",
+          "type": "documentAdditionOrUpdate",
+          "canceledBy": null,
+          "details": {
+            "receivedDocuments": 1,
+            "indexedDocuments": 1
+          },
+          "error": null,
+          "duration": "[duration]",
+          "enqueuedAt": "[date]",
+          "startedAt": "[date]",
+          "finishedAt": "[date]"
+        },
+        {
+          "uid": "[ignored]",
+          "batchUid": "[ignored]",
+          "indexUid": "[uuid]",
+          "status": "succeeded",
+          "type": "documentAdditionOrUpdate",
+          "canceledBy": null,
+          "details": {
+            "receivedDocuments": 1,
+            "indexedDocuments": 1
+          },
+          "error": null,
+          "duration": "[duration]",
+          "enqueuedAt": "[date]",
+          "startedAt": "[date]",
+          "finishedAt": "[date]"
+        },
+        {
+          "uid": "[ignored]",
+          "batchUid": "[ignored]",
+          "indexUid": "[uuid]",
+          "status": "succeeded",
+          "type": "documentAdditionOrUpdate",
+          "canceledBy": null,
+          "details": {
+            "receivedDocuments": 1,
+            "indexedDocuments": 1
+          },
+          "error": null,
+          "duration": "[duration]",
+          "enqueuedAt": "[date]",
+          "startedAt": "[date]",
+          "finishedAt": "[date]"
+        }
+      ],
+      "total": 4,
+      "limit": 20,
+      "from": 12,
+      "next": null
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn delete_tasks_time_bounds() {
+    delete_tasks_time_bounds_inner("EnqueuedAt").await;
+    delete_tasks_time_bounds_inner("StartedAt").await;
+    delete_tasks_time_bounds_inner("FinishedAt").await;
 }
