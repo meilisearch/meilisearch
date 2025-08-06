@@ -186,7 +186,7 @@ test_setting_routes!(
     },
     {
         setting: chat,
-        update_verb: put,
+        update_verb: patch,
         default_value: {
             "description": "",
             "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
