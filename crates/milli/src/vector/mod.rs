@@ -153,6 +153,8 @@ impl VectorStore {
                 if writer.need_build(wtxn)? {
                     writer
                         .builder(rng)
+                        // .progress(|step| progress.update_progress_from_hannoy(step))
+                        .cancel(cancel)
                         .ef_construction(HANNOY_EF_CONSTRUCTION)
                         .build::<HANNOY_M, HANNOY_M0>(wtxn)?
                 } else if writer.is_empty(wtxn)? {
