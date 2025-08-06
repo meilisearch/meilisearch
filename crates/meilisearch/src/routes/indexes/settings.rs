@@ -98,7 +98,7 @@ macro_rules! make_setting_route {
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 request_body = $type,
                 responses(
-                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
                             "taskUid": 147,
                             "indexUid": "movies",
@@ -162,7 +162,7 @@ macro_rules! make_setting_route {
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
                 request_body = $type,
                 responses(
-                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
                             "taskUid": 147,
                             "indexUid": "movies",
@@ -530,7 +530,7 @@ make_setting_routes!(
     params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     request_body = Settings<Unchecked>,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -680,7 +680,7 @@ pub async fn get_all(
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
     params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
