@@ -166,20 +166,20 @@ impl VectorStore {
                 // only happens once in the life of an embedder, it's not very performances
                 // sensitive.
                 if quantizing && !self.quantized {
-                    // let writer = writer.prepare_changing_distance::<BinaryQuantizedCosine>(wtxn)?;
-                    // writer
-                    //     .builder(rng)
-                    //     .available_memory(hannoy_memory.unwrap_or(usize::MAX))
-                    //     .progress(|step| progress.update_progress_from_hannoy(step))
-                    //     .cancel(cancel)
-                    //     .build(wtxn)?;
-                    unimplemented!("switching from quantized to non-quantized");
+                    let writer = writer.prepare_changing_distance::<BinaryQuantizedCosine>(wtxn)?;
+                    writer
+                        .builder(rng)
+                        .available_memory(hannoy_memory.unwrap_or(usize::MAX))
+                        // .progress(|step| progress.update_progress_from_hannoy(step))
+                        .cancel(cancel)
+                        .ef_construction(HANNOY_EF_CONSTRUCTION)
+                        .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
                 } else if writer.need_build(wtxn)? {
                     writer
                         .builder(rng)
                         .available_memory(hannoy_memory.unwrap_or(usize::MAX))
                         // .progress(|step| progress.update_progress_from_hannoy(step))
-                        // .cancel(cancel)
+                        .cancel(cancel)
                         .ef_construction(HANNOY_EF_CONSTRUCTION)
                         .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
                 } else if writer.is_empty(wtxn)? {
