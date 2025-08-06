@@ -468,7 +468,8 @@ impl VectorStore {
 
         for reader in self.readers(rtxn, db) {
             let reader = reader?;
-            let mut searcher = reader.nns(limit, limit * 10); // TODO find better ef
+            let mut searcher = reader.nns(limit);
+            searcher.ef_search(limit * 10); // TODO find better ef
             if let Some(filter) = filter {
                 if reader.item_ids().is_disjoint(filter) {
                     continue;
@@ -510,7 +511,8 @@ impl VectorStore {
 
         for reader in self.readers(rtxn, db) {
             let reader = reader?;
-            let mut searcher = reader.nns(limit, limit * 10); // TODO find better ef
+            let mut searcher = reader.nns(limit);
+            searcher.ef_search(limit * 10); // TODO find better ef
             if let Some(filter) = filter {
                 if reader.item_ids().is_disjoint(filter) {
                     continue;
