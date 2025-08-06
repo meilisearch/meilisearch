@@ -2603,8 +2603,8 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.0.1"
-source = "git+https://github.com/Kerollmops/hannoy?branch=release-0.0.2#d734d5ab13ae34b3ee4d34b9eeb3ed8843cd11c2"
+version = "0.0.2"
+source = "git+https://github.com/nnethercott/hannoy?rev=cab22c0#cab22c01dce4c825ae4d0d8824ba51ed4cef57e1"
 dependencies = [
  "bytemuck",
  "byteorder",
