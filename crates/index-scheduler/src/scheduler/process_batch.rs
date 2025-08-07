@@ -10,6 +10,7 @@ use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use milli::update::Settings as MilliSettings;
 use roaring::RoaringBitmap;
+use time::OffsetDateTime;
 
 use super::create_batch::Batch;
 use crate::processing::{
@@ -232,8 +233,15 @@ impl IndexScheduler {
             Batch::IndexUpdate { index_uid, primary_key, new_index_uid, mut task } => {
                 progress.update_progress(UpdateIndexProgress::UpdatingTheIndex);
 
+                // Get the index (renamed or not)
+                let rtxn = self.env.read_txn()?;
+                let index = self.index_mapper.index(&rtxn, &index_uid)?;
+                let mut index_wtxn = index.write_txn()?;
+
                 // Handle rename if new_index_uid is provided
                 let final_index_uid = if let Some(new_uid) = &new_index_uid {
+                    index.set_updated_at(&mut index_wtxn, &OffsetDateTime::now_utc())?;
+
                     let mut wtxn = self.env.write_txn()?;
 
                     // Rename the index
@@ -252,13 +260,9 @@ impl IndexScheduler {
                 } else {
                     index_uid.clone()
                 };
-                // Get the index (renamed or not)
-                let rtxn = self.env.read_txn()?;
-                let index = self.index_mapper.index(&rtxn, &final_index_uid)?;
 
                 // Handle primary key update if provided
                 if let Some(ref primary_key) = primary_key {
-                    let mut index_wtxn = index.write_txn()?;
                     let mut builder = MilliSettings::new(
                         &mut index_wtxn,
                         &index,
@@ -274,9 +278,9 @@ impl IndexScheduler {
                             current_batch.embedder_stats.clone(),
                         )
                         .map_err(|e| Error::from_milli(e, Some(final_index_uid.to_string())))?;
-                    index_wtxn.commit()?;
                 }
 
+                index_wtxn.commit()?;
                 // drop rtxn before starting a new wtxn on the same db
                 rtxn.commit()?;
 
