@@ -61,7 +61,7 @@ async fn delete_task() {
     server.wait_task(task).await.succeeded();
 
     // Delete tasks
-    let (task, code) = index.delete_tasks(format!("uids={task_uid}")).await;
+    let (task, code) = server.delete_tasks(&format!("uids={task_uid}")).await;
     snapshot!(code, @"202 Accepted");
     let value = server.wait_task(task).await.succeeded();
     snapshot!(value, @r#"
@@ -132,12 +132,12 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
     }
 
     // Delete tasks with before_enqueued and after_enqueued
-    let (task, code) = index
-        .delete_tasks(dbg!(format!(
+    let (task, code) = server
+        .delete_tasks(&format!(
             "before{name}={}&after{name}={}",
             encode(&time2.format(&Rfc3339).unwrap()),
             encode(&time1.format(&Rfc3339).unwrap()),
-        )))
+        ))
         .await;
     snapshot!(code, @"202 Accepted");
     let value = server.wait_task(task).await.succeeded();

@@ -375,11 +375,6 @@ impl<State> Index<'_, State> {
         self.service.get(url).await
     }
 
-    pub async fn delete_tasks(&self, query: impl AsRef<str>) -> (Value, StatusCode) {
-        let url = format!("/tasks?{}", query.as_ref());
-        self.service.delete(url).await
-    }
-
     pub async fn filtered_tasks(
         &self,
         types: &[&str],
