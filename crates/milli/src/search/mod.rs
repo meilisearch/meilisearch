@@ -102,13 +102,7 @@ impl<'a> Search<'a> {
         vector: Option<Embedding>,
         media: Option<serde_json::Value>,
     ) -> &mut Search<'a> {
-        self.semantic = Some(SemanticSearch {
-            embedder_name,
-            embedder,
-            quantized,
-            vector,
-            media,
-        });
+        self.semantic = Some(SemanticSearch { embedder_name, embedder, quantized, vector, media });
         self
     }
 

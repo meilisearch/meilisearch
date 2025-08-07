@@ -232,13 +232,7 @@ impl Search<'_> {
         }
 
         // no embedder, no semantic search
-        let Some(SemanticSearch {
-            vector,
-            embedder_name,
-            embedder,
-            quantized,
-            media,
-        }) = semantic
+        let Some(SemanticSearch { vector, embedder_name, embedder, quantized, media }) = semantic
         else {
             return Ok(return_keyword_results(self.limit, self.offset, keyword_results));
         };
