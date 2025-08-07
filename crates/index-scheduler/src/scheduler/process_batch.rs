@@ -10,6 +10,7 @@ use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use milli::update::Settings as MilliSettings;
 use roaring::RoaringBitmap;
+use time::OffsetDateTime;
 
 use super::create_batch::Batch;
 use crate::processing::{
@@ -224,24 +225,50 @@ impl IndexScheduler {
                 self.index_mapper.create_index(wtxn, &index_uid, None)?;
 
                 self.process_batch(
-                    Batch::IndexUpdate { index_uid, primary_key, task },
+                    Batch::IndexUpdate { index_uid, primary_key, new_index_uid: None, task },
                     current_batch,
                     progress,
                 )
             }
-            Batch::IndexUpdate { index_uid, primary_key, mut task } => {
+            Batch::IndexUpdate { index_uid, primary_key, new_index_uid, mut task } => {
                 progress.update_progress(UpdateIndexProgress::UpdatingTheIndex);
+
+                // Get the index (renamed or not)
                 let rtxn = self.env.read_txn()?;
                 let index = self.index_mapper.index(&rtxn, &index_uid)?;
+                let mut index_wtxn = index.write_txn()?;
 
-                if let Some(primary_key) = primary_key.clone() {
-                    let mut index_wtxn = index.write_txn()?;
+                // Handle rename if new_index_uid is provided
+                let final_index_uid = if let Some(new_uid) = &new_index_uid {
+                    index.set_updated_at(&mut index_wtxn, &OffsetDateTime::now_utc())?;
+
+                    let mut wtxn = self.env.write_txn()?;
+
+                    // Rename the index
+                    self.index_mapper.rename(&mut wtxn, &index_uid, new_uid)?;
+
+                    // Update the task index mappings
+                    let old_tasks =
+                        self.queue.tasks.index_tasks(&wtxn, &index_uid).unwrap_or_default();
+                    self.queue.tasks.update_index(&mut wtxn, new_uid, |bm| {
+                        *bm |= &old_tasks;
+                    })?;
+                    self.queue.tasks.update_index(&mut wtxn, &index_uid, |bm| bm.clear())?;
+                    wtxn.commit()?;
+
+                    new_uid.clone()
+                } else {
+                    index_uid.clone()
+                };
+
+                // Handle primary key update if provided
+                if let Some(ref primary_key) = primary_key {
                     let mut builder = MilliSettings::new(
                         &mut index_wtxn,
                         &index,
                         self.index_mapper.indexer_config(),
                     );
-                    builder.set_primary_key(primary_key);
+                    builder.set_primary_key(primary_key.clone());
                     let must_stop_processing = self.scheduler.must_stop_processing.clone();
 
                     builder
@@ -250,15 +277,18 @@ impl IndexScheduler {
                             &progress,
                             current_batch.embedder_stats.clone(),
                         )
-                        .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
-                    index_wtxn.commit()?;
+                        .map_err(|e| Error::from_milli(e, Some(final_index_uid.to_string())))?;
                 }
 
+                index_wtxn.commit()?;
                 // drop rtxn before starting a new wtxn on the same db
                 rtxn.commit()?;
 
                 task.status = Status::Succeeded;
-                task.details = Some(Details::IndexInfo { primary_key });
+                task.details = Some(Details::IndexInfo {
+                    primary_key: primary_key.clone(),
+                    new_uid: new_index_uid.clone(),
+                });
 
                 // if the update processed successfully, we're going to store the new
                 // stats of the index. Since the tasks have already been processed and
@@ -268,8 +298,8 @@ impl IndexScheduler {
                     let mut wtxn = self.env.write_txn()?;
                     let index_rtxn = index.read_txn()?;
                     let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
-                        .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
-                    self.index_mapper.store_stats_of(&mut wtxn, &index_uid, &stats)?;
+                        .map_err(|e| Error::from_milli(e, Some(final_index_uid.clone())))?;
+                    self.index_mapper.store_stats_of(&mut wtxn, &final_index_uid, &stats)?;
                     wtxn.commit()?;
                     Ok(())
                 }();
@@ -330,13 +360,18 @@ impl IndexScheduler {
                     unreachable!()
                 };
                 let mut not_found_indexes = BTreeSet::new();
-                for IndexSwap { indexes: (lhs, rhs) } in swaps {
-                    for index in [lhs, rhs] {
-                        let index_exists = self.index_mapper.index_exists(&wtxn, index)?;
-                        if !index_exists {
-                            not_found_indexes.insert(index);
-                        }
+                let mut found_indexes_but_should_not = BTreeSet::new();
+                for IndexSwap { indexes: (lhs, rhs), rename } in swaps {
+                    let index_exists = self.index_mapper.index_exists(&wtxn, lhs)?;
+                    if !index_exists {
+                        not_found_indexes.insert(lhs);
                     }
+                    let index_exists = self.index_mapper.index_exists(&wtxn, rhs)?;
+                    match (index_exists, rename) {
+                        (true, true) => found_indexes_but_should_not.insert(rhs),
+                        (false, false) => not_found_indexes.insert(rhs),
+                        (true, false) | (false, true) => true, // random value we don't read it anyway
+                    };
                 }
                 if !not_found_indexes.is_empty() {
                     if not_found_indexes.len() == 1 {
@@ -346,6 +381,17 @@ impl IndexScheduler {
                     } else {
                         return Err(Error::SwapIndexesNotFound(
                             not_found_indexes.into_iter().cloned().collect(),
+                        ));
+                    }
+                }
+                if !found_indexes_but_should_not.is_empty() {
+                    if found_indexes_but_should_not.len() == 1 {
+                        return Err(Error::SwapIndexFoundDuringRename(
+                            found_indexes_but_should_not.into_iter().next().unwrap().clone(),
+                        ));
+                    } else {
+                        return Err(Error::SwapIndexesFoundDuringRename(
+                            found_indexes_but_should_not.into_iter().cloned().collect(),
                         ));
                     }
                 }
@@ -362,6 +408,7 @@ impl IndexScheduler {
                         task.uid,
                         &swap.indexes.0,
                         &swap.indexes.1,
+                        swap.rename,
                     )?;
                 }
                 wtxn.commit()?;
@@ -451,6 +498,7 @@ impl IndexScheduler {
         task_id: u32,
         lhs: &str,
         rhs: &str,
+        rename: bool,
     ) -> Result<()> {
         progress.update_progress(InnerSwappingTwoIndexes::RetrieveTheTasks);
         // 1. Verify that both lhs and rhs are existing indexes
@@ -458,16 +506,23 @@ impl IndexScheduler {
         if !index_lhs_exists {
             return Err(Error::IndexNotFound(lhs.to_owned()));
         }
-        let index_rhs_exists = self.index_mapper.index_exists(wtxn, rhs)?;
-        if !index_rhs_exists {
-            return Err(Error::IndexNotFound(rhs.to_owned()));
+        if !rename {
+            let index_rhs_exists = self.index_mapper.index_exists(wtxn, rhs)?;
+            if !index_rhs_exists {
+                return Err(Error::IndexNotFound(rhs.to_owned()));
+            }
         }
 
         // 2. Get the task set for index = name that appeared before the index swap task
         let mut index_lhs_task_ids = self.queue.tasks.index_tasks(wtxn, lhs)?;
         index_lhs_task_ids.remove_range(task_id..);
-        let mut index_rhs_task_ids = self.queue.tasks.index_tasks(wtxn, rhs)?;
-        index_rhs_task_ids.remove_range(task_id..);
+        let index_rhs_task_ids = if rename {
+            let mut index_rhs_task_ids = self.queue.tasks.index_tasks(wtxn, rhs)?;
+            index_rhs_task_ids.remove_range(task_id..);
+            index_rhs_task_ids
+        } else {
+            RoaringBitmap::new()
+        };
 
         // 3. before_name -> new_name in the task's KindWithContent
         progress.update_progress(InnerSwappingTwoIndexes::UpdateTheTasks);
@@ -496,7 +551,11 @@ impl IndexScheduler {
         })?;
 
         // 6. Swap in the index mapper
-        self.index_mapper.swap(wtxn, lhs, rhs)?;
+        if rename {
+            self.index_mapper.rename(wtxn, lhs, rhs)?;
+        } else {
+            self.index_mapper.swap(wtxn, lhs, rhs)?;
+        }
 
         Ok(())
     }

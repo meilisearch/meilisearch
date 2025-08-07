@@ -335,6 +335,7 @@ InvalidState                                   , Internal             , INTERNAL
 InvalidStoreFile                               , Internal             , INTERNAL_SERVER_ERROR ;
 InvalidSwapDuplicateIndexFound                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSwapIndexes                             , InvalidRequest       , BAD_REQUEST ;
+InvalidSwapRename                              , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskAfterEnqueuedAt                     , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskAfterFinishedAt                     , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskAfterStartedAt                      , InvalidRequest       , BAD_REQUEST ;

@@ -132,6 +132,11 @@ pub struct DetailsView {
     pub payload_size: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub indexes: Option<BTreeMap<String, DetailsExportIndexSettings>>,
+    // index rename
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub old_index_uid: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_index_uid: Option<String>,
 }
 
 impl DetailsView {
@@ -292,6 +297,18 @@ impl DetailsView {
                 (None, Some(to)) | (Some(to), None) => Some(to),
                 (Some(_), Some(to)) => Some(to),
             },
+            old_index_uid: match (self.old_index_uid.clone(), other.old_index_uid.clone()) {
+                (None, None) => None,
+                (None, Some(uid)) | (Some(uid), None) => Some(uid),
+                // We should never be able to batch multiple renames at the same time.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            new_index_uid: match (self.new_index_uid.clone(), other.new_index_uid.clone()) {
+                (None, None) => None,
+                (None, Some(uid)) | (Some(uid), None) => Some(uid),
+                // We should never be able to batch multiple renames at the same time.
+                (Some(left), Some(_right)) => Some(left),
+            },
         }
     }
 }
@@ -324,9 +341,11 @@ impl From<Details> for DetailsView {
                 settings.hide_secrets();
                 DetailsView { settings: Some(settings), ..DetailsView::default() }
             }
-            Details::IndexInfo { primary_key } => {
-                DetailsView { primary_key: Some(primary_key), ..DetailsView::default() }
-            }
+            Details::IndexInfo { primary_key, new_uid } => DetailsView {
+                primary_key: Some(primary_key),
+                new_index_uid: new_uid.clone(),
+                ..DetailsView::default()
+            },
             Details::DocumentDeletion {
                 provided_ids: received_document_ids,
                 deleted_documents,

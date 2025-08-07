@@ -4,7 +4,7 @@ use deserr::actix_web::AwebJson;
 use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::deserr_codes::InvalidSwapIndexes;
+use meilisearch_types::error::deserr_codes::{InvalidSwapIndexes, InvalidSwapRename};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
@@ -33,11 +33,15 @@ pub struct SwapIndexesPayload {
     /// Array of the two indexUids to be swapped
     #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<IndexUid>,
+    /// If set to true, instead of swapping the left and right indexes it'll change the name of the first index to the second
+    #[deserr(default, error = DeserrJsonError<InvalidSwapRename>)]
+    rename: bool,
 }
 
 #[derive(Serialize)]
 struct IndexSwappedAnalytics {
     swap_operation_number: usize,
+    rename_used: bool,
 }
 
 impl Aggregate for IndexSwappedAnalytics {
@@ -48,6 +52,7 @@ impl Aggregate for IndexSwappedAnalytics {
     fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
         Box::new(Self {
             swap_operation_number: self.swap_operation_number.max(new.swap_operation_number),
+            rename_used: self.rename_used | new.rename_used,
         })
     }
 
@@ -95,11 +100,17 @@ pub async fn swap_indexes(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
-    analytics.publish(IndexSwappedAnalytics { swap_operation_number: params.len() }, &req);
+    analytics.publish(
+        IndexSwappedAnalytics {
+            swap_operation_number: params.len(),
+            rename_used: params.iter().any(|obj| obj.rename),
+        },
+        &req,
+    );
     let filters = index_scheduler.filters();
 
     let mut swaps = vec![];
-    for SwapIndexesPayload { indexes } in params.into_iter() {
+    for SwapIndexesPayload { indexes, rename } in params.into_iter() {
         // TODO: switch to deserr
         let (lhs, rhs) = match indexes.as_slice() {
             [lhs, rhs] => (lhs, rhs),
@@ -110,7 +121,7 @@ pub async fn swap_indexes(
         if !filters.is_index_authorized(lhs) || !filters.is_index_authorized(rhs) {
             return Err(AuthenticationError::InvalidToken.into());
         }
-        swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()) });
+        swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()), rename });
     }
 
     let task = KindWithContent::IndexSwap { swaps };

@@ -274,8 +274,8 @@ fn snapshot_details(d: &Details) -> String {
         Details::SettingsUpdate { settings } => {
             format!("{{ settings: {settings:?} }}")
         }
-        Details::IndexInfo { primary_key } => {
-            format!("{{ primary_key: {primary_key:?} }}")
+        Details::IndexInfo { primary_key, new_uid } => {
+            format!("{{ primary_key: {primary_key:?}, new_uid: {new_uid:?} }}")
         }
         Details::DocumentDeletion {
             provided_ids: received_document_ids,

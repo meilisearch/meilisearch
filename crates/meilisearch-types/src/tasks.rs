@@ -140,6 +140,7 @@ pub enum KindWithContent {
     IndexUpdate {
         index_uid: String,
         primary_key: Option<String>,
+        new_index_uid: Option<String>,
     },
     IndexSwap {
         swaps: Vec<IndexSwap>,
@@ -172,6 +173,7 @@ pub enum KindWithContent {
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
+    pub rename: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -220,8 +222,14 @@ impl KindWithContent {
             | DocumentClear { index_uid }
             | SettingsUpdate { index_uid, .. }
             | IndexCreation { index_uid, .. }
-            | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid } => vec![index_uid],
+            IndexUpdate { index_uid, new_index_uid, .. } => {
+                let mut indexes = vec![index_uid.as_str()];
+                if let Some(new_uid) = new_index_uid {
+                    indexes.push(new_uid.as_str());
+                }
+                indexes
+            }
             IndexSwap { swaps } => {
                 let mut indexes = HashSet::<&str>::default();
                 for swap in swaps {
@@ -270,9 +278,14 @@ impl KindWithContent {
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            KindWithContent::IndexCreation { primary_key, .. }
-            | KindWithContent::IndexUpdate { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone() })
+            KindWithContent::IndexCreation { primary_key, .. } => {
+                Some(Details::IndexInfo { primary_key: primary_key.clone(), new_uid: None })
+            }
+            KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
+                Some(Details::IndexInfo {
+                    primary_key: primary_key.clone(),
+                    new_uid: new_index_uid.clone(),
+                })
             }
             KindWithContent::IndexSwap { swaps } => {
                 Some(Details::IndexSwap { swaps: swaps.clone() })
@@ -344,9 +357,14 @@ impl KindWithContent {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             KindWithContent::IndexDeletion { .. } => None,
-            KindWithContent::IndexCreation { primary_key, .. }
-            | KindWithContent::IndexUpdate { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone() })
+            KindWithContent::IndexCreation { primary_key, .. } => {
+                Some(Details::IndexInfo { primary_key: primary_key.clone(), new_uid: None })
+            }
+            KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
+                Some(Details::IndexInfo {
+                    primary_key: primary_key.clone(),
+                    new_uid: new_index_uid.clone(),
+                })
             }
             KindWithContent::IndexSwap { .. } => {
                 todo!()
@@ -401,10 +419,13 @@ impl From<&KindWithContent> for Option<Details> {
             }
             KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone() })
+                Some(Details::IndexInfo { primary_key: primary_key.clone(), new_uid: None })
             }
-            KindWithContent::IndexUpdate { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone() })
+            KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
+                Some(Details::IndexInfo {
+                    primary_key: primary_key.clone(),
+                    new_uid: new_index_uid.clone(),
+                })
             }
             KindWithContent::IndexSwap { .. } => None,
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
@@ -657,6 +678,7 @@ pub enum Details {
     },
     IndexInfo {
         primary_key: Option<String>,
+        new_uid: Option<String>,
     },
     DocumentDeletion {
         provided_ids: usize,

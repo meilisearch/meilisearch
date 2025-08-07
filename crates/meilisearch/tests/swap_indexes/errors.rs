@@ -92,3 +92,20 @@ async fn swap_indexes_bad_indexes() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn swap_indexes_bad_rename() {
+    let server = Server::new_shared();
+
+    let (response, code) =
+        server.index_swap(json!([{ "indexes": ["kefir", "intel"], "rename": "hello" }])).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r#"
+    {
+      "message": "Invalid value type at `[0].rename`: expected a boolean, but found a string: `\"hello\"`",
+      "code": "invalid_swap_rename",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_swap_rename"
+    }
+    "#);
+}

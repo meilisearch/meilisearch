@@ -375,6 +375,9 @@ pub struct UpdateIndexRequest {
     /// The new primary key of the index
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
+    /// The new uid of the index (for renaming)
+    #[deserr(default, error = DeserrJsonError<InvalidIndexUid>)]
+    uid: Option<String>,
 }
 
 /// Update index
@@ -419,6 +422,12 @@ pub async fn update_index(
     debug!(parameters = ?body, "Update index");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let body = body.into_inner();
+
+    // Validate new uid if provided
+    if let Some(ref new_uid) = body.uid {
+        let _ = IndexUid::try_from(new_uid.clone())?;
+    }
+
     analytics.publish(
         IndexUpdatedAggregate { primary_key: body.primary_key.iter().cloned().collect() },
         &req,
@@ -427,6 +436,7 @@ pub async fn update_index(
     let task = KindWithContent::IndexUpdate {
         index_uid: index_uid.into_inner(),
         primary_key: body.primary_key,
+        new_index_uid: body.uid,
     };
 
     let uid = get_task_id(&req, &opt)?;
