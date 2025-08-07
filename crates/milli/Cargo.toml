@@ -88,7 +88,7 @@ rhai = { version = "1.22.2", features = [
     "sync",
 ] }
 arroy = "0.6.1"
-hannoy = { git = "https://github.com/nnethercott/hannoy", rev = "cab22c0" }
+hannoy = { git = "https://github.com/nnethercott/hannoy", branch = "main" }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
