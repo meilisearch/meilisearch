@@ -19,6 +19,7 @@
 //! word           = (alphanumeric | _ | - | .)+
 //! geoRadius      = "_geoRadius(" WS* float WS* "," WS* float WS* "," float WS* ")"
 //! geoBoundingBox = "_geoBoundingBox([" WS * float WS* "," WS* float WS* "], [" WS* float WS* "," WS* float WS* "]")
+//! geoPolygon     = "_geoPolygon([[" WS* float WS* "," WS* float WS* "],+])"
 //! ```
 //!
 //! Other BNF grammar used to handle some specific errors:
@@ -145,6 +146,7 @@ pub enum FilterCondition<'a> {
     And(Vec<Self>),
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
     GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
+    GeoPolygon { points: Vec<[Token<'a>; 2]> },
 }
 
 pub enum TraversedElement<'a> {
@@ -175,6 +177,7 @@ impl<'a> FilterCondition<'a> {
             }
             FilterCondition::GeoLowerThan { .. }
             | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::GeoPolygon { .. }
             | FilterCondition::In { .. } => None,
         }
     }
@@ -422,6 +425,38 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     Ok((input, res))
 }
 
+/// geoPolygon     = "_geoPolygon([[" WS* float WS* "," WS* float WS* "],+])"
+/// If we parse `_geoPolygon` we MUST parse the rest of the expression.
+fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
+    // we want to allow space BEFORE the _geoBoundingBox but not after
+    let parsed = preceded(
+        tuple((multispace0, word_exact("_geoPolygon"))),
+        // if we were able to parse `_geoPolygon` and can't parse the rest of the input we return a failure
+        cut(delimited(
+            char('('),
+            separated_list1(
+                tag(","),
+                ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
+            ),
+            char(')'),
+        )),
+    )(input)
+    .map_err(|e| e.map(|_| Error::new_from_kind(dbg!(input), ErrorKind::GeoBoundingBox)));
+
+    let (input, args) = parsed?;
+
+    // TODO: Return a more specific error
+    if args.len() <= 2 || args.iter().any(|a| a.len() != 2) {
+        println!("here");
+        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
+    }
+
+    let res = FilterCondition::GeoPolygon {
+        points: args.into_iter().map(|a| [a[0].into(), a[1].into()]).collect(),
+    };
+    Ok((input, res))
+}
+
 /// geoPoint      = WS* "_geoPoint(float WS* "," WS* float WS* "," WS* float)
 fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     // we want to forbid space BEFORE the _geoPoint but not after
@@ -491,8 +526,8 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
                 Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(c.char()))
             }),
         ),
-        parse_geo_radius,
-        parse_geo_bounding_box,
+        // Made a random block of functions because we reached the maximum number of elements per alt
+        alt((parse_geo_radius, parse_geo_bounding_box, parse_geo_polygon)),
         parse_in,
         parse_not_in,
         parse_condition,
@@ -572,6 +607,13 @@ impl std::fmt::Display for FilterCondition<'_> {
                     bottom_right_point[0],
                     bottom_right_point[1]
                 )
+            }
+            FilterCondition::GeoPolygon { points } => {
+                write!(f, "_geoPolygon([")?;
+                for point in points {
+                    write!(f, "[{}, {}], ", point[0], point[1])?;
+                }
+                write!(f, "])")
             }
         }
     }

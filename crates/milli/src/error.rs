@@ -78,6 +78,8 @@ pub enum InternalError {
     #[error(transparent)]
     ArroyError(#[from] arroy::Error),
     #[error(transparent)]
+    CelluliteError(#[from] cellulite::Error),
+    #[error(transparent)]
     VectorEmbeddingError(#[from] crate::vector::Error),
 }
 
@@ -97,6 +99,12 @@ pub enum SerializationError {
     InvalidNumberSerialization,
 }
 
+impl From<cellulite::Error> for Error {
+    fn from(error: cellulite::Error) -> Self {
+        Self::UserError(UserError::CelluliteError(error))
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum FieldIdMapMissingEntry {
     #[error("unknown field id {field_id} coming from the {process} process")]
@@ -107,6 +115,8 @@ pub enum FieldIdMapMissingEntry {
 
 #[derive(Error, Debug)]
 pub enum UserError {
+    #[error(transparent)]
+    CelluliteError(#[from] cellulite::Error),
     #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
     #[error(transparent)]
@@ -151,6 +161,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     },
     #[error(transparent)]
     InvalidGeoField(#[from] Box<GeoError>),
+    #[error(transparent)]
+    GeoJsonError(#[from] geojson::Error),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
     #[error("Invalid vector dimensions in document with id `{document_id}` in `._vectors.{embedder_name}`.\n  - note: embedding #{embedding_index} has dimensions {found}\n  - note: embedder `{embedder_name}` requires {expected}")]

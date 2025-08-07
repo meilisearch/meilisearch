@@ -24,7 +24,7 @@ pub trait Extractor<'extractor>: Sync {
     fn process<'doc>(
         &'doc self,
         changes: impl Iterator<Item = Result<DocumentChange<'doc>>>,
-        context: &'doc DocumentContext<Self::Data>,
+        context: &'doc DocumentContext<'doc, 'extractor, '_, '_, Self::Data>,
     ) -> Result<()>;
 }
 
