@@ -88,7 +88,10 @@ fn idx_del() -> KindWithContent {
 
 fn idx_swap() -> KindWithContent {
     KindWithContent::IndexSwap {
-        swaps: vec![IndexSwap { indexes: (String::from("doggo"), String::from("catto")) }],
+        swaps: vec![IndexSwap {
+            indexes: (String::from("doggo"), String::from("catto")),
+            rename: false,
+        }],
     }
 }
 

@@ -360,13 +360,18 @@ impl IndexScheduler {
                     unreachable!()
                 };
                 let mut not_found_indexes = BTreeSet::new();
-                for IndexSwap { indexes: (lhs, rhs) } in swaps {
-                    for index in [lhs, rhs] {
-                        let index_exists = self.index_mapper.index_exists(&wtxn, index)?;
-                        if !index_exists {
-                            not_found_indexes.insert(index);
-                        }
+                let mut found_indexes_but_should_not = BTreeSet::new();
+                for IndexSwap { indexes: (lhs, rhs), rename } in swaps {
+                    let index_exists = self.index_mapper.index_exists(&wtxn, lhs)?;
+                    if !index_exists {
+                        not_found_indexes.insert(lhs);
                     }
+                    let index_exists = self.index_mapper.index_exists(&wtxn, rhs)?;
+                    match (index_exists, rename) {
+                        (true, true) => found_indexes_but_should_not.insert(rhs),
+                        (false, false) => not_found_indexes.insert(rhs),
+                        (true, false) | (false, true) => true, // random value we don't read it anyway
+                    };
                 }
                 if !not_found_indexes.is_empty() {
                     if not_found_indexes.len() == 1 {
@@ -376,6 +381,17 @@ impl IndexScheduler {
                     } else {
                         return Err(Error::SwapIndexesNotFound(
                             not_found_indexes.into_iter().cloned().collect(),
+                        ));
+                    }
+                }
+                if !found_indexes_but_should_not.is_empty() {
+                    if found_indexes_but_should_not.len() == 1 {
+                        return Err(Error::SwapIndexFoundDuringRename(
+                            found_indexes_but_should_not.into_iter().next().unwrap().clone(),
+                        ));
+                    } else {
+                        return Err(Error::SwapIndexesFoundDuringRename(
+                            found_indexes_but_should_not.into_iter().cloned().collect(),
                         ));
                     }
                 }
@@ -392,6 +408,7 @@ impl IndexScheduler {
                         task.uid,
                         &swap.indexes.0,
                         &swap.indexes.1,
+                        swap.rename,
                     )?;
                 }
                 wtxn.commit()?;
@@ -481,6 +498,7 @@ impl IndexScheduler {
         task_id: u32,
         lhs: &str,
         rhs: &str,
+        rename: bool,
     ) -> Result<()> {
         progress.update_progress(InnerSwappingTwoIndexes::RetrieveTheTasks);
         // 1. Verify that both lhs and rhs are existing indexes
@@ -488,16 +506,23 @@ impl IndexScheduler {
         if !index_lhs_exists {
             return Err(Error::IndexNotFound(lhs.to_owned()));
         }
-        let index_rhs_exists = self.index_mapper.index_exists(wtxn, rhs)?;
-        if !index_rhs_exists {
-            return Err(Error::IndexNotFound(rhs.to_owned()));
+        if !rename {
+            let index_rhs_exists = self.index_mapper.index_exists(wtxn, rhs)?;
+            if !index_rhs_exists {
+                return Err(Error::IndexNotFound(rhs.to_owned()));
+            }
         }
 
         // 2. Get the task set for index = name that appeared before the index swap task
         let mut index_lhs_task_ids = self.queue.tasks.index_tasks(wtxn, lhs)?;
         index_lhs_task_ids.remove_range(task_id..);
-        let mut index_rhs_task_ids = self.queue.tasks.index_tasks(wtxn, rhs)?;
-        index_rhs_task_ids.remove_range(task_id..);
+        let index_rhs_task_ids = if rename {
+            let mut index_rhs_task_ids = self.queue.tasks.index_tasks(wtxn, rhs)?;
+            index_rhs_task_ids.remove_range(task_id..);
+            index_rhs_task_ids
+        } else {
+            RoaringBitmap::new()
+        };
 
         // 3. before_name -> new_name in the task's KindWithContent
         progress.update_progress(InnerSwappingTwoIndexes::UpdateTheTasks);
@@ -526,7 +551,11 @@ impl IndexScheduler {
         })?;
 
         // 6. Swap in the index mapper
-        self.index_mapper.swap(wtxn, lhs, rhs)?;
+        if rename {
+            self.index_mapper.rename(wtxn, lhs, rhs)?;
+        } else {
+            self.index_mapper.swap(wtxn, lhs, rhs)?;
+        }
 
         Ok(())
     }

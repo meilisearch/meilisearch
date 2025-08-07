@@ -173,6 +173,7 @@ pub enum KindWithContent {
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
     pub indexes: (String, String),
+    pub rename: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]

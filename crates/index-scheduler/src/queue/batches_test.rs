@@ -334,11 +334,11 @@ fn query_batches_special_rules() {
     let kind = index_creation_task("doggo", "sheep");
     let _task = index_scheduler.register(kind, None, false).unwrap();
     let kind = KindWithContent::IndexSwap {
-        swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
+        swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()), rename: false }],
     };
     let _task = index_scheduler.register(kind, None, false).unwrap();
     let kind = KindWithContent::IndexSwap {
-        swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()) }],
+        swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "whalo".to_owned()), rename: false }],
     };
     let _task = index_scheduler.register(kind, None, false).unwrap();
 
@@ -442,7 +442,7 @@ fn query_batches_canceled_by() {
     let kind = index_creation_task("doggo", "sheep");
     let _ = index_scheduler.register(kind, None, false).unwrap();
     let kind = KindWithContent::IndexSwap {
-        swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()) }],
+        swaps: vec![IndexSwap { indexes: ("catto".to_owned(), "doggo".to_owned()), rename: false }],
     };
     let _task = index_scheduler.register(kind, None, false).unwrap();
 

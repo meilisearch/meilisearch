@@ -271,7 +271,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
             }
         }
         K::IndexSwap { swaps } => {
-            for IndexSwap { indexes: (lhs, rhs) } in swaps.iter_mut() {
+            for IndexSwap { indexes: (lhs, rhs), rename: _ } in swaps.iter_mut() {
                 if lhs == swap.0 || lhs == swap.1 {
                     index_uids.push(lhs);
                 }
@@ -288,7 +288,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         | K::SnapshotCreation => (),
     };
     if let Some(Details::IndexSwap { swaps }) = &mut task.details {
-        for IndexSwap { indexes: (lhs, rhs) } in swaps.iter_mut() {
+        for IndexSwap { indexes: (lhs, rhs), rename: _ } in swaps.iter_mut() {
             if lhs == swap.0 || lhs == swap.1 {
                 index_uids.push(lhs);
             }
@@ -330,7 +330,7 @@ pub(crate) fn check_index_swap_validity(task: &Task) -> Result<()> {
         if let KindWithContent::IndexSwap { swaps } = &task.kind { swaps } else { return Ok(()) };
     let mut all_indexes = HashSet::new();
     let mut duplicate_indexes = BTreeSet::new();
-    for IndexSwap { indexes: (lhs, rhs) } in swaps {
+    for IndexSwap { indexes: (lhs, rhs), rename: _ } in swaps {
         for name in [lhs, rhs] {
             let is_new = all_indexes.insert(name);
             if !is_new {
