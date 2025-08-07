@@ -8,6 +8,7 @@ use hannoy::distances::{BinaryQuantizedCosine, Cosine};
 use hannoy::ItemId;
 use heed::{RoTxn, RwTxn, Unspecified};
 use ordered_float::OrderedFloat;
+use rand::SeedableRng;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -69,7 +70,7 @@ impl VectorStore {
         rtxn: &'a RoTxn<'a>,
         db: hannoy::Database<D>,
     ) -> impl Iterator<Item = Result<hannoy::Reader<'a, D>, hannoy::Error>> + 'a {
-        hannoy_store_range_for_embedder(self.embedder_index).filter_map(move |index| {
+        vector_store_range_for_embedder(self.embedder_index).filter_map(move |index| {
             match hannoy::Reader::open(rtxn, index, db) {
                 Ok(reader) => match reader.is_empty(rtxn) {
                     Ok(false) => Some(Ok(reader)),
@@ -77,6 +78,24 @@ impl VectorStore {
                     Err(e) => Some(Err(e)),
                 },
                 Err(hannoy::Error::MissingMetadata(_)) => None,
+                Err(e) => Some(Err(e)),
+            }
+        })
+    }
+
+    fn arroy_readers<'a, D: arroy::Distance>(
+        &'a self,
+        rtxn: &'a RoTxn<'a>,
+        db: arroy::Database<D>,
+    ) -> impl Iterator<Item = Result<arroy::Reader<'a, D>, arroy::Error>> + 'a {
+        vector_store_range_for_embedder(self.embedder_index).filter_map(move |index| {
+            match arroy::Reader::open(rtxn, index, db) {
+                Ok(reader) => match reader.is_empty(rtxn) {
+                    Ok(false) => Some(Ok(reader)),
+                    Ok(true) => None,
+                    Err(e) => Some(Err(e)),
+                },
+                Err(arroy::Error::MissingMetadata(_)) => None,
                 Err(e) => Some(Err(e)),
             }
         })
@@ -136,6 +155,44 @@ impl VectorStore {
         }
     }
 
+    pub fn convert_from_arroy(&self, wtxn: &mut RwTxn) -> crate::Result<()> {
+        if self.quantized {
+            let dimensions = self
+                .arroy_readers(wtxn, self.arroy_quantized_db())
+                .next()
+                .transpose()?
+                .map(|reader| reader.dimensions());
+
+            let Some(dimensions) = dimensions else { return Ok(()) };
+
+            for index in vector_store_range_for_embedder(self.embedder_index) {
+                let mut rng = rand::rngs::StdRng::from_entropy();
+                let writer = hannoy::Writer::new(self.quantized_db(), index, dimensions);
+                writer.prepare_arroy_conversion(wtxn)?;
+                writer.builder(&mut rng).build::<HANNOY_M, HANNOY_M0>(wtxn)?;
+            }
+
+            Ok(())
+        } else {
+            let dimensions = self
+                .arroy_readers(wtxn, self.arroy_angular_db())
+                .next()
+                .transpose()?
+                .map(|reader| reader.dimensions());
+
+            let Some(dimensions) = dimensions else { return Ok(()) };
+
+            for index in vector_store_range_for_embedder(self.embedder_index) {
+                let mut rng = rand::rngs::StdRng::from_entropy();
+                let writer = hannoy::Writer::new(self.angular_db(), index, dimensions);
+                writer.prepare_arroy_conversion(wtxn)?;
+                writer.builder(&mut rng).build::<HANNOY_M, HANNOY_M0>(wtxn)?;
+            }
+
+            Ok(())
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
         &mut self,
@@ -147,7 +204,7 @@ impl VectorStore {
         hannoy_memory: Option<usize>,
         cancel: &(impl Fn() -> bool + Sync + Send),
     ) -> Result<(), hannoy::Error> {
-        for index in hannoy_store_range_for_embedder(self.embedder_index) {
+        for index in vector_store_range_for_embedder(self.embedder_index) {
             if self.quantized {
                 let writer = hannoy::Writer::new(self.quantized_db(), index, dimension);
                 if writer.need_build(wtxn)? {
@@ -204,7 +261,7 @@ impl VectorStore {
     ) -> Result<(), hannoy::Error> {
         let dimension = embeddings.dimension();
         for (index, vector) in
-            hannoy_store_range_for_embedder(self.embedder_index).zip(embeddings.iter())
+            vector_store_range_for_embedder(self.embedder_index).zip(embeddings.iter())
         {
             if self.quantized {
                 hannoy::Writer::new(self.quantized_db(), index, dimension)
@@ -240,7 +297,7 @@ impl VectorStore {
     ) -> Result<(), hannoy::Error> {
         let dimension = vector.len();
 
-        for index in hannoy_store_range_for_embedder(self.embedder_index) {
+        for index in vector_store_range_for_embedder(self.embedder_index) {
             let writer = hannoy::Writer::new(db, index, dimension);
             if !writer.contains_item(wtxn, item_id)? {
                 writer.add_item(wtxn, item_id, vector)?;
@@ -289,7 +346,7 @@ impl VectorStore {
         dimension: usize,
         item_id: hannoy::ItemId,
     ) -> Result<(), hannoy::Error> {
-        for index in hannoy_store_range_for_embedder(self.embedder_index) {
+        for index in vector_store_range_for_embedder(self.embedder_index) {
             if self.quantized {
                 let writer = hannoy::Writer::new(self.quantized_db(), index, dimension);
                 writer.del_item(wtxn, item_id)?;
@@ -389,7 +446,7 @@ impl VectorStore {
     ) -> Result<bool, hannoy::Error> {
         let dimension = vector.len();
 
-        for index in hannoy_store_range_for_embedder(self.embedder_index) {
+        for index in vector_store_range_for_embedder(self.embedder_index) {
             let writer = hannoy::Writer::new(db, index, dimension);
             if writer.contains_item(wtxn, item_id)? {
                 return writer.del_item(wtxn, item_id);
@@ -399,7 +456,7 @@ impl VectorStore {
     }
 
     pub fn clear(&self, wtxn: &mut RwTxn, dimension: usize) -> Result<(), hannoy::Error> {
-        for index in hannoy_store_range_for_embedder(self.embedder_index) {
+        for index in vector_store_range_for_embedder(self.embedder_index) {
             if self.quantized {
                 let writer = hannoy::Writer::new(self.quantized_db(), index, dimension);
                 if writer.is_empty(wtxn)? {
@@ -423,7 +480,7 @@ impl VectorStore {
         dimension: usize,
         item: hannoy::ItemId,
     ) -> Result<bool, hannoy::Error> {
-        for index in hannoy_store_range_for_embedder(self.embedder_index) {
+        for index in vector_store_range_for_embedder(self.embedder_index) {
             let contains = if self.quantized {
                 let writer = hannoy::Writer::new(self.quantized_db(), index, dimension);
                 if writer.is_empty(rtxn)? {
@@ -555,6 +612,14 @@ impl VectorStore {
 
     fn quantized_db(&self) -> hannoy::Database<BinaryQuantizedCosine> {
         self.database.remap_data_type()
+    }
+
+    fn arroy_angular_db(&self) -> arroy::Database<arroy::distances::Cosine> {
+        self.database.remap_types()
+    }
+
+    fn arroy_quantized_db(&self) -> arroy::Database<arroy::distances::BinaryQuantizedCosine> {
+        self.database.remap_types()
     }
 
     pub fn aggregate_stats(
@@ -1238,7 +1303,7 @@ pub const fn is_cuda_enabled() -> bool {
     cfg!(feature = "cuda")
 }
 
-fn hannoy_store_range_for_embedder(embedder_id: u8) -> impl Iterator<Item = u16> {
+fn vector_store_range_for_embedder(embedder_id: u8) -> impl Iterator<Item = u16> {
     (0..=u8::MAX).map(move |store_id| hannoy_store_for_embedder(embedder_id, store_id))
 }
 
