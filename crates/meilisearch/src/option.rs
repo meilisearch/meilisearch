@@ -886,7 +886,10 @@ fn total_memory_bytes() -> Option<u64> {
         let mem_kind = RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram());
         let mut system = System::new_with_specifics(mem_kind);
         system.refresh_memory();
-        Some(system.total_memory())
+        system
+            .cgroup_limits()
+            .map(|limits| limits.total_memory)
+            .or_else(|| Some(system.total_memory()))
     } else {
         None
     }
