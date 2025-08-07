@@ -234,7 +234,6 @@ impl Search<'_> {
         // no embedder, no semantic search
         let Some(SemanticSearch {
             vector,
-            mut auto_embedded,
             embedder_name,
             embedder,
             quantized,
@@ -262,10 +261,7 @@ impl Search<'_> {
                 let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
 
                 match embedder.embed_search(query, Some(deadline)) {
-                    Ok(embedding) => {
-                        auto_embedded = true;
-                        embedding
-                    }
+                    Ok(embedding) => embedding,
                     Err(error) => {
                         tracing::error!(error=%error, "Embedding failed");
                         return Ok(return_keyword_results(
@@ -280,7 +276,6 @@ impl Search<'_> {
 
         search.semantic = Some(SemanticSearch {
             vector: Some(vector_query.clone()),
-            auto_embedded,
             embedder_name,
             embedder,
             quantized,

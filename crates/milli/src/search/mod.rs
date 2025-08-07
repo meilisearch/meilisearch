@@ -33,7 +33,6 @@ pub mod similar;
 #[derive(Debug, Clone)]
 pub struct SemanticSearch {
     vector: Option<Vec<f32>>,
-    auto_embedded: bool,
     media: Option<serde_json::Value>,
     embedder_name: String,
     embedder: Arc<Embedder>,
@@ -105,26 +104,6 @@ impl<'a> Search<'a> {
     ) -> &mut Search<'a> {
         self.semantic = Some(SemanticSearch {
             embedder_name,
-            auto_embedded: false,
-            embedder,
-            quantized,
-            vector,
-            media,
-        });
-        self
-    }
-
-    pub fn semantic_auto_embedded(
-        &mut self,
-        embedder_name: String,
-        embedder: Arc<Embedder>,
-        quantized: bool,
-        vector: Option<Embedding>,
-        media: Option<serde_json::Value>,
-    ) -> &mut Search<'a> {
-        self.semantic = Some(SemanticSearch {
-            embedder_name,
-            auto_embedded: true,
             embedder,
             quantized,
             vector,
@@ -278,13 +257,12 @@ impl<'a> Search<'a> {
         } = match self.semantic.as_ref() {
             Some(SemanticSearch {
                 vector: Some(vector),
-                auto_embedded,
                 embedder_name,
                 embedder,
                 quantized,
                 media: _,
             }) => {
-                if *auto_embedded && self.retrieve_vectors {
+                if self.retrieve_vectors {
                     query_vector = Some(vector.clone());
                 }
                 execute_vector_search(
