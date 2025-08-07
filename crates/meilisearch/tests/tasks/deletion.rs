@@ -62,7 +62,7 @@ async fn delete_task() {
 
     // Delete tasks
     let (task, code) = index.delete_tasks(format!("uids={task_uid}")).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     let value = server.wait_task(task).await.succeeded();
     snapshot!(value, @r#"
     {
@@ -75,7 +75,7 @@ async fn delete_task() {
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
-        "originalFilter": "?uids=0"
+        "originalFilter": "?uids=4"
       },
       "error": null,
       "duration": "[duration]",
@@ -102,7 +102,7 @@ async fn delete_task() {
 // If there is a bug it's caused by a combination of the parameters so let's test them together!
 
 async fn delete_tasks_time_bounds_inner(name: &str) {
-    let server = Server::new_shared();
+    let server = Server::new().await;
     let index = server.unique_index();
 
     // Add documents
@@ -139,21 +139,18 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
             encode(&time1.format(&Rfc3339).unwrap()),
         )))
         .await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     let value = server.wait_task(task).await.succeeded();
-
     snapshot!(json_string!(value, {
         ".details.originalFilter" => "[ignored]",
-        ".uid" => "[ignored]",
-        ".batchUid" => "[ignored]",
         ".duration" => "[duration]",
         ".enqueuedAt" => "[date]",
         ".startedAt" => "[date]",
         ".finishedAt" => "[date]"
     }), @r#"
     {
-      "uid": "[ignored]",
-      "batchUid": "[ignored]",
+      "uid": 6,
+      "batchUid": 6,
       "indexUid": null,
       "status": "succeeded",
       "type": "taskDeletion",
@@ -172,21 +169,38 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
     "#);
 
     // Check that the task is deleted
-    let (value, code) = index.list_tasks().await;
+    let (value, code) = server.tasks().await;
     snapshot!(code, @r#"200 OK"#);
     snapshot!(json_string!(value, {
-        ".results[].uid" => "[ignored]",
-        ".results[].batchUid" => "[ignored]",
         ".results[].duration" => "[duration]",
         ".results[].enqueuedAt" => "[date]",
         ".results[].startedAt" => "[date]",
-        ".results[].finishedAt" => "[date]"
+        ".results[].finishedAt" => "[date]",
+        ".results[].details.originalFilter" => "[ignored]"
     }), @r#"
     {
       "results": [
         {
-          "uid": "[ignored]",
-          "batchUid": "[ignored]",
+          "uid": 6,
+          "batchUid": 6,
+          "indexUid": null,
+          "status": "succeeded",
+          "type": "taskDeletion",
+          "canceledBy": null,
+          "details": {
+            "matchedTasks": 2,
+            "deletedTasks": 2,
+            "originalFilter": "[ignored]"
+          },
+          "error": null,
+          "duration": "[duration]",
+          "enqueuedAt": "[date]",
+          "startedAt": "[date]",
+          "finishedAt": "[date]"
+        },
+        {
+          "uid": 5,
+          "batchUid": 5,
           "indexUid": "[uuid]",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -202,8 +216,8 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
           "finishedAt": "[date]"
         },
         {
-          "uid": "[ignored]",
-          "batchUid": "[ignored]",
+          "uid": 4,
+          "batchUid": 4,
           "indexUid": "[uuid]",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -219,8 +233,8 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
           "finishedAt": "[date]"
         },
         {
-          "uid": "[ignored]",
-          "batchUid": "[ignored]",
+          "uid": 1,
+          "batchUid": 1,
           "indexUid": "[uuid]",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -236,8 +250,8 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
           "finishedAt": "[date]"
         },
         {
-          "uid": "[ignored]",
-          "batchUid": "[ignored]",
+          "uid": 0,
+          "batchUid": 0,
           "indexUid": "[uuid]",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
@@ -253,17 +267,27 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
           "finishedAt": "[date]"
         }
       ],
-      "total": 4,
+      "total": 5,
       "limit": 20,
-      "from": 12,
+      "from": 6,
       "next": null
     }
     "#);
+
+    todo!()
 }
 
 #[actix_rt::test]
-async fn delete_tasks_time_bounds() {
+async fn delete_tasks_enqueued() {
     delete_tasks_time_bounds_inner("EnqueuedAt").await;
+}
+
+#[actix_rt::test]
+async fn delete_tasks_started() {
     delete_tasks_time_bounds_inner("StartedAt").await;
+}
+
+#[actix_rt::test]
+async fn delete_tasks_finished() {
     delete_tasks_time_bounds_inner("FinishedAt").await;
 }

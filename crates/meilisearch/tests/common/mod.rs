@@ -160,7 +160,9 @@ pub trait IntoTaskUid {
 
 impl IntoTaskUid for Value {
     fn uid(&self) -> u64 {
-        self["taskUid"].as_u64().expect("Value must contain a taskUid")
+        self["taskUid"].as_u64().unwrap_or_else(|| {
+            panic!("Called `uid` on a Value that doesn't contain a taskUid: {self}")
+        })
     }
 }
 
