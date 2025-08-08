@@ -127,6 +127,12 @@ impl IndexScheduler {
                         _ => unreachable!(),
                     }
                 }
+
+                debug_assert!(
+                    deleted_tasks.is_empty(),
+                    "There should be no tasks left to delete after processing the batch"
+                );
+
                 Ok((tasks, ProcessBatchInfo::default()))
             }
             Batch::SnapshotCreation(tasks) => self
