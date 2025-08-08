@@ -540,7 +540,7 @@ impl IndexScheduler {
                 Some((start, end))
             })
         }
-        progress.update_progress(TaskDeletionProgress::DeletingTasksDateTime);
+        progress.update_progress(TaskDeletionProgress::RetrievingTasks);
 
         // 1. Remove from this list the tasks that we are not allowed to delete
         let enqueued_tasks = self.queue.tasks.get_status(wtxn, Status::Enqueued)?;
@@ -563,9 +563,9 @@ impl IndexScheduler {
         progress.update_progress(task_progress);
         let mut min_enqueued = i128::MAX;
         let mut max_enqueued = i128::MIN;
-        let mut enqueued_to_remove = HashMap::new();
-        let mut started_to_remove = HashMap::new();
-        let mut finished_to_remove = HashMap::new();
+        let mut enqueued_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
+        let mut started_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
+        let mut finished_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
         for task_id in to_delete_tasks.iter() {
             let task =
                 self.queue.tasks.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
@@ -585,10 +585,7 @@ impl IndexScheduler {
             if enqueued_at > max_enqueued {
                 max_enqueued = enqueued_at;
             }
-            enqueued_to_remove
-                .entry(enqueued_at)
-                .or_insert_with(RoaringBitmap::new)
-                .insert(task_id);
+            enqueued_to_remove.entry(enqueued_at).or_default().insert(task_id);
 
             if let Some(started_at) = task.started_at {
                 let started_at = started_at.unix_timestamp_nanos();
@@ -598,10 +595,7 @@ impl IndexScheduler {
                 if started_at > max_enqueued {
                     max_enqueued = started_at;
                 }
-                started_to_remove
-                    .entry(started_at)
-                    .or_insert_with(RoaringBitmap::new)
-                    .insert(task_id);
+                started_to_remove.entry(started_at).or_default().insert(task_id);
             }
 
             if let Some(finished_at) = task.finished_at {
@@ -612,10 +606,7 @@ impl IndexScheduler {
                 if finished_at > max_enqueued {
                     max_enqueued = finished_at;
                 }
-                finished_to_remove
-                    .entry(finished_at)
-                    .or_insert_with(RoaringBitmap::new)
-                    .insert(task_id);
+                finished_to_remove.entry(finished_at).or_default().insert(task_id);
             }
 
             if let Some(canceled_by) = task.canceled_by {
@@ -627,6 +618,7 @@ impl IndexScheduler {
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
+        progress.update_progress(TaskDeletionProgress::DeletingTasksDateTime);
         for (mut to_remove, db) in [
             (enqueued_to_remove, &self.queue.tasks.enqueued_at),
             (started_to_remove, &self.queue.tasks.started_at),
