@@ -571,9 +571,9 @@ impl IndexScheduler {
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
 
         let all_task_ids = self.queue.tasks.all_task_ids(&rtxn)?;
-        let mut to_delete_tasks = all_task_ids & matched_tasks;
-        to_delete_tasks -= &**processing_tasks;
-        to_delete_tasks -= &enqueued_tasks;
+        let mut tasks_to_remove = all_task_ids & matched_tasks;
+        tasks_to_remove -= &**processing_tasks;
+        tasks_to_remove -= &enqueued_tasks;
 
         // 2. We now have a list of tasks to delete, delete them
         let mut affected_indexes = HashSet::new();
@@ -583,7 +583,7 @@ impl IndexScheduler {
         // The tasks that have been removed *per batches*.
         let mut affected_batches: HashMap<BatchId, RoaringBitmap> = HashMap::new();
 
-        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
+        let (atomic_progress, task_progress) = AtomicTaskStep::new(tasks_to_remove.len() as u32);
         progress.update_progress(task_progress);
         let mut min_enqueued = i128::MAX;
         let mut max_enqueued = i128::MIN;
@@ -594,7 +594,7 @@ impl IndexScheduler {
         let mut enqueued_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
         let mut started_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
         let mut finished_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
-        for range in consecutive_ranges(to_delete_tasks.iter()) {
+        for range in consecutive_ranges(tasks_to_remove.iter()) {
             let iter = self
                 .queue
                 .tasks
