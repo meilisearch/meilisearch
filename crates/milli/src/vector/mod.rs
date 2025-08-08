@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use deserr::{DeserializeError, Deserr};
-use hannoy::distances::{BinaryQuantizedCosine, Cosine};
+use hannoy::distances::{Cosine, Hamming};
 use hannoy::ItemId;
 use heed::{RoTxn, RwTxn, Unspecified};
 use ordered_float::OrderedFloat;
@@ -168,7 +168,7 @@ impl VectorStore {
                 // only happens once in the life of an embedder, it's not very performances
                 // sensitive.
                 if quantizing && !self.quantized {
-                    let writer = writer.prepare_changing_distance::<BinaryQuantizedCosine>(wtxn)?;
+                    let writer = writer.prepare_changing_distance::<Hamming>(wtxn)?;
                     writer
                         .builder(rng)
                         .available_memory(hannoy_memory.unwrap_or(usize::MAX))
@@ -553,7 +553,7 @@ impl VectorStore {
         self.database.remap_data_type()
     }
 
-    fn quantized_db(&self) -> hannoy::Database<BinaryQuantizedCosine> {
+    fn quantized_db(&self) -> hannoy::Database<Hamming> {
         self.database.remap_data_type()
     }
 
