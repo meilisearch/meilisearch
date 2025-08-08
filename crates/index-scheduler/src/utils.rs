@@ -168,7 +168,7 @@ pub(crate) fn insert_task_datetime(
     let timestamp = time.unix_timestamp_nanos();
     let mut task_ids = database.get(wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
-    database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(task_ids))?;
+    database.put(wtxn, &timestamp, &task_ids)?;
     Ok(())
 }
 
@@ -184,7 +184,7 @@ pub(crate) fn remove_task_datetime(
         if existing.is_empty() {
             database.delete(wtxn, &timestamp)?;
         } else {
-            database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(existing))?;
+            database.put(wtxn, &timestamp, &existing)?;
         }
     }
 
