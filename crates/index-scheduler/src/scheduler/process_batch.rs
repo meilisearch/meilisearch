@@ -892,20 +892,20 @@ impl IndexScheduler {
         progress.update_progress(TaskDeletionProgress::DeletingBatchesMetadata);
 
         for (index, batches) in to_remove_from_indexes {
-            self.queue.tasks.update_index(wtxn, index, |index_tasks| {
-                *index_tasks -= &batches;
+            self.queue.batches.update_index(wtxn, index, |b| {
+                *b -= &batches;
             })?;
         }
 
         for (status, batches) in to_remove_from_statuses {
-            self.queue.tasks.update_status(wtxn, status, |status_tasks| {
-                *status_tasks -= &batches;
+            self.queue.batches.update_status(wtxn, status, |b| {
+                *b -= &batches;
             })?;
         }
 
         for (kind, batches) in to_remove_from_kinds {
-            self.queue.tasks.update_kind(wtxn, kind, |kind_tasks| {
-                *kind_tasks -= &batches;
+            self.queue.batches.update_kind(wtxn, kind, |b| {
+                *b -= &batches;
             })?;
         }
 
