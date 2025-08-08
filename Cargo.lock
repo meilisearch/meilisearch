@@ -580,7 +580,7 @@ source = "git+https://github.com/meilisearch/bbqueue#cbb87cc707b5af415ef203bdaf2
 
 [[package]]
 name = "benchmarks"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "anyhow",
  "bumpalo",
@@ -770,7 +770,7 @@ dependencies = [
 
 [[package]]
 name = "build-info"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "anyhow",
  "time",
@@ -1774,7 +1774,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "anyhow",
  "big_s",
@@ -2006,7 +2006,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "file-store"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "tempfile",
  "thiserror 2.0.12",
@@ -2028,7 +2028,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "insta",
  "nom",
@@ -2049,7 +2049,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -2194,7 +2194,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzers"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "arbitrary",
  "bumpalo",
@@ -2601,6 +2601,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "hannoy"
+version = "0.0.2"
+source = "git+https://github.com/nnethercott/hannoy?branch=main#d7097b5214c211f5d2bb9d2643f3d9fb8ccb03e2"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "hashbrown 0.15.4",
+ "heed",
+ "min-max-heap",
+ "page_size",
+ "papaya",
+ "rand 0.8.5",
+ "rayon",
+ "roaring",
+ "rustc-hash 2.1.1",
+ "thiserror 2.0.12",
+ "tinyvec",
+ "tracing",
+]
+
+[[package]]
 name = "hash32"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2994,7 +3015,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "anyhow",
  "backoff",
@@ -3230,7 +3251,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -3340,7 +3361,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -3724,7 +3745,7 @@ checksum = "490cc448043f947bae3cbee9c203358d62dbee0db12107a74be5c30ccfd09771"
 
 [[package]]
 name = "meili-snap"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "insta",
  "md5",
@@ -3735,7 +3756,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -3831,7 +3852,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "base64 0.22.1",
  "enum-iterator",
@@ -3850,7 +3871,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -3885,7 +3906,7 @@ dependencies = [
 
 [[package]]
 name = "meilitool"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3919,7 +3940,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "allocator-api2 0.3.0",
  "arroy",
@@ -3950,6 +3971,7 @@ dependencies = [
  "fxhash",
  "geoutils",
  "grenad",
+ "hannoy",
  "hashbrown 0.15.4",
  "heed",
  "hf-hub",
@@ -4018,6 +4040,12 @@ dependencies = [
  "mime",
  "unicase",
 ]
+
+[[package]]
+name = "min-max-heap"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2687e6cf9c00f48e9284cf9fd15f2ef341d03cc7743abf9df4c5f07fdee50b18"
 
 [[package]]
 name = "minimal-lexical"
@@ -4400,6 +4428,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "papaya"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f92dd0b07c53a0a0c764db2ace8c541dc47320dad97c2200c2a637ab9dd2328f"
+dependencies = [
+ "equivalent",
+ "seize",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4471,7 +4509,7 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "big_s",
  "serde_json",
@@ -5448,6 +5486,16 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.12",
  "time",
+]
+
+[[package]]
+name = "seize"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4b8d813387d566f627f3ea1b914c068aac94c40ae27ec43f5f33bde65abefe7"
+dependencies = [
+ "libc",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -7259,7 +7307,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.16.0"
+version = "1.18.0"
 dependencies = [
  "anyhow",
  "build-info",
