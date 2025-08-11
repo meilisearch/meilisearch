@@ -84,11 +84,11 @@ make_enum_progress! {
         RetrievingTasks,
         RetrievingBatches,
         DeletingTasksDateTime,
+        DeletingBatchesDateTime,
         DeletingTasksMetadata,
+        DeletingBatchesMetadata,
         DeletingTasks,
         DeletingBatches,
-        DeletingBatchesDateTime,
-        DeletingBatchesMetadata,
     }
 }
 
