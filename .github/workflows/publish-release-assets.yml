@@ -191,18 +191,15 @@ jobs:
       steps:
         - name: Checkout code
           uses: actions/checkout@v4
-
         - name: Setup Rust
           uses: actions-rs/toolchain@v1
           with:
             toolchain: stable
             override: true
-
-        - name: Generate OpenAPI specification
+        - name: Generate OpenAPI file
           run: |
             cd crates/openapi-generator
             cargo run --release -- --pretty --output ../../meilisearch.json
-
         - name: Upload OpenAPI to Release
           # No need to upload for dry run (cron)
           if: github.event_name == 'release'
