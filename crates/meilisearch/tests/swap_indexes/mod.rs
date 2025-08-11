@@ -73,7 +73,7 @@ async fn swap_indexes() {
     snapshot!(code, @"200 OK");
 
     // Notice how the task 0 which was initially representing the creation of the index `A` now represents the creation of the index `B`.
-    snapshot!(json_string!(tasks, { ".results[].duration" => "[duration]", ".results[].enqueuedAt" => "[date]", ".results[].startedAt" => "[date]", ".results[].finishedAt" => "[date]" }), @r###"
+    snapshot!(json_string!(tasks, { ".results[].duration" => "[duration]", ".results[].enqueuedAt" => "[date]", ".results[].startedAt" => "[date]", ".results[].finishedAt" => "[date]" }), @r#"
     {
       "results": [
         {
@@ -89,7 +89,8 @@ async fn swap_indexes() {
                 "indexes": [
                   "a",
                   "b"
-                ]
+                ],
+                "rename": false
               }
             ]
           },
@@ -102,7 +103,7 @@ async fn swap_indexes() {
         {
           "uid": 1,
           "batchUid": 1,
-          "indexUid": "a",
+          "indexUid": "b",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
           "canceledBy": null,
@@ -139,7 +140,7 @@ async fn swap_indexes() {
       "from": 2,
       "next": null
     }
-    "###);
+    "#);
 
     // BUT, the data in `a` should now points to the data that was in `b`.
     // And the opposite is true as well
@@ -228,7 +229,7 @@ async fn swap_indexes() {
     // 2. stays unchanged
     // 3. now have the indexUid `d` instead of `c`
     // 4. now have the indexUid `c` instead of `d`
-    snapshot!(json_string!(tasks, { ".results[].duration" => "[duration]", ".results[].enqueuedAt" => "[date]", ".results[].startedAt" => "[date]", ".results[].finishedAt" => "[date]" }), @r###"
+    snapshot!(json_string!(tasks, { ".results[].duration" => "[duration]", ".results[].enqueuedAt" => "[date]", ".results[].startedAt" => "[date]", ".results[].finishedAt" => "[date]" }), @r#"
     {
       "results": [
         {
@@ -244,13 +245,15 @@ async fn swap_indexes() {
                 "indexes": [
                   "a",
                   "b"
-                ]
+                ],
+                "rename": false
               },
               {
                 "indexes": [
                   "c",
                   "d"
-                ]
+                ],
+                "rename": false
               }
             ]
           },
@@ -263,7 +266,7 @@ async fn swap_indexes() {
         {
           "uid": 4,
           "batchUid": 4,
-          "indexUid": "c",
+          "indexUid": "d",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
           "canceledBy": null,
@@ -307,7 +310,8 @@ async fn swap_indexes() {
                 "indexes": [
                   "b",
                   "a"
-                ]
+                ],
+                "rename": false
               }
             ]
           },
@@ -337,7 +341,7 @@ async fn swap_indexes() {
         {
           "uid": 0,
           "batchUid": 0,
-          "indexUid": "a",
+          "indexUid": "b",
           "status": "succeeded",
           "type": "documentAdditionOrUpdate",
           "canceledBy": null,
@@ -357,7 +361,7 @@ async fn swap_indexes() {
       "from": 5,
       "next": null
     }
-    "###);
+    "#);
 
     // - The data in `a` should point to `a`.
     // - The data in `b` should point to `b`.
@@ -530,7 +534,7 @@ async fn swap_rename_indexes() {
     let (res, _) = b.delete().await;
     server.wait_task(res.uid()).await.succeeded();
 
-    let (res, _) = b.create(Some("kefir")).await;
+    b.create(Some("kefir")).await;
     let (res, _code) = server.index_swap(json!([{ "indexes": ["b", "a"], "rename": true }])).await;
     server.wait_task(res.uid()).await.succeeded();
 

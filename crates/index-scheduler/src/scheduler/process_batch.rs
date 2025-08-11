@@ -368,7 +368,7 @@ impl IndexScheduler {
                     }
                     let index_exists = self.index_mapper.index_exists(&wtxn, rhs)?;
                     match (index_exists, rename) {
-                        (true, true) => found_indexes_but_should_not.insert(rhs),
+                        (true, true) => found_indexes_but_should_not.insert((lhs, rhs)),
                         (false, false) => not_found_indexes.insert(rhs),
                         (true, false) | (false, true) => true, // random value we don't read it anyway
                     };
@@ -386,12 +386,18 @@ impl IndexScheduler {
                 }
                 if !found_indexes_but_should_not.is_empty() {
                     if found_indexes_but_should_not.len() == 1 {
-                        return Err(Error::SwapIndexFoundDuringRename(
-                            found_indexes_but_should_not.into_iter().next().unwrap().clone(),
-                        ));
+                        let (lhs, rhs) = found_indexes_but_should_not
+                            .into_iter()
+                            .next()
+                            .map(|(lhs, rhs)| (lhs.clone(), rhs.clone()))
+                            .unwrap();
+                        return Err(Error::SwapIndexFoundDuringRename(lhs, rhs));
                     } else {
                         return Err(Error::SwapIndexesFoundDuringRename(
-                            found_indexes_but_should_not.into_iter().cloned().collect(),
+                            found_indexes_but_should_not
+                                .into_iter()
+                                .map(|(_, rhs)| rhs.to_string())
+                                .collect(),
                         ));
                     }
                 }

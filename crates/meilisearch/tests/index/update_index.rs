@@ -4,7 +4,9 @@ use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::common::encoder::Encoder;
-use crate::common::{shared_does_not_exists_index, shared_index_with_documents, Server};
+use crate::common::{
+    shared_does_not_exists_index, shared_empty_index, shared_index_with_documents, Server,
+};
 use crate::json;
 
 #[actix_rt::test]
@@ -113,17 +115,14 @@ async fn error_update_unexisting_index() {
 async fn update_index_name() {
     let server = Server::new_shared();
     let index = server.unique_index();
-    let (task, code) = index.create(None).await;
-
-    assert_eq!(code, 202);
+    let (task, _code) = index.create(None).await;
     server.wait_task(task.uid()).await.succeeded();
 
     let new_index = server.unique_index();
-    let (task, _status_code) = index.update_raw(json!({ "uid": new_index.uid })).await;
+    let (task, _code) = index.update_raw(json!({ "uid": new_index.uid })).await;
     server.wait_task(task.uid()).await.succeeded();
 
     let (response, code) = new_index.get().await;
-
     snapshot!(code, @"200 OK");
 
     assert_eq!(response["uid"], new_index.uid);
@@ -138,4 +137,40 @@ async fn update_index_name() {
 
     snapshot!(response["primaryKey"], @"null");
     snapshot!(response.as_object().unwrap().len(), @"4");
+}
+
+#[actix_rt::test]
+async fn error_update_index_name_to_already_existing_index() {
+    let server = Server::new_shared();
+    let base_index = shared_empty_index().await;
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _status_code) = index.update_raw(json!({ "uid": base_index.uid })).await;
+    let task = server.wait_task(task.uid()).await;
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "[uuid]",
+      "status": "failed",
+      "type": "indexUpdate",
+      "canceledBy": null,
+      "details": {
+        "primaryKey": null,
+        "newIndexUid": "EMPTY_INDEX"
+      },
+      "error": {
+        "message": "Index `EMPTY_INDEX` already exists.",
+        "code": "index_already_exists",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_already_exists"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
 }
