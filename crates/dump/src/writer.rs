@@ -8,6 +8,7 @@ use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{ChatCompletionSettings, Network, RuntimeTogglableFeatures};
 use meilisearch_types::keys::Key;
 use meilisearch_types::settings::{Checked, Settings};
+use meilisearch_types::webhooks::WebhooksDumpView;
 use serde_json::{Map, Value};
 use tempfile::TempDir;
 use time::OffsetDateTime;
@@ -72,6 +73,13 @@ impl DumpWriter {
 
     pub fn create_network(&self, network: Network) -> Result<()> {
         Ok(std::fs::write(self.dir.path().join("network.json"), serde_json::to_string(&network)?)?)
+    }
+
+    pub fn create_webhooks(&self, webhooks: WebhooksDumpView) -> Result<()> {
+        Ok(std::fs::write(
+            self.dir.path().join("webhooks.json"),
+            serde_json::to_string(&webhooks)?,
+        )?)
     }
 
     pub fn persist_to(self, mut writer: impl Write) -> Result<()> {

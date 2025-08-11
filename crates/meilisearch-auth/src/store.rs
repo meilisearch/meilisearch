@@ -137,6 +137,14 @@ impl HeedAuthStore {
                 Action::ChatsSettingsAll => {
                     actions.extend([Action::ChatsSettingsGet, Action::ChatsSettingsUpdate]);
                 }
+                Action::WebhooksAll => {
+                    actions.extend([
+                        Action::WebhooksGet,
+                        Action::WebhooksUpdate,
+                        Action::WebhooksDelete,
+                        Action::WebhooksCreate,
+                    ]);
+                }
                 other => {
                     actions.insert(*other);
                 }

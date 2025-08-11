@@ -12,7 +12,8 @@ use milli::update::new::indexer;
 use milli::update::{IndexerConfig, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{
-    AscDesc, Criterion, DocumentId, FilterableAttributesRule, Index, Member, TermsMatchingStrategy,
+    normalize_facet, AscDesc, Criterion, DocumentId, FilterableAttributesRule, Index, Member,
+    TermsMatchingStrategy,
 };
 use serde::{Deserialize, Deserializer};
 use slice_group_by::GroupBy;
@@ -36,7 +37,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let path = tempfile::tempdir().unwrap();
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
-    options.map_size(10 * 1024 * 1024); // 10 MB
+    options.map_size(10 * 1024 * 1024); // 10 MiB
     let index = Index::new(options, &path, true).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
@@ -46,6 +47,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
     builder.set_criteria(criteria.to_vec());
     builder.set_filterable_fields(vec![
+        FilterableAttributesRule::Field(S("title")),
         FilterableAttributesRule::Field(S("tag")),
         FilterableAttributesRule::Field(S("asc_desc_rank")),
         FilterableAttributesRule::Field(S("_geo")),
@@ -220,6 +222,19 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
         {
             id = Some(document.id.clone())
         }
+    } else if let Some((field, prefix)) = filter.split_once("STARTS WITH") {
+        let field = match field.trim() {
+            "tag" => &document.tag,
+            "title" => &document.title,
+            "description" => &document.description,
+            _ => panic!("Unknown field: {field}"),
+        };
+
+        let field = normalize_facet(field);
+        let prefix = normalize_facet(prefix.trim().trim_matches('\''));
+        if field.starts_with(&prefix) {
+            id = Some(document.id.clone());
+        }
     } else if let Some(("asc_desc_rank", filter)) = filter.split_once('<') {
         if document.asc_desc_rank < filter.parse().unwrap() {
             id = Some(document.id.clone())
@@ -271,6 +286,8 @@ fn execute_filter(filter: &str, document: &TestDocument) -> Option<String> {
     } else if matches!(filter, "tag_in NOT IN[1, 2, 3, four, five]") {
         id = (!matches!(document.id.as_str(), "A" | "B" | "C" | "D" | "E"))
             .then(|| document.id.clone());
+    } else {
+        panic!("Unknown filter: {filter}");
     }
     id
 }

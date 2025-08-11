@@ -182,6 +182,25 @@ impl Server<Owned> {
         self.service.patch("/network", value).await
     }
 
+    pub async fn create_webhook(&self, value: Value) -> (Value, StatusCode) {
+        self.service.post("/webhooks", value).await
+    }
+
+    pub async fn get_webhook(&self, uuid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/webhooks/{}", uuid.as_ref());
+        self.service.get(url).await
+    }
+
+    pub async fn delete_webhook(&self, uuid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/webhooks/{}", uuid.as_ref());
+        self.service.delete(url).await
+    }
+
+    pub async fn patch_webhook(&self, uuid: impl AsRef<str>, value: Value) -> (Value, StatusCode) {
+        let url = format!("/webhooks/{}", uuid.as_ref());
+        self.service.patch(url, value).await
+    }
+
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
         self.service.get("/metrics").await
     }
@@ -446,6 +465,10 @@ impl<State> Server<State> {
 
     pub async fn get_network(&self) -> (Value, StatusCode) {
         self.service.get("/network").await
+    }
+
+    pub async fn get_webhooks(&self) -> (Value, StatusCode) {
+        self.service.get("/webhooks").await
     }
 }
 

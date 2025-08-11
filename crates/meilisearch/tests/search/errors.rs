@@ -1270,27 +1270,27 @@ async fn search_with_contains_without_enabling_the_feature() {
     index
         .search(json!({ "filter": "doggo CONTAINS kefir" }), |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(json_string!(response), @r###"
+            snapshot!(json_string!(response), @r#"
             {
-              "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
               "code": "feature_not_enabled",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
             }
-            "###);
+            "#);
         })
         .await;
     index
         .search(json!({ "filter": "doggo != echo AND doggo CONTAINS kefir" }), |response, code| {
             snapshot!(code, @"400 Bad Request");
-            snapshot!(json_string!(response), @r###"
+            snapshot!(json_string!(response), @r#"
             {
-              "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25:33 doggo != echo AND doggo CONTAINS kefir",
+              "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n25:33 doggo != echo AND doggo CONTAINS kefir",
               "code": "feature_not_enabled",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
             }
-            "###);
+            "#);
         })
         .await;
 
@@ -1299,24 +1299,24 @@ async fn search_with_contains_without_enabling_the_feature() {
         index.search_post(json!({ "filter": ["doggo != echo", "doggo CONTAINS kefir"] })).await;
 
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response), @r#"
     {
-      "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+      "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
-    "###);
+    "#);
     let (response, code) =
         index.search_post(json!({ "filter": ["doggo != echo", ["doggo CONTAINS kefir"]] })).await;
 
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response), @r#"
     {
-      "message": "Using `CONTAINS` or `STARTS WITH` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
+      "message": "Using `CONTAINS` in a filter requires enabling the `contains filter` experimental feature. See https://github.com/orgs/meilisearch/discussions/763\n7:15 doggo CONTAINS kefir",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
-    "###);
+    "#);
 }
