@@ -185,7 +185,7 @@ jobs:
           asset_name: ${{ matrix.asset_name }}
           tag: ${{ github.ref }}
 
-    publish-openapi:
+    publish-openapi-file:
       name: Publish OpenAPI file
       runs-on: ubuntu-latest
       steps:
