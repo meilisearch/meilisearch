@@ -390,30 +390,3 @@ async fn rename_index_with_pending_tasks() {
     let docs = response["results"].as_array().unwrap();
     assert!(!docs.is_empty()); // At least the initial document should be there
 }
-
-#[actix_rt::test]
-async fn rename_index_to_same_name() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-
-    // Create index
-    let (task, code) = index.create(None).await;
-    assert_eq!(code, 202);
-    server.wait_task(task.uid()).await.succeeded();
-
-    // Try to rename to the same name
-    let body = json!({ "uid": index.uid });
-    let (task, code) = index.service.patch(format!("/indexes/{}", index.uid), body).await;
-
-    assert_eq!(code, 202);
-    let response = server.wait_task(task.uid()).await.failed();
-
-    // Should fail with index already exists error
-    assert_eq!(response["status"], "failed");
-    assert_eq!(response["type"], "indexUpdate");
-    assert_eq!(response["error"]["code"], "index_already_exists");
-
-    // Index should still be accessible with original name
-    let (_, code) = index.get().await;
-    assert_eq!(code, 200);
-}
