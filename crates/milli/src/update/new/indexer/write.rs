@@ -136,7 +136,7 @@ where
             .unwrap_or(false);
         writer.build_and_quantize(
             wtxn,
-            progress,
+            progress.clone(),
             &mut rng,
             dimensions,
             is_being_quantized,
