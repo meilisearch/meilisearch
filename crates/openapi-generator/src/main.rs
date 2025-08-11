@@ -1,8 +1,9 @@
+use std::path::PathBuf;
+
 use anyhow::Result;
 use clap::Parser;
 use meilisearch::routes::MeilisearchApi;
 use utoipa::OpenApi;
-use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "openapi-generator")]
