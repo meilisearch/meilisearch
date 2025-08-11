@@ -7,9 +7,9 @@ source: crates/index-scheduler/src/queue/batches_test.rs
 {uid: 1, details: {"primaryKey":"sheep"}, stats: {"totalNbTasks":1,"status":{"processing":1},"types":{"indexCreation":1},"indexUids":{"doggo":1}}, stop reason: "created batch containing only task with id 1 of type `indexCreation` that cannot be batched with any other task.", }
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse"), new_uid: None }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
-1 {uid: 1, status: enqueued, details: { primary_key: Some("sheep"), new_uid: None }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
-2 {uid: 2, status: enqueued, details: { primary_key: Some("fish"), new_uid: None }, kind: IndexCreation { index_uid: "whalo", primary_key: Some("fish") }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, status: enqueued, details: { primary_key: Some("sheep"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
+2 {uid: 2, status: enqueued, details: { primary_key: Some("fish"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "whalo", primary_key: Some("fish") }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued [1,2,]

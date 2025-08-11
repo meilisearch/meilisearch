@@ -6,9 +6,9 @@ source: crates/index-scheduler/src/queue/batches_test.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse"), new_uid: None }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
-1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("sheep"), new_uid: None }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
-2 {uid: 2, batch_uid: 2, status: failed, error: ResponseError { code: 200, message: "Planned failure for tests.", error_code: "internal", error_type: "internal", error_link: "https://docs.meilisearch.com/errors#internal" }, details: { primary_key: Some("fish"), new_uid: None }, kind: IndexCreation { index_uid: "whalo", primary_key: Some("fish") }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("sheep"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
+2 {uid: 2, batch_uid: 2, status: failed, error: ResponseError { code: 200, message: "Planned failure for tests.", error_code: "internal", error_type: "internal", error_link: "https://docs.meilisearch.com/errors#internal" }, details: { primary_key: Some("fish"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "whalo", primary_key: Some("fish") }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []

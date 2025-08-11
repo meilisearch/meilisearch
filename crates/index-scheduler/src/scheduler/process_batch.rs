@@ -283,7 +283,9 @@ impl IndexScheduler {
                 task.status = Status::Succeeded;
                 task.details = Some(Details::IndexInfo {
                     primary_key: primary_key.clone(),
-                    uid: new_index_uid.clone(),
+                    new_index_uid: new_index_uid.clone(),
+                    // we only display the old index uid if a rename happened => there is a new_index_uid
+                    old_index_uid: new_index_uid.map(|_| index_uid.clone()),
                 });
 
                 // if the update processed successfully, we're going to store the new

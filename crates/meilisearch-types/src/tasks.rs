@@ -278,13 +278,16 @@ impl KindWithContent {
             KindWithContent::SettingsUpdate { new_settings, .. } => {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
-            KindWithContent::IndexCreation { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone(), uid: None })
-            }
-            KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
+            KindWithContent::IndexCreation { primary_key, .. } => Some(Details::IndexInfo {
+                primary_key: primary_key.clone(),
+                old_index_uid: None,
+                new_index_uid: None,
+            }),
+            KindWithContent::IndexUpdate { primary_key, new_index_uid, index_uid } => {
                 Some(Details::IndexInfo {
                     primary_key: primary_key.clone(),
-                    uid: new_index_uid.clone(),
+                    old_index_uid: new_index_uid.as_ref().map(|_| index_uid.clone()),
+                    new_index_uid: new_index_uid.clone(),
                 })
             }
             KindWithContent::IndexSwap { swaps } => {
@@ -357,13 +360,16 @@ impl KindWithContent {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             KindWithContent::IndexDeletion { .. } => None,
-            KindWithContent::IndexCreation { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone(), uid: None })
-            }
-            KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
+            KindWithContent::IndexCreation { primary_key, .. } => Some(Details::IndexInfo {
+                primary_key: primary_key.clone(),
+                old_index_uid: None,
+                new_index_uid: None,
+            }),
+            KindWithContent::IndexUpdate { primary_key, new_index_uid, index_uid } => {
                 Some(Details::IndexInfo {
                     primary_key: primary_key.clone(),
-                    uid: new_index_uid.clone(),
+                    old_index_uid: new_index_uid.as_ref().map(|_| index_uid.clone()),
+                    new_index_uid: new_index_uid.clone(),
                 })
             }
             KindWithContent::IndexSwap { .. } => {
@@ -418,13 +424,16 @@ impl From<&KindWithContent> for Option<Details> {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             KindWithContent::IndexDeletion { .. } => None,
-            KindWithContent::IndexCreation { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone(), uid: None })
-            }
-            KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
+            KindWithContent::IndexCreation { primary_key, .. } => Some(Details::IndexInfo {
+                primary_key: primary_key.clone(),
+                new_index_uid: None,
+                old_index_uid: None,
+            }),
+            KindWithContent::IndexUpdate { primary_key, new_index_uid, index_uid } => {
                 Some(Details::IndexInfo {
                     primary_key: primary_key.clone(),
-                    uid: new_index_uid.clone(),
+                    old_index_uid: new_index_uid.as_ref().map(|_| index_uid.clone()),
+                    new_index_uid: new_index_uid.clone(),
                 })
             }
             KindWithContent::IndexSwap { .. } => None,
@@ -678,7 +687,8 @@ pub enum Details {
     },
     IndexInfo {
         primary_key: Option<String>,
-        uid: Option<String>,
+        new_index_uid: Option<String>,
+        old_index_uid: Option<String>,
     },
     DocumentDeletion {
         provided_ids: usize,

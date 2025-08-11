@@ -162,22 +162,21 @@ async fn update_index_name_to_itself() {
 async fn error_update_index_name_to_already_existing_index() {
     let server = Server::new_shared();
     let base_index = shared_empty_index().await;
-    let index = server.unique_index();
-    let (task, _code) = index.create(None).await;
-    server.wait_task(task.uid()).await.succeeded();
+    let index = shared_index_with_documents().await;
 
-    let (task, _status_code) = index.update_raw(json!({ "uid": base_index.uid })).await;
-    let task = server.wait_task(task.uid()).await;
+    let (task, _status_code) =
+        index.update_raw_index_fail(json!({ "uid": base_index.uid }), server).await;
     snapshot!(task, @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
-      "indexUid": "[uuid]",
+      "indexUid": "SHARED_DOCUMENTS",
       "status": "failed",
       "type": "indexUpdate",
       "canceledBy": null,
       "details": {
         "primaryKey": null,
+        "oldIndexUid": "SHARED_DOCUMENTS",
         "newIndexUid": "EMPTY_INDEX"
       },
       "error": {

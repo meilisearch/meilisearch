@@ -341,9 +341,10 @@ impl From<Details> for DetailsView {
                 settings.hide_secrets();
                 DetailsView { settings: Some(settings), ..DetailsView::default() }
             }
-            Details::IndexInfo { primary_key, uid } => DetailsView {
+            Details::IndexInfo { primary_key, new_index_uid, old_index_uid } => DetailsView {
                 primary_key: Some(primary_key),
-                new_index_uid: uid.clone(),
+                new_index_uid: new_index_uid.clone(),
+                old_index_uid: old_index_uid.clone(),
                 ..DetailsView::default()
             },
             Details::DocumentDeletion {

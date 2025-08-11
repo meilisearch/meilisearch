@@ -6,9 +6,9 @@ source: crates/index-scheduler/src/queue/tasks_test.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: enqueued, details: { primary_key: Some("bone"), new_uid: None }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
-1 {uid: 1, status: enqueued, details: { primary_key: Some("plankton"), new_uid: None }, kind: IndexCreation { index_uid: "whalo", primary_key: Some("plankton") }}
-2 {uid: 2, status: enqueued, details: { primary_key: Some("his_own_vomit"), new_uid: None }, kind: IndexCreation { index_uid: "catto", primary_key: Some("his_own_vomit") }}
+0 {uid: 0, status: enqueued, details: { primary_key: Some("bone"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("bone") }}
+1 {uid: 1, status: enqueued, details: { primary_key: Some("plankton"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "whalo", primary_key: Some("plankton") }}
+2 {uid: 2, status: enqueued, details: { primary_key: Some("his_own_vomit"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "catto", primary_key: Some("his_own_vomit") }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued [0,1,2,]

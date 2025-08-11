@@ -13,7 +13,8 @@ source: crates/index-scheduler/src/queue/test.rs
     "details": {
       "IndexInfo": {
         "primary_key": null,
-        "uid": null
+        "new_index_uid": null,
+        "old_index_uid": null
       }
     },
     "status": "enqueued",
@@ -35,7 +36,8 @@ source: crates/index-scheduler/src/queue/test.rs
     "details": {
       "IndexInfo": {
         "primary_key": null,
-        "uid": null
+        "new_index_uid": null,
+        "old_index_uid": null
       }
     },
     "status": "enqueued",

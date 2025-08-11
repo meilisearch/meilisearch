@@ -7,7 +7,7 @@ source: crates/index-scheduler/src/scheduler/test.rs
 {uid: 0, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"processing":1},"types":{"indexCreation":1},"indexUids":{"index_a":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: enqueued, details: { primary_key: Some("id"), new_uid: None }, kind: IndexCreation { index_uid: "index_a", primary_key: Some("id") }}
+0 {uid: 0, status: enqueued, details: { primary_key: Some("id"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "index_a", primary_key: Some("id") }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued [0,]

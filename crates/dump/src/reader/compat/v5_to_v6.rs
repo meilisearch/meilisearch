@@ -140,9 +140,11 @@ impl CompatV5ToV6 {
                         v5::Details::Settings { settings } => {
                             v6::Details::SettingsUpdate { settings: Box::new(settings.into()) }
                         }
-                        v5::Details::IndexInfo { primary_key } => {
-                            v6::Details::IndexInfo { primary_key, uid: None }
-                        }
+                        v5::Details::IndexInfo { primary_key } => v6::Details::IndexInfo {
+                            primary_key,
+                            new_index_uid: None,
+                            old_index_uid: None,
+                        },
                         v5::Details::DocumentDeletion {
                             received_document_ids,
                             deleted_documents,
