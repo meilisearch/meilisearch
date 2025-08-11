@@ -140,7 +140,7 @@ impl VectorStore {
     pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
         &mut self,
         wtxn: &mut RwTxn,
-        progress: &Progress,
+        progress: Progress,
         rng: &mut R,
         dimension: usize,
         quantizing: bool,
@@ -151,12 +151,12 @@ impl VectorStore {
             if self.quantized {
                 let writer = hannoy::Writer::new(self.quantized_db(), index, dimension);
                 if writer.need_build(wtxn)? {
-                    writer
-                        .builder(rng)
-                        // .progress(|step| progress.update_progress_from_hannoy(step))
+                    let mut builder = writer.builder(rng).progress(progress.clone());
+                    builder
+                        .available_memory(hannoy_memory.unwrap_or(usize::MAX))
                         .cancel(cancel)
                         .ef_construction(HANNOY_EF_CONSTRUCTION)
-                        .build::<HANNOY_M, HANNOY_M0>(wtxn)?
+                        .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
                 } else if writer.is_empty(wtxn)? {
                     continue;
                 }
@@ -169,18 +169,16 @@ impl VectorStore {
                 // sensitive.
                 if quantizing && !self.quantized {
                     let writer = writer.prepare_changing_distance::<Hamming>(wtxn)?;
-                    writer
-                        .builder(rng)
+                    let mut builder = writer.builder(rng).progress(progress.clone());
+                    builder
                         .available_memory(hannoy_memory.unwrap_or(usize::MAX))
-                        // .progress(|step| progress.update_progress_from_hannoy(step))
                         .cancel(cancel)
                         .ef_construction(HANNOY_EF_CONSTRUCTION)
                         .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
                 } else if writer.need_build(wtxn)? {
-                    writer
-                        .builder(rng)
+                    let mut builder = writer.builder(rng).progress(progress.clone());
+                    builder
                         .available_memory(hannoy_memory.unwrap_or(usize::MAX))
-                        // .progress(|step| progress.update_progress_from_hannoy(step))
                         .cancel(cancel)
                         .ef_construction(HANNOY_EF_CONSTRUCTION)
                         .build::<HANNOY_M, HANNOY_M0>(wtxn)?;

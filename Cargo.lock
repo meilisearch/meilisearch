@@ -2604,7 +2604,7 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.0.2"
-source = "git+https://github.com/nnethercott/hannoy?branch=main#93a24c4cdf712152c90d27a2898715f22942c35c"
+source = "git+https://github.com/nnethercott/hannoy?branch=main#8d1846b188ed2cc8776fdb86805eefbfbde9ddd1"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -2617,6 +2617,7 @@ dependencies = [
  "rayon",
  "roaring",
  "rustc-hash 2.1.1",
+ "steppe",
  "thiserror 2.0.12",
  "tinyvec",
  "tracing",
@@ -3056,9 +3057,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.9.0"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea70ddb795996207ad57735b50c5982d8844f38ba9ee5f1aedcfb708a2aa11e"
+checksum = "fe4cd85333e22411419a0bcae1297d25e58c9443848b11dc6a86fefe8c78a661"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.4",
@@ -4005,6 +4006,7 @@ dependencies = [
  "smallstr",
  "smallvec",
  "smartstring",
+ "steppe",
  "tempfile",
  "thiserror 2.0.12",
  "thread_local",
@@ -5865,6 +5867,16 @@ name = "static_assertions"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
+name = "steppe"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dead99cdf718f37bcd1d22dda9b498f35c5aa22894b755bfd94bf8c2daec9427"
+dependencies = [
+ "convert_case 0.8.0",
+ "indexmap",
+]
 
 [[package]]
 name = "strsim"

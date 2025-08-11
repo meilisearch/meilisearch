@@ -96,14 +96,6 @@ impl Progress {
 
         durations.drain(..).map(|(name, duration)| (name, format!("{duration:.2?}"))).collect()
     }
-
-    // TODO: ideally we should expose the progress in a way that let arroy use it directly
-    // pub(crate) fn update_progress_from_hannoy(&self, progress: hannoy::WriterProgress) {
-    //     self.update_progress(progress.main);
-    //     if let Some(sub) = progress.sub {
-    //         self.update_progress(sub);
-    //     }
-    // }
 }
 
 /// Generate the names associated with the durations and push them.
@@ -317,3 +309,27 @@ impl<U: Send + Sync + 'static> Step for VariableNameStep<U> {
 //         self.max
 //     }
 // }
+
+// Integration with steppe
+
+impl steppe::Progress for Progress {
+    fn update(&self, sub_progress: impl steppe::Step) {
+        self.update_progress(Compat(sub_progress));
+    }
+}
+
+struct Compat<T: steppe::Step>(T);
+
+impl<T: steppe::Step> Step for Compat<T> {
+    fn name(&self) -> Cow<'static, str> {
+        self.0.name().into()
+    }
+
+    fn current(&self) -> u32 {
+        self.0.current().try_into().unwrap_or(u32::MAX)
+    }
+
+    fn total(&self) -> u32 {
+        self.0.total().try_into().unwrap_or(u32::MAX)
+    }
+}
