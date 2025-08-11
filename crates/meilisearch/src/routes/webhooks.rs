@@ -159,37 +159,32 @@ async fn get_webhooks(
 }
 
 #[derive(Serialize, Default)]
-pub struct PatchWebhooksAnalytics {
-    patch_webhook_count: usize,
-    post_webhook_count: usize,
-    delete_webhook_count: usize,
-}
-
-impl PatchWebhooksAnalytics {
-    pub fn patch_webhook() -> Self {
-        PatchWebhooksAnalytics { patch_webhook_count: 1, ..Default::default() }
-    }
-
-    pub fn post_webhook() -> Self {
-        PatchWebhooksAnalytics { post_webhook_count: 1, ..Default::default() }
-    }
-
-    pub fn delete_webhook() -> Self {
-        PatchWebhooksAnalytics { delete_webhook_count: 1, ..Default::default() }
-    }
-}
+pub struct PatchWebhooksAnalytics;
 
 impl Aggregate for PatchWebhooksAnalytics {
     fn event_name(&self) -> &'static str {
         "Webhooks Updated"
     }
 
-    fn aggregate(self: Box<Self>, new: Box<Self>) -> Box<Self> {
-        Box::new(PatchWebhooksAnalytics {
-            patch_webhook_count: self.patch_webhook_count + new.patch_webhook_count,
-            post_webhook_count: self.post_webhook_count + new.post_webhook_count,
-            delete_webhook_count: self.delete_webhook_count + new.delete_webhook_count,
-        })
+    fn aggregate(self: Box<Self>, _new: Box<Self>) -> Box<Self> {
+        self
+    }
+
+    fn into_event(self: Box<Self>) -> serde_json::Value {
+        serde_json::to_value(*self).unwrap_or_default()
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct PostWebhooksAnalytics;
+
+impl Aggregate for PostWebhooksAnalytics {
+    fn event_name(&self) -> &'static str {
+        "Webhooks Created"
+    }
+
+    fn aggregate(self: Box<Self>, _new: Box<Self>) -> Box<Self> {
+        self
     }
 
     fn into_event(self: Box<Self>) -> serde_json::Value {
@@ -386,7 +381,7 @@ async fn post_webhook(
     webhooks.insert(uuid, webhook.clone());
     index_scheduler.update_runtime_webhooks(webhooks)?;
 
-    analytics.publish(PatchWebhooksAnalytics::post_webhook(), &req);
+    analytics.publish(PostWebhooksAnalytics, &req);
 
     let response = WebhookWithMetadata::from(uuid, webhook);
     debug!(returns = ?response, "Post webhook");
@@ -438,7 +433,7 @@ async fn patch_webhook(
     webhooks.insert(uuid, webhook.clone());
     index_scheduler.update_runtime_webhooks(webhooks)?;
 
-    analytics.publish(PatchWebhooksAnalytics::patch_webhook(), &req);
+    analytics.publish(PatchWebhooksAnalytics, &req);
 
     let response = WebhookWithMetadata::from(uuid, webhook);
     debug!(returns = ?response, "Patch webhook");
@@ -462,8 +457,6 @@ async fn patch_webhook(
 async fn delete_webhook(
     index_scheduler: GuardedData<ActionPolicy<{ actions::WEBHOOKS_DELETE }>, Data<IndexScheduler>>,
     uuid: Path<String>,
-    req: HttpRequest,
-    analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let uuid = Uuid::from_str(&uuid.into_inner()).map_err(InvalidUuid)?;
     debug!(parameters = ?uuid, "Delete webhook");
@@ -475,8 +468,6 @@ async fn delete_webhook(
     let mut webhooks = index_scheduler.retrieve_runtime_webhooks();
     webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
     index_scheduler.update_runtime_webhooks(webhooks)?;
-
-    analytics.publish(PatchWebhooksAnalytics::delete_webhook(), &req);
 
     debug!(returns = "No Content", "Delete webhook");
     Ok(HttpResponse::NoContent().finish())
