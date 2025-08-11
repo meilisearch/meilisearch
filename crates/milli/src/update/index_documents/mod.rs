@@ -526,7 +526,7 @@ where
                 writer.build_and_quantize(
                     wtxn,
                     // In the settings we don't have any progress to share
-                    &Progress::default(),
+                    Progress::default(),
                     &mut rng,
                     dimension,
                     is_quantizing,
