@@ -4,10 +4,11 @@ This guide is to describe how to make releases for the current repository.
 
 ## 📅 Weekly Meilisearch release
 
-1. A weekly meeting is done every Monday to define the release and to ensure minimal checks before the release.
+1. A weekly meeting is held every Thursday afternoon to define the release and to ensure minimal checks before the release.
 <details>
 <summary>Check out the TODO 👇👇👇</summary>
 - [ ] Define the version of the release (`vX.Y.Z`) based on our <a href="https://github.com/meilisearch/meilisearch/blob/main/documentation/versioning-policy.md">Versioning Policy</a></br>.
+- [ ] Define the commit that will reference the tag release. Every PR merged after this commit will not be taken into account in the future release
 - [ ] Manually test `--experimental-dumpless-upgrade` on a DB of the previous Meilisearch minor version</br>
 - [ ] Check recent <a href="https://github.com/meilisearch/meilisearch/actions">automated tests</a> on `main`</br>
     - [ ] Scheduled test suite</br>
