@@ -23,7 +23,7 @@ categories:
 template: |
   $CHANGES
 
-  Thanks again to $CONTRIBUTORS! 🎉
+  ❤️  Huge thanks to our contributors: $CONTRIBUTORS.
 no-changes-template: 'Changes are coming soon 😎'
 sort-direction: 'ascending'
 replacers:
