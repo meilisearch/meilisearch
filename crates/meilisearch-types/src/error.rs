@@ -212,7 +212,6 @@ ImmutableApiKeyKey                             , InvalidRequest       , BAD_REQU
 ImmutableApiKeyUid                             , InvalidRequest       , BAD_REQUEST;
 ImmutableApiKeyUpdatedAt                       , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexCreatedAt                        , InvalidRequest       , BAD_REQUEST;
-ImmutableIndexUid                              , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexUpdatedAt                        , InvalidRequest       , BAD_REQUEST;
 IndexAlreadyExists                             , InvalidRequest       , CONFLICT ;
 IndexCreationFailed                            , Internal             , INTERNAL_SERVER_ERROR;

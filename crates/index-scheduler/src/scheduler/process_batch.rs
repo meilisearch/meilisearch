@@ -240,23 +240,19 @@ impl IndexScheduler {
 
                 // Handle rename if new_index_uid is provided
                 let final_index_uid = if let Some(new_uid) = &new_index_uid {
-                    index.set_updated_at(&mut index_wtxn, &OffsetDateTime::now_utc())?;
+                    if new_uid != &index_uid {
+                        index.set_updated_at(&mut index_wtxn, &OffsetDateTime::now_utc())?;
 
-                    let mut wtxn = self.env.write_txn()?;
+                        let mut wtxn = self.env.write_txn()?;
+                        self.apply_index_swap(
+                            &mut wtxn, &progress, task.uid, &index_uid, new_uid, true,
+                        )?;
+                        wtxn.commit()?;
 
-                    // Rename the index
-                    self.index_mapper.rename(&mut wtxn, &index_uid, new_uid)?;
-
-                    // Update the task index mappings
-                    let old_tasks =
-                        self.queue.tasks.index_tasks(&wtxn, &index_uid).unwrap_or_default();
-                    self.queue.tasks.update_index(&mut wtxn, new_uid, |bm| {
-                        *bm |= &old_tasks;
-                    })?;
-                    self.queue.tasks.update_index(&mut wtxn, &index_uid, |bm| bm.clear())?;
-                    wtxn.commit()?;
-
-                    new_uid.clone()
+                        new_uid.clone()
+                    } else {
+                        new_uid.clone()
+                    }
                 } else {
                     index_uid.clone()
                 };
@@ -287,7 +283,7 @@ impl IndexScheduler {
                 task.status = Status::Succeeded;
                 task.details = Some(Details::IndexInfo {
                     primary_key: primary_key.clone(),
-                    new_uid: new_index_uid.clone(),
+                    uid: new_index_uid.clone(),
                 });
 
                 // if the update processed successfully, we're going to store the new

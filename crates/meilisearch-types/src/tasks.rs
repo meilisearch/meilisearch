@@ -279,12 +279,12 @@ impl KindWithContent {
                 Some(Details::SettingsUpdate { settings: new_settings.clone() })
             }
             KindWithContent::IndexCreation { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone(), new_uid: None })
+                Some(Details::IndexInfo { primary_key: primary_key.clone(), uid: None })
             }
             KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
                 Some(Details::IndexInfo {
                     primary_key: primary_key.clone(),
-                    new_uid: new_index_uid.clone(),
+                    uid: new_index_uid.clone(),
                 })
             }
             KindWithContent::IndexSwap { swaps } => {
@@ -358,12 +358,12 @@ impl KindWithContent {
             }
             KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone(), new_uid: None })
+                Some(Details::IndexInfo { primary_key: primary_key.clone(), uid: None })
             }
             KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
                 Some(Details::IndexInfo {
                     primary_key: primary_key.clone(),
-                    new_uid: new_index_uid.clone(),
+                    uid: new_index_uid.clone(),
                 })
             }
             KindWithContent::IndexSwap { .. } => {
@@ -419,12 +419,12 @@ impl From<&KindWithContent> for Option<Details> {
             }
             KindWithContent::IndexDeletion { .. } => None,
             KindWithContent::IndexCreation { primary_key, .. } => {
-                Some(Details::IndexInfo { primary_key: primary_key.clone(), new_uid: None })
+                Some(Details::IndexInfo { primary_key: primary_key.clone(), uid: None })
             }
             KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
                 Some(Details::IndexInfo {
                     primary_key: primary_key.clone(),
-                    new_uid: new_index_uid.clone(),
+                    uid: new_index_uid.clone(),
                 })
             }
             KindWithContent::IndexSwap { .. } => None,
@@ -678,7 +678,7 @@ pub enum Details {
     },
     IndexInfo {
         primary_key: Option<String>,
-        new_uid: Option<String>,
+        uid: Option<String>,
     },
     DocumentDeletion {
         provided_ids: usize,

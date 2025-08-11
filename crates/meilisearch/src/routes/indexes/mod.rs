@@ -288,7 +288,6 @@ fn deny_immutable_fields_index(
     location: ValuePointerRef,
 ) -> DeserrJsonError {
     match field {
-        "uid" => immutable_field_error(field, accepted, Code::ImmutableIndexUid),
         "createdAt" => immutable_field_error(field, accepted, Code::ImmutableIndexCreatedAt),
         "updatedAt" => immutable_field_error(field, accepted, Code::ImmutableIndexUpdatedAt),
         _ => deserr::take_cf_content(DeserrJsonError::<BadRequest>::error::<Infallible>(

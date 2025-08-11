@@ -140,6 +140,25 @@ async fn update_index_name() {
 }
 
 #[actix_rt::test]
+async fn update_index_name_to_itself() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+    let (initial_response, code) = index.get().await;
+    snapshot!(code, @"200 OK");
+
+    let (task, _code) = index.update_raw(json!({ "uid": index.uid })).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (new_response, code) = index.get().await;
+    snapshot!(code, @"200 OK");
+
+    // Renaming an index to its own name should not change anything
+    assert_eq!(initial_response, new_response);
+}
+
+#[actix_rt::test]
 async fn error_update_index_name_to_already_existing_index() {
     let server = Server::new_shared();
     let base_index = shared_empty_index().await;

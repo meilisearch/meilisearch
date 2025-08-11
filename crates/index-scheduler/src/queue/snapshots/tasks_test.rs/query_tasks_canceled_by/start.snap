@@ -6,9 +6,9 @@ source: crates/index-scheduler/src/queue/tasks_test.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse") }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
-1 {uid: 1, batch_uid: 1, status: canceled, canceled_by: 3, details: { primary_key: Some("sheep") }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
-2 {uid: 2, batch_uid: 1, status: canceled, canceled_by: 3, details: { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("catto", "doggo") }] }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("mouse"), new_uid: None }, kind: IndexCreation { index_uid: "catto", primary_key: Some("mouse") }}
+1 {uid: 1, batch_uid: 1, status: canceled, canceled_by: 3, details: { primary_key: Some("sheep"), new_uid: None }, kind: IndexCreation { index_uid: "doggo", primary_key: Some("sheep") }}
+2 {uid: 2, batch_uid: 1, status: canceled, canceled_by: 3, details: { swaps: [IndexSwap { indexes: ("catto", "doggo"), rename: false }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("catto", "doggo"), rename: false }] }}
 3 {uid: 3, batch_uid: 1, status: succeeded, details: { matched_tasks: 3, canceled_tasks: Some(2), original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0, 1, 2]> }}
 ----------------------------------------------------------------------
 ### Status:
@@ -49,7 +49,7 @@ catto: { number_of_documents: 0, field_distribution: {} }
 ----------------------------------------------------------------------
 ### All Batches:
 0 {uid: 0, details: {"primaryKey":"mouse"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"catto":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
-1 {uid: 1, details: {"primaryKey":"sheep","matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query","swaps":[{"indexes":["catto","doggo"]}]}, stats: {"totalNbTasks":3,"status":{"succeeded":1,"canceled":2},"types":{"indexCreation":1,"indexSwap":1,"taskCancelation":1},"indexUids":{"doggo":1}}, stop reason: "created batch containing only task with id 3 of type `taskCancelation` that cannot be batched with any other task.", }
+1 {uid: 1, details: {"primaryKey":"sheep","matchedTasks":3,"canceledTasks":2,"originalFilter":"test_query","swaps":[{"indexes":["catto","doggo"],"rename":false}]}, stats: {"totalNbTasks":3,"status":{"succeeded":1,"canceled":2},"types":{"indexCreation":1,"indexSwap":1,"taskCancelation":1},"indexUids":{"doggo":1}}, stop reason: "created batch containing only task with id 3 of type `taskCancelation` that cannot be batched with any other task.", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

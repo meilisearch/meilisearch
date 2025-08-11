@@ -85,7 +85,7 @@ impl CompatV5ToV6 {
                             v6::Kind::IndexCreation { primary_key }
                         }
                         v5::tasks::TaskContent::IndexUpdate { primary_key, .. } => {
-                            v6::Kind::IndexUpdate { primary_key, new_uid: None }
+                            v6::Kind::IndexUpdate { primary_key, uid: None }
                         }
                         v5::tasks::TaskContent::IndexDeletion { .. } => v6::Kind::IndexDeletion,
                         v5::tasks::TaskContent::DocumentAddition {
@@ -141,7 +141,7 @@ impl CompatV5ToV6 {
                             v6::Details::SettingsUpdate { settings: Box::new(settings.into()) }
                         }
                         v5::Details::IndexInfo { primary_key } => {
-                            v6::Details::IndexInfo { primary_key, new_uid: None }
+                            v6::Details::IndexInfo { primary_key, uid: None }
                         }
                         v5::Details::DocumentDeletion {
                             received_document_ids,
