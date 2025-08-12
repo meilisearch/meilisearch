@@ -129,14 +129,12 @@ impl VectorStore {
                 self._arroy_items_in_store(rtxn, self.arroy_angular_db(), store_id, with_items)
                     .map_err(Into::into)
             }
+        } else if self.quantized {
+            self._items_in_store(rtxn, self.quantized_db(), store_id, with_items)
+                .map_err(Into::into)
         } else {
-            if self.quantized {
-                self._items_in_store(rtxn, self.quantized_db(), store_id, with_items)
-                    .map_err(Into::into)
-            } else {
-                self._items_in_store(rtxn, self.angular_db(), store_id, with_items)
-                    .map_err(Into::into)
-            }
+            self._items_in_store(rtxn, self.angular_db(), store_id, with_items)
+                .map_err(Into::into)
         }
     }
 
@@ -193,20 +191,18 @@ impl VectorStore {
                     .transpose()?
                     .map(|reader| reader.dimensions()))
             }
+        } else if self.quantized {
+            Ok(self
+                .readers(rtxn, self.quantized_db())
+                .next()
+                .transpose()?
+                .map(|reader| reader.dimensions()))
         } else {
-            if self.quantized {
-                Ok(self
-                    .readers(rtxn, self.quantized_db())
-                    .next()
-                    .transpose()?
-                    .map(|reader| reader.dimensions()))
-            } else {
-                Ok(self
-                    .readers(rtxn, self.angular_db())
-                    .next()
-                    .transpose()?
-                    .map(|reader| reader.dimensions()))
-            }
+            Ok(self
+                .readers(rtxn, self.angular_db())
+                .next()
+                .transpose()?
+                .map(|reader| reader.dimensions()))
         }
     }
 
@@ -550,20 +546,18 @@ impl VectorStore {
                     }
                     writer.contains_item(rtxn, item)?
                 }
-            } else {
-                if self.quantized {
-                    let writer = hannoy::Writer::new(self.quantized_db(), index, dimension);
-                    if writer.is_empty(rtxn)? {
-                        continue;
-                    }
-                    writer.contains_item(rtxn, item)?
-                } else {
-                    let writer = hannoy::Writer::new(self.angular_db(), index, dimension);
-                    if writer.is_empty(rtxn)? {
-                        continue;
-                    }
-                    writer.contains_item(rtxn, item)?
+            } else if self.quantized {
+                let writer = hannoy::Writer::new(self.quantized_db(), index, dimension);
+                if writer.is_empty(rtxn)? {
+                    continue;
                 }
+                writer.contains_item(rtxn, item)?
+            } else {
+                let writer = hannoy::Writer::new(self.angular_db(), index, dimension);
+                if writer.is_empty(rtxn)? {
+                    continue;
+                }
+                writer.contains_item(rtxn, item)?
             };
             if contains {
                 return Ok(contains);
@@ -587,13 +581,11 @@ impl VectorStore {
                 self._arroy_nns_by_item(rtxn, self.arroy_angular_db(), item, limit, filter)
                     .map_err(Into::into)
             }
+        } else if self.quantized {
+            self._nns_by_item(rtxn, self.quantized_db(), item, limit, filter)
+                .map_err(Into::into)
         } else {
-            if self.quantized {
-                self._nns_by_item(rtxn, self.quantized_db(), item, limit, filter)
-                    .map_err(Into::into)
-            } else {
-                self._nns_by_item(rtxn, self.angular_db(), item, limit, filter).map_err(Into::into)
-            }
+            self._nns_by_item(rtxn, self.angular_db(), item, limit, filter).map_err(Into::into)
         }
     }
 
@@ -669,14 +661,12 @@ impl VectorStore {
                 self._arroy_nns_by_vector(rtxn, self.arroy_angular_db(), vector, limit, filter)
                     .map_err(Into::into)
             }
+        } else if self.quantized {
+            self._nns_by_vector(rtxn, self.quantized_db(), vector, limit, filter)
+                .map_err(Into::into)
         } else {
-            if self.quantized {
-                self._nns_by_vector(rtxn, self.quantized_db(), vector, limit, filter)
-                    .map_err(Into::into)
-            } else {
-                self._nns_by_vector(rtxn, self.angular_db(), vector, limit, filter)
-                    .map_err(Into::into)
-            }
+            self._nns_by_vector(rtxn, self.angular_db(), vector, limit, filter)
+                .map_err(Into::into)
         }
     }
 
@@ -754,18 +744,16 @@ impl VectorStore {
                     }
                 }
             }
-        } else {
-            if self.quantized {
-                for reader in self.readers(rtxn, self.quantized_db()) {
-                    if let Some(vec) = reader?.item_vector(rtxn, item_id)? {
-                        vectors.push(vec);
-                    }
+        } else if self.quantized {
+            for reader in self.readers(rtxn, self.quantized_db()) {
+                if let Some(vec) = reader?.item_vector(rtxn, item_id)? {
+                    vectors.push(vec);
                 }
-            } else {
-                for reader in self.readers(rtxn, self.angular_db()) {
-                    if let Some(vec) = reader?.item_vector(rtxn, item_id)? {
-                        vectors.push(vec);
-                    }
+            }
+        } else {
+            for reader in self.readers(rtxn, self.angular_db()) {
+                if let Some(vec) = reader?.item_vector(rtxn, item_id)? {
+                    vectors.push(vec);
                 }
             }
         }

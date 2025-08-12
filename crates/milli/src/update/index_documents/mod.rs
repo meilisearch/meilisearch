@@ -485,7 +485,7 @@ where
 
         // If an embedder wasn't used in the typedchunk but must be binary quantized
         // we should insert it in `dimension`
-        let index_version = self.index.get_version(&self.wtxn)?.unwrap();
+        let index_version = self.index.get_version(self.wtxn)?.unwrap();
         for (name, action) in settings_diff.embedding_config_updates.iter() {
             if action.is_being_quantized && !dimension.contains_key(name.as_str()) {
                 let index = self.index.embedding_configs().embedder_id(self.wtxn, name)?.ok_or(
