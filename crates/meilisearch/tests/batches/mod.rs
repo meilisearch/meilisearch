@@ -1273,7 +1273,7 @@ async fn test_summarized_batch_cancelation() {
 
 #[actix_web::test]
 async fn test_summarized_batch_deletion() {
-    let server = Server::new_shared();
+    let server = Server::new().await;
     let index = server.unique_index();
     // to avoid being flaky we're only going to delete an already finished batch :(
     let (task, _status_code) = index.create(None).await;
