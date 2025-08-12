@@ -1,18 +1,15 @@
 use std::collections::{BTreeSet, VecDeque};
 
-use crate::{
-    constants::RESERVED_GEO_FIELD_NAME,
-    documents::{geo_sort::next_bucket, GeoSortParameter},
-    heed_codec::{
-        facet::{FacetGroupKeyCodec, FacetGroupValueCodec},
-        BytesRefCodec,
-    },
-    is_faceted,
-    search::facet::{ascending_facet_sort, descending_facet_sort},
-    AscDesc, DocumentId, Member, UserError,
-};
 use heed::Database;
 use roaring::RoaringBitmap;
+
+use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::documents::geo_sort::next_bucket;
+use crate::documents::GeoSortParameter;
+use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::BytesRefCodec;
+use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
+use crate::{is_faceted, AscDesc, DocumentId, Member, UserError};
 
 #[derive(Debug, Clone, Copy)]
 enum AscDescId {
