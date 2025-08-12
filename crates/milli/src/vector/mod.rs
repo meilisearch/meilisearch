@@ -47,18 +47,20 @@ const HANNOY_M: usize = 16;
 const HANNOY_M0: usize = 32;
 
 pub struct VectorStore {
-    quantized: bool,
-    embedder_index: u8,
+    version: (u32, u32, u32),
     database: hannoy::Database<Unspecified>,
+    embedder_index: u8,
+    quantized: bool,
 }
 
 impl VectorStore {
     pub fn new(
+        version: (u32, u32, u32),
         database: hannoy::Database<Unspecified>,
         embedder_index: u8,
         quantized: bool,
     ) -> Self {
-        Self { database, embedder_index, quantized }
+        Self { version, database, embedder_index, quantized }
     }
 
     pub fn embedder_index(&self) -> u8 {

@@ -146,7 +146,6 @@ impl IndexScheduler {
                 };
 
                 let mut index_wtxn = index.write_txn()?;
-
                 let index_version = index.get_version(&index_wtxn)?.unwrap_or((1, 12, 0));
                 let package_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
                 if index_version != package_version {
