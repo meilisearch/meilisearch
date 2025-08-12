@@ -511,7 +511,7 @@ make_setting_routes!(
     },
     {
         route: "/chat",
-        update_verb: put,
+        update_verb: patch,
         value_type: ChatSettings,
         err_type: meilisearch_types::deserr::DeserrJsonError<
             meilisearch_types::error::deserr_codes::InvalidSettingsIndexChat,
