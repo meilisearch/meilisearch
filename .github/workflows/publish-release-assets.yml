@@ -11,7 +11,7 @@ jobs:
   check-version:
     name: Check the version validity
     runs-on: ubuntu-latest
-    # No need to check the version for dry run (cron)
+    # No need to check the version for dry run (cron or workflow_dispatch)
     steps:
       - uses: actions/checkout@v3
       # Check if the tag has the v<nmumber>.<number>.<number> format.
@@ -48,7 +48,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85
       - name: Build
         run: cargo build --release --locked
-      # No need to upload binaries for dry run (cron)
+      # No need to upload binaries for dry run (cron or workflow_dispatch)
       - name: Upload binaries to release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@2.11.2
@@ -78,7 +78,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85
       - name: Build
         run: cargo build --release --locked
-      # No need to upload binaries for dry run (cron)
+      # No need to upload binaries for dry run (cron or workflow_dispatch)
       - name: Upload binaries to release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@2.11.2
@@ -111,7 +111,7 @@ jobs:
           command: build
           args: --release --target ${{ matrix.target }}
       - name: Upload the binary to release
-        # No need to upload binaries for dry run (cron)
+        # No need to upload binaries for dry run (cron or workflow_dispatch)
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@2.11.2
         with:
@@ -176,7 +176,7 @@ jobs:
       - name: List target output files
         run: ls -lR ./target
       - name: Upload the binary to release
-        # No need to upload binaries for dry run (cron)
+        # No need to upload binaries for dry run (cron or workflow_dispatch)
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@2.11.2
         with:
@@ -187,6 +187,7 @@ jobs:
 
   publish-openapi-file:
     name: Publish OpenAPI file
+    needs: check-version
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -201,7 +202,7 @@ jobs:
           cd crates/openapi-generator
           cargo run --release -- --pretty --output ../../meilisearch.json
       - name: Upload OpenAPI to Release
-        # No need to upload for dry run (cron)
+        # No need to upload for dry run (cron or workflow_dispatch)
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@2.11.2
         with:
