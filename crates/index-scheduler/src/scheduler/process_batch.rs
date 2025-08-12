@@ -734,7 +734,7 @@ impl IndexScheduler {
                 // We must remove the batch from all the reverse indexes it no longer has tasks for.
 
                 for (index, index_tasks) in affected_indexes_tasks.iter() {
-                    if !index_tasks.is_disjoint(&tasks) {
+                    if index_tasks.is_disjoint(&tasks) {
                         to_remove_from_indexes
                             .entry(index)
                             .or_insert_with(RoaringBitmap::new)
@@ -743,7 +743,7 @@ impl IndexScheduler {
                 }
 
                 for (status, status_tasks) in affected_statuses_tasks.iter() {
-                    if !status_tasks.is_disjoint(&tasks) {
+                    if status_tasks.is_disjoint(&tasks) {
                         to_remove_from_statuses
                             .entry(*status)
                             .or_insert_with(RoaringBitmap::new)
@@ -752,7 +752,7 @@ impl IndexScheduler {
                 }
 
                 for (kind, kind_tasks) in affected_kinds_tasks.iter() {
-                    if !kind_tasks.is_disjoint(&tasks) {
+                    if kind_tasks.is_disjoint(&tasks) {
                         to_remove_from_kinds
                             .entry(*kind)
                             .or_insert_with(RoaringBitmap::new)
