@@ -127,7 +127,12 @@ impl BatchQueue {
         status: Status,
         bitmap: &RoaringBitmap,
     ) -> Result<()> {
-        Ok(self.status.put(wtxn, &status, bitmap)?)
+        if bitmap.is_empty() {
+            self.status.delete(wtxn, &status)?;
+        } else {
+            self.status.put(wtxn, &status, bitmap)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn update_status(

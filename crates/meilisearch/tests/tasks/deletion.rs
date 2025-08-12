@@ -20,7 +20,7 @@ async fn delete_task() {
 
     // Delete tasks
     let (task, code) = server.delete_tasks(&format!("uids={task_uid}")).await;
-    snapshot!(code, @"202 Accepted");
+    snapshot!(code, @"200 OK");
     let value = server.wait_task(task).await.succeeded();
     snapshot!(value, @r#"
     {
@@ -95,7 +95,7 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
             encode(&time1.format(&Rfc3339).unwrap()),
         ))
         .await;
-    snapshot!(code, @"202 Accepted");
+    snapshot!(code, @"200 OK");
     let value = server.wait_task(task).await.succeeded();
     snapshot!(json_string!(value, {
         ".details.originalFilter" => "[ignored]",
