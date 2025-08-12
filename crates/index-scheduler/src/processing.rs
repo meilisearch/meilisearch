@@ -83,7 +83,6 @@ make_enum_progress! {
     pub enum TaskDeletionProgress {
         RetrievingTasks,
         RetrievingBatchTasks,
-        RetrievingBatches,
         DeletingTasksDateTime,
         DeletingBatchesDateTime,
         DeletingTasksMetadata,
