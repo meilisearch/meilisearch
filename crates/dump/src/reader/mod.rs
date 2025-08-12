@@ -232,7 +232,11 @@ pub(crate) mod test {
     use std::{fs::File, io::Seek};
 
     use meili_snap::insta;
-    use meilisearch_types::{batches::{Batch, BatchEnqueuedAt, BatchStats}, task_view::DetailsView, tasks::{BatchStopReason, Kind, Status}};
+    use meilisearch_types::{
+        batches::{Batch, BatchEnqueuedAt, BatchStats},
+        task_view::DetailsView,
+        tasks::{BatchStopReason, Kind, Status},
+    };
     use time::macros::datetime;
 
     use super::*;

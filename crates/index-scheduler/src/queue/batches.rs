@@ -66,7 +66,7 @@ impl BatchQueue {
         NUMBER_OF_DATABASES
     }
 
-    pub(super) fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self> {
+    pub(crate) fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self> {
         Ok(Self {
             all_batches: env.create_database(wtxn, Some(db_name::ALL_BATCHES))?,
             status: env.create_database(wtxn, Some(db_name::BATCH_STATUS))?,
