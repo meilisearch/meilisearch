@@ -5,48 +5,6 @@ use meili_snap::{json_string, snapshot};
 use time::format_description::well_known::Rfc3339;
 use urlencoding::encode;
 
-// pub struct Query {
-//     /// The maximum number of tasks to be matched
-//     pub limit: Option<u32>,
-//     /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched
-//     pub from: Option<u32>,
-//     /// The order used to return the tasks. By default the newest tasks are returned first and the boolean is `false`.
-//     pub reverse: Option<bool>,
-//     /// The [task ids](`meilisearch_types::tasks::Task::uid`) to be matched
-//     pub uids: Option<Vec<TaskId>>,
-//     /// The [batch ids](`meilisearch_types::batches::Batch::uid`) to be matched
-//     pub batch_uids: Option<Vec<BatchId>>,
-//     /// The allowed [statuses](`meilisearch_types::tasks::Task::status`) of the matched tasls
-//     pub statuses: Option<Vec<Status>>,
-//     /// The allowed [kinds](meilisearch_types::tasks::Kind) of the matched tasks.
-//     ///
-//     /// The kind of a task is given by:
-//     /// ```
-//     /// # use meilisearch_types::tasks::{Task, Kind};
-//     /// # fn doc_func(task: Task) -> Kind {
-//     /// task.kind.as_kind()
-//     /// # }
-//     /// ```
-//     pub types: Option<Vec<Kind>>,
-//     /// The allowed [index ids](meilisearch_types::tasks::Task::index_uid) of the matched tasks
-//     pub index_uids: Option<Vec<String>>,
-//     /// The [task ids](`meilisearch_types::tasks::Task::uid`) of the [`TaskCancelation`](meilisearch_types::tasks::Task::Kind::TaskCancelation) tasks
-//     /// that canceled the matched tasks.
-//     pub canceled_by: Option<Vec<TaskId>>,
-//     /// Exclusive upper bound of the matched tasks' [`enqueued_at`](meilisearch_types::tasks::Task::enqueued_at) field.
-//     pub before_enqueued_at: Option<OffsetDateTime>,
-//     /// Exclusive lower bound of the matched tasks' [`enqueued_at`](meilisearch_types::tasks::Task::enqueued_at) field.
-//     pub after_enqueued_at: Option<OffsetDateTime>,
-//     /// Exclusive upper bound of the matched tasks' [`started_at`](meilisearch_types::tasks::Task::started_at) field.
-//     pub before_started_at: Option<OffsetDateTime>,
-//     /// Exclusive lower bound of the matched tasks' [`started_at`](meilisearch_types::tasks::Task::started_at) field.
-//     pub after_started_at: Option<OffsetDateTime>,
-//     /// Exclusive upper bound of the matched tasks' [`finished_at`](meilisearch_types::tasks::Task::finished_at) field.
-//     pub before_finished_at: Option<OffsetDateTime>,
-//     /// Exclusive lower bound of the matched tasks' [`finished_at`](meilisearch_types::tasks::Task::finished_at) field.
-//     pub after_finished_at: Option<OffsetDateTime>,
-// }
-
 #[actix_rt::test]
 async fn delete_task() {
     let server = Server::new_shared();
