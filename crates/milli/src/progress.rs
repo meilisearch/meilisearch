@@ -5,7 +5,6 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use enum_iterator::Sequence;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::Serialize;
