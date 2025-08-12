@@ -133,8 +133,7 @@ impl VectorStore {
             self._items_in_store(rtxn, self.quantized_db(), store_id, with_items)
                 .map_err(Into::into)
         } else {
-            self._items_in_store(rtxn, self.angular_db(), store_id, with_items)
-                .map_err(Into::into)
+            self._items_in_store(rtxn, self.angular_db(), store_id, with_items).map_err(Into::into)
         }
     }
 
@@ -582,8 +581,7 @@ impl VectorStore {
                     .map_err(Into::into)
             }
         } else if self.quantized {
-            self._nns_by_item(rtxn, self.quantized_db(), item, limit, filter)
-                .map_err(Into::into)
+            self._nns_by_item(rtxn, self.quantized_db(), item, limit, filter).map_err(Into::into)
         } else {
             self._nns_by_item(rtxn, self.angular_db(), item, limit, filter).map_err(Into::into)
         }
@@ -665,8 +663,7 @@ impl VectorStore {
             self._nns_by_vector(rtxn, self.quantized_db(), vector, limit, filter)
                 .map_err(Into::into)
         } else {
-            self._nns_by_vector(rtxn, self.angular_db(), vector, limit, filter)
-                .map_err(Into::into)
+            self._nns_by_vector(rtxn, self.angular_db(), vector, limit, filter).map_err(Into::into)
         }
     }
 
