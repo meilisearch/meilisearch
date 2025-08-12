@@ -155,7 +155,7 @@ impl VectorStore {
         }
     }
 
-    pub fn convert_from_arroy(&self, wtxn: &mut RwTxn) -> crate::Result<()> {
+    pub fn convert_from_arroy(&self, wtxn: &mut RwTxn, progress: Progress) -> crate::Result<()> {
         if self.quantized {
             let dimensions = self
                 .arroy_readers(wtxn, self.arroy_quantized_db())
@@ -168,7 +168,7 @@ impl VectorStore {
             for index in vector_store_range_for_embedder(self.embedder_index) {
                 let mut rng = rand::rngs::StdRng::from_entropy();
                 let writer = hannoy::Writer::new(self.quantized_db(), index, dimensions);
-                let mut builder = writer.builder(&mut rng);
+                let mut builder = writer.builder(&mut rng).progress(progress.clone());
                 builder.prepare_arroy_conversion(wtxn)?;
                 builder.build::<HANNOY_M, HANNOY_M0>(wtxn)?;
             }
@@ -186,7 +186,7 @@ impl VectorStore {
             for index in vector_store_range_for_embedder(self.embedder_index) {
                 let mut rng = rand::rngs::StdRng::from_entropy();
                 let writer = hannoy::Writer::new(self.angular_db(), index, dimensions);
-                let mut builder = writer.builder(&mut rng);
+                let mut builder = writer.builder(&mut rng).progress(progress.clone());
                 builder.prepare_arroy_conversion(wtxn)?;
                 builder.build::<HANNOY_M, HANNOY_M0>(wtxn)?;
             }

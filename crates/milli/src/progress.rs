@@ -269,47 +269,6 @@ impl<U: Send + Sync + 'static> Step for VariableNameStep<U> {
     }
 }
 
-// impl Step for hannoy::MainStep {
-//     fn name(&self) -> Cow<'static, str> {
-//         match self {
-//             hannoy::MainStep::PreProcessingTheItems => "pre processing the items",
-//             hannoy::MainStep::WritingTheDescendantsAndMetadata => {
-//                 "writing the descendants and metadata"
-//             }
-//             hannoy::MainStep::RetrieveTheUpdatedItems => "retrieve the updated items",
-//             hannoy::MainStep::RetrievingTheTreeAndItemNodes => "retrieving the tree and item nodes",
-//             hannoy::MainStep::UpdatingTheTrees => "updating the trees",
-//             hannoy::MainStep::CreateNewTrees => "create new trees",
-//             hannoy::MainStep::WritingNodesToDatabase => "writing nodes to database",
-//             hannoy::MainStep::DeleteExtraneousTrees => "delete extraneous trees",
-//             hannoy::MainStep::WriteTheMetadata => "write the metadata",
-//         }
-//         .into()
-//     }
-
-//     fn current(&self) -> u32 {
-//         *self as u32
-//     }
-
-//     fn total(&self) -> u32 {
-//         Self::CARDINALITY as u32
-//     }
-// }
-
-// impl Step for hannoy::SubStep {
-//     fn name(&self) -> Cow<'static, str> {
-//         self.unit.into()
-//     }
-
-//     fn current(&self) -> u32 {
-//         self.current.load(Ordering::Relaxed)
-//     }
-
-//     fn total(&self) -> u32 {
-//         self.max
-//     }
-// }
-
 // Integration with steppe
 
 impl steppe::Progress for Progress {
@@ -322,7 +281,7 @@ struct Compat<T: steppe::Step>(T);
 
 impl<T: steppe::Step> Step for Compat<T> {
     fn name(&self) -> Cow<'static, str> {
-        self.0.name().into()
+        self.0.name()
     }
 
     fn current(&self) -> u32 {
