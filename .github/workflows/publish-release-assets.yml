@@ -185,27 +185,27 @@ jobs:
           asset_name: ${{ matrix.asset_name }}
           tag: ${{ github.ref }}
 
-    publish-openapi-file:
-      name: Publish OpenAPI file
-      runs-on: ubuntu-latest
-      steps:
-        - name: Checkout code
-          uses: actions/checkout@v4
-        - name: Setup Rust
-          uses: actions-rs/toolchain@v1
-          with:
-            toolchain: stable
-            override: true
-        - name: Generate OpenAPI file
-          run: |
-            cd crates/openapi-generator
-            cargo run --release -- --pretty --output ../../meilisearch.json
-        - name: Upload OpenAPI to Release
-          # No need to upload for dry run (cron)
-          if: github.event_name == 'release'
-          uses: svenstaro/upload-release-action@2.11.2
-          with:
-            repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-            file: ./meilisearch.json
-            asset_name: meilisearch-openapi.json
-            tag: ${{ github.ref }}
+  publish-openapi-file:
+    name: Publish OpenAPI file
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Generate OpenAPI file
+        run: |
+          cd crates/openapi-generator
+          cargo run --release -- --pretty --output ../../meilisearch.json
+      - name: Upload OpenAPI to Release
+        # No need to upload for dry run (cron)
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@2.11.2
+        with:
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          file: ./meilisearch.json
+          asset_name: meilisearch-openapi.json
+          tag: ${{ github.ref }}
