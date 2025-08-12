@@ -544,8 +544,8 @@ impl IndexScheduler {
                 return Ok(());
             }
 
-            let min = to_remove.keys().min().cloned().unwrap_or(i128::MAX);
-            let max = to_remove.keys().max().cloned().unwrap_or(i128::MIN);
+            let min = to_remove.keys().min().cloned().unwrap(); // to_remove isn't empty so this is ok
+            let max = to_remove.keys().max().cloned().unwrap();
             let range = min..=max;
 
             // We iterate over the time database to see which ranges of timestamps need to be removed
@@ -573,7 +573,7 @@ impl IndexScheduler {
                 }
             }
             if let Some(delete_range_start) = delete_range_start.take() {
-                delete_ranges.push(delete_range_start..i128::MAX);
+                delete_ranges.push(delete_range_start..(max+1));
             }
 
             for range in delete_ranges {
@@ -779,18 +779,14 @@ impl IndexScheduler {
 
         // 7. Remove task datetimes
         progress.update_progress(TaskDeletionProgress::DeletingTasksDateTime);
-
         remove_task_datetimes(wtxn, tasks_enqueued_to_remove, self.queue.tasks.enqueued_at)?;
         remove_task_datetimes(wtxn, tasks_started_to_remove, self.queue.tasks.started_at)?;
         remove_task_datetimes(wtxn, tasks_finished_to_remove, self.queue.tasks.finished_at)?;
 
         // 8. Delete batches datetimes
         progress.update_progress(TaskDeletionProgress::DeletingBatchesDateTime);
-
         remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.enqueued_at)?;
-
         remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.started_at)?;
-
         remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.finished_at)?;
 
         // 9. Remove batches metadata from indexes, statuses, and kinds
