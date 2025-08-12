@@ -7,7 +7,7 @@ use urlencoding::encode;
 
 #[actix_rt::test]
 async fn delete_task() {
-    let server = Server::new_shared();
+    let server = Server::new().await;
     let index = server.unique_index();
 
     // Add a document
@@ -33,7 +33,7 @@ async fn delete_task() {
       "details": {
         "matchedTasks": 1,
         "deletedTasks": 1,
-        "originalFilter": "?uids=4"
+        "originalFilter": "?uids=0"
       },
       "error": null,
       "duration": "[duration]",
@@ -231,8 +231,6 @@ async fn delete_tasks_time_bounds_inner(name: &str) {
       "next": null
     }
     "#);
-
-    todo!()
 }
 
 #[actix_rt::test]
