@@ -821,21 +821,33 @@ impl IndexScheduler {
         );
         progress.update_progress(task_progress);
 
-        for (index, mut previous_tasks) in affected_indexes_tasks.into_iter() {
-            previous_tasks -= &to_delete_tasks;
-            self.queue.tasks.index_tasks.put(wtxn, index, &previous_tasks)?;
+        for (index, mut tasks) in affected_indexes_tasks.into_iter() {
+            tasks -= &to_delete_tasks;
+            if tasks.is_empty() {
+                self.queue.tasks.index_tasks.delete(wtxn, index)?;
+            } else {
+                self.queue.tasks.index_tasks.put(wtxn, index, &tasks)?;
+            }
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
-        for (status, mut previous_tasks) in affected_statuses_tasks.into_iter() {
-            previous_tasks -= &to_delete_tasks;
-            self.queue.tasks.status.put(wtxn, &status, &previous_tasks)?;
+        for (status, mut tasks) in affected_statuses_tasks.into_iter() {
+            tasks -= &to_delete_tasks;
+            if tasks.is_empty() {
+                self.queue.tasks.status.delete(wtxn, &status)?;
+            } else {
+                self.queue.tasks.status.put(wtxn, &status, &tasks)?;
+            }
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
-        for (kind, mut previous_tasks) in affected_kinds_tasks.into_iter() {
-            previous_tasks -= &to_delete_tasks;
-            self.queue.tasks.kind.put(wtxn, &kind, &previous_tasks)?;
+        for (kind, mut tasks) in affected_kinds_tasks.into_iter() {
+            tasks -= &to_delete_tasks;
+            if tasks.is_empty() {
+                self.queue.tasks.kind.delete(wtxn, &kind)?;
+            } else {
+                self.queue.tasks.kind.put(wtxn, &kind, &tasks)?;
+            }
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
