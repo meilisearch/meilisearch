@@ -3,6 +3,7 @@ mod v1_13;
 mod v1_14;
 mod v1_15;
 mod v1_16;
+mod v1_17;
 mod v1_18;
 
 use heed::RwTxn;
