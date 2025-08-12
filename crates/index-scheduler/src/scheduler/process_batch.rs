@@ -562,7 +562,9 @@ impl IndexScheduler {
                     current -= &to_remove;
 
                     if current.is_empty() {
-                        delete_range_start = Some(timestamp);
+                        if delete_range_start.is_none() {
+                            delete_range_start = Some(timestamp);
+                        }
                     } else {
                         // We could close the deletion range but it's not necessary because the new value will get reinserted anyway
                         to_put.insert(timestamp, current);
@@ -608,7 +610,9 @@ impl IndexScheduler {
                     current -= to_remove;
 
                     if current.is_empty() {
-                        delete_range_start = Some(timestamp);
+                        if delete_range_start.is_none() {
+                            delete_range_start = Some(timestamp);
+                        }
                     } else {
                         // We could close the deletion range but it's not necessary because the new value will get reinserted anyway
                         to_put.insert(timestamp, current);
