@@ -2,7 +2,7 @@
 
 use crate::milli::progress::EmbedderStats;
 use std::collections::{BTreeSet, HashSet};
-use std::ops::Bound;
+use std::ops::{Bound, RangeInclusive};
 use std::sync::Arc;
 
 use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
@@ -157,6 +157,30 @@ impl ProcessingBatch {
             stop_reason: self.reason.to_string(),
         }
     }
+}
+
+/// Given a **sorted** iterator of `u32`, return an iterator of the ranges of consecutive values it contains.
+pub(crate) fn consecutive_ranges(
+    iter: impl IntoIterator<Item = u32>,
+) -> impl Iterator<Item = RangeInclusive<u32>> {
+    let mut iter = iter.into_iter().peekable();
+
+    std::iter::from_fn(move || {
+        let start = iter.next()?;
+
+        let mut end = start;
+
+        while let Some(&next) = iter.peek() {
+            if next == end + 1 {
+                end = next;
+                iter.next();
+            } else {
+                break;
+            }
+        }
+
+        Some(start..=end)
+    })
 }
 
 pub(crate) fn insert_task_datetime(
