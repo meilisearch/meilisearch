@@ -57,8 +57,6 @@ async fn delete_task() {
     "#);
 }
 
-// If there is a bug it's caused by a combination of the parameters so let's test them together!
-
 async fn delete_tasks_time_bounds_inner(name: &str) {
     let server = Server::new().await;
     let index = server.unique_index();
