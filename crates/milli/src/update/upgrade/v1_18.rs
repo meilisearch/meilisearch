@@ -14,7 +14,7 @@ impl UpgradeIndex for Latest_V1_17_To_V1_18_0 {
         wtxn: &mut RwTxn,
         index: &Index,
         _original: (u32, u32, u32),
-        _progress: Progress,
+        progress: Progress,
     ) -> Result<bool> {
         let embedding_configs = index.embedding_configs();
         for config in embedding_configs.embedding_configs(wtxn)? {
@@ -22,7 +22,7 @@ impl UpgradeIndex for Latest_V1_17_To_V1_18_0 {
             let quantized = config.config.quantized();
             let embedder_id = embedding_configs.embedder_id(wtxn, &config.name)?.unwrap();
             let vector_store = VectorStore::new(index.vector_store, embedder_id, quantized);
-            vector_store.convert_from_arroy(wtxn)?;
+            vector_store.convert_from_arroy(wtxn, progress.clone())?;
         }
 
         Ok(false)
