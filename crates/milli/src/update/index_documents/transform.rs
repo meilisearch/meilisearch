@@ -884,10 +884,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
                 )?;
 
-                let injected_vectors: std::result::Result<
-                    serde_json::Map<String, serde_json::Value>,
-                    hannoy::Error,
-                > = readers
+                let injected_vectors: crate::Result<_> = readers
                     .iter()
                     .filter_map(|(name, (reader, user_provided))| {
                         if !user_provided.contains(docid) {
