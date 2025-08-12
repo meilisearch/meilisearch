@@ -311,7 +311,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
     security(("Bearer" = ["tasks.cancel", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = OK, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -392,7 +392,8 @@ async fn cancel_tasks(
             .await??;
     let task: SummarizedTaskView = task.into();
 
-    Ok(HttpResponse::Accepted().json(task))
+    // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
+    Ok(HttpResponse::Ok().json(task))
 }
 
 /// Delete tasks
@@ -405,7 +406,7 @@ async fn cancel_tasks(
     security(("Bearer" = ["tasks.delete", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = OK, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -485,7 +486,8 @@ async fn delete_tasks(
         .await??;
     let task: SummarizedTaskView = task.into();
 
-    Ok(HttpResponse::Accepted().json(task))
+    // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
+    Ok(HttpResponse::Ok().json(task))
 }
 
 #[derive(Debug, Serialize, ToSchema)]

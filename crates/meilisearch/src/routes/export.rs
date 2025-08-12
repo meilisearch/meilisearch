@@ -47,7 +47,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     tag = "Export",
     security(("Bearer" = ["export", "*"])),
     responses(
-        (status = ACCEPTED, description = "Export successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = OK, description = "Export successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 1,
                 "status": "enqueued",
@@ -106,7 +106,8 @@ async fn export(
 
     analytics.publish(analytics_aggregate, &req);
 
-    Ok(HttpResponse::Accepted().json(task))
+    // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
+    Ok(HttpResponse::Ok().json(task))
 }
 
 #[derive(Debug, Deserr, ToSchema, Serialize)]
