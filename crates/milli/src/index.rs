@@ -1769,10 +1769,12 @@ impl Index {
     ) -> Result<BTreeMap<String, EmbeddingsWithMetadata>> {
         let mut res = BTreeMap::new();
         let embedders = self.embedding_configs();
+        let index_version = self.get_version(rtxn)?.unwrap();
         for config in embedders.embedding_configs(rtxn)? {
             let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
             let has_fragments = config.config.embedder_options.has_fragments();
             let reader = VectorStore::new(
+                index_version,
                 self.vector_store,
                 embedder_info.embedder_id,
                 config.config.quantized(),
@@ -1795,10 +1797,15 @@ impl Index {
     pub fn hannoy_stats(&self, rtxn: &RoTxn<'_>) -> Result<HannoyStats> {
         let mut stats = HannoyStats::default();
         let embedding_configs = self.embedding_configs();
+        let index_version = self.get_version(rtxn)?.unwrap();
         for config in embedding_configs.embedding_configs(rtxn)? {
             let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
-            let reader =
-                VectorStore::new(self.vector_store, embedder_id, config.config.quantized());
+            let reader = VectorStore::new(
+                index_version,
+                self.vector_store,
+                embedder_id,
+                config.config.quantized(),
+            );
             reader.aggregate_stats(rtxn, &mut stats)?;
         }
         Ok(stats)
