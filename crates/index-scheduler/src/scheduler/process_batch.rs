@@ -533,7 +533,8 @@ impl IndexScheduler {
                 let (timestamp, data) = i?;
 
                 if let Some(to_remove) = to_remove.remove(&timestamp) {
-                    let mut current = data.decode().unwrap(); // TODO
+                    let mut current =
+                        data.decode().map_err(|e| Error::Anyhow(anyhow::anyhow!(e)))?;
                     current -= &to_remove;
 
                     if current.is_empty() {
