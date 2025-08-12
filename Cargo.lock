@@ -2603,8 +2603,9 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.0.2"
-source = "git+https://github.com/nnethercott/hannoy?branch=main#8d1846b188ed2cc8776fdb86805eefbfbde9ddd1"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0cac6ebc04fc7246356d29908b55315c26c695a2ea2f692de9f72c0ac61ca1b1"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -3363,7 +3364,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
