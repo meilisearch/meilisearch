@@ -1,5 +1,5 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::ops::{Range, RangeInclusive};
+use std::ops::RangeInclusive;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
@@ -805,29 +805,7 @@ impl IndexScheduler {
             self.queue.batches.finished_at,
         )?;
 
-        // 9. Remove tasks from indexes, statuses, and kinds
-        progress.update_progress(TaskDeletionProgress::DeletingTasksMetadata);
-        let (atomic_progress, task_progress) = AtomicTaskStep::new(
-            (affected_indexes.len() + affected_statuses.len() + affected_kinds.len()) as u32,
-        );
-        progress.update_progress(task_progress);
-
-        for index in affected_indexes.iter() {
-            self.queue.tasks.update_index(wtxn, index, |bitmap| *bitmap -= &to_delete_tasks)?;
-            atomic_progress.fetch_add(1, Ordering::Relaxed);
-        }
-
-        for status in affected_statuses.iter() {
-            self.queue.tasks.update_status(wtxn, *status, |bitmap| *bitmap -= &to_delete_tasks)?;
-            atomic_progress.fetch_add(1, Ordering::Relaxed);
-        }
-
-        for kind in affected_kinds.iter() {
-            self.queue.tasks.update_kind(wtxn, *kind, |bitmap| *bitmap -= &to_delete_tasks)?;
-            atomic_progress.fetch_add(1, Ordering::Relaxed);
-        }
-
-        // 10. Remove batches metadata from indexes, statuses, and kinds
+        // 9. Remove batches metadata from indexes, statuses, and kinds
         progress.update_progress(TaskDeletionProgress::DeletingBatchesMetadata);
 
         for (index, batches) in to_remove_from_indexes {
@@ -846,6 +824,31 @@ impl IndexScheduler {
             self.queue.batches.update_kind(wtxn, kind, |b| {
                 *b -= &batches;
             })?;
+        }
+
+        // 10. Remove tasks from indexes, statuses, and kinds
+        progress.update_progress(TaskDeletionProgress::DeletingTasksMetadata);
+        let (atomic_progress, task_progress) = AtomicTaskStep::new(
+            (affected_indexes.len() + affected_statuses.len() + affected_kinds.len()) as u32,
+        );
+        progress.update_progress(task_progress);
+
+        for (index, mut previous_tasks) in affected_indexes_tasks.into_iter() {
+            previous_tasks -= &to_delete_tasks;
+            self.queue.tasks.index_tasks.put(wtxn, index, &previous_tasks)?;
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
+        }
+
+        for (status, mut previous_tasks) in affected_statuses_tasks.into_iter() {
+            previous_tasks -= &to_delete_tasks;
+            self.queue.tasks.status.put(wtxn, &status, &previous_tasks)?;
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
+        }
+
+        for (kind, mut previous_tasks) in affected_kinds_tasks.into_iter() {
+            previous_tasks -= &to_delete_tasks;
+            self.queue.tasks.kind.put(wtxn, &kind, &previous_tasks)?;
+            atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
         // 11. Delete tasks
