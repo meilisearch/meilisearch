@@ -5,6 +5,7 @@ use std::path::Path;
 
 pub use meilisearch_types::milli;
 use meilisearch_types::milli::vector::hf::OverridePooling;
+use roaring::RoaringBitmap;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use tracing::debug;
@@ -188,11 +189,36 @@ impl V6Reader {
     }
 
     pub fn batches(&mut self) -> Box<dyn Iterator<Item = Result<Batch>> + '_> {
+        let mut task_uids = RoaringBitmap::new();
+        let mut faulty = false;
+        for task in self.tasks() {
+            let Ok((task, _)) = task else {
+                // If we can't read the tasks, just give up trying to filter the batches
+                // The database may contain phantom batches, but that's not that big of a deal
+                faulty = true;
+                break;
+            };
+            task_uids.insert(task.uid);
+        }
         match self.batches.as_mut() {
-            Some(batches) => Box::new((batches).lines().map(|line| -> Result<_> {
-                let batch = serde_json::from_str(&line?)?;
-                Ok(batch)
-            })),
+            Some(batches) => Box::new(
+                (batches)
+                    .lines()
+                    .map(|line| -> Result<_> {
+                        let batch: meilisearch_types::batches::Batch =
+                            serde_json::from_str(&line?)?;
+                        Ok(batch)
+                    })
+                    .filter(move |batch| match batch {
+                        Ok(batch) => {
+                            faulty
+                                || batch.stats.status.values().any(|t| task_uids.contains(*t))
+                                || batch.stats.types.values().any(|t| task_uids.contains(*t))
+                                || batch.stats.index_uids.values().any(|t| task_uids.contains(*t))
+                        }
+                        Err(_) => true,
+                    }),
+            ),
             None => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = Result<Batch>> + '_>,
         }
     }

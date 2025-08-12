@@ -263,6 +263,7 @@ pub(crate) mod test {
     use uuid::Uuid;
 
     use crate::reader::Document;
+    use crate::writer::BatchWriter;
     use crate::{DumpReader, DumpWriter, IndexMetadata, KindDump, TaskDump, Version};
 
     pub fn create_test_instance_uid() -> Uuid {
@@ -467,7 +468,7 @@ pub(crate) mod test {
         ]
     }
 
-    pub fn create_test_dump() -> File {
+    pub fn create_test_dump_writer() -> (DumpWriter, BatchWriter) {
         let instance_uid = create_test_instance_uid();
         let dump = DumpWriter::new(Some(instance_uid)).unwrap();
 
@@ -489,7 +490,6 @@ pub(crate) mod test {
         for batch in &batches {
             batch_queue.push_batch(batch).unwrap();
         }
-        batch_queue.flush().unwrap();
 
         // ========== pushing the task queue
         let tasks = create_test_tasks();
@@ -522,6 +522,13 @@ pub(crate) mod test {
         // ========== network
         let network = create_test_network();
         dump.create_network(network).unwrap();
+
+        (dump, batch_queue)
+    }
+
+    pub fn create_test_dump() -> File {
+        let (dump, batch_writer) = create_test_dump_writer();
+        batch_writer.flush().unwrap();
 
         // create the dump
         let mut file = tempfile::tempfile().unwrap();

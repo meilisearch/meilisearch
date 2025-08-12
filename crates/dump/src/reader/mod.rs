@@ -229,12 +229,52 @@ impl From<CompatIndexV5ToV6> for DumpIndexReader {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::fs::File;
+    use std::{fs::File, io::Seek};
 
     use meili_snap::insta;
+    use meilisearch_types::{batches::{Batch, BatchEnqueuedAt, BatchStats}, task_view::DetailsView, tasks::{BatchStopReason, Kind, Status}};
+    use time::macros::datetime;
 
     use super::*;
-    use crate::reader::v6::RuntimeTogglableFeatures;
+    use crate::{reader::v6::RuntimeTogglableFeatures, test::create_test_dump_writer};
+
+    #[test]
+    fn import_dump_with_bad_batches() {
+        let (dump, mut batch_writer) = create_test_dump_writer();
+        let bad_batch = Batch {
+            uid: 1,
+            progress: None,
+            details: DetailsView::default(),
+            stats: BatchStats {
+                total_nb_tasks: 1,
+                status: maplit::btreemap! { Status::Succeeded => 666 },
+                types: maplit::btreemap! { Kind::DocumentAdditionOrUpdate => 666 },
+                index_uids: maplit::btreemap! { "doggo".to_string() => 666 },
+                progress_trace: Default::default(),
+                write_channel_congestion: None,
+                internal_database_sizes: Default::default(),
+            },
+            embedder_stats: Default::default(),
+            enqueued_at: Some(BatchEnqueuedAt {
+                earliest: datetime!(2022-11-11 0:00 UTC),
+                oldest: datetime!(2022-11-11 0:00 UTC),
+            }),
+            started_at: datetime!(2022-11-20 0:00 UTC),
+            finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+            stop_reason: BatchStopReason::Unspecified.to_string(),
+        };
+        batch_writer.push_batch(&bad_batch).unwrap();
+        batch_writer.flush().unwrap();
+
+        let mut file = tempfile::tempfile().unwrap();
+        dump.persist_to(&mut file).unwrap();
+        file.rewind().unwrap();
+
+        let mut dump = DumpReader::open(file).unwrap();
+        let read_batches = dump.batches().unwrap().map(|b| b.unwrap()).collect::<Vec<_>>();
+
+        assert!(!read_batches.iter().any(|b| b.uid == 1));
+    }
 
     #[test]
     fn import_dump_v6_with_vectors() {
