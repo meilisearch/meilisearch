@@ -787,23 +787,11 @@ impl IndexScheduler {
         // 8. Delete batches datetimes
         progress.update_progress(TaskDeletionProgress::DeletingBatchesDateTime);
 
-        remove_batch_datetimes(
-            wtxn,
-            &to_delete_batches,
-            self.queue.batches.enqueued_at,
-        )?;
+        remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.enqueued_at)?;
 
-        remove_batch_datetimes(
-            wtxn,
-            &to_delete_batches,
-            self.queue.batches.started_at,
-        )?;
+        remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.started_at)?;
 
-        remove_batch_datetimes(
-            wtxn,
-            &to_delete_batches,
-            self.queue.batches.finished_at,
-        )?;
+        remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.finished_at)?;
 
         // 9. Remove batches metadata from indexes, statuses, and kinds
         progress.update_progress(TaskDeletionProgress::DeletingBatchesMetadata);
