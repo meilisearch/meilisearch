@@ -485,6 +485,7 @@ where
 
         // If an embedder wasn't used in the typedchunk but must be binary quantized
         // we should insert it in `dimension`
+        let index_version = self.index.get_version(&self.wtxn)?.unwrap();
         for (name, action) in settings_diff.embedding_config_updates.iter() {
             if action.is_being_quantized && !dimension.contains_key(name.as_str()) {
                 let index = self.index.embedding_configs().embedder_id(self.wtxn, name)?.ok_or(
@@ -493,7 +494,12 @@ where
                         key: None,
                     },
                 )?;
-                let reader = VectorStore::new(self.index.vector_store, index, action.was_quantized);
+                let reader = VectorStore::new(
+                    index_version,
+                    self.index.vector_store,
+                    index,
+                    action.was_quantized,
+                );
                 let Some(dim) = reader.dimensions(self.wtxn)? else {
                     continue;
                 };
@@ -522,7 +528,8 @@ where
             let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
             pool.install(|| {
-                let mut writer = VectorStore::new(vector_hannoy, embedder_index, was_quantized);
+                let mut writer =
+                    VectorStore::new(index_version, vector_hannoy, embedder_index, was_quantized);
                 writer.build_and_quantize(
                     wtxn,
                     // In the settings we don't have any progress to share

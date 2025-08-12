@@ -8,7 +8,7 @@ use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
-use heed::RwTxn;
+use heed::{RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
 pub use post_processing::recompute_word_fst_from_word_docids_database;
 pub use update_by_function::UpdateByFunction;
@@ -131,6 +131,7 @@ where
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
 
         let vector_arroy = index.vector_store;
+        let index_version = index.get_version(wtxn)?.unwrap();
         let hannoy_writers: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
             .iter()
@@ -144,7 +145,12 @@ where
                     })?;
 
                 let dimensions = runtime.embedder.dimensions();
-                let writer = VectorStore::new(vector_arroy, embedder_index, runtime.is_quantized);
+                let writer = VectorStore::new(
+                    index_version,
+                    vector_arroy,
+                    embedder_index,
+                    runtime.is_quantized,
+                );
 
                 Ok((
                     embedder_index,
@@ -286,6 +292,7 @@ where
         let index_embedder_category_ids = settings_delta.new_embedder_category_id();
         let mut hannoy_writers = hannoy_writers_from_embedder_actions(
             index,
+            wtxn,
             embedder_actions,
             new_embedders,
             index_embedder_category_ids,
@@ -339,11 +346,13 @@ where
 
 fn hannoy_writers_from_embedder_actions<'indexer>(
     index: &Index,
+    rtxn: &RoTxn,
     embedder_actions: &'indexer BTreeMap<String, EmbedderAction>,
     embedders: &'indexer RuntimeEmbedders,
     index_embedder_category_ids: &'indexer std::collections::HashMap<String, u8>,
 ) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, VectorStore, usize)>> {
     let vector_arroy = index.vector_store;
+    let index_version = index.get_version(rtxn)?.unwrap();
 
     embedders
         .inner_as_ref()
@@ -361,8 +370,12 @@ fn hannoy_writers_from_embedder_actions<'indexer>(
                         },
                     )));
                 };
-                let writer =
-                    VectorStore::new(vector_arroy, embedder_category_id, action.was_quantized);
+                let writer = VectorStore::new(
+                    index_version,
+                    vector_arroy,
+                    embedder_category_id,
+                    action.was_quantized,
+                );
                 let dimensions = runtime.embedder.dimensions();
                 Some(Ok((
                     embedder_category_id,
@@ -385,7 +398,12 @@ where
         let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() else {
             continue;
         };
-        let reader = VectorStore::new(index.vector_store, *embedder_id, action.was_quantized);
+        let reader = VectorStore::new(
+            index.get_version(wtxn)?.unwrap(),
+            index.vector_store,
+            *embedder_id,
+            action.was_quantized,
+        );
         let Some(dimensions) = reader.dimensions(wtxn)? else {
             continue;
         };
@@ -401,7 +419,12 @@ where
         let Some(infos) = index.embedding_configs().embedder_info(wtxn, embedder_name)? else {
             continue;
         };
-        let arroy = VectorStore::new(index.vector_store, infos.embedder_id, was_quantized);
+        let arroy = VectorStore::new(
+            index.get_version(wtxn)?.unwrap(),
+            index.vector_store,
+            infos.embedder_id,
+            was_quantized,
+        );
         let Some(dimensions) = arroy.dimensions(wtxn)? else {
             continue;
         };
