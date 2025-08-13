@@ -1018,7 +1018,7 @@ pub mod tests {
         22:23 _vectors.embedderName. EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r#"
-        The vector filter's embedder is invalid.
+        The vector filter's embedder name is invalid.
         30:30 _vectors."embedderName EXISTS
         "#);
         insta::assert_snapshot!(p(r#"_vectors."embedderNam"e EXISTS"#), @r#"
@@ -1056,6 +1056,14 @@ pub mod tests {
         insta::assert_snapshot!(p(r#"_vectors.embedderName.fargments.test EXISTS"#), @r"
         Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `fargments`. Did you mean `fragments`?
         23:32 _vectors.embedderName.fargments.test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName."userProvided" EXISTS"#), @r#"
+        Was expecting this part to be unquoted.
+        24:36 _vectors.embedderName."userProvided" EXISTS
+        "#);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.userProvided.fragments.test EXISTS"#), @r"
+        Vector filter can only accept one of `fragments`, `userProvided`, `documentTemplate` or `regenerate`, but found both `userProvided` and `fragments`.
+        36:45 _vectors.embedderName.userProvided.fragments.test EXISTS
         ");
 
         insta::assert_snapshot!(p(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"

@@ -83,7 +83,7 @@ pub enum ErrorKind<'a> {
     VectorFilterInvalidEmbedder,
     VectorFilterMissingFragment,
     VectorFilterInvalidFragment,
-    VectorFilterUnknownSuffix(String),
+    VectorFilterUnknownSuffix(Option<&'static str>, String),
     VectorFilterOperation,
     InvalidPrimary,
     InvalidEscapedNumber,
@@ -214,16 +214,23 @@ impl Display for Error<'_> {
             ErrorKind::VectorFilterLeftover => {
                 writeln!(f, "The vector filter has leftover tokens.")?
             }
-            ErrorKind::VectorFilterUnknownSuffix(value) if value.as_str() == "." => {
+            ErrorKind::VectorFilterUnknownSuffix(_, value) if value.as_str() == "." => {
                 writeln!(f, "Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.")?;
             }
-            ErrorKind::VectorFilterUnknownSuffix(value) => {
+            ErrorKind::VectorFilterUnknownSuffix(None, value) if ["fragments", "userProvided", "documentTemplate", "regenerate"].contains(&value.as_str()) => {
+                // This will happen with "_vectors.rest.\"userProvided\"" for instance
+                writeln!(f, "Was expecting this part to be unquoted.")?
+            }
+            ErrorKind::VectorFilterUnknownSuffix(None, value) => {
                 if let Some(suggestion) = key_suggestion(value, &["fragments", "userProvided", "documentTemplate", "regenerate"]) {
                     writeln!(f, "Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `{value}`. Did you mean `{suggestion}`?")?;
                 } else {
                     writeln!(f, "Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `{value}`.")?;
                 }
             }
+            ErrorKind::VectorFilterUnknownSuffix(Some(previous_filter_kind), value) => {
+                writeln!(f, "Vector filter can only accept one of `fragments`, `userProvided`, `documentTemplate` or `regenerate`, but found both `{previous_filter_kind}` and `{value}`.")?
+            },
             ErrorKind::VectorFilterInvalidFragment => {
                 writeln!(f, "The vector filter's fragment is invalid.")?
             }
@@ -234,7 +241,7 @@ impl Display for Error<'_> {
                 writeln!(f, "Was expecting embedder name but found nothing.")?
             }
             ErrorKind::VectorFilterInvalidEmbedder => {
-                writeln!(f, "The vector filter's embedder is invalid.")?
+                writeln!(f, "The vector filter's embedder name is invalid.")?
             }
             ErrorKind::VectorFilterOperation => {
                 writeln!(f, "Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.")?

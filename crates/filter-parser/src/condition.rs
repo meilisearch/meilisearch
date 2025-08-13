@@ -162,7 +162,17 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
         let value =
             opt_value.as_ref().map(|v| v.value().to_owned()).unwrap_or_else(|| point.to_string());
         let context = opt_value.map(|v| v.original_span()).unwrap_or(point);
-        return Err(Error::failure_from_kind(context, ErrorKind::VectorFilterUnknownSuffix(value)));
+        let previous_kind = match filter {
+            VectorFilter::Fragment(_) => Some("fragments"),
+            VectorFilter::DocumentTemplate => Some("documentTemplate"),
+            VectorFilter::UserProvided => Some("userProvided"),
+            VectorFilter::Regenerate => Some("regenerate"),
+            VectorFilter::None => None,
+        };
+        return Err(Error::failure_from_kind(
+            context,
+            ErrorKind::VectorFilterUnknownSuffix(previous_kind, value),
+        ));
     }
 
     let (input, _) = multispace1(input).map_cut(ErrorKind::VectorFilterLeftover)?;
