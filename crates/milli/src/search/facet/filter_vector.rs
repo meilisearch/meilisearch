@@ -1,7 +1,7 @@
 use filter_parser::{Token, VectorFilter};
 use roaring::{MultiOps, RoaringBitmap};
 
-use crate::error::Error;
+use crate::error::{DidYouMean, Error};
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::{ArroyStats, ArroyWrapper};
 use crate::Index;
@@ -14,7 +14,8 @@ pub enum VectorFilterError<'a> {
         } else {
             let mut available = available.clone();
             available.sort_unstable();
-            format!("Available embedders are: {}.", available.iter().map(|e| format!("`{e}`")).collect::<Vec<_>>().join(", "))
+            let did_you_mean = DidYouMean::new(embedder.value(), &available);
+            format!("Available embedders are: {}.{did_you_mean}", available.iter().map(|e| format!("`{e}`")).collect::<Vec<_>>().join(", "))
         }
     })]
     EmbedderDoesNotExist { embedder: &'a Token<'a>, available: Vec<String> },
@@ -25,7 +26,8 @@ pub enum VectorFilterError<'a> {
         } else {
             let mut available = available.clone();
             available.sort_unstable();
-            format!("Available fragments on this embedder are: {}.", available.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", "))
+            let did_you_mean = DidYouMean::new(fragment.value(), &available);
+            format!("Available fragments on this embedder are: {}.{did_you_mean}", available.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", "))
         }
     })]
     FragmentDoesNotExist {

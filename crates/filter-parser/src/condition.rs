@@ -159,10 +159,8 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
 
     if let Ok((input, point)) = tag::<_, _, ()>(".")(input) {
         let opt_value = parse_vector_value(input).ok().map(|(_, v)| v);
-        let value = opt_value
-            .as_ref()
-            .map(|v| v.original_span().to_string())
-            .unwrap_or_else(|| point.to_string());
+        let value =
+            opt_value.as_ref().map(|v| v.value().to_owned()).unwrap_or_else(|| point.to_string());
         let context = opt_value.map(|v| v.original_span()).unwrap_or(point);
         return Err(Error::failure_from_kind(context, ErrorKind::VectorFilterUnknownSuffix(value)));
     }

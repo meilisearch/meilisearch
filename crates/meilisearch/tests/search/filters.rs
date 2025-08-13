@@ -952,13 +952,13 @@ async fn vector_filter_non_existant_fragment() {
 
     let (value, _code) = index
         .search_post(json!({
-            "filter": "_vectors.rest.fragments.other EXISTS",
+            "filter": "_vectors.rest.fragments.withBred EXISTS",
             "attributesToRetrieve": ["name"]
         }))
         .await;
     snapshot!(value, @r#"
     {
-      "message": "Index `[uuid]`: The fragment `other` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`.\n25:30 _vectors.rest.fragments.other EXISTS",
+      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n25:33 _vectors.rest.fragments.withBred EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"

@@ -639,3 +639,29 @@ fn conditionally_lookup_for_error_message() {
         assert_eq!(err.to_string(), format!("{} {}", prefix, suffix));
     }
 }
+
+pub struct DidYouMean<'a>(Option<&'a str>);
+
+impl<'a> DidYouMean<'a> {
+    pub fn new(key: &str, keys: &'a [String]) -> DidYouMean<'a> {
+        let typos = levenshtein_automata::LevenshteinAutomatonBuilder::new(2, true).build_dfa(key);
+        for key in keys.iter() {
+            match typos.eval(key) {
+                levenshtein_automata::Distance::Exact(_) => {
+                    return DidYouMean(Some(key));
+                }
+                levenshtein_automata::Distance::AtLeast(_) => continue,
+            }
+        }
+        DidYouMean(None)
+    }
+}
+
+impl std::fmt::Display for DidYouMean<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(suggestion) = self.0 {
+            write!(f, " Did you mean `{suggestion}`?")?;
+        }
+        Ok(())
+    }
+}
