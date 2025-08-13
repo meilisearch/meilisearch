@@ -19,6 +19,7 @@ use Condition::*;
 
 use crate::error::IResultExt;
 use crate::value::parse_vector_value;
+use crate::value::parse_vector_value_cut;
 use crate::Error;
 use crate::ErrorKind;
 use crate::VectorFilter;
@@ -141,13 +142,13 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     }
 
     let (input, embedder_name) =
-        parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidEmbedder)?;
+        parse_vector_value_cut(input, ErrorKind::VectorFilterInvalidEmbedder)?;
 
     let (input, filter) = alt((
         map(
             preceded(tag(".fragments"), |input| {
                 let (input, _) = tag(".")(input).map_cut(ErrorKind::VectorFilterMissingFragment)?;
-                parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidFragment)
+                parse_vector_value_cut(input, ErrorKind::VectorFilterInvalidFragment)
             }),
             VectorFilter::Fragment,
         ),

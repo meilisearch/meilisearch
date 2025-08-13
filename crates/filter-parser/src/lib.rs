@@ -1018,8 +1018,8 @@ pub mod tests {
         22:23 _vectors.embedderName. EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r#"
-        The vector filter's embedder name is invalid.
-        30:30 _vectors."embedderName EXISTS
+        The quotes in one of the values are inconsistent.
+        10:30 _vectors."embedderName EXISTS
         "#);
         insta::assert_snapshot!(p(r#"_vectors."embedderNam"e EXISTS"#), @r#"
         The vector filter has leftover tokens.
@@ -1034,7 +1034,7 @@ pub mod tests {
         32:39 _vectors.embedderName.fragments EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. EXISTS"#), @r"
-        The vector filter's fragment is invalid.
+        The vector filter's fragment name is invalid.
         33:40 _vectors.embedderName.fragments. EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments.test test EXISTS"#), @r"
@@ -1042,7 +1042,7 @@ pub mod tests {
         38:49 _vectors.embedderName.fragments.test test EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. test EXISTS"#), @r"
-        The vector filter's fragment is invalid.
+        The vector filter's fragment name is invalid.
         33:45 _vectors.embedderName.fragments. test EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments. test EXISTS"#), @r"

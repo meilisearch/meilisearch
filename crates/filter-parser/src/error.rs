@@ -79,6 +79,7 @@ pub enum ErrorKind<'a> {
     MisusedGeoRadius,
     MisusedGeoBoundingBox,
     VectorFilterLeftover,
+    VectorFilterInvalidQuotes,
     VectorFilterMissingEmbedder,
     VectorFilterInvalidEmbedder,
     VectorFilterMissingFragment,
@@ -232,7 +233,7 @@ impl Display for Error<'_> {
                 writeln!(f, "Vector filter can only accept one of `fragments`, `userProvided`, `documentTemplate` or `regenerate`, but found both `{previous_filter_kind}` and `{value}`.")?
             },
             ErrorKind::VectorFilterInvalidFragment => {
-                writeln!(f, "The vector filter's fragment is invalid.")?
+                writeln!(f, "The vector filter's fragment name is invalid.")?
             }
             ErrorKind::VectorFilterMissingFragment => {
                 writeln!(f, "The vector filter is missing a fragment name.")?
@@ -245,6 +246,9 @@ impl Display for Error<'_> {
             }
             ErrorKind::VectorFilterOperation => {
                 writeln!(f, "Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.")?
+            }
+            ErrorKind::VectorFilterInvalidQuotes => {
+                writeln!(f, "The quotes in one of the values are inconsistent.")?
             }
             ErrorKind::ReservedKeyword(word) => {
                 writeln!(f, "`{word}` is a reserved keyword and thus cannot be used as a field name unless it is put inside quotes. Use \"{word}\" or \'{word}\' instead.")?

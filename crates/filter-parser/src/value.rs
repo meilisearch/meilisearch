@@ -113,6 +113,18 @@ pub fn parse_vector_value(input: Span) -> IResult<Token> {
     }
 }
 
+pub fn parse_vector_value_cut<'a>(input: Span<'a>, kind: ErrorKind<'a>) -> IResult<'a, Token<'a>> {
+    parse_vector_value(input).map_err(|e| match e {
+        nom::Err::Failure(e) => match e.kind() {
+            ErrorKind::Char(c) if *c == '"' || *c == '\'' => {
+                crate::Error::failure_from_kind(input, ErrorKind::VectorFilterInvalidQuotes)
+            }
+            _ => crate::Error::failure_from_kind(input, kind),
+        },
+        _ => crate::Error::failure_from_kind(input, kind),
+    })
+}
+
 /// value          = WS* ( word | singleQuoted | doubleQuoted) WS+
 pub fn parse_value(input: Span) -> IResult<Token> {
     // to get better diagnostic message we are going to strip the left whitespaces from the input right now
