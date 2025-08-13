@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
+use crate::milli::vector::Embedding;
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
@@ -118,6 +119,9 @@ pub struct FederatedSearchResult {
     pub hits_info: HitsInfo,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_vectors: Option<BTreeMap<usize, Embedding>>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -144,6 +148,7 @@ impl fmt::Debug for FederatedSearchResult {
             hits,
             processing_time_ms,
             hits_info,
+            query_vectors,
             semantic_hit_count,
             degraded,
             used_negative_operator,
@@ -158,6 +163,10 @@ impl fmt::Debug for FederatedSearchResult {
         debug.field("processing_time_ms", &processing_time_ms);
         debug.field("hits", &format!("[{} hits returned]", hits.len()));
         debug.field("hits_info", &hits_info);
+        if let Some(query_vectors) = query_vectors {
+            let known = query_vectors.len();
+            debug.field("query_vectors", &format!("[{known} known vectors]"));
+        }
         if *used_negative_operator {
             debug.field("used_negative_operator", used_negative_operator);
         }

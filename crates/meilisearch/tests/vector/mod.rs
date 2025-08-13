@@ -686,7 +686,7 @@ async fn clear_documents() {
     // Make sure the arroy DB has been cleared
     let (documents, _code) =
         index.search_post(json!({ "vector": [1, 1, 1], "hybrid": {"embedder": "manual"} })).await;
-    snapshot!(documents, @r###"
+    snapshot!(documents, @r#"
     {
       "hits": [],
       "query": "",
@@ -696,7 +696,7 @@ async fn clear_documents() {
       "estimatedTotalHits": 0,
       "semanticHitCount": 0
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
@@ -740,7 +740,7 @@ async fn add_remove_one_vector_4588() {
             json!({"vector": [1, 1, 1], "hybrid": {"semanticRatio": 1.0, "embedder": "manual"} }),
         )
         .await;
-    snapshot!(documents, @r###"
+    snapshot!(documents, @r#"
     {
       "hits": [
         {
@@ -755,7 +755,7 @@ async fn add_remove_one_vector_4588() {
       "estimatedTotalHits": 1,
       "semanticHitCount": 1
     }
-    "###);
+    "#);
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
