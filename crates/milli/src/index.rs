@@ -237,7 +237,7 @@ impl Index {
         // vector stuff
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
-        let vector_hannoy = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
+        let vector_store = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
@@ -264,7 +264,7 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_store: vector_hannoy,
+            vector_store,
             embedder_category_id,
             documents,
         };
