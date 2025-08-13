@@ -2091,9 +2091,21 @@ pub(crate) fn parse_filter(
     })?;
 
     if let Some(ref filter) = filter {
-        // If the contains operator is used while the contains filter features is not enabled, errors out
+        // If the contains operator is used while the contains filter feature is not enabled, errors out
         if let Some((token, error)) =
             filter.use_contains_operator().zip(features.check_contains_filter().err())
+        {
+            return Err(ResponseError::from_msg(
+                token.as_external_error(error).to_string(),
+                Code::FeatureNotEnabled,
+            ));
+        }
+    }
+
+    if let Some(ref filter) = filter {
+        // If a vector filter is used while the multi modal feature is not enabled, errors out
+        if let Some((token, error)) =
+            filter.use_vector_filter().zip(features.check_multimodal("using a vector filter").err())
         {
             return Err(ResponseError::from_msg(
                 token.as_external_error(error).to_string(),

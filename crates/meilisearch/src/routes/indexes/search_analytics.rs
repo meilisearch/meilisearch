@@ -40,6 +40,7 @@ pub struct SearchAggregator<Method: AggregateMethod> {
     // filter
     filter_with_geo_radius: bool,
     filter_with_geo_bounding_box: bool,
+    filter_on_vectors: bool,
     // every time a request has a filter, this field must be incremented by the number of terms it contains
     filter_sum_of_criteria_terms: usize,
     // every time a request has a filter, this field must be incremented by one
@@ -163,6 +164,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             let stringified_filters = filter.to_string();
             ret.filter_with_geo_radius = stringified_filters.contains("_geoRadius(");
             ret.filter_with_geo_bounding_box = stringified_filters.contains("_geoBoundingBox(");
+            ret.filter_on_vectors = stringified_filters.contains("_vectors");
             ret.filter_sum_of_criteria_terms = RE.split(&stringified_filters).count();
         }
 
@@ -261,6 +263,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             distinct,
             filter_with_geo_radius,
             filter_with_geo_bounding_box,
+            filter_on_vectors,
             filter_sum_of_criteria_terms,
             filter_total_number_of_criteria,
             used_syntax,
@@ -315,6 +318,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         // filter
         self.filter_with_geo_radius |= filter_with_geo_radius;
         self.filter_with_geo_bounding_box |= filter_with_geo_bounding_box;
+        self.filter_on_vectors |= filter_on_vectors;
         self.filter_sum_of_criteria_terms =
             self.filter_sum_of_criteria_terms.saturating_add(filter_sum_of_criteria_terms);
         self.filter_total_number_of_criteria =
@@ -389,6 +393,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             distinct,
             filter_with_geo_radius,
             filter_with_geo_bounding_box,
+            filter_on_vectors,
             filter_sum_of_criteria_terms,
             filter_total_number_of_criteria,
             used_syntax,
@@ -446,6 +451,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             "filter": {
                "with_geoRadius": filter_with_geo_radius,
                "with_geoBoundingBox": filter_with_geo_bounding_box,
+               "on_vectors": filter_on_vectors,
                "avg_criteria_number": format!("{:.2}", filter_sum_of_criteria_terms as f64 / filter_total_number_of_criteria as f64),
                "most_used_syntax": used_syntax.iter().max_by_key(|(_, v)| *v).map(|(k, _)| json!(k)).unwrap_or_else(|| json!(null)),
             },

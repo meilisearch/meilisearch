@@ -556,9 +556,6 @@ impl ArroyWrapper {
             for reader in self.readers(rtxn, self.quantized_db()) {
                 let reader = reader?;
                 let documents = reader.item_ids();
-                if documents.is_empty() {
-                    break;
-                }
                 stats.documents |= documents;
                 stats.number_of_embeddings += documents.len();
             }
@@ -566,9 +563,6 @@ impl ArroyWrapper {
             for reader in self.readers(rtxn, self.angular_db()) {
                 let reader = reader?;
                 let documents = reader.item_ids();
-                if documents.is_empty() {
-                    break;
-                }
                 stats.documents |= documents;
                 stats.number_of_embeddings += documents.len();
             }
