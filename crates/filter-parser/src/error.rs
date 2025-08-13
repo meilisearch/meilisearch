@@ -54,7 +54,7 @@ impl<'a, T> IResultExt<'a> for IResult<'a, T> {
                 nom::Err::Error(e) => *e.context(),
                 nom::Err::Failure(e) => *e.context(),
             };
-            Error::new_failure_from_kind(input, kind)
+            Error::failure_from_kind(input, kind)
         })
     }
 }
@@ -83,6 +83,7 @@ pub enum ErrorKind<'a> {
     VectorFilterInvalidEmbedder,
     VectorFilterMissingFragment,
     VectorFilterInvalidFragment,
+    VectorFilterUnknownSuffix(String),
     VectorFilterOperation,
     InvalidPrimary,
     InvalidEscapedNumber,
@@ -114,7 +115,7 @@ impl<'a> Error<'a> {
         Self { context, kind }
     }
 
-    pub fn new_failure_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> nom::Err<Self> {
+    pub fn failure_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> nom::Err<Self> {
         nom::Err::Failure(Self::new_from_kind(context, kind))
     }
 
@@ -154,6 +155,20 @@ impl Display for Error<'_> {
         // When printing our error message we want to escape all `\n` to be sure we keep our format with the
         // first line being the diagnostic and the second line being the incriminated filter.
         let escaped_input = input.escape_debug();
+
+        fn key_suggestion<'a>(key: &str, keys: &[&'a str]) -> Option<&'a str> {
+            let typos =
+                levenshtein_automata::LevenshteinAutomatonBuilder::new(2, true).build_dfa(key);
+            for key in keys.iter() {
+                match typos.eval(key) {
+                    levenshtein_automata::Distance::Exact(_) => {
+                        return Some(key);
+                    }
+                    levenshtein_automata::Distance::AtLeast(_) => continue,
+                }
+            }
+            None
+        }
 
         match &self.kind {
             ErrorKind::ExpectedValue(_) if input.trim().is_empty() => {
@@ -198,6 +213,16 @@ impl Display for Error<'_> {
             }
             ErrorKind::VectorFilterLeftover => {
                 writeln!(f, "The vector filter has leftover tokens.")?
+            }
+            ErrorKind::VectorFilterUnknownSuffix(value) if value.as_str() == "." => {
+                writeln!(f, "Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.")?;
+            }
+            ErrorKind::VectorFilterUnknownSuffix(value) => {
+                if let Some(suggestion) = key_suggestion(value, &["fragments", "userProvided", "documentTemplate", "regenerate"]) {
+                    writeln!(f, "Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `{value}`. Did you mean `{suggestion}`?")?;
+                } else {
+                    writeln!(f, "Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `{value}`.")?;
+                }
             }
             ErrorKind::VectorFilterInvalidFragment => {
                 writeln!(f, "The vector filter's fragment is invalid.")?

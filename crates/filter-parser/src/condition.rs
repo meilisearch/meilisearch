@@ -19,6 +19,7 @@ use Condition::*;
 
 use crate::error::IResultExt;
 use crate::value::parse_vector_value;
+use crate::Error;
 use crate::ErrorKind;
 use crate::VectorFilter;
 use crate::{parse_value, FilterCondition, IResult, Span, Token};
@@ -136,10 +137,7 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     // We could use nom's `cut` but it's better to be explicit about the errors
 
     if let Ok((_, space)) = tag::<_, _, ()>(" ")(input) {
-        return Err(crate::Error::new_failure_from_kind(
-            space,
-            ErrorKind::VectorFilterMissingEmbedder,
-        ));
+        return Err(crate::Error::failure_from_kind(space, ErrorKind::VectorFilterMissingEmbedder));
     }
 
     let (input, embedder_name) =
@@ -158,6 +156,16 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
         value(VectorFilter::Regenerate, tag(".regenerate")),
         value(VectorFilter::None, nom::combinator::success("")),
     ))(input)?;
+
+    if let Ok((input, point)) = tag::<_, _, ()>(".")(input) {
+        let opt_value = parse_vector_value(input).ok().map(|(_, v)| v);
+        let value = opt_value
+            .as_ref()
+            .map(|v| v.original_span().to_string())
+            .unwrap_or_else(|| point.to_string());
+        let context = opt_value.map(|v| v.original_span()).unwrap_or(point);
+        return Err(Error::failure_from_kind(context, ErrorKind::VectorFilterUnknownSuffix(value)));
+    }
 
     let (input, _) = multispace1(input).map_cut(ErrorKind::VectorFilterLeftover)?;
 
@@ -181,7 +189,7 @@ pub fn parse_vectors_exists(input: Span) -> IResult<FilterCondition> {
         ));
     }
 
-    Err(crate::Error::new_failure_from_kind(input, ErrorKind::VectorFilterOperation))
+    Err(crate::Error::failure_from_kind(input, ErrorKind::VectorFilterOperation))
 }
 
 /// contains        = value "CONTAINS" value

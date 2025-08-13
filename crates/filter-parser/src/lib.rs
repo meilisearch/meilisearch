@@ -437,7 +437,7 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     let (input, args) = parsed?;
 
     if args.len() != 2 || args[0].len() != 2 || args[1].len() != 2 {
-        return Err(Error::new_failure_from_kind(input, ErrorKind::GeoBoundingBox));
+        return Err(Error::failure_from_kind(input, ErrorKind::GeoBoundingBox));
     }
 
     let res = FilterCondition::GeoBoundingBox {
@@ -458,7 +458,7 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
-    Err(Error::new_failure_from_kind(input, ErrorKind::ReservedGeo("_geoPoint")))
+    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geoPoint")))
 }
 
 /// geoPoint      = WS* "_geoDistance(float WS* "," WS* float WS* "," WS* float)
@@ -472,7 +472,7 @@ fn parse_geo_distance(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))?;
     // if we succeeded we still return a `Failure` because `geoDistance` filters are not allowed
-    Err(Error::new_failure_from_kind(input, ErrorKind::ReservedGeo("_geoDistance")))
+    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geoDistance")))
 }
 
 /// geo      = WS* "_geo(float WS* "," WS* float WS* "," WS* float)
@@ -486,7 +486,7 @@ fn parse_geo(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))?;
     // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
-    Err(Error::new_failure_from_kind(input, ErrorKind::ReservedGeo("_geo")))
+    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geo")))
 }
 
 fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
@@ -1014,8 +1014,8 @@ pub mod tests {
         10:30 _vectors .embedderName EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName. EXISTS"#), @r"
-        The vector filter has leftover tokens.
-        22:30 _vectors.embedderName. EXISTS
+        Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.
+        22:23 _vectors.embedderName. EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r#"
         The vector filter's embedder is invalid.
@@ -1026,8 +1026,8 @@ pub mod tests {
         23:31 _vectors."embedderNam"e EXISTS
         "#);
         insta::assert_snapshot!(p(r#"_vectors.embedderName.documentTemplate. EXISTS"#), @r"
-        The vector filter has leftover tokens.
-        39:47 _vectors.embedderName.documentTemplate. EXISTS
+        Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.
+        39:40 _vectors.embedderName.documentTemplate. EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments EXISTS"#), @r"
         The vector filter is missing a fragment name.
@@ -1052,6 +1052,10 @@ pub mod tests {
         insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments.test EXISTS"#), @r"
         Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
         23:45 _vectors.embedderName .fragments.test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fargments.test EXISTS"#), @r"
+        Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `fargments`. Did you mean `fragments`?
+        23:32 _vectors.embedderName.fargments.test EXISTS
         ");
 
         insta::assert_snapshot!(p(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"
