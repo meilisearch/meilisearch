@@ -4,10 +4,11 @@ This guide is to describe how to make releases for the current repository.
 
 ## 📅 Weekly Meilisearch release
 
-1. A weekly meeting is done every Monday to define the release and to ensure minimal checks before the release.
+1. A weekly meeting is held every Thursday afternoon to define the release and to ensure minimal checks before the release.
 <details>
 <summary>Check out the TODO 👇👇👇</summary>
-- [ ] Define the version of the release (`vX.Y.Z`)
+- [ ] Define the version of the release (`vX.Y.Z`) based on our <a href="https://github.com/meilisearch/meilisearch/blob/main/documentation/versioning-policy.md">Versioning Policy</a></br>.
+- [ ] Define the commit that will reference the tag release. Every PR merged after this commit will not be taken into account in the future release
 - [ ] Manually test `--experimental-dumpless-upgrade` on a DB of the previous Meilisearch minor version</br>
 - [ ] Check recent <a href="https://github.com/meilisearch/meilisearch/actions">automated tests</a> on `main`</br>
     - [ ] Scheduled test suite</br>
@@ -22,7 +23,7 @@ This guide is to describe how to make releases for the current repository.
 2. Go to the GitHub interface, in the [`Release` section](https://github.com/meilisearch/meilisearch/releases).
 
 3. Select the already drafted release or click on the `Draft a new release` button if you want to start a blank one, and fill the form with the appropriate information.
-⚠️ Publish on `main`
+⚠️ Publish on a specific commit defined by the team. Or publish on `main`, but ensure you do want all the PRs merged in your release.
 
 ⚙️ The CIs will be triggered to:
 - [Upload binaries](https://github.com/meilisearch/meilisearch/actions/workflows/publish-binaries.yml) to the associated GitHub release.
@@ -31,7 +32,7 @@ This guide is to describe how to make releases for the current repository.
 - [Move the `latest` git tag to the release commit](https://github.com/meilisearch/meilisearch/actions/workflows/latest-git-tag.yml).
 
 
-### 🔥 How to do a patch release for an hotfix
+### 🔥 How to do a patch release for a hotfix
 
 It happens some releases come with impactful bugs in production (e.g. indexation or search issues): we obviously don't wait for the next cycle to fix them and we release a patched version of Meilisearch.
 

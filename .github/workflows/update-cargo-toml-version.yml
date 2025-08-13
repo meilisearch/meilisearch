@@ -41,5 +41,4 @@ jobs:
             --title "Update version for the next release ($NEW_VERSION) in Cargo.toml" \
             --body '⚠️ This PR is automatically generated. Check the new version is the expected one and Cargo.lock has been updated before merging.' \
             --label 'skip changelog' \
-            --milestone $NEW_VERSION \
             --base $GITHUB_REF_NAME

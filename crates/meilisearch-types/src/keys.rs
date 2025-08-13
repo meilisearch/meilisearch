@@ -365,6 +365,21 @@ pub enum Action {
     #[serde(rename = "*.get")]
     #[deserr(rename = "*.get")]
     AllGet,
+    #[serde(rename = "webhooks.get")]
+    #[deserr(rename = "webhooks.get")]
+    WebhooksGet,
+    #[serde(rename = "webhooks.update")]
+    #[deserr(rename = "webhooks.update")]
+    WebhooksUpdate,
+    #[serde(rename = "webhooks.delete")]
+    #[deserr(rename = "webhooks.delete")]
+    WebhooksDelete,
+    #[serde(rename = "webhooks.create")]
+    #[deserr(rename = "webhooks.create")]
+    WebhooksCreate,
+    #[serde(rename = "webhooks.*")]
+    #[deserr(rename = "webhooks.*")]
+    WebhooksAll,
 }
 
 impl Action {
@@ -416,6 +431,11 @@ impl Action {
             NETWORK_GET => Some(Self::NetworkGet),
             NETWORK_UPDATE => Some(Self::NetworkUpdate),
             ALL_GET => Some(Self::AllGet),
+            WEBHOOKS_GET => Some(Self::WebhooksGet),
+            WEBHOOKS_UPDATE => Some(Self::WebhooksUpdate),
+            WEBHOOKS_DELETE => Some(Self::WebhooksDelete),
+            WEBHOOKS_CREATE => Some(Self::WebhooksCreate),
+            WEBHOOKS_ALL => Some(Self::WebhooksAll),
             _otherwise => None,
         }
     }
@@ -428,7 +448,9 @@ impl Action {
         match self {
             // Any action that expands to others must return false, as it wouldn't be able to expand recursively.
             All | AllGet | DocumentsAll | IndexesAll | ChatsAll | TasksAll | SettingsAll
-            | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll => false,
+            | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll | WebhooksAll => {
+                false
+            }
 
             Search => true,
             DocumentsAdd => false,
@@ -463,6 +485,10 @@ impl Action {
             ChatsDelete => false,
             ChatsSettingsGet => true,
             ChatsSettingsUpdate => false,
+            WebhooksGet => true,
+            WebhooksUpdate => false,
+            WebhooksDelete => false,
+            WebhooksCreate => false,
         }
     }
 
@@ -522,6 +548,12 @@ pub mod actions {
     pub const CHATS_SETTINGS_ALL: u8 = ChatsSettingsAll.repr();
     pub const CHATS_SETTINGS_GET: u8 = ChatsSettingsGet.repr();
     pub const CHATS_SETTINGS_UPDATE: u8 = ChatsSettingsUpdate.repr();
+
+    pub const WEBHOOKS_GET: u8 = WebhooksGet.repr();
+    pub const WEBHOOKS_UPDATE: u8 = WebhooksUpdate.repr();
+    pub const WEBHOOKS_DELETE: u8 = WebhooksDelete.repr();
+    pub const WEBHOOKS_CREATE: u8 = WebhooksCreate.repr();
+    pub const WEBHOOKS_ALL: u8 = WebhooksAll.repr();
 }
 
 #[cfg(test)]
@@ -577,6 +609,11 @@ pub(crate) mod test {
         assert!(ChatsSettingsGet.repr() == 42 && CHATS_SETTINGS_GET == 42);
         assert!(ChatsSettingsUpdate.repr() == 43 && CHATS_SETTINGS_UPDATE == 43);
         assert!(AllGet.repr() == 44 && ALL_GET == 44);
+        assert!(WebhooksGet.repr() == 45 && WEBHOOKS_GET == 45);
+        assert!(WebhooksUpdate.repr() == 46 && WEBHOOKS_UPDATE == 46);
+        assert!(WebhooksDelete.repr() == 47 && WEBHOOKS_DELETE == 47);
+        assert!(WebhooksCreate.repr() == 48 && WEBHOOKS_CREATE == 48);
+        assert!(WebhooksAll.repr() == 49 && WEBHOOKS_ALL == 49);
     }
 
     #[test]

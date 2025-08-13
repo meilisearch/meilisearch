@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::fmt::{Debug, Display};
 use std::ops::Bound::{self, Excluded, Included, Unbounded};
@@ -14,10 +15,9 @@ use super::facet_range_search;
 use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
-use crate::heed_codec::facet::{
-    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValue, FacetGroupValueCodec,
-};
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::index::db_name::FACET_ID_STRING_DOCIDS;
+use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds;
 use crate::{
     distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
     FilterableAttributesFeatures, FilterableAttributesRule, Index, InternalError, Result,
@@ -422,20 +422,56 @@ impl<'a> Filter<'a> {
                 return Ok(docids);
             }
             Condition::StartsWith { keyword: _, word } => {
+                // The idea here is that "STARTS WITH baba" is the same as "baba <= value < babb".
+                // We just incremented the last letter to find the upper bound.
+                // The upper bound may not be valid utf8, but lmdb doesn't care as it works over bytes.
+
                 let value = crate::normalize_facet(word.value());
-                let base = FacetGroupKey { field_id, level: 0, left_bound: value.as_str() };
-                let docids = strings_db
-                    .prefix_iter(rtxn, &base)?
-                    .map(|result| -> Result<RoaringBitmap> {
-                        match result {
-                            Ok((_facet_group_key, FacetGroupValue { bitmap, .. })) => Ok(bitmap),
-                            Err(_e) => Err(InternalError::from(SerializationError::Decoding {
-                                db_name: Some(FACET_ID_STRING_DOCIDS),
-                            })
-                            .into()),
-                        }
-                    })
-                    .union()?;
+                let mut value2 = value.as_bytes().to_owned();
+
+                let last = match value2.last_mut() {
+                    Some(last) => last,
+                    None => {
+                        // The prefix is empty, so all documents that have the field will match.
+                        return index
+                            .exists_faceted_documents_ids(rtxn, field_id)
+                            .map_err(|e| e.into());
+                    }
+                };
+
+                if *last == u8::MAX {
+                    // u8::MAX is a forbidden UTF-8 byte, we're guaranteed it cannot be sent through a filter to meilisearch, but just in case, we're going to return something
+                    tracing::warn!(
+                        "Found non utf-8 character in filter. That shouldn't be possible"
+                    );
+                    return Ok(RoaringBitmap::new());
+                }
+                *last += 1;
+
+                // This is very similar to `heed::Bytes` but its `EItem` is `&[u8]` instead of `[u8]`
+                struct BytesRef;
+                impl<'a> BytesEncode<'a> for BytesRef {
+                    type EItem = &'a [u8];
+
+                    fn bytes_encode(
+                        item: &'a Self::EItem,
+                    ) -> std::result::Result<Cow<'a, [u8]>, heed::BoxedError> {
+                        Ok(Cow::Borrowed(item))
+                    }
+                }
+
+                let mut docids = RoaringBitmap::new();
+                let bytes_db =
+                    index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRef>>();
+                find_docids_of_facet_within_bounds::<BytesRef>(
+                    rtxn,
+                    bytes_db,
+                    field_id,
+                    &Included(value.as_bytes()),
+                    &Excluded(value2.as_slice()),
+                    universe,
+                    &mut docids,
+                )?;
 
                 return Ok(docids);
             }

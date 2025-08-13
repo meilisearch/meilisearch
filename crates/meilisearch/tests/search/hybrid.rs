@@ -148,7 +148,70 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}}},{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}}},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}}}]"###);
+    snapshot!(response, @r#"
+    {
+      "hits": [
+        {
+          "title": "Captain Planet",
+          "desc": "He's not part of the Marvel Cinematic Universe",
+          "id": "2",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  1.0,
+                  2.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "title": "Captain Marvel",
+          "desc": "a Shazam ersatz",
+          "id": "3",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  2.0,
+                  3.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "title": "Shazam!",
+          "desc": "a Captain Marvel ersatz",
+          "id": "1",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  1.0,
+                  3.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        }
+      ],
+      "query": "Captain",
+      "queryVector": [
+        1.0,
+        1.0
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3,
+      "semanticHitCount": 0
+    }
+    "#);
     snapshot!(response["semanticHitCount"], @"0");
 
     let (response, code) = index
@@ -157,7 +220,73 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.9848484848484848},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response, @r#"
+    {
+      "hits": [
+        {
+          "title": "Captain Marvel",
+          "desc": "a Shazam ersatz",
+          "id": "3",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  2.0,
+                  3.0
+                ]
+              ],
+              "regenerate": false
+            }
+          },
+          "_rankingScore": 0.990290343761444
+        },
+        {
+          "title": "Captain Planet",
+          "desc": "He's not part of the Marvel Cinematic Universe",
+          "id": "2",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  1.0,
+                  2.0
+                ]
+              ],
+              "regenerate": false
+            }
+          },
+          "_rankingScore": 0.9848484848484848
+        },
+        {
+          "title": "Shazam!",
+          "desc": "a Captain Marvel ersatz",
+          "id": "1",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  1.0,
+                  3.0
+                ]
+              ],
+              "regenerate": false
+            }
+          },
+          "_rankingScore": 0.9472135901451112
+        }
+      ],
+      "query": "Captain",
+      "queryVector": [
+        1.0,
+        1.0
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3,
+      "semanticHitCount": 2
+    }
+    "#);
     snapshot!(response["semanticHitCount"], @"2");
 
     let (response, code) = index
@@ -166,7 +295,73 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3","_vectors":{"default":{"embeddings":[[2.0,3.0]],"regenerate":false}},"_rankingScore":0.990290343761444},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2","_vectors":{"default":{"embeddings":[[1.0,2.0]],"regenerate":false}},"_rankingScore":0.974341630935669},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1","_vectors":{"default":{"embeddings":[[1.0,3.0]],"regenerate":false}},"_rankingScore":0.9472135901451112}]"###);
+    snapshot!(response, @r#"
+    {
+      "hits": [
+        {
+          "title": "Captain Marvel",
+          "desc": "a Shazam ersatz",
+          "id": "3",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  2.0,
+                  3.0
+                ]
+              ],
+              "regenerate": false
+            }
+          },
+          "_rankingScore": 0.990290343761444
+        },
+        {
+          "title": "Captain Planet",
+          "desc": "He's not part of the Marvel Cinematic Universe",
+          "id": "2",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  1.0,
+                  2.0
+                ]
+              ],
+              "regenerate": false
+            }
+          },
+          "_rankingScore": 0.974341630935669
+        },
+        {
+          "title": "Shazam!",
+          "desc": "a Captain Marvel ersatz",
+          "id": "1",
+          "_vectors": {
+            "default": {
+              "embeddings": [
+                [
+                  1.0,
+                  3.0
+                ]
+              ],
+              "regenerate": false
+            }
+          },
+          "_rankingScore": 0.9472135901451112
+        }
+      ],
+      "query": "Captain",
+      "queryVector": [
+        1.0,
+        1.0
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 3,
+      "semanticHitCount": 3
+    }
+    "#);
     snapshot!(response["semanticHitCount"], @"3");
 }
 
