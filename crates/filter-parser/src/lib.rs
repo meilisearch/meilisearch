@@ -65,7 +65,7 @@ use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 use value::word_exact;
 
-use crate::condition::{parse_vectors_exists, parse_vectors_not_exists};
+use crate::condition::parse_vectors_exists;
 use crate::error::IResultExt;
 
 pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
@@ -525,7 +525,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_is_not_null,
         parse_is_empty,
         parse_is_not_empty,
-        alt((parse_vectors_exists, parse_vectors_not_exists, parse_exists, parse_not_exists)),
+        alt((parse_vectors_exists, parse_exists, parse_not_exists)),
         parse_to,
         parse_contains,
         parse_not_contains,
@@ -1002,16 +1002,16 @@ pub mod tests {
         );
 
         insta::assert_snapshot!(p(r#"_vectors _vectors EXISTS"#), @r"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors _vectors EXISTS`.
-        1:25 _vectors _vectors EXISTS
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        10:25 _vectors _vectors EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors. embedderName EXISTS"#), @r"
         Was expecting embedder name but found nothing.
         10:11 _vectors. embedderName EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors .embedderName EXISTS"#), @r"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors .embedderName EXISTS`.
-        1:30 _vectors .embedderName EXISTS
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        10:30 _vectors .embedderName EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName. EXISTS"#), @r"
         The vector filter has leftover tokens.
@@ -1038,20 +1038,20 @@ pub mod tests {
         33:40 _vectors.embedderName.fragments. EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments.test test EXISTS"#), @r"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors.embedderName.fragments.test test EXISTS`.
-        1:49 _vectors.embedderName.fragments.test test EXISTS
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        38:49 _vectors.embedderName.fragments.test test EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. test EXISTS"#), @r"
         The vector filter's fragment is invalid.
         33:45 _vectors.embedderName.fragments. test EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments. test EXISTS"#), @r"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors.embedderName .fragments. test EXISTS`.
-        1:46 _vectors.embedderName .fragments. test EXISTS
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        23:46 _vectors.embedderName .fragments. test EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments.test EXISTS"#), @r"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors.embedderName .fragments.test EXISTS`.
-        1:45 _vectors.embedderName .fragments.test EXISTS
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        23:45 _vectors.embedderName .fragments.test EXISTS
         ");
 
         insta::assert_snapshot!(p(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"

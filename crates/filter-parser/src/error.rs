@@ -83,6 +83,7 @@ pub enum ErrorKind<'a> {
     VectorFilterInvalidEmbedder,
     VectorFilterMissingFragment,
     VectorFilterInvalidFragment,
+    VectorFilterOperation,
     InvalidPrimary,
     InvalidEscapedNumber,
     ExpectedEof,
@@ -209,6 +210,9 @@ impl Display for Error<'_> {
             }
             ErrorKind::VectorFilterInvalidEmbedder => {
                 writeln!(f, "The vector filter's embedder is invalid.")?
+            }
+            ErrorKind::VectorFilterOperation => {
+                writeln!(f, "Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.")?
             }
             ErrorKind::ReservedKeyword(word) => {
                 writeln!(f, "`{word}` is a reserved keyword and thus cannot be used as a field name unless it is put inside quotes. Use \"{word}\" or \'{word}\' instead.")?

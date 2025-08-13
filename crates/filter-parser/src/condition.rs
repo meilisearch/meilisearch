@@ -164,21 +164,24 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     Ok((input, (Token::from(fid), Some(embedder_name), filter)))
 }
 
-/// vectors_exists          = vectors "EXISTS"
+/// vectors_exists          = vectors ("EXISTS" | ("NOT" WS+ "EXISTS"))
 pub fn parse_vectors_exists(input: Span) -> IResult<FilterCondition> {
-    let (input, (fid, embedder, filter)) = terminated(parse_vectors, tag("EXISTS"))(input)?;
-
-    Ok((input, FilterCondition::VectorExists { fid, embedder, filter }))
-}
-/// vectors_not_exists      = vectors "NOT" WS+ "EXISTS"
-pub fn parse_vectors_not_exists(input: Span) -> IResult<FilterCondition> {
     let (input, (fid, embedder, filter)) = parse_vectors(input)?;
 
-    let (input, _) = tuple((tag("NOT"), multispace1, tag("EXISTS")))(input)?;
-    Ok((
-        input,
-        FilterCondition::Not(Box::new(FilterCondition::VectorExists { fid, embedder, filter })),
-    ))
+    // Try parsing "EXISTS" first
+    if let Ok((input, _)) = tag::<_, _, ()>("EXISTS")(input) {
+        return Ok((input, FilterCondition::VectorExists { fid, embedder, filter }));
+    }
+
+    // Try parsing "NOT EXISTS"
+    if let Ok((input, _)) = tuple::<_, _, (), _>((tag("NOT"), multispace1, tag("EXISTS")))(input) {
+        return Ok((
+            input,
+            FilterCondition::Not(Box::new(FilterCondition::VectorExists { fid, embedder, filter })),
+        ));
+    }
+
+    Err(crate::Error::new_failure_from_kind(input, ErrorKind::VectorFilterOperation))
 }
 
 /// contains        = value "CONTAINS" value
