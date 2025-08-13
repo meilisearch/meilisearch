@@ -132,31 +132,21 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     }
 
     match parse_geo_radius(input) {
-        Ok(_) => {
-            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius)))
-        }
+        Ok(_) => return Err(Error::new_failure_from_kind(input, ErrorKind::MisusedGeoRadius)),
         // if we encountered a failure it means the user badly wrote a _geoRadius filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius)))
+            return Err(Error::new_failure_from_kind(input, ErrorKind::MisusedGeoRadius))
         }
         _ => (),
     }
 
     match parse_geo_bounding_box(input) {
-        Ok(_) => {
-            return Err(nom::Err::Failure(Error::new_from_kind(
-                input,
-                ErrorKind::MisusedGeoBoundingBox,
-            )))
-        }
+        Ok(_) => return Err(Error::new_failure_from_kind(input, ErrorKind::MisusedGeoBoundingBox)),
         // if we encountered a failure it means the user badly wrote a _geoBoundingBox filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(nom::Err::Failure(Error::new_from_kind(
-                input,
-                ErrorKind::MisusedGeoBoundingBox,
-            )))
+            return Err(Error::new_failure_from_kind(input, ErrorKind::MisusedGeoBoundingBox))
         }
         _ => (),
     }

@@ -437,7 +437,7 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     let (input, args) = parsed?;
 
     if args.len() != 2 || args[0].len() != 2 || args[1].len() != 2 {
-        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
+        return Err(Error::new_failure_from_kind(input, ErrorKind::GeoBoundingBox));
     }
 
     let res = FilterCondition::GeoBoundingBox {
@@ -458,7 +458,7 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
-    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
+    Err(Error::new_failure_from_kind(input, ErrorKind::ReservedGeo("_geoPoint")))
 }
 
 /// geoPoint      = WS* "_geoDistance(float WS* "," WS* float WS* "," WS* float)
@@ -472,7 +472,7 @@ fn parse_geo_distance(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))?;
     // if we succeeded we still return a `Failure` because `geoDistance` filters are not allowed
-    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))
+    Err(Error::new_failure_from_kind(input, ErrorKind::ReservedGeo("_geoDistance")))
 }
 
 /// geo      = WS* "_geo(float WS* "," WS* float WS* "," WS* float)
@@ -486,7 +486,7 @@ fn parse_geo(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))?;
     // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
-    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))
+    Err(Error::new_failure_from_kind(input, ErrorKind::ReservedGeo("_geo")))
 }
 
 fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
@@ -1006,8 +1006,8 @@ pub mod tests {
         1:25 _vectors _vectors EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors. embedderName EXISTS"#), @r"
-        The vector filter's embedder is invalid.
-        10:30 _vectors. embedderName EXISTS
+        Was expecting embedder name but found nothing.
+        10:11 _vectors. embedderName EXISTS
         ");
         insta::assert_snapshot!(p(r#"_vectors .embedderName EXISTS"#), @r"
         Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `_vectors .embedderName EXISTS`.

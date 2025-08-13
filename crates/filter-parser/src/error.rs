@@ -54,7 +54,7 @@ impl<'a, T> IResultExt<'a> for IResult<'a, T> {
                 nom::Err::Error(e) => *e.context(),
                 nom::Err::Failure(e) => *e.context(),
             };
-            nom::Err::Failure(Error::new_from_kind(input, kind))
+            Error::new_failure_from_kind(input, kind)
         })
     }
 }
@@ -79,6 +79,7 @@ pub enum ErrorKind<'a> {
     MisusedGeoRadius,
     MisusedGeoBoundingBox,
     VectorFilterLeftover,
+    VectorFilterMissingEmbedder,
     VectorFilterInvalidEmbedder,
     VectorFilterMissingFragment,
     VectorFilterInvalidFragment,
@@ -110,6 +111,10 @@ impl<'a> Error<'a> {
 
     pub fn new_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> Self {
         Self { context, kind }
+    }
+
+    pub fn new_failure_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> nom::Err<Self> {
+        nom::Err::Failure(Self::new_from_kind(context, kind))
     }
 
     pub fn new_from_external(context: Span<'a>, error: impl std::error::Error) -> Self {
@@ -198,6 +203,9 @@ impl Display for Error<'_> {
             }
             ErrorKind::VectorFilterMissingFragment => {
                 writeln!(f, "The vector filter is missing a fragment name.")?
+            }
+            ErrorKind::VectorFilterMissingEmbedder => {
+                writeln!(f, "Was expecting embedder name but found nothing.")?
             }
             ErrorKind::VectorFilterInvalidEmbedder => {
                 writeln!(f, "The vector filter's embedder is invalid.")?

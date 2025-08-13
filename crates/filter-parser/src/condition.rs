@@ -135,6 +135,13 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     // From this point, we are certain this is a vector filter, so our errors must be final.
     // We could use nom's `cut` but it's better to be explicit about the errors
 
+    if let Ok((_, space)) = tag::<_, _, ()>(" ")(input) {
+        return Err(crate::Error::new_failure_from_kind(
+            space,
+            ErrorKind::VectorFilterMissingEmbedder,
+        ));
+    }
+
     let (input, embedder_name) =
         parse_vector_value(input).map_cut(ErrorKind::VectorFilterInvalidEmbedder)?;
 
