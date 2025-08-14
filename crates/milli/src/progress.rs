@@ -356,7 +356,7 @@ struct Compat<T: steppe::Step>(T);
 
 impl<T: steppe::Step> Step for Compat<T> {
     fn name(&self) -> Cow<'static, str> {
-        self.0.name().into()
+        self.0.name()
     }
 
     fn current(&self) -> u32 {
