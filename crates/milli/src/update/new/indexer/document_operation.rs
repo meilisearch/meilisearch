@@ -6,6 +6,7 @@ use bumparaw_collections::RawMap;
 use hashbrown::hash_map::Entry;
 use heed::RoTxn;
 use memmap2::Mmap;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::slice::ParallelSlice;
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
@@ -20,7 +21,7 @@ use crate::update::new::document::{DocumentContext, Versions};
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
-use crate::update::{AvailableIds, IndexDocumentsMethod};
+use crate::update::{AvailableIds, ConcurrentAvailableIds, IndexDocumentsMethod};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
 #[derive(Default)]
@@ -73,14 +74,13 @@ impl<'pl> DocumentOperation<'pl> {
         progress: Progress,
     ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
     where
-        MSP: Fn() -> bool,
+        MSP: Fn() -> bool + Sync,
     {
         progress.update_progress(IndexingStep::PreparingPayloads);
         let Self { operations } = self;
 
         let documents_ids = index.documents_ids(rtxn)?;
-        let mut operations_stats = Vec::new();
-        let mut available_docids = AvailableIds::new(&documents_ids);
+        let available_docids = ConcurrentAvailableIds::new(documents_ids);
         let mut docids_version_offsets = hashbrown::HashMap::new();
         let mut primary_key = None;
 
@@ -88,64 +88,74 @@ impl<'pl> DocumentOperation<'pl> {
         let (step, progress_step) = AtomicPayloadStep::new(payload_count as u32);
         progress.update_progress(progress_step);
 
-        for (payload_index, operation) in operations.into_iter().enumerate() {
-            if must_stop_processing() {
-                return Err(InternalError::AbortedIndexation.into());
-            }
-            step.store(payload_index as u32, Ordering::Relaxed);
-
-            let mut bytes = 0;
-            let result = match operation {
-                Payload::Replace(payload) => extract_addition_payload_changes(
-                    indexer,
-                    index,
-                    rtxn,
-                    primary_key_from_op,
-                    &mut primary_key,
-                    new_fields_ids_map,
-                    &mut available_docids,
-                    &mut bytes,
-                    &docids_version_offsets,
-                    IndexDocumentsMethod::ReplaceDocuments,
-                    payload,
-                ),
-                Payload::Update(payload) => extract_addition_payload_changes(
-                    indexer,
-                    index,
-                    rtxn,
-                    primary_key_from_op,
-                    &mut primary_key,
-                    new_fields_ids_map,
-                    &mut available_docids,
-                    &mut bytes,
-                    &docids_version_offsets,
-                    IndexDocumentsMethod::UpdateDocuments,
-                    payload,
-                ),
-                Payload::Deletion(to_delete) => extract_deletion_payload_changes(
-                    index,
-                    rtxn,
-                    &mut available_docids,
-                    &docids_version_offsets,
-                    to_delete,
-                ),
-            };
-
-            let mut document_count = 0;
-            let error = match result {
-                Ok(new_docids_version_offsets) => {
-                    document_count = new_docids_version_offsets.len() as u64;
-                    // If we don't have any error then we can merge the content of this payload
-                    // into to main payload. Else we just drop this payload extraction.
-                    merge_version_offsets(&mut docids_version_offsets, new_docids_version_offsets);
-                    None
+        let operations_stats = operations
+            .into_par_iter()
+            .enumerate()
+            .map(|(payload_index, operation)| {
+                if must_stop_processing() {
+                    return Err(InternalError::AbortedIndexation.into());
                 }
-                Err(Error::UserError(user_error)) => Some(user_error),
-                Err(e) => return Err(e),
-            };
-            operations_stats.push(PayloadStats { document_count, bytes, error });
-        }
-        step.store(payload_count as u32, Ordering::Relaxed);
+                step.fetch_add(1, Ordering::Relaxed);
+
+                // TODO do not create too many rtxn and rather keep a pool
+                let rtxn = index.read_txn()?;
+                let bump = Bump::new();
+
+                let mut bytes = 0;
+                let result = match operation {
+                    Payload::Replace(payload) => extract_addition_payload_changes(
+                        &bump,
+                        index,
+                        &rtxn,
+                        primary_key_from_op,
+                        &mut primary_key,
+                        new_fields_ids_map,
+                        &available_docids,
+                        &mut bytes,
+                        &docids_version_offsets,
+                        IndexDocumentsMethod::ReplaceDocuments,
+                        payload,
+                    ),
+                    Payload::Update(payload) => extract_addition_payload_changes(
+                        &bump,
+                        index,
+                        &rtxn,
+                        primary_key_from_op,
+                        &mut primary_key,
+                        new_fields_ids_map,
+                        &available_docids,
+                        &mut bytes,
+                        &docids_version_offsets,
+                        IndexDocumentsMethod::UpdateDocuments,
+                        payload,
+                    ),
+                    Payload::Deletion(to_delete) => extract_deletion_payload_changes(
+                        index,
+                        &rtxn,
+                        &available_docids,
+                        &docids_version_offsets,
+                        to_delete,
+                    ),
+                };
+
+                match result {
+                    Ok(new_docids_version_offsets) => {
+                        let document_count = new_docids_version_offsets.len() as u64;
+                        // If we don't have any error then we can merge the content of this payload
+                        // into to main payload. Else we just drop this payload extraction.
+                        merge_version_offsets(
+                            &mut docids_version_offsets,
+                            new_docids_version_offsets,
+                        );
+                        Ok(PayloadStats { document_count, bytes, error: None })
+                    }
+                    Err(Error::UserError(user_error)) => {
+                        Ok(PayloadStats { document_count: 0, bytes, error: Some(user_error) })
+                    }
+                    Err(e) => Err(e),
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         // TODO We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
         let mut docids_version_offsets: bumpalo::collections::vec::Vec<_> =
@@ -169,7 +179,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     primary_key_from_op: Option<&'r str>,
     primary_key: &mut Option<PrimaryKey<'r>>,
     new_fields_ids_map: &mut FieldsIdsMap,
-    available_docids: &mut AvailableIds,
+    available_docids: &ConcurrentAvailableIds,
     bytes: &mut u64,
     main_docids_version_offsets: &hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>,
     method: IndexDocumentsMethod,
@@ -318,7 +328,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
             Ok(Err(UserError::NoPrimaryKeyCandidateFound)) => (),
             Ok(Err(user_error)) => return Err(Error::UserError(user_error)),
             Err(error) => return Err(error),
-        };
+        }
     }
 
     Ok(new_docids_version_offsets)
@@ -327,7 +337,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
 fn extract_deletion_payload_changes<'s, 'pl: 's>(
     index: &Index,
     rtxn: &RoTxn,
-    available_docids: &mut AvailableIds,
+    available_docids: &ConcurrentAvailableIds,
     main_docids_version_offsets: &hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
     to_delete: &'pl [&'pl str],
 ) -> Result<hashbrown::HashMap<&'s str, PayloadOperations<'pl>>> {
