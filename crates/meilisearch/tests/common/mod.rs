@@ -154,6 +154,24 @@ impl From<Vec<Value>> for Value {
     }
 }
 
+pub trait IntoTaskUid {
+    fn uid(&self) -> u64;
+}
+
+impl IntoTaskUid for Value {
+    fn uid(&self) -> u64 {
+        self["taskUid"].as_u64().unwrap_or_else(|| {
+            panic!("Called `uid` on a Value that doesn't contain a taskUid: {self}")
+        })
+    }
+}
+
+impl IntoTaskUid for u64 {
+    fn uid(&self) -> u64 {
+        *self
+    }
+}
+
 #[macro_export]
 macro_rules! json {
     ($($json:tt)+) => {

@@ -3,16 +3,17 @@ mod v1_13;
 mod v1_14;
 mod v1_15;
 mod v1_16;
+mod v1_17;
 use heed::RwTxn;
 use v1_12::{V1_12_3_To_V1_13_0, V1_12_To_V1_12_3};
 use v1_13::{V1_13_0_To_V1_13_1, V1_13_1_To_Latest_V1_13};
 use v1_14::Latest_V1_13_To_Latest_V1_14;
 use v1_15::Latest_V1_14_To_Latest_V1_15;
-use v1_16::Latest_V1_16_To_V1_17_0;
+use v1_16::Latest_V1_15_To_V1_16_0;
+use v1_17::Latest_V1_16_To_V1_17_0;
 
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use crate::progress::{Progress, VariableNameStep};
-use crate::update::upgrade::v1_16::Latest_V1_15_To_V1_16_0;
 use crate::{Index, InternalError, Result};
 
 trait UpgradeIndex {

@@ -32,7 +32,7 @@ use crate::{Error, IndexSchedulerOptions, Result, TaskId};
 /// The number of database used by queue itself
 const NUMBER_OF_DATABASES: u32 = 1;
 /// Database const names for the `IndexScheduler`.
-mod db_name {
+pub(crate) mod db_name {
     pub const BATCH_TO_TASKS_MAPPING: &str = "batch-to-tasks-mapping";
 }
 

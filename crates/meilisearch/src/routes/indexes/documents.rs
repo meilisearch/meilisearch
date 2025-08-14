@@ -310,7 +310,7 @@ impl Aggregate for DocumentsDeletionAggregator {
         ("documentId" = String, Path, example = "853", description = "Document Identifier", nullable = false),
     ),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -427,7 +427,7 @@ pub struct BrowseQuery {
     params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     request_body = BrowseQuery,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
+        (status = 200, description = "Documents returned", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
                 "results":[
                     {
@@ -745,7 +745,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
     ),
     request_body = serde_json::Value,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -846,7 +846,7 @@ pub async fn replace_documents(
     ),
     request_body = serde_json::Value,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1112,7 +1112,7 @@ async fn copy_body_to_file(
     ),
     request_body = Vec<Value>,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1303,7 +1303,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     ),
     request_body = DocumentEditionByFunction,
     responses(
-        (status = 202, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1401,7 +1401,7 @@ pub async fn edit_documents_by_function(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,

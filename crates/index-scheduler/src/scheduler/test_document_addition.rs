@@ -3,6 +3,7 @@ use meili_snap::snapshot;
 use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
 use meilisearch_types::tasks::KindWithContent;
+use roaring::RoaringBitmap;
 
 use crate::insta_snapshot::snapshot_index_scheduler;
 use crate::test_utils::read_json;
@@ -1147,4 +1148,83 @@ fn test_document_addition_with_set_and_null_primary_key_inference_works() {
         .map(|ret| obkv_to_json(&field_ids, &field_ids_map, ret.unwrap().1).unwrap())
         .collect::<Vec<_>>();
     snapshot!(serde_json::to_string_pretty(&documents).unwrap(), name: "documents");
+}
+
+#[test]
+fn test_task_deletion_issue_5827() {
+    // 1. We're going to autobatch 2 document addition
+    // 2. We will delete the first task
+    // 3. We will delete the second task
+    // 4. The batch should be gone
+
+    let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+    let mut tasks = Vec::new();
+    for i in 0..2 {
+        let content = format!(
+            r#"{{
+                    "id": {},
+                    "doggo": "bob {}"
+                }}"#,
+            i, i
+        );
+
+        let (uuid, mut file) = index_scheduler.queue.create_update_file_with_uuid(i).unwrap();
+        let documents_count = read_json(content.as_bytes(), &mut file).unwrap();
+        file.persist().unwrap();
+        let task = index_scheduler
+            .register(
+                KindWithContent::DocumentAdditionOrUpdate {
+                    index_uid: S("doggos"),
+                    primary_key: Some(S("id")),
+                    method: ReplaceDocuments,
+                    content_file: uuid,
+                    documents_count,
+                    allow_index_creation: true,
+                },
+                None,
+                false,
+            )
+            .unwrap();
+        tasks.push(task);
+        index_scheduler.assert_internally_consistent();
+    }
+
+    handle.advance_one_successful_batch();
+    let rtxn = index_scheduler.read_txn().unwrap();
+    let batches = index_scheduler.queue.batches.all_batch_ids(&rtxn).unwrap();
+    assert_eq!(batches.into_iter().collect::<Vec<_>>().as_slice(), &[0]);
+
+    index_scheduler
+        .register(
+            KindWithContent::TaskDeletion {
+                query: String::from("whatever"),
+                tasks: RoaringBitmap::from_iter([tasks[0].uid]),
+            },
+            None,
+            false,
+        )
+        .unwrap();
+    handle.advance_one_successful_batch();
+    let rtxn = index_scheduler.read_txn().unwrap();
+    let batches = index_scheduler.queue.batches.all_batch_ids(&rtxn).unwrap();
+    assert_eq!(batches.into_iter().collect::<Vec<_>>().as_slice(), &[0, 1]);
+
+    index_scheduler
+        .register(
+            KindWithContent::TaskDeletion {
+                query: String::from("whatever"),
+                tasks: RoaringBitmap::from_iter([tasks[1].uid]),
+            },
+            None,
+            false,
+        )
+        .unwrap();
+    handle.advance_one_successful_batch();
+    let rtxn = index_scheduler.read_txn().unwrap();
+    let batches = index_scheduler.queue.batches.all_batch_ids(&rtxn).unwrap();
+    assert_eq!(batches.into_iter().collect::<Vec<_>>().as_slice(), &[1, 2]);
+
+    let batch0 = index_scheduler.queue.batches.get_batch(&rtxn, 0).unwrap();
+    assert!(batch0.is_none(), "Batch 0 should have been deleted");
 }

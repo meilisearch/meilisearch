@@ -7,6 +7,9 @@ use tracing::info;
 
 use crate::queue::TaskQueue;
 use crate::versioning::Versioning;
+use v1_18::V1_17_To_V1_18_0;
+
+mod v1_18;
 
 trait UpgradeIndexScheduler {
     fn upgrade(
@@ -29,7 +32,8 @@ pub fn upgrade_index_scheduler(
     let current_patch = to.2;
 
     let upgrade_functions: &[&dyn UpgradeIndexScheduler] = &[
-        // This is the last upgrade function, it will be called when the index is up to date.
+        &V1_17_To_V1_18_0 {},
+        // This is the last upgrade function, it will be called when the scheduler is up to date.
         // any other upgrade function should be added before this one.
         &ToCurrentNoOp {},
     ];
@@ -40,6 +44,7 @@ pub fn upgrade_index_scheduler(
         (1, 14, _) => 0,
         (1, 15, _) => 0,
         (1, 16, _) => 0,
+        (1, 17, _) => 0,
         (major, minor, patch) => {
             if major > current_major
                 || (major == current_major && minor > current_minor)
