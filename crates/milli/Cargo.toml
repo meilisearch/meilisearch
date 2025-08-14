@@ -109,6 +109,8 @@ utoipa = { version = "5.4.0", features = [
     "openapi_extensions",
 ] }
 lru = "0.14.0"
+boxcar = "0.2.14"
+papaya = "0.2.3"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.47", default-features = false }
