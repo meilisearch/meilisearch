@@ -844,10 +844,10 @@ impl<'a> Filter<'a> {
                     );
                     let result = index
                         .cellulite
-                        .in_shape(rtxn, &polygon.into(), &mut |_| ())
+                        .in_shape(rtxn, &polygon, &mut |_| ())
                         .map_err(InternalError::CelluliteError)?;
                     // TODO: Remove once we update roaring
-                    let result = roaring::RoaringBitmap::from_iter(result.into_iter());
+                    let result = roaring::RoaringBitmap::from_iter(result);
                     Ok(result)
                 } else {
                     Err(points[0][0].as_external_error(FilterError::AttributeNotFilterable {
