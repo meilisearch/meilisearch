@@ -38,6 +38,7 @@ pub(crate) enum Batch {
     IndexUpdate {
         index_uid: String,
         primary_key: Option<String>,
+        new_index_uid: Option<String>,
         task: Task,
     },
     IndexDeletion {
@@ -405,11 +406,13 @@ impl IndexScheduler {
                 let mut task =
                     self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 current_batch.processing(Some(&mut task));
-                let primary_key = match &task.kind {
-                    KindWithContent::IndexUpdate { primary_key, .. } => primary_key.clone(),
+                let (primary_key, new_index_uid) = match &task.kind {
+                    KindWithContent::IndexUpdate { primary_key, new_index_uid, .. } => {
+                        (primary_key.clone(), new_index_uid.clone())
+                    }
                     _ => unreachable!(),
                 };
-                Ok(Some(Batch::IndexUpdate { index_uid, primary_key, task }))
+                Ok(Some(Batch::IndexUpdate { index_uid, primary_key, new_index_uid, task }))
             }
             BatchKind::IndexDeletion { ids } => Ok(Some(Batch::IndexDeletion {
                 index_uid,

@@ -161,35 +161,19 @@ async fn update_index_bad_primary_key() {
 }
 
 #[actix_rt::test]
-async fn update_index_immutable_uid() {
-    let server = Server::new_shared();
-    let index = server.unique_index();
-    let (response, code) = index.update_raw(json!({ "uid": "doggo" })).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
-    {
-      "message": "Immutable field `uid`: expected one of `primaryKey`",
-      "code": "immutable_index_uid",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#immutable_index_uid"
-    }
-    "###);
-}
-
-#[actix_rt::test]
 async fn update_index_immutable_created_at() {
     let server = Server::new_shared();
     let index = server.unique_index();
     let (response, code) = index.update_raw(json!({ "createdAt": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response), @r#"
     {
-      "message": "Immutable field `createdAt`: expected one of `primaryKey`",
+      "message": "Immutable field `createdAt`: expected one of `primaryKey`, `uid`",
       "code": "immutable_index_created_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#immutable_index_created_at"
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
@@ -198,14 +182,14 @@ async fn update_index_immutable_updated_at() {
     let index = server.unique_index();
     let (response, code) = index.update_raw(json!({ "updatedAt": "doggo" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response), @r#"
     {
-      "message": "Immutable field `updatedAt`: expected one of `primaryKey`",
+      "message": "Immutable field `updatedAt`: expected one of `primaryKey`, `uid`",
       "code": "immutable_index_updated_at",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#immutable_index_updated_at"
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]
@@ -214,14 +198,14 @@ async fn update_index_unknown_field() {
     let index = server.unique_index();
     let (response, code) = index.update_raw(json!({ "doggo": "bork" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response), @r#"
     {
-      "message": "Unknown field `doggo`: expected one of `primaryKey`",
+      "message": "Unknown field `doggo`: expected one of `primaryKey`, `uid`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]

@@ -287,7 +287,7 @@ impl BatchKind {
         };
 
         match (self, autobatch_kind) {
-            // We don't batch any of these operations
+            // We don't batch any of these operations  
             (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition) => Break((this, BatchStopReason::TaskCannotBeBatched { kind, id })),
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
             (this, kind) if !index_already_exists && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {

@@ -67,6 +67,8 @@ pub enum Error {
     SwapDuplicateIndexesFound(Vec<String>),
     #[error("Index `{0}` not found.")]
     SwapIndexNotFound(String),
+    #[error("Cannot rename `{0}` to `{1}` as the index already exists. Hint: You can remove `{1}` first and then do your remove.")]
+    SwapIndexFoundDuringRename(String, String),
     #[error("Meilisearch cannot receive write operations because the limit of the task database has been reached. Please delete tasks to continue performing write operations.")]
     NoSpaceLeftInTaskQueue,
     #[error(
@@ -74,6 +76,10 @@ pub enum Error {
         .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
     )]
     SwapIndexesNotFound(Vec<String>),
+    #[error("The following indexes are being renamed but cannot because their new name conflicts with an already existing index: {}. Renaming doesn't overwrite the other index name.",
+        .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", ")
+    )]
+    SwapIndexesFoundDuringRename(Vec<String>),
     #[error("Corrupted dump.")]
     CorruptedDump,
     #[error(
@@ -203,6 +209,8 @@ impl Error {
             | Error::SwapIndexNotFound(_)
             | Error::NoSpaceLeftInTaskQueue
             | Error::SwapIndexesNotFound(_)
+            | Error::SwapIndexFoundDuringRename(_, _)
+            | Error::SwapIndexesFoundDuringRename(_)
             | Error::CorruptedDump
             | Error::InvalidTaskDate { .. }
             | Error::InvalidTaskUid { .. }
@@ -271,6 +279,8 @@ impl ErrorCode for Error {
             Error::SwapDuplicateIndexFound(_) => Code::InvalidSwapDuplicateIndexFound,
             Error::SwapIndexNotFound(_) => Code::IndexNotFound,
             Error::SwapIndexesNotFound(_) => Code::IndexNotFound,
+            Error::SwapIndexFoundDuringRename(_, _) => Code::IndexAlreadyExists,
+            Error::SwapIndexesFoundDuringRename(_) => Code::IndexAlreadyExists,
             Error::InvalidTaskDate { field, .. } => (*field).into(),
             Error::InvalidTaskUid { .. } => Code::InvalidTaskUids,
             Error::InvalidBatchUid { .. } => Code::InvalidBatchUids,

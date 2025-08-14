@@ -1457,7 +1457,7 @@ impl Index {
             .0)
     }
 
-    pub(crate) fn set_updated_at(
+    pub fn set_updated_at(
         &self,
         wtxn: &mut RwTxn<'_>,
         time: &time::OffsetDateTime,

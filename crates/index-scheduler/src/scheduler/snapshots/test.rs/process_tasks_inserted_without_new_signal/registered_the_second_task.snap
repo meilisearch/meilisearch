@@ -1,14 +1,13 @@
 ---
 source: crates/index-scheduler/src/scheduler/test.rs
-snapshot_kind: text
 ---
 ### Autobatching Enabled = true
 ### Processing batch None:
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: enqueued, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
-1 {uid: 1, status: enqueued, details: { primary_key: None }, kind: IndexCreation { index_uid: "cattos", primary_key: None }}
+0 {uid: 0, status: enqueued, details: { primary_key: None, old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+1 {uid: 1, status: enqueued, details: { primary_key: None, old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "cattos", primary_key: None }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued [0,1,]
