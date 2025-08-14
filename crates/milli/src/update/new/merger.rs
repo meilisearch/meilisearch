@@ -63,8 +63,8 @@ where
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_docids<'extractor, MSP, D>(
-    mut caches: Vec<BalancedCaches<'extractor>>,
+pub fn merge_and_send_docids<MSP, D>(
+    mut caches: Vec<BalancedCaches<'_>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
     docids_sender: WordDocidsSender<D>,
@@ -91,8 +91,8 @@ where
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_facet_docids<'extractor>(
-    mut caches: Vec<BalancedCaches<'extractor>>,
+pub fn merge_and_send_facet_docids(
+    mut caches: Vec<BalancedCaches<'_>>,
     database: FacetDatabases,
     index: &Index,
     rtxn: &RoTxn,
