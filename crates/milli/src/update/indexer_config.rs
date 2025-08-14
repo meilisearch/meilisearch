@@ -1,7 +1,8 @@
 use grenad::CompressionType;
 
 use super::GrenadParameters;
-use crate::{thread_pool_no_abort::ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
+use crate::thread_pool_no_abort::ThreadPoolNoAbort;
+use crate::ThreadPoolNoAbortBuilder;
 
 #[derive(Debug)]
 pub struct IndexerConfig {

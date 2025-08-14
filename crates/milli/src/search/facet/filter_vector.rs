@@ -3,7 +3,7 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use crate::error::{DidYouMean, Error};
 use crate::vector::db::IndexEmbeddingConfig;
-use crate::vector::{ArroyStats, ArroyWrapper};
+use crate::vector::{HannoyStats, VectorStore};
 use crate::Index;
 
 #[derive(Debug, thiserror::Error)]
@@ -82,6 +82,7 @@ fn evaluate_inner(
     embedding_configs: &[IndexEmbeddingConfig],
     filter: &VectorFilter<'_>,
 ) -> crate::Result<RoaringBitmap> {
+    let index_version = index.get_version(rtxn)?.unwrap();
     let embedder_name = embedder.value();
     let available_embedders =
         || embedding_configs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
@@ -96,8 +97,9 @@ fn evaluate_inner(
         .embedder_info(rtxn, embedder_name)?
         .ok_or_else(|| EmbedderDoesNotExist { embedder, available: available_embedders() })?;
 
-    let arroy_wrapper = ArroyWrapper::new(
-        index.vector_arroy,
+    let vector_store = VectorStore::new(
+        index_version,
+        index.vector_store,
         embedder_info.embedder_id,
         embedding_config.config.quantized(),
     );
@@ -122,7 +124,7 @@ fn evaluate_inner(
                 })?;
 
             let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
-            arroy_wrapper.items_in_store(rtxn, fragment_config.id, |bitmap| {
+            vector_store.items_in_store(rtxn, fragment_config.id, |bitmap| {
                 bitmap.clone() - user_provided_docids
             })?
         }
@@ -132,8 +134,8 @@ fn evaluate_inner(
             }
 
             let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
-            let mut stats = ArroyStats::default();
-            arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
+            let mut stats = HannoyStats::default();
+            vector_store.aggregate_stats(rtxn, &mut stats)?;
             stats.documents - user_provided_docids.clone()
         }
         VectorFilter::UserProvided => {
@@ -141,14 +143,14 @@ fn evaluate_inner(
             user_provided_docids.clone()
         }
         VectorFilter::Regenerate => {
-            let mut stats = ArroyStats::default();
-            arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
+            let mut stats = HannoyStats::default();
+            vector_store.aggregate_stats(rtxn, &mut stats)?;
             let skip_regenerate = embedder_info.embedding_status.skip_regenerate_docids();
             stats.documents - skip_regenerate
         }
         VectorFilter::None => {
-            let mut stats = ArroyStats::default();
-            arroy_wrapper.aggregate_stats(rtxn, &mut stats)?;
+            let mut stats = HannoyStats::default();
+            vector_store.aggregate_stats(rtxn, &mut stats)?;
             stats.documents
         }
     };

@@ -1,17 +1,13 @@
-use crate::{
-    distance_between_two_points,
-    heed_codec::facet::{FieldDocIdFacetCodec, OrderedF64Codec},
-    lat_lng_to_xyz,
-    search::new::{facet_string_values, facet_values_prefix_key},
-    GeoPoint, Index,
-};
-use heed::{
-    types::{Bytes, Unit},
-    RoPrefix, RoTxn,
-};
+use std::collections::VecDeque;
+
+use heed::types::{Bytes, Unit};
+use heed::{RoPrefix, RoTxn};
 use roaring::RoaringBitmap;
 use rstar::RTree;
-use std::collections::VecDeque;
+
+use crate::heed_codec::facet::{FieldDocIdFacetCodec, OrderedF64Codec};
+use crate::search::new::{facet_string_values, facet_values_prefix_key};
+use crate::{distance_between_two_points, lat_lng_to_xyz, GeoPoint, Index};
 
 #[derive(Debug, Clone, Copy)]
 pub struct GeoSortParameter {
