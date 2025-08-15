@@ -133,7 +133,7 @@ impl ArroyWrapper {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng>(
+    pub fn build_and_quantize<R: rand::Rng + rand::SeedableRng + Send + Sync>(
         &mut self,
         wtxn: &mut RwTxn,
         progress: &Progress,
