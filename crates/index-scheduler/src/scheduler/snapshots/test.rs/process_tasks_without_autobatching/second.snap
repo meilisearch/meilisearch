@@ -6,7 +6,7 @@ source: crates/index-scheduler/src/scheduler/test.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None, old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "doggos", primary_key: None }}
 1 {uid: 1, batch_uid: 1, status: succeeded, details: { deleted_documents: Some(0) }, kind: DocumentClear { index_uid: "doggos" }}
 2 {uid: 2, status: enqueued, details: { deleted_documents: None }, kind: DocumentClear { index_uid: "doggos" }}
 3 {uid: 3, status: enqueued, details: { deleted_documents: None }, kind: DocumentClear { index_uid: "doggos" }}

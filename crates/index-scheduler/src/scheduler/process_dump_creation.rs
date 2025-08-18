@@ -270,6 +270,11 @@ impl IndexScheduler {
         let network = self.network();
         dump.create_network(network)?;
 
+        // 7. Dump the webhooks
+        progress.update_progress(DumpCreationProgress::DumpTheWebhooks);
+        let webhooks = self.webhooks_dump_view();
+        dump.create_webhooks(webhooks)?;
+
         let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
                 )).unwrap();

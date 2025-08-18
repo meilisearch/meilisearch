@@ -138,6 +138,13 @@ impl DumpReader {
             DumpReader::Compat(compat) => compat.network(),
         }
     }
+
+    pub fn webhooks(&self) -> Option<&v6::Webhooks> {
+        match self {
+            DumpReader::Current(current) => current.webhooks(),
+            DumpReader::Compat(compat) => compat.webhooks(),
+        }
+    }
 }
 
 impl From<V6Reader> for DumpReader {
@@ -365,6 +372,7 @@ pub(crate) mod test {
 
         assert_eq!(dump.features().unwrap().unwrap(), RuntimeTogglableFeatures::default());
         assert_eq!(dump.network().unwrap(), None);
+        assert_eq!(dump.webhooks(), None);
     }
 
     #[test]
@@ -433,6 +441,43 @@ pub(crate) mod test {
         insta::assert_snapshot!(network.remotes.get("ms-1").as_ref().unwrap().search_api_key.is_none(), @"true");
         insta::assert_snapshot!(network.remotes.get("ms-2").as_ref().unwrap().url, @"http://ms-5679.example.meilisearch.io");
         insta::assert_snapshot!(network.remotes.get("ms-2").as_ref().unwrap().search_api_key.as_ref().unwrap(), @"foo");
+    }
+
+    #[test]
+    fn import_dump_v6_webhooks() {
+        let dump = File::open("tests/assets/v6-with-webhooks.dump").unwrap();
+        let dump = DumpReader::open(dump).unwrap();
+
+        // top level infos
+        insta::assert_snapshot!(dump.date().unwrap(), @"2025-07-31 9:21:30.479544 +00:00:00");
+        insta::assert_debug_snapshot!(dump.instance_uid().unwrap(), @r"
+        Some(
+            cb887dcc-34b3-48d1-addd-9815ae721a81,
+        )
+        ");
+
+        // webhooks
+        let webhooks = dump.webhooks().unwrap();
+        insta::assert_json_snapshot!(webhooks, @r#"
+        {
+          "webhooks": {
+            "627ea538-733d-4545-8d2d-03526eb381ce": {
+              "url": "https://example.com/authorization-less",
+              "headers": {}
+            },
+            "771b0a28-ef28-4082-b984-536f82958c65": {
+              "url": "https://example.com/hook",
+              "headers": {
+                "authorization": "TOKEN"
+              }
+            },
+            "f3583083-f8a7-4cbf-a5e7-fb3f1e28a7e9": {
+              "url": "https://third.com",
+              "headers": {}
+            }
+          }
+        }
+        "#);
     }
 
     #[test]

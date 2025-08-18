@@ -75,7 +75,11 @@ fn idx_create() -> KindWithContent {
 }
 
 fn idx_update() -> KindWithContent {
-    KindWithContent::IndexUpdate { index_uid: String::from("doggo"), primary_key: None }
+    KindWithContent::IndexUpdate {
+        index_uid: String::from("doggo"),
+        primary_key: None,
+        new_index_uid: None,
+    }
 }
 
 fn idx_del() -> KindWithContent {
@@ -84,7 +88,10 @@ fn idx_del() -> KindWithContent {
 
 fn idx_swap() -> KindWithContent {
     KindWithContent::IndexSwap {
-        swaps: vec![IndexSwap { indexes: (String::from("doggo"), String::from("catto")) }],
+        swaps: vec![IndexSwap {
+            indexes: (String::from("doggo"), String::from("catto")),
+            rename: false,
+        }],
     }
 }
 

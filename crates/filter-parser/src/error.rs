@@ -54,7 +54,7 @@ impl<'a, T> IResultExt<'a> for IResult<'a, T> {
                 nom::Err::Error(e) => *e.context(),
                 nom::Err::Failure(e) => *e.context(),
             };
-            nom::Err::Failure(Error::new_from_kind(input, kind))
+            Error::failure_from_kind(input, kind)
         })
     }
 }
@@ -79,9 +79,13 @@ pub enum ErrorKind<'a> {
     MisusedGeoRadius,
     MisusedGeoBoundingBox,
     VectorFilterLeftover,
+    VectorFilterInvalidQuotes,
+    VectorFilterMissingEmbedder,
     VectorFilterInvalidEmbedder,
     VectorFilterMissingFragment,
     VectorFilterInvalidFragment,
+    VectorFilterUnknownSuffix(Option<&'static str>, String),
+    VectorFilterOperation,
     InvalidPrimary,
     InvalidEscapedNumber,
     ExpectedEof,
@@ -110,6 +114,10 @@ impl<'a> Error<'a> {
 
     pub fn new_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> Self {
         Self { context, kind }
+    }
+
+    pub fn failure_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> nom::Err<Self> {
+        nom::Err::Failure(Self::new_from_kind(context, kind))
     }
 
     pub fn new_from_external(context: Span<'a>, error: impl std::error::Error) -> Self {
@@ -148,6 +156,20 @@ impl Display for Error<'_> {
         // When printing our error message we want to escape all `\n` to be sure we keep our format with the
         // first line being the diagnostic and the second line being the incriminated filter.
         let escaped_input = input.escape_debug();
+
+        fn key_suggestion<'a>(key: &str, keys: &[&'a str]) -> Option<&'a str> {
+            let typos =
+                levenshtein_automata::LevenshteinAutomatonBuilder::new(2, true).build_dfa(key);
+            for key in keys.iter() {
+                match typos.eval(key) {
+                    levenshtein_automata::Distance::Exact(_) => {
+                        return Some(key);
+                    }
+                    levenshtein_automata::Distance::AtLeast(_) => continue,
+                }
+            }
+            None
+        }
 
         match &self.kind {
             ErrorKind::ExpectedValue(_) if input.trim().is_empty() => {
@@ -193,14 +215,40 @@ impl Display for Error<'_> {
             ErrorKind::VectorFilterLeftover => {
                 writeln!(f, "The vector filter has leftover tokens.")?
             }
+            ErrorKind::VectorFilterUnknownSuffix(_, value) if value.as_str() == "." => {
+                writeln!(f, "Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.")?;
+            }
+            ErrorKind::VectorFilterUnknownSuffix(None, value) if ["fragments", "userProvided", "documentTemplate", "regenerate"].contains(&value.as_str()) => {
+                // This will happen with "_vectors.rest.\"userProvided\"" for instance
+                writeln!(f, "Was expecting this part to be unquoted.")?
+            }
+            ErrorKind::VectorFilterUnknownSuffix(None, value) => {
+                if let Some(suggestion) = key_suggestion(value, &["fragments", "userProvided", "documentTemplate", "regenerate"]) {
+                    writeln!(f, "Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `{value}`. Did you mean `{suggestion}`?")?;
+                } else {
+                    writeln!(f, "Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `{value}`.")?;
+                }
+            }
+            ErrorKind::VectorFilterUnknownSuffix(Some(previous_filter_kind), value) => {
+                writeln!(f, "Vector filter can only accept one of `fragments`, `userProvided`, `documentTemplate` or `regenerate`, but found both `{previous_filter_kind}` and `{value}`.")?
+            },
             ErrorKind::VectorFilterInvalidFragment => {
-                writeln!(f, "The vector filter's fragment is invalid.")?
+                writeln!(f, "The vector filter's fragment name is invalid.")?
             }
             ErrorKind::VectorFilterMissingFragment => {
                 writeln!(f, "The vector filter is missing a fragment name.")?
             }
+            ErrorKind::VectorFilterMissingEmbedder => {
+                writeln!(f, "Was expecting embedder name but found nothing.")?
+            }
             ErrorKind::VectorFilterInvalidEmbedder => {
-                writeln!(f, "The vector filter's embedder is invalid.")?
+                writeln!(f, "The vector filter's embedder name is invalid.")?
+            }
+            ErrorKind::VectorFilterOperation => {
+                writeln!(f, "Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.")?
+            }
+            ErrorKind::VectorFilterInvalidQuotes => {
+                writeln!(f, "The quotes in one of the values are inconsistent.")?
             }
             ErrorKind::ReservedKeyword(word) => {
                 writeln!(f, "`{word}` is a reserved keyword and thus cannot be used as a field name unless it is put inside quotes. Use \"{word}\" or \'{word}\' instead.")?

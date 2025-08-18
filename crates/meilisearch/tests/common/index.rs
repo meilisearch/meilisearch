@@ -249,6 +249,11 @@ impl<'a> Index<'a, Owned> {
         self.service.put_encoded(url, settings, self.encoder).await
     }
 
+    pub async fn update_settings_chat(&self, settings: Value) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/settings/chat", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, settings, self.encoder).await
+    }
+
     pub async fn delete_settings(&self) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/settings", urlencode(self.uid.as_ref()));
         self.service.delete(url).await
@@ -314,6 +319,24 @@ impl Index<'_, Shared> {
         }
         (task, code)
     }
+
+    pub async fn update_raw_index_fail<State>(
+        &self,
+        body: Value,
+        waiter: &Server<State>,
+    ) -> (Value, StatusCode) {
+        let (mut task, code) = self._update_raw(body).await;
+        if code.is_success() {
+            task = waiter.wait_task(task.uid()).await;
+            if task.is_success() {
+                panic!(
+                    "`update_raw_index_fail` succeeded: {}",
+                    serde_json::to_string_pretty(&task).unwrap()
+                );
+            }
+        }
+        (task, code)
+    }
 }
 
 #[allow(dead_code)]
@@ -361,6 +384,11 @@ impl<State> Index<'_, State> {
         let body = json!({
             "primaryKey": primary_key,
         });
+        let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
+        self.service.patch_encoded(url, body, self.encoder).await
+    }
+
+    pub(super) async fn _update_raw(&self, body: Value) -> (Value, StatusCode) {
         let url = format!("/indexes/{}", urlencode(self.uid.as_ref()));
         self.service.patch_encoded(url, body, self.encoder).await
     }

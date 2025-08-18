@@ -25,13 +25,16 @@ macro_rules! test_filter {
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
             let filtered_ids = search::expected_filtered_ids($filter);
-            let expected_external_ids: Vec<_> =
+            let mut expected_external_ids: Vec<_> =
                 search::expected_order(&criteria, TermsMatchingStrategy::default(), &[])
                     .into_iter()
                     .filter_map(|d| if filtered_ids.contains(&d.id) { Some(d.id) } else { None })
                     .collect();
 
-            let documents_ids = search::internal_to_external_ids(&index, &documents_ids);
+            let mut documents_ids = search::internal_to_external_ids(&index, &documents_ids);
+
+            expected_external_ids.sort_unstable();
+            documents_ids.sort_unstable();
             assert_eq!(documents_ids, expected_external_ids);
         }
     };
@@ -102,3 +105,9 @@ test_filter!(empty_filter_1_double_not, vec![Right("NOT opt1 IS NOT EMPTY")]);
 test_filter!(in_filter, vec![Right("tag_in IN[1, 2, 3, four, five]")]);
 test_filter!(not_in_filter, vec![Right("tag_in NOT IN[1, 2, 3, four, five]")]);
 test_filter!(not_not_in_filter, vec![Right("NOT tag_in NOT IN[1, 2, 3, four, five]")]);
+
+test_filter!(starts_with_filter_single_letter, vec![Right("tag STARTS WITH e")]);
+test_filter!(starts_with_filter_diacritic, vec![Right("tag STARTS WITH é")]);
+test_filter!(starts_with_filter_empty_prefix, vec![Right("tag STARTS WITH ''")]);
+test_filter!(starts_with_filter_hell, vec![Right("title STARTS WITH hell")]);
+test_filter!(starts_with_filter_hello, vec![Right("title STARTS WITH hello")]);

@@ -526,6 +526,20 @@ impl IndexMapper {
         Ok(())
     }
 
+    /// Rename an index.
+    pub fn rename(&self, wtxn: &mut RwTxn, current: &str, new: &str) -> Result<()> {
+        let uuid = self
+            .index_mapping
+            .get(wtxn, current)?
+            .ok_or_else(|| Error::IndexNotFound(current.to_string()))?;
+        if self.index_mapping.get(wtxn, new)?.is_some() {
+            return Err(Error::IndexAlreadyExists(new.to_string()));
+        }
+        self.index_mapping.delete(wtxn, current)?;
+        self.index_mapping.put(wtxn, new, &uuid)?;
+        Ok(())
+    }
+
     /// The stats of an index.
     ///
     /// If available in the cache, they are directly returned.

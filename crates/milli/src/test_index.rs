@@ -1097,6 +1097,7 @@ fn bug_3021_fourth() {
         mut documents_ids,
         degraded: _,
         used_negative_operator: _,
+        query_vector: _,
     } = search.execute().unwrap();
     let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
     documents_ids.sort_unstable();

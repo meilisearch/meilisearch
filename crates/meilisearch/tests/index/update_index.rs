@@ -1,8 +1,12 @@
+use meili_snap::snapshot;
+
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
 use crate::common::encoder::Encoder;
-use crate::common::{shared_does_not_exists_index, shared_index_with_documents, Server};
+use crate::common::{
+    shared_does_not_exists_index, shared_empty_index, shared_index_with_documents, Server,
+};
 use crate::json;
 
 #[actix_rt::test]
@@ -105,4 +109,86 @@ async fn error_update_unexisting_index() {
     });
 
     assert_eq!(response["error"], expected_response);
+}
+
+#[actix_rt::test]
+async fn update_index_name() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let new_index = server.unique_index();
+    let (task, _code) = index.update_raw(json!({ "uid": new_index.uid })).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = new_index.get().await;
+    snapshot!(code, @"200 OK");
+
+    assert_eq!(response["uid"], new_index.uid);
+    assert!(response.get("createdAt").is_some());
+    assert!(response.get("updatedAt").is_some());
+
+    let created_at =
+        OffsetDateTime::parse(response["createdAt"].as_str().unwrap(), &Rfc3339).unwrap();
+    let updated_at =
+        OffsetDateTime::parse(response["updatedAt"].as_str().unwrap(), &Rfc3339).unwrap();
+    assert!(created_at < updated_at, "{created_at} should be inferior to {updated_at}");
+
+    snapshot!(response["primaryKey"], @"null");
+    snapshot!(response.as_object().unwrap().len(), @"4");
+}
+
+#[actix_rt::test]
+async fn update_index_name_to_itself() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+    let (initial_response, code) = index.get().await;
+    snapshot!(code, @"200 OK");
+
+    let (task, _code) = index.update_raw(json!({ "uid": index.uid })).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (new_response, code) = index.get().await;
+    snapshot!(code, @"200 OK");
+
+    // Renaming an index to its own name should not change anything
+    assert_eq!(initial_response, new_response);
+}
+
+#[actix_rt::test]
+async fn error_update_index_name_to_already_existing_index() {
+    let server = Server::new_shared();
+    let base_index = shared_empty_index().await;
+    let index = shared_index_with_documents().await;
+
+    let (task, _status_code) =
+        index.update_raw_index_fail(json!({ "uid": base_index.uid }), server).await;
+    snapshot!(task, @r#"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "SHARED_DOCUMENTS",
+      "status": "failed",
+      "type": "indexUpdate",
+      "canceledBy": null,
+      "details": {
+        "primaryKey": null,
+        "oldIndexUid": "SHARED_DOCUMENTS",
+        "newIndexUid": "EMPTY_INDEX"
+      },
+      "error": {
+        "message": "Index `EMPTY_INDEX` already exists.",
+        "code": "index_already_exists",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#index_already_exists"
+      },
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]"
+    }
+    "#);
 }

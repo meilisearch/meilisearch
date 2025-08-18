@@ -17,7 +17,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let path = tempfile::tempdir().unwrap();
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
-    options.map_size(10 * 1024 * 1024); // 10 MB
+    options.map_size(10 * 1024 * 1024); // 10 MiB
     let index = Index::new(options, &path, true).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();

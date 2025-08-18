@@ -212,7 +212,6 @@ ImmutableApiKeyKey                             , InvalidRequest       , BAD_REQU
 ImmutableApiKeyUid                             , InvalidRequest       , BAD_REQUEST;
 ImmutableApiKeyUpdatedAt                       , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexCreatedAt                        , InvalidRequest       , BAD_REQUEST;
-ImmutableIndexUid                              , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexUpdatedAt                        , InvalidRequest       , BAD_REQUEST;
 IndexAlreadyExists                             , InvalidRequest       , CONFLICT ;
 IndexCreationFailed                            , Internal             , INTERNAL_SERVER_ERROR;
@@ -335,6 +334,7 @@ InvalidState                                   , Internal             , INTERNAL
 InvalidStoreFile                               , Internal             , INTERNAL_SERVER_ERROR ;
 InvalidSwapDuplicateIndexFound                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSwapIndexes                             , InvalidRequest       , BAD_REQUEST ;
+InvalidSwapRename                              , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskAfterEnqueuedAt                     , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskAfterFinishedAt                     , InvalidRequest       , BAD_REQUEST ;
 InvalidTaskAfterStartedAt                      , InvalidRequest       , BAD_REQUEST ;
@@ -428,7 +428,16 @@ InvalidRenderInputDocumentId                   , InvalidRequest       , BAD_REQU
 InvalidRenderInputInline                       , InvalidRequest       , BAD_REQUEST ;
 RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND ;
 TemplateParsingError                           , InvalidRequest       , BAD_REQUEST ;
-TemplateRenderingError                         , InvalidRequest       , BAD_REQUEST
+TemplateRenderingError                         , InvalidRequest       , BAD_REQUEST ;
+// Webhooks
+InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
+InvalidWebhookUrl                              , InvalidRequest       , BAD_REQUEST ;
+InvalidWebhookHeaders                          , InvalidRequest       , BAD_REQUEST ;
+ImmutableWebhook                               , InvalidRequest       , BAD_REQUEST ;
+InvalidWebhookUuid                             , InvalidRequest       , BAD_REQUEST ;
+WebhookNotFound                                , InvalidRequest       , NOT_FOUND ;
+ImmutableWebhookUuid                           , InvalidRequest       , BAD_REQUEST ;
+ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST
 }
 
 impl ErrorCode for JoinError {

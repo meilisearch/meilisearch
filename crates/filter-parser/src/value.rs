@@ -113,6 +113,18 @@ pub fn parse_dotted_value_part(input: Span) -> IResult<Token> {
     }
 }
 
+pub fn parse_dotted_value_cut<'a>(input: Span<'a>, kind: ErrorKind<'a>) -> IResult<'a, Token<'a>> {
+    parse_dotted_value_part(input).map_err(|e| match e {
+        nom::Err::Failure(e) => match e.kind() {
+            ErrorKind::Char(c) if *c == '"' || *c == '\'' => {
+                crate::Error::failure_from_kind(input, ErrorKind::VectorFilterInvalidQuotes)
+            }
+            _ => crate::Error::failure_from_kind(input, kind),
+        },
+        _ => crate::Error::failure_from_kind(input, kind),
+    })
+}
+
 /// value          = WS* ( word | singleQuoted | doubleQuoted) WS+
 pub fn parse_value(input: Span) -> IResult<Token> {
     // to get better diagnostic message we are going to strip the left whitespaces from the input right now
@@ -132,31 +144,21 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     }
 
     match parse_geo_radius(input) {
-        Ok(_) => {
-            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius)))
-        }
+        Ok(_) => return Err(Error::failure_from_kind(input, ErrorKind::MisusedGeoRadius)),
         // if we encountered a failure it means the user badly wrote a _geoRadius filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::MisusedGeoRadius)))
+            return Err(Error::failure_from_kind(input, ErrorKind::MisusedGeoRadius))
         }
         _ => (),
     }
 
     match parse_geo_bounding_box(input) {
-        Ok(_) => {
-            return Err(nom::Err::Failure(Error::new_from_kind(
-                input,
-                ErrorKind::MisusedGeoBoundingBox,
-            )))
-        }
+        Ok(_) => return Err(Error::failure_from_kind(input, ErrorKind::MisusedGeoBoundingBox)),
         // if we encountered a failure it means the user badly wrote a _geoBoundingBox filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(nom::Err::Failure(Error::new_from_kind(
-                input,
-                ErrorKind::MisusedGeoBoundingBox,
-            )))
+            return Err(Error::failure_from_kind(input, ErrorKind::MisusedGeoBoundingBox))
         }
         _ => (),
     }
