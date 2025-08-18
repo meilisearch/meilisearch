@@ -6,11 +6,11 @@ source: crates/index-scheduler/src/scheduler/test.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
-1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
-2 {uid: 2, batch_uid: 2, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
-3 {uid: 3, batch_uid: 3, status: succeeded, details: { primary_key: Some("id") }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
-4 {uid: 4, batch_uid: 4, status: failed, error: ResponseError { code: 200, message: "Indexes `e`, `f` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_not_found" }, details: { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "e") }, IndexSwap { indexes: ("d", "f") }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b") }, IndexSwap { indexes: ("c", "e") }, IndexSwap { indexes: ("d", "f") }] }}
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: Some("id"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "a", primary_key: Some("id") }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { primary_key: Some("id"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "b", primary_key: Some("id") }}
+2 {uid: 2, batch_uid: 2, status: succeeded, details: { primary_key: Some("id"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "c", primary_key: Some("id") }}
+3 {uid: 3, batch_uid: 3, status: succeeded, details: { primary_key: Some("id"), old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "d", primary_key: Some("id") }}
+4 {uid: 4, batch_uid: 4, status: failed, error: ResponseError { code: 200, message: "Indexes `e`, `f` not found.", error_code: "index_not_found", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_not_found" }, details: { swaps: [IndexSwap { indexes: ("a", "b"), rename: false }, IndexSwap { indexes: ("c", "e"), rename: false }, IndexSwap { indexes: ("d", "f"), rename: false }] }, kind: IndexSwap { swaps: [IndexSwap { indexes: ("a", "b"), rename: false }, IndexSwap { indexes: ("c", "e"), rename: false }, IndexSwap { indexes: ("d", "f"), rename: false }] }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued []
@@ -65,7 +65,7 @@ d: { number_of_documents: 0, field_distribution: {} }
 1 {uid: 1, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"b":1}}, stop reason: "created batch containing only task with id 1 of type `indexCreation` that cannot be batched with any other task.", }
 2 {uid: 2, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"c":1}}, stop reason: "created batch containing only task with id 2 of type `indexCreation` that cannot be batched with any other task.", }
 3 {uid: 3, details: {"primaryKey":"id"}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"d":1}}, stop reason: "created batch containing only task with id 3 of type `indexCreation` that cannot be batched with any other task.", }
-4 {uid: 4, details: {"swaps":[{"indexes":["a","b"]},{"indexes":["c","e"]},{"indexes":["d","f"]}]}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexSwap":1},"indexUids":{}}, stop reason: "created batch containing only task with id 4 of type `indexSwap` that cannot be batched with any other task.", }
+4 {uid: 4, details: {"swaps":[{"indexes":["a","b"],"rename":false},{"indexes":["c","e"],"rename":false},{"indexes":["d","f"],"rename":false}]}, stats: {"totalNbTasks":1,"status":{"failed":1},"types":{"indexSwap":1},"indexUids":{}}, stop reason: "created batch containing only task with id 4 of type `indexSwap` that cannot be batched with any other task.", }
 ----------------------------------------------------------------------
 ### Batch to tasks mapping:
 0 [0,]

@@ -896,7 +896,7 @@ async fn test_summarized_index_swap() {
     server.wait_task(task.uid()).await.failed();
     let (task, _) = server.get_task(task.uid()).await;
     snapshot!(task,
-        @r###"
+        @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
@@ -910,7 +910,8 @@ async fn test_summarized_index_swap() {
             "indexes": [
               "doggos",
               "cattos"
-            ]
+            ],
+            "rename": false
           }
         ]
       },
@@ -925,7 +926,7 @@ async fn test_summarized_index_swap() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 
     let doggos_index = server.unique_index();
     let (task, _code) = doggos_index.create(None).await;
@@ -942,7 +943,7 @@ async fn test_summarized_index_swap() {
     let (task, _) = server.get_task(task.uid()).await;
     snapshot!(json_string!(task,
         { ".uid" => "[uid]", ".batchUid" => "[batch_uid]", ".**.indexes[0]" => "doggos", ".**.indexes[1]" => "cattos", ".duration" => "[duration]", ".enqueuedAt" => "[date]", ".startedAt" => "[date]", ".finishedAt" => "[date]" }),
-        @r###"
+        @r#"
     {
       "uid": "[uid]",
       "batchUid": "[batch_uid]",
@@ -956,7 +957,8 @@ async fn test_summarized_index_swap() {
             "indexes": [
               "doggos",
               "cattos"
-            ]
+            ],
+            "rename": false
           }
         ]
       },
@@ -966,7 +968,7 @@ async fn test_summarized_index_swap() {
       "startedAt": "[date]",
       "finishedAt": "[date]"
     }
-    "###);
+    "#);
 }
 
 #[actix_web::test]

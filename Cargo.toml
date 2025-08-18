@@ -19,10 +19,11 @@ members = [
     "crates/tracing-trace",
     "crates/xtask",
     "crates/build-info",
+    "crates/openapi-generator",
 ]
 
 [workspace.package]
-version = "1.17.0"
+version = "1.17.1"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
     "Clément Renault <clement@meilisearch.com>",

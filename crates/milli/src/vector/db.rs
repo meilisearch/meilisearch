@@ -128,6 +128,7 @@ impl EmbeddingStatus {
     pub fn is_user_provided(&self, docid: DocumentId) -> bool {
         self.user_provided.contains(docid)
     }
+
     /// Whether vectors should be regenerated for that document and that embedder.
     pub fn must_regenerate(&self, docid: DocumentId) -> bool {
         let invert = self.skip_regenerate_different_from_user_provided.contains(docid);

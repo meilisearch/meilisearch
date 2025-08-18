@@ -107,12 +107,18 @@ Run `cargo xtask --help` from the root of the repository to find out what is ava
 
 To update the openAPI file in the code, see [sprint_issue.md](https://github.com/meilisearch/meilisearch/blob/main/.github/ISSUE_TEMPLATE/sprint_issue.md#reminders-when-modifying-the-api).
 
-If you want to update the openAPI file on the [open-api repository](https://github.com/meilisearch/open-api):
-- Pull the latest version of the latest rc of Meilisearch `git checkout release-vX.Y.Z; git pull`
+If you want to generate OpenAPI file manually:
+
+With swagger:
 - Starts Meilisearch with the `swagger` feature flag: `cargo run --features swagger`
 - On a browser, open the following URL: http://localhost:7700/scalar
 - Click the « Download openAPI file »
-- Open a PR replacing [this file](https://github.com/meilisearch/open-api/blob/main/open-api.json) with the one downloaded
+
+With the internal crate:
+```bash
+cd crates/openapi-generator
+cargo run --release -- --pretty --output meilisearch.json
+```
 
 ### Logging
 

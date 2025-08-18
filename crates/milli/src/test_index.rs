@@ -1097,6 +1097,7 @@ fn bug_3021_fourth() {
         mut documents_ids,
         degraded: _,
         used_negative_operator: _,
+        query_vector: _,
     } = search.execute().unwrap();
     let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
     documents_ids.sort_unstable();
@@ -1338,10 +1339,9 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     assert!(results.candidates.is_empty());
 
     let mut search = index.search(&rtxn);
-    let results = search
-        .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
-        .execute()
-        .unwrap();
+    let results =
+        dbg!(search.filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()).execute())
+            .unwrap();
     assert!(results.candidates.is_empty());
 
     index

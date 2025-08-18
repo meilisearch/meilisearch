@@ -7,11 +7,22 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
+use nom::character::complete::char;
+use nom::character::complete::multispace0;
 use nom::character::complete::multispace1;
 use nom::combinator::cut;
+use nom::combinator::map;
+use nom::combinator::value;
+use nom::sequence::preceded;
 use nom::sequence::{terminated, tuple};
 use Condition::*;
 
+use crate::error::IResultExt;
+use crate::value::parse_vector_value;
+use crate::value::parse_vector_value_cut;
+use crate::Error;
+use crate::ErrorKind;
+use crate::VectorFilter;
 use crate::{parse_value, FilterCondition, IResult, Span, Token};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +122,83 @@ pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
 
     let (input, _) = tuple((tag("NOT"), multispace1, tag("EXISTS")))(input)?;
     Ok((input, FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key, op: Exists }))))
+}
+
+fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>)> {
+    let (input, _) = multispace0(input)?;
+    let (input, fid) = tag("_vectors")(input)?;
+
+    if let Ok((input, _)) = multispace1::<_, crate::Error>(input) {
+        return Ok((input, (Token::from(fid), None, VectorFilter::None)));
+    }
+
+    let (input, _) = char('.')(input)?;
+
+    // From this point, we are certain this is a vector filter, so our errors must be final.
+    // We could use nom's `cut` but it's better to be explicit about the errors
+
+    if let Ok((_, space)) = tag::<_, _, ()>(" ")(input) {
+        return Err(crate::Error::failure_from_kind(space, ErrorKind::VectorFilterMissingEmbedder));
+    }
+
+    let (input, embedder_name) =
+        parse_vector_value_cut(input, ErrorKind::VectorFilterInvalidEmbedder)?;
+
+    let (input, filter) = alt((
+        map(
+            preceded(tag(".fragments"), |input| {
+                let (input, _) = tag(".")(input).map_cut(ErrorKind::VectorFilterMissingFragment)?;
+                parse_vector_value_cut(input, ErrorKind::VectorFilterInvalidFragment)
+            }),
+            VectorFilter::Fragment,
+        ),
+        value(VectorFilter::UserProvided, tag(".userProvided")),
+        value(VectorFilter::DocumentTemplate, tag(".documentTemplate")),
+        value(VectorFilter::Regenerate, tag(".regenerate")),
+        value(VectorFilter::None, nom::combinator::success("")),
+    ))(input)?;
+
+    if let Ok((input, point)) = tag::<_, _, ()>(".")(input) {
+        let opt_value = parse_vector_value(input).ok().map(|(_, v)| v);
+        let value =
+            opt_value.as_ref().map(|v| v.value().to_owned()).unwrap_or_else(|| point.to_string());
+        let context = opt_value.map(|v| v.original_span()).unwrap_or(point);
+        let previous_kind = match filter {
+            VectorFilter::Fragment(_) => Some("fragments"),
+            VectorFilter::DocumentTemplate => Some("documentTemplate"),
+            VectorFilter::UserProvided => Some("userProvided"),
+            VectorFilter::Regenerate => Some("regenerate"),
+            VectorFilter::None => None,
+        };
+        return Err(Error::failure_from_kind(
+            context,
+            ErrorKind::VectorFilterUnknownSuffix(previous_kind, value),
+        ));
+    }
+
+    let (input, _) = multispace1(input).map_cut(ErrorKind::VectorFilterLeftover)?;
+
+    Ok((input, (Token::from(fid), Some(embedder_name), filter)))
+}
+
+/// vectors_exists          = vectors ("EXISTS" | ("NOT" WS+ "EXISTS"))
+pub fn parse_vectors_exists(input: Span) -> IResult<FilterCondition> {
+    let (input, (fid, embedder, filter)) = parse_vectors(input)?;
+
+    // Try parsing "EXISTS" first
+    if let Ok((input, _)) = tag::<_, _, ()>("EXISTS")(input) {
+        return Ok((input, FilterCondition::VectorExists { fid, embedder, filter }));
+    }
+
+    // Try parsing "NOT EXISTS"
+    if let Ok((input, _)) = tuple::<_, _, (), _>((tag("NOT"), multispace1, tag("EXISTS")))(input) {
+        return Ok((
+            input,
+            FilterCondition::Not(Box::new(FilterCondition::VectorExists { fid, embedder, filter })),
+        ));
+    }
+
+    Err(crate::Error::failure_from_kind(input, ErrorKind::VectorFilterOperation))
 }
 
 /// contains        = value "CONTAINS" value

@@ -372,8 +372,8 @@ fn swap_indexes() {
         .register(
             KindWithContent::IndexSwap {
                 swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
-                    IndexSwap { indexes: ("c".to_owned(), "d".to_owned()) },
+                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
+                    IndexSwap { indexes: ("c".to_owned(), "d".to_owned()), rename: false },
                 ],
             },
             None,
@@ -384,7 +384,7 @@ fn swap_indexes() {
     index_scheduler
         .register(
             KindWithContent::IndexSwap {
-                swaps: vec![IndexSwap { indexes: ("a".to_owned(), "c".to_owned()) }],
+                swaps: vec![IndexSwap { indexes: ("a".to_owned(), "c".to_owned()), rename: false }],
             },
             None,
             false,
@@ -428,8 +428,8 @@ fn swap_indexes_errors() {
         .register(
             KindWithContent::IndexSwap {
                 swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
-                    IndexSwap { indexes: ("b".to_owned(), "a".to_owned()) },
+                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
+                    IndexSwap { indexes: ("b".to_owned(), "a".to_owned()), rename: false },
                 ],
             },
             None,
@@ -446,9 +446,9 @@ fn swap_indexes_errors() {
         .register(
             KindWithContent::IndexSwap {
                 swaps: vec![
-                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()) },
-                    IndexSwap { indexes: ("c".to_owned(), "e".to_owned()) },
-                    IndexSwap { indexes: ("d".to_owned(), "f".to_owned()) },
+                    IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false },
+                    IndexSwap { indexes: ("c".to_owned(), "e".to_owned()), rename: false },
+                    IndexSwap { indexes: ("d".to_owned(), "f".to_owned()), rename: false },
                 ],
             },
             None,

@@ -336,7 +336,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "The task uid does not exist", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
@@ -431,7 +431,7 @@ async fn cancel_tasks(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "The task uid does not exist", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
@@ -613,7 +613,7 @@ async fn get_tasks(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "The task uid does not exist", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
@@ -667,7 +667,7 @@ async fn get_task(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "The task uid does not exists", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "The task uid does not exist", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",

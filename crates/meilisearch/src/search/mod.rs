@@ -841,6 +841,8 @@ pub struct SearchHit {
 pub struct SearchResult {
     pub hits: Vec<SearchHit>,
     pub query: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query_vector: Option<Vec<f32>>,
     pub processing_time_ms: u128,
     #[serde(flatten)]
     pub hits_info: HitsInfo,
@@ -865,6 +867,7 @@ impl fmt::Debug for SearchResult {
         let SearchResult {
             hits,
             query,
+            query_vector,
             processing_time_ms,
             hits_info,
             facet_distribution,
@@ -879,6 +882,9 @@ impl fmt::Debug for SearchResult {
         debug.field("processing_time_ms", &processing_time_ms);
         debug.field("hits", &format!("[{} hits returned]", hits.len()));
         debug.field("query", &query);
+        if query_vector.is_some() {
+            debug.field("query_vector", &"[...]");
+        }
         debug.field("hits_info", &hits_info);
         if *used_negative_operator {
             debug.field("used_negative_operator", used_negative_operator);
@@ -1050,6 +1056,7 @@ pub fn prepare_search<'t>(
         .map(|x| x as usize)
         .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
+    search.retrieve_vectors(query.retrieve_vectors);
     search.exhaustive_number_hits(is_finite_pagination);
     search.max_total_hits(Some(max_total_hits));
     search.scoring_strategy(
@@ -1132,6 +1139,7 @@ pub fn perform_search(
             document_scores,
             degraded,
             used_negative_operator,
+            query_vector,
         },
         semantic_hit_count,
     ) = search_from_kind(index_uid, search_kind, search)?;
@@ -1222,6 +1230,7 @@ pub fn perform_search(
         hits: documents,
         hits_info,
         query: q.unwrap_or_default(),
+        query_vector,
         processing_time_ms: before_search.elapsed().as_millis(),
         facet_distribution,
         facet_stats,
@@ -1734,6 +1743,7 @@ pub fn perform_similar(
         document_scores,
         degraded: _,
         used_negative_operator: _,
+        query_vector: _,
     } = similar.execute().map_err(|err| match err {
         milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
             ResponseError::from_msg(err.to_string(), Code::InvalidSimilarFilter)
@@ -2081,9 +2091,21 @@ pub(crate) fn parse_filter(
     })?;
 
     if let Some(ref filter) = filter {
-        // If the contains operator is used while the contains filter features is not enabled, errors out
+        // If the contains operator is used while the contains filter feature is not enabled, errors out
         if let Some((token, error)) =
             filter.use_contains_operator().zip(features.check_contains_filter().err())
+        {
+            return Err(ResponseError::from_msg(
+                token.as_external_error(error).to_string(),
+                Code::FeatureNotEnabled,
+            ));
+        }
+    }
+
+    if let Some(ref filter) = filter {
+        // If a vector filter is used while the multi modal feature is not enabled, errors out
+        if let Some((token, error)) =
+            filter.use_vector_filter().zip(features.check_multimodal("using a vector filter").err())
         {
             return Err(ResponseError::from_msg(
                 token.as_external_error(error).to_string(),

@@ -1142,7 +1142,7 @@ async fn test_summarized_index_swap() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".batchStrategy" => insta::dynamic_redaction(task_with_id_redaction),
         },
-        @r###"
+        @r#"
     {
       "uid": "[uid]",
       "progress": null,
@@ -1152,7 +1152,8 @@ async fn test_summarized_index_swap() {
             "indexes": [
               "doggos",
               "cattos"
-            ]
+            ],
+            "rename": false
           }
         ]
       },
@@ -1172,7 +1173,7 @@ async fn test_summarized_index_swap() {
       "finishedAt": "[date]",
       "batchStrategy": "created batch containing only task with id X of type `indexSwap` that cannot be batched with any other task."
     }
-    "###);
+    "#);
 
     let doggos_index = server.unique_index();
     doggos_index.create(None).await;

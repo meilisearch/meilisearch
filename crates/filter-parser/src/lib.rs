@@ -65,6 +65,9 @@ use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
 use value::word_exact;
 
+use crate::condition::parse_vectors_exists;
+use crate::error::IResultExt;
+
 pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
 
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
@@ -137,12 +140,22 @@ impl<'a> From<&'a str> for Token<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VectorFilter<'a> {
+    Fragment(Token<'a>),
+    DocumentTemplate,
+    UserProvided,
+    Regenerate,
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterCondition<'a> {
     Not(Box<Self>),
     Condition { fid: Token<'a>, op: Condition<'a> },
     In { fid: Token<'a>, els: Vec<Token<'a>> },
     Or(Vec<Self>),
     And(Vec<Self>),
+    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
     GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
 }
@@ -173,9 +186,24 @@ impl<'a> FilterCondition<'a> {
             FilterCondition::Or(seq) | FilterCondition::And(seq) => {
                 seq.iter().find_map(|filter| filter.use_contains_operator())
             }
+            FilterCondition::VectorExists { .. }
+            | FilterCondition::GeoLowerThan { .. }
+            | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::In { .. } => None,
+        }
+    }
+
+    pub fn use_vector_filter(&self) -> Option<&Token> {
+        match self {
+            FilterCondition::Condition { .. } => None,
+            FilterCondition::Not(this) => this.use_vector_filter(),
+            FilterCondition::Or(seq) | FilterCondition::And(seq) => {
+                seq.iter().find_map(|filter| filter.use_vector_filter())
+            }
             FilterCondition::GeoLowerThan { .. }
             | FilterCondition::GeoBoundingBox { .. }
             | FilterCondition::In { .. } => None,
+            FilterCondition::VectorExists { fid, .. } => Some(fid),
         }
     }
 
@@ -263,10 +291,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
     let (input, _) = ws(word_exact("IN"))(input)?;
 
     // everything after `IN` can be a failure
-    let (input, _) =
-        cut_with_err(tag("["), |_| Error::new_from_kind(input, ErrorKind::InOpeningBracket))(
-            input,
-        )?;
+    let (input, _) = tag("[")(input).map_cut(ErrorKind::InOpeningBracket)?;
 
     let (input, content) = cut(parse_value_list)(input)?;
 
@@ -412,7 +437,7 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     let (input, args) = parsed?;
 
     if args.len() != 2 || args[0].len() != 2 || args[1].len() != 2 {
-        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
+        return Err(Error::failure_from_kind(input, ErrorKind::GeoBoundingBox));
     }
 
     let res = FilterCondition::GeoBoundingBox {
@@ -433,7 +458,7 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
-    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))
+    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geoPoint")))
 }
 
 /// geoPoint      = WS* "_geoDistance(float WS* "," WS* float WS* "," WS* float)
@@ -447,7 +472,7 @@ fn parse_geo_distance(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))?;
     // if we succeeded we still return a `Failure` because `geoDistance` filters are not allowed
-    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))
+    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geoDistance")))
 }
 
 /// geo      = WS* "_geo(float WS* "," WS* float WS* "," WS* float)
@@ -461,7 +486,7 @@ fn parse_geo(input: Span) -> IResult<FilterCondition> {
     ))(input)
     .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))?;
     // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
-    Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))
+    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geo")))
 }
 
 fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
@@ -500,8 +525,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_is_not_null,
         parse_is_empty,
         parse_is_not_empty,
-        parse_exists,
-        parse_not_exists,
+        alt((parse_vectors_exists, parse_exists, parse_not_exists)),
         parse_to,
         parse_contains,
         parse_not_contains,
@@ -556,6 +580,22 @@ impl std::fmt::Display for FilterCondition<'_> {
                     write!(f, "{el}, ")?;
                 }
                 write!(f, "]")
+            }
+            FilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
+                write!(f, "_vectors")?;
+                if let Some(embedder) = embedder {
+                    write!(f, ".{:?}", embedder.value())?;
+                }
+                match inner {
+                    VectorFilter::Fragment(fragment) => {
+                        write!(f, ".fragments.{:?}", fragment.value())?
+                    }
+                    VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
+                    VectorFilter::UserProvided => write!(f, ".userProvided")?,
+                    VectorFilter::Regenerate => write!(f, ".regenerate")?,
+                    VectorFilter::None => (),
+                }
+                write!(f, " EXISTS")
             }
             FilterCondition::GeoLowerThan { point, radius } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
@@ -630,6 +670,9 @@ pub mod tests {
         insta::assert_snapshot!(p(r"title = 'foo\\\\\\\\'"), @r#"{title} = {foo\\\\}"#);
         // but it also works with other sequences
         insta::assert_snapshot!(p(r#"title = 'foo\x20\n\t\"\'"'"#), @"{title} = {foo \n\t\"\'\"}");
+
+        insta::assert_snapshot!(p(r#"_vectors." valid.name  ".fragments."also.. valid! " EXISTS"#), @r#"_vectors." valid.name  ".fragments."also.. valid! " EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.\"\n\t\r\\\"\" EXISTS"), @r#"_vectors."\n\t\r\"" EXISTS"#);
     }
 
     #[test]
@@ -691,6 +734,18 @@ pub mod tests {
         insta::assert_snapshot!(p("subscribers IS NOT EMPTY"), @"NOT ({subscribers} IS EMPTY)");
         insta::assert_snapshot!(p("NOT subscribers IS NOT EMPTY"), @"{subscribers} IS EMPTY");
         insta::assert_snapshot!(p("subscribers  IS   NOT   EMPTY"), @"NOT ({subscribers} IS EMPTY)");
+
+        // Test _vectors EXISTS + _vectors NOT EXITS
+        insta::assert_snapshot!(p("_vectors EXISTS"), @"_vectors EXISTS");
+        insta::assert_snapshot!(p("_vectors.embedderName EXISTS"), @r#"_vectors."embedderName" EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.embedderName.documentTemplate EXISTS"), @r#"_vectors."embedderName".documentTemplate EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.embedderName.regenerate EXISTS"), @r#"_vectors."embedderName".regenerate EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.embedderName.regenerate EXISTS"), @r#"_vectors."embedderName".regenerate EXISTS"#);
+        insta::assert_snapshot!(p("_vectors.embedderName.fragments.fragmentName EXISTS"), @r#"_vectors."embedderName".fragments."fragmentName" EXISTS"#);
+        insta::assert_snapshot!(p("  _vectors.embedderName.fragments.fragmentName   EXISTS"), @r#"_vectors."embedderName".fragments."fragmentName" EXISTS"#);
+        insta::assert_snapshot!(p("NOT _vectors EXISTS"), @"NOT (_vectors EXISTS)");
+        insta::assert_snapshot!(p(" NOT  _vectors   EXISTS"), @"NOT (_vectors EXISTS)");
+        insta::assert_snapshot!(p("  _vectors  NOT  EXISTS"), @"NOT (_vectors EXISTS)");
 
         // Test EXISTS + NOT EXITS
         insta::assert_snapshot!(p("subscribers EXISTS"), @"{subscribers} EXISTS");
@@ -945,6 +1000,71 @@ pub mod tests {
         797:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
         "###
         );
+
+        insta::assert_snapshot!(p(r#"_vectors _vectors EXISTS"#), @r"
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        10:25 _vectors _vectors EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors. embedderName EXISTS"#), @r"
+        Was expecting embedder name but found nothing.
+        10:11 _vectors. embedderName EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors .embedderName EXISTS"#), @r"
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        10:30 _vectors .embedderName EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName. EXISTS"#), @r"
+        Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.
+        22:23 _vectors.embedderName. EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors."embedderName EXISTS"#), @r#"
+        The quotes in one of the values are inconsistent.
+        10:30 _vectors."embedderName EXISTS
+        "#);
+        insta::assert_snapshot!(p(r#"_vectors."embedderNam"e EXISTS"#), @r#"
+        The vector filter has leftover tokens.
+        23:31 _vectors."embedderNam"e EXISTS
+        "#);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.documentTemplate. EXISTS"#), @r"
+        Was expecting one of `.fragments`, `.userProvided`, `.documentTemplate`, `.regenerate` or nothing, but instead found a point without a valid value.
+        39:40 _vectors.embedderName.documentTemplate. EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments EXISTS"#), @r"
+        The vector filter is missing a fragment name.
+        32:39 _vectors.embedderName.fragments EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. EXISTS"#), @r"
+        The vector filter's fragment name is invalid.
+        33:40 _vectors.embedderName.fragments. EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments.test test EXISTS"#), @r"
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        38:49 _vectors.embedderName.fragments.test test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fragments. test EXISTS"#), @r"
+        The vector filter's fragment name is invalid.
+        33:45 _vectors.embedderName.fragments. test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments. test EXISTS"#), @r"
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        23:46 _vectors.embedderName .fragments. test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName .fragments.test EXISTS"#), @r"
+        Was expecting an operation like `EXISTS` or `NOT EXISTS` after the vector filter.
+        23:45 _vectors.embedderName .fragments.test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.fargments.test EXISTS"#), @r"
+        Was expecting one of `fragments`, `userProvided`, `documentTemplate`, `regenerate` or nothing, but instead found `fargments`. Did you mean `fragments`?
+        23:32 _vectors.embedderName.fargments.test EXISTS
+        ");
+        insta::assert_snapshot!(p(r#"_vectors.embedderName."userProvided" EXISTS"#), @r#"
+        Was expecting this part to be unquoted.
+        24:36 _vectors.embedderName."userProvided" EXISTS
+        "#);
+        insta::assert_snapshot!(p(r#"_vectors.embedderName.userProvided.fragments.test EXISTS"#), @r"
+        Vector filter can only accept one of `fragments`, `userProvided`, `documentTemplate` or `regenerate`, but found both `userProvided` and `fragments`.
+        36:45 _vectors.embedderName.userProvided.fragments.test EXISTS
+        ");
 
         insta::assert_snapshot!(p(r#"NOT OR EXISTS AND EXISTS NOT EXISTS"#), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.

@@ -1,6 +1,5 @@
 ---
 source: crates/index-scheduler/src/queue/test.rs
-snapshot_kind: text
 ---
 [
   {
@@ -13,7 +12,9 @@ snapshot_kind: text
     "canceledBy": null,
     "details": {
       "IndexInfo": {
-        "primary_key": null
+        "primary_key": null,
+        "new_index_uid": null,
+        "old_index_uid": null
       }
     },
     "status": "enqueued",
