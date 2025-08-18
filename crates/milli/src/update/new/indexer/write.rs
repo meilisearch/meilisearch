@@ -16,6 +16,7 @@ use crate::update::settings::InnerIndexSettings;
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
 use crate::vector::{Embedder, Embeddings, RuntimeEmbedders, VectorStore};
+use crate::{DocumentId, Error, Index, InternalError, Result, UserError};
 use crate::{Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
@@ -72,17 +73,14 @@ pub fn write_to_db(
                 let embedding = large_vector.read_embedding(*dimensions);
                 writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
             }
-            ReceiverAction::GeoJson(docid, geojson) => match geojson {
-                Some(geojson) => {
-                    index
-                        .cellulite
-                        .add_raw_zerometry(wtxn, docid, &geojson)
-                        .map_err(InternalError::CelluliteError)?;
-                }
-                None => {
-                    index.cellulite.delete(wtxn, docid).map_err(InternalError::CelluliteError)?;
-                }
-            },
+            ReceiverAction::LargeGeoJson(LargeGeoJson { docid, geojson }) => {
+                // It cannot be a deletion because it's large. Deletions are always small
+                let geojson: &[u8] = &geojson;
+                index
+                    .cellulite
+                    .add_raw_zerometry(wtxn, docid, geojson)
+                    .map_err(InternalError::CelluliteError)?;
+            }
         }
 
         // Every time the is a message in the channel we search
@@ -273,6 +271,19 @@ pub fn write_from_bbqueue(
                     }
                     writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
                 }
+            }
+            EntryHeader::CelluliteItem(docid) => {
+                let frame = frame_with_header.frame();
+                let skip = EntryHeader::variant_size() + std::mem::size_of::<DocumentId>();
+                let geojson = &frame[skip..];
+
+                index
+                    .cellulite
+                    .add_raw_zerometry(wtxn, docid, geojson)
+                    .map_err(InternalError::CelluliteError)?;
+            }
+            EntryHeader::CelluliteRemove(docid) => {
+                index.cellulite.delete(wtxn, docid).map_err(InternalError::CelluliteError)?;
             }
         }
     }
