@@ -426,7 +426,9 @@ impl<State> Server<State> {
         self.service.delete(format!("/tasks?{}", value)).await
     }
 
-    pub async fn wait_task(&self, update_id: u64) -> Value {
+    pub async fn wait_task(&self, update_id: impl super::IntoTaskUid) -> Value {
+        let update_id = update_id.uid();
+
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{update_id}");
         let max_attempts = 400; // 200 seconds in total, 0.5secs per attempt

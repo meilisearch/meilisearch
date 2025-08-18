@@ -73,7 +73,7 @@ impl Aggregate for IndexSwappedAnalytics {
     security(("Bearer" = ["search", "*"])),
     request_body = Vec<SwapIndexesPayload>,
     responses(
-        (status = OK, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 3,
                 "indexUid": null,

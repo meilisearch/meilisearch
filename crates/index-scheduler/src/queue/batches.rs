@@ -66,7 +66,7 @@ impl BatchQueue {
         NUMBER_OF_DATABASES
     }
 
-    pub(super) fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self> {
+    pub(crate) fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self> {
         Ok(Self {
             all_batches: env.create_database(wtxn, Some(db_name::ALL_BATCHES))?,
             status: env.create_database(wtxn, Some(db_name::BATCH_STATUS))?,
@@ -127,7 +127,12 @@ impl BatchQueue {
         status: Status,
         bitmap: &RoaringBitmap,
     ) -> Result<()> {
-        Ok(self.status.put(wtxn, &status, bitmap)?)
+        if bitmap.is_empty() {
+            self.status.delete(wtxn, &status)?;
+        } else {
+            self.status.put(wtxn, &status, bitmap)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn update_status(

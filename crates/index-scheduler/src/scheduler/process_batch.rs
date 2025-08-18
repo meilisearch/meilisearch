@@ -2,14 +2,14 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
-use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
-use meilisearch_types::heed::{RoTxn, RwTxn};
+use meilisearch_types::batches::BatchId;
+use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
-use meilisearch_types::milli::{self, ChannelCongestion};
+use meilisearch_types::milli::{self, CboRoaringBitmapCodec, ChannelCongestion};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use milli::update::Settings as MilliSettings;
-use roaring::RoaringBitmap;
+use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
 use super::create_batch::Batch;
@@ -18,11 +18,8 @@ use crate::processing::{
     InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress, TaskDeletionProgress,
     UpdateIndexProgress,
 };
-use crate::utils::{
-    self, remove_n_tasks_datetime_earlier_than, remove_task_datetime, swap_index_uid_in_task,
-    ProcessingBatch,
-};
-use crate::{Error, IndexScheduler, Result, TaskId};
+use crate::utils::{consecutive_ranges, swap_index_uid_in_task, ProcessingBatch};
+use crate::{Error, IndexScheduler, Result, TaskId, BEI128};
 
 #[derive(Debug, Default)]
 pub struct ProcessBatchInfo {
@@ -102,10 +99,7 @@ impl IndexScheduler {
                     }
                 }
 
-                let mut wtxn = self.env.write_txn()?;
-                let mut deleted_tasks =
-                    self.delete_matched_tasks(&mut wtxn, &matched_tasks, &progress)?;
-                wtxn.commit()?;
+                let mut deleted_tasks = self.delete_matched_tasks(&matched_tasks, &progress)?;
 
                 for task in tasks.iter_mut() {
                     task.status = Status::Succeeded;
@@ -127,6 +121,12 @@ impl IndexScheduler {
                         _ => unreachable!(),
                     }
                 }
+
+                debug_assert!(
+                    deleted_tasks.is_empty(),
+                    "There should be no tasks left to delete after processing the batch"
+                );
+
                 Ok((tasks, ProcessBatchInfo::default()))
             }
             Batch::SnapshotCreation(tasks) => self
@@ -567,102 +567,339 @@ impl IndexScheduler {
     /// Delete each given task from all the databases (if it is deleteable).
     ///
     /// Return the number of tasks that were actually deleted.
+    #[allow(clippy::reversed_empty_ranges)]
     fn delete_matched_tasks(
         &self,
-        wtxn: &mut RwTxn,
         matched_tasks: &RoaringBitmap,
         progress: &Progress,
     ) -> Result<RoaringBitmap> {
-        progress.update_progress(TaskDeletionProgress::DeletingTasksDateTime);
+        fn remove_task_datetimes(
+            wtxn: &mut RwTxn<'_>,
+            mut to_remove: HashMap<i128, RoaringBitmap>,
+            db: Database<BEI128, CboRoaringBitmapCodec>,
+        ) -> Result<()> {
+            if to_remove.is_empty() {
+                return Ok(());
+            }
+
+            let min = to_remove.keys().min().cloned().unwrap(); // to_remove isn't empty so this is ok
+            let max = to_remove.keys().max().cloned().unwrap();
+            let range = min..=max;
+
+            // We iterate over the time database to see which ranges of timestamps need to be removed
+            let lazy_db = db.lazily_decode_data();
+            let iter = lazy_db.range(wtxn, &range)?;
+            let mut delete_range_start = None;
+            let mut delete_ranges = Vec::new();
+            let mut to_put: HashMap<i128, RoaringBitmap> = HashMap::new();
+            for i in iter {
+                let (timestamp, data) = i?;
+
+                if let Some(to_remove) = to_remove.remove(&timestamp) {
+                    let mut current =
+                        data.decode().map_err(|e| Error::Anyhow(anyhow::anyhow!(e)))?;
+                    current -= &to_remove;
+
+                    if current.is_empty() {
+                        if delete_range_start.is_none() {
+                            delete_range_start = Some(timestamp);
+                        }
+                    } else {
+                        // We could close the deletion range but it's not necessary because the new value will get reinserted anyway
+                        to_put.insert(timestamp, current);
+                    }
+                } else if let Some(delete_range_start) = delete_range_start.take() {
+                    // Current one must not be deleted so we need to skip it
+                    delete_ranges.push(delete_range_start..timestamp);
+                }
+            }
+            if let Some(delete_range_start) = delete_range_start.take() {
+                delete_ranges.push(delete_range_start..(max + 1));
+            }
+
+            for range in delete_ranges {
+                db.delete_range(wtxn, &range)?;
+            }
+
+            for (timestamp, data) in to_put {
+                db.put(wtxn, &timestamp, &data)?;
+            }
+
+            Ok(())
+        }
+
+        fn remove_batch_datetimes(
+            wtxn: &mut RwTxn<'_>,
+            to_remove: &RoaringBitmap,
+            db: Database<BEI128, CboRoaringBitmapCodec>,
+        ) -> Result<()> {
+            if to_remove.is_empty() {
+                return Ok(());
+            }
+
+            // We iterate over the time database to see which ranges of timestamps need to be removed
+            let iter = db.iter(wtxn)?;
+            let mut delete_range_start = None;
+            let mut delete_ranges = Vec::new();
+            let mut to_put: HashMap<i128, RoaringBitmap> = HashMap::new();
+            for i in iter {
+                let (timestamp, mut current) = i?;
+
+                if !current.is_disjoint(to_remove) {
+                    current -= to_remove;
+
+                    if current.is_empty() {
+                        if delete_range_start.is_none() {
+                            delete_range_start = Some(timestamp);
+                        }
+                    } else {
+                        // We could close the deletion range but it's not necessary because the new value will get reinserted anyway
+                        to_put.insert(timestamp, current);
+                    }
+                } else if let Some(delete_range_start) = delete_range_start.take() {
+                    // Current one must not be deleted so we need to skip it
+                    delete_ranges.push(delete_range_start..timestamp);
+                }
+            }
+            if let Some(delete_range_start) = delete_range_start.take() {
+                delete_ranges.push(delete_range_start..i128::MAX);
+            }
+
+            for range in delete_ranges {
+                db.delete_range(wtxn, &range)?;
+            }
+
+            for (timestamp, data) in to_put {
+                db.put(wtxn, &timestamp, &data)?;
+            }
+
+            Ok(())
+        }
+
+        progress.update_progress(TaskDeletionProgress::RetrievingTasks);
+
+        let rtxn = self.env.read_txn()?;
 
         // 1. Remove from this list the tasks that we are not allowed to delete
-        let enqueued_tasks = self.queue.tasks.get_status(wtxn, Status::Enqueued)?;
         let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
-
-        let all_task_ids = self.queue.tasks.all_task_ids(wtxn)?;
-        let mut to_delete_tasks = all_task_ids & matched_tasks;
+        let mut status_tasks = HashMap::new();
+        for status in enum_iterator::all::<Status>() {
+            status_tasks.insert(status, self.queue.tasks.get_status(&rtxn, status)?);
+        }
+        let enqueued_tasks = status_tasks.get(&Status::Enqueued).unwrap(); // We added all statuses
+        let all_task_ids = status_tasks.values().union();
+        let mut to_remove_from_statuses = HashMap::new();
+        let mut to_delete_tasks = all_task_ids.clone() & matched_tasks;
         to_delete_tasks -= &**processing_tasks;
-        to_delete_tasks -= &enqueued_tasks;
+        to_delete_tasks -= enqueued_tasks;
 
-        // 2. We now have a list of tasks to delete, delete them
+        // 2. We now have a list of tasks to delete. Read their metadata to list what needs to be updated.
         let mut affected_indexes = HashSet::new();
         let mut affected_statuses = HashSet::new();
         let mut affected_kinds = HashSet::new();
         let mut affected_canceled_by = RoaringBitmap::new();
-        // The tasks that have been removed *per batches*.
-        let mut affected_batches: HashMap<BatchId, RoaringBitmap> = HashMap::new();
-
+        let mut affected_batches: HashMap<BatchId, RoaringBitmap> = HashMap::new(); // The tasks that have been removed *per batches*.
+        let mut tasks_enqueued_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
+        let mut tasks_started_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
+        let mut tasks_finished_to_remove: HashMap<i128, RoaringBitmap> = HashMap::new();
         let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
         progress.update_progress(task_progress);
-        for task_id in to_delete_tasks.iter() {
-            let task =
-                self.queue.tasks.get_task(wtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+        for range in consecutive_ranges(to_delete_tasks.iter()) {
+            let iter = self.queue.tasks.all_tasks.range(&rtxn, &range)?;
+            for task in iter {
+                let (task_id, task) = task?;
 
-            affected_indexes.extend(task.indexes().into_iter().map(|x| x.to_owned()));
-            affected_statuses.insert(task.status);
-            affected_kinds.insert(task.kind.as_kind());
-            // Note: don't delete the persisted task data since
-            // we can only delete succeeded, failed, and canceled tasks.
-            // In each of those cases, the persisted data is supposed to
-            // have been deleted already.
-            utils::remove_task_datetime(
-                wtxn,
-                self.queue.tasks.enqueued_at,
-                task.enqueued_at,
-                task.uid,
-            )?;
-            if let Some(started_at) = task.started_at {
-                utils::remove_task_datetime(
-                    wtxn,
-                    self.queue.tasks.started_at,
-                    started_at,
-                    task.uid,
-                )?;
+                affected_indexes.extend(task.indexes().into_iter().map(|x| x.to_owned()));
+                affected_statuses.insert(task.status);
+                affected_kinds.insert(task.kind.as_kind());
+
+                let enqueued_at = task.enqueued_at.unix_timestamp_nanos();
+                tasks_enqueued_to_remove.entry(enqueued_at).or_default().insert(task_id);
+
+                if let Some(started_at) = task.started_at {
+                    tasks_started_to_remove
+                        .entry(started_at.unix_timestamp_nanos())
+                        .or_default()
+                        .insert(task_id);
+                }
+
+                if let Some(finished_at) = task.finished_at {
+                    tasks_finished_to_remove
+                        .entry(finished_at.unix_timestamp_nanos())
+                        .or_default()
+                        .insert(task_id);
+                }
+
+                if let Some(canceled_by) = task.canceled_by {
+                    affected_canceled_by.insert(canceled_by);
+                }
+                if let Some(batch_uid) = task.batch_uid {
+                    affected_batches.entry(batch_uid).or_default().insert(task_id);
+                }
+                atomic_progress.fetch_add(1, Ordering::Relaxed);
             }
-            if let Some(finished_at) = task.finished_at {
-                utils::remove_task_datetime(
-                    wtxn,
-                    self.queue.tasks.finished_at,
-                    finished_at,
-                    task.uid,
-                )?;
-            }
-            if let Some(canceled_by) = task.canceled_by {
-                affected_canceled_by.insert(canceled_by);
-            }
-            if let Some(batch_uid) = task.batch_uid {
-                affected_batches.entry(batch_uid).or_default().insert(task_id);
-            }
-            atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
+        // 3. Read the tasks by indexes, statuses and kinds
+        let mut affected_indexes_tasks = HashMap::new();
+        for index in &affected_indexes {
+            affected_indexes_tasks
+                .insert(index.as_str(), self.queue.tasks.index_tasks(&rtxn, index)?);
+        }
+        let mut to_remove_from_indexes = HashMap::new();
+
+        let mut affected_kinds_tasks = HashMap::new();
+        for kind in &affected_kinds {
+            affected_kinds_tasks.insert(*kind, self.queue.tasks.get_kind(&rtxn, *kind)?);
+        }
+        let mut to_remove_from_kinds = HashMap::new();
+
+        // 4. Read affected batches' tasks
+        let mut to_delete_batches = RoaringBitmap::new();
+        let affected_batches_bitmap = RoaringBitmap::from_iter(affected_batches.keys());
+        progress.update_progress(TaskDeletionProgress::RetrievingBatchTasks);
+        let (atomic_progress, task_progress) =
+            AtomicBatchStep::new(affected_batches_bitmap.len() as u32);
+        progress.update_progress(task_progress);
+        for range in consecutive_ranges(affected_batches_bitmap.iter()) {
+            let iter = self.queue.batch_to_tasks_mapping.range(&rtxn, &range)?;
+            for batch in iter {
+                let (batch_id, mut tasks) = batch?;
+                let to_delete_tasks = affected_batches.remove(&batch_id).unwrap_or_default();
+                tasks -= &to_delete_tasks;
+
+                // Note: we never delete tasks from the mapping. It's error-prone but intentional (perf)
+                // We make sure to filter the tasks from the mapping when we read them.
+                tasks &= &all_task_ids;
+
+                // We must remove the batch entirely
+                if tasks.is_empty() {
+                    to_delete_batches.insert(batch_id);
+                }
+
+                // We must remove the batch from all the reverse indexes it no longer has tasks for.
+
+                for (index, index_tasks) in affected_indexes_tasks.iter() {
+                    if index_tasks.is_disjoint(&tasks) {
+                        to_remove_from_indexes
+                            .entry(index)
+                            .or_insert_with(RoaringBitmap::new)
+                            .insert(batch_id);
+                    }
+                }
+
+                for (status, status_tasks) in status_tasks.iter() {
+                    if status_tasks.is_disjoint(&tasks) {
+                        to_remove_from_statuses
+                            .entry(*status)
+                            .or_insert_with(RoaringBitmap::new)
+                            .insert(batch_id);
+                    }
+                }
+
+                for (kind, kind_tasks) in affected_kinds_tasks.iter() {
+                    if kind_tasks.is_disjoint(&tasks) {
+                        to_remove_from_kinds
+                            .entry(*kind)
+                            .or_insert_with(RoaringBitmap::new)
+                            .insert(batch_id);
+                    }
+                }
+
+                // Note: no need to delete the persisted task data since
+                // we can only delete succeeded, failed, and canceled tasks.
+                // In each of those cases, the persisted data is supposed to
+                // have been deleted already.
+
+                atomic_progress.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        drop(rtxn);
+        let mut owned_wtxn = self.env.write_txn()?;
+        let wtxn = &mut owned_wtxn;
+
+        // 7. Remove task datetimes
+        progress.update_progress(TaskDeletionProgress::DeletingTasksDateTime);
+        remove_task_datetimes(wtxn, tasks_enqueued_to_remove, self.queue.tasks.enqueued_at)?;
+        remove_task_datetimes(wtxn, tasks_started_to_remove, self.queue.tasks.started_at)?;
+        remove_task_datetimes(wtxn, tasks_finished_to_remove, self.queue.tasks.finished_at)?;
+
+        // 8. Delete batches datetimes
+        progress.update_progress(TaskDeletionProgress::DeletingBatchesDateTime);
+        remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.enqueued_at)?;
+        remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.started_at)?;
+        remove_batch_datetimes(wtxn, &to_delete_batches, self.queue.batches.finished_at)?;
+
+        // 9. Remove batches metadata from indexes, statuses, and kinds
+        progress.update_progress(TaskDeletionProgress::DeletingBatchesMetadata);
+
+        for (index, batches) in to_remove_from_indexes {
+            self.queue.batches.update_index(wtxn, index, |b| {
+                *b -= &batches;
+            })?;
+        }
+
+        for (status, batches) in to_remove_from_statuses {
+            self.queue.batches.update_status(wtxn, status, |b| {
+                *b -= &batches;
+            })?;
+        }
+
+        for (kind, batches) in to_remove_from_kinds {
+            self.queue.batches.update_kind(wtxn, kind, |b| {
+                *b -= &batches;
+            })?;
+        }
+
+        // 10. Remove tasks from indexes, statuses, and kinds
         progress.update_progress(TaskDeletionProgress::DeletingTasksMetadata);
         let (atomic_progress, task_progress) = AtomicTaskStep::new(
             (affected_indexes.len() + affected_statuses.len() + affected_kinds.len()) as u32,
         );
         progress.update_progress(task_progress);
-        for index in affected_indexes.iter() {
-            self.queue.tasks.update_index(wtxn, index, |bitmap| *bitmap -= &to_delete_tasks)?;
+
+        for (index, mut tasks) in affected_indexes_tasks.into_iter() {
+            tasks -= &to_delete_tasks;
+            if tasks.is_empty() {
+                self.queue.tasks.index_tasks.delete(wtxn, index)?;
+            } else {
+                self.queue.tasks.index_tasks.put(wtxn, index, &tasks)?;
+            }
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
-        for status in affected_statuses.iter() {
-            self.queue.tasks.update_status(wtxn, *status, |bitmap| *bitmap -= &to_delete_tasks)?;
+        for status in affected_statuses.into_iter() {
+            let mut tasks = status_tasks.remove(&status).unwrap(); // we inserted all statuses above
+            tasks -= &to_delete_tasks;
+            if tasks.is_empty() {
+                self.queue.tasks.status.delete(wtxn, &status)?;
+            } else {
+                self.queue.tasks.status.put(wtxn, &status, &tasks)?;
+            }
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
-        for kind in affected_kinds.iter() {
-            self.queue.tasks.update_kind(wtxn, *kind, |bitmap| *bitmap -= &to_delete_tasks)?;
+        for (kind, mut tasks) in affected_kinds_tasks.into_iter() {
+            tasks -= &to_delete_tasks;
+            if tasks.is_empty() {
+                self.queue.tasks.kind.delete(wtxn, &kind)?;
+            } else {
+                self.queue.tasks.kind.put(wtxn, &kind, &tasks)?;
+            }
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
+        // 11. Delete tasks
         progress.update_progress(TaskDeletionProgress::DeletingTasks);
-        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
+        let (atomic_progress, task_progress) =
+            AtomicTaskStep::new((to_delete_tasks.len() + affected_canceled_by.len()) as u32);
         progress.update_progress(task_progress);
-        for task in to_delete_tasks.iter() {
-            self.queue.tasks.all_tasks.delete(wtxn, &task)?;
-            atomic_progress.fetch_add(1, Ordering::Relaxed);
+        for range in consecutive_ranges(to_delete_tasks.iter()) {
+            self.queue.tasks.all_tasks.delete_range(wtxn, &range)?;
+            atomic_progress.fetch_add(range.size_hint().0 as u32, Ordering::Relaxed);
         }
+
         for canceled_by in affected_canceled_by {
             if let Some(mut tasks) = self.queue.tasks.canceled_by.get(wtxn, &canceled_by)? {
                 tasks -= &to_delete_tasks;
@@ -672,95 +909,20 @@ impl IndexScheduler {
                     self.queue.tasks.canceled_by.put(wtxn, &canceled_by, &tasks)?;
                 }
             }
-        }
-        progress.update_progress(TaskDeletionProgress::DeletingBatches);
-        let (atomic_progress, batch_progress) = AtomicBatchStep::new(affected_batches.len() as u32);
-        progress.update_progress(batch_progress);
-        for (batch_id, to_delete_tasks) in affected_batches {
-            if let Some(mut tasks) = self.queue.batch_to_tasks_mapping.get(wtxn, &batch_id)? {
-                tasks -= &to_delete_tasks;
-                // We must remove the batch entirely
-                if tasks.is_empty() {
-                    if let Some(batch) = self.queue.batches.get_batch(wtxn, batch_id)? {
-                        if let Some(BatchEnqueuedAt { earliest, oldest }) = batch.enqueued_at {
-                            remove_task_datetime(
-                                wtxn,
-                                self.queue.batches.enqueued_at,
-                                earliest,
-                                batch_id,
-                            )?;
-                            remove_task_datetime(
-                                wtxn,
-                                self.queue.batches.enqueued_at,
-                                oldest,
-                                batch_id,
-                            )?;
-                        } else {
-                            // If we don't have the enqueued at in the batch it means the database comes from the v1.12
-                            // and we still need to find the date by scrolling the database
-                            remove_n_tasks_datetime_earlier_than(
-                                wtxn,
-                                self.queue.batches.enqueued_at,
-                                batch.started_at,
-                                batch.stats.total_nb_tasks.clamp(1, 2) as usize,
-                                batch_id,
-                            )?;
-                        }
-                        remove_task_datetime(
-                            wtxn,
-                            self.queue.batches.started_at,
-                            batch.started_at,
-                            batch_id,
-                        )?;
-                        if let Some(finished_at) = batch.finished_at {
-                            remove_task_datetime(
-                                wtxn,
-                                self.queue.batches.finished_at,
-                                finished_at,
-                                batch_id,
-                            )?;
-                        }
-
-                        self.queue.batches.all_batches.delete(wtxn, &batch_id)?;
-                        self.queue.batch_to_tasks_mapping.delete(wtxn, &batch_id)?;
-                    }
-                }
-
-                // Anyway, we must remove the batch from all its reverse indexes.
-                // The only way to do that is to check
-
-                for index in affected_indexes.iter() {
-                    let index_tasks = self.queue.tasks.index_tasks(wtxn, index)?;
-                    let remaining_index_tasks = index_tasks & &tasks;
-                    if remaining_index_tasks.is_empty() {
-                        self.queue.batches.update_index(wtxn, index, |bitmap| {
-                            bitmap.remove(batch_id);
-                        })?;
-                    }
-                }
-
-                for status in affected_statuses.iter() {
-                    let status_tasks = self.queue.tasks.get_status(wtxn, *status)?;
-                    let remaining_status_tasks = status_tasks & &tasks;
-                    if remaining_status_tasks.is_empty() {
-                        self.queue.batches.update_status(wtxn, *status, |bitmap| {
-                            bitmap.remove(batch_id);
-                        })?;
-                    }
-                }
-
-                for kind in affected_kinds.iter() {
-                    let kind_tasks = self.queue.tasks.get_kind(wtxn, *kind)?;
-                    let remaining_kind_tasks = kind_tasks & &tasks;
-                    if remaining_kind_tasks.is_empty() {
-                        self.queue.batches.update_kind(wtxn, *kind, |bitmap| {
-                            bitmap.remove(batch_id);
-                        })?;
-                    }
-                }
-            }
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
+
+        // 12. Delete batches
+        progress.update_progress(TaskDeletionProgress::DeletingBatches);
+        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_batches.len() as u32);
+        progress.update_progress(task_progress);
+        for range in consecutive_ranges(to_delete_batches.iter()) {
+            self.queue.batches.all_batches.delete_range(wtxn, &range)?;
+            self.queue.batch_to_tasks_mapping.delete_range(wtxn, &range)?;
+            atomic_progress.fetch_add(range.size_hint().0 as u32, Ordering::Relaxed);
+        }
+
+        owned_wtxn.commit()?;
 
         Ok(to_delete_tasks)
     }

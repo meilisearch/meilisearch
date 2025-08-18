@@ -2,7 +2,7 @@
 
 use crate::milli::progress::EmbedderStats;
 use std::collections::{BTreeSet, HashSet};
-use std::ops::Bound;
+use std::ops::{Bound, RangeInclusive};
 use std::sync::Arc;
 
 use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
@@ -159,6 +159,30 @@ impl ProcessingBatch {
     }
 }
 
+/// Given a **sorted** iterator of `u32`, return an iterator of the ranges of consecutive values it contains.
+pub(crate) fn consecutive_ranges(
+    iter: impl IntoIterator<Item = u32>,
+) -> impl Iterator<Item = RangeInclusive<u32>> {
+    let mut iter = iter.into_iter().peekable();
+
+    std::iter::from_fn(move || {
+        let start = iter.next()?;
+
+        let mut end = start;
+
+        while let Some(&next) = iter.peek() {
+            if next == end + 1 {
+                end = next;
+                iter.next();
+            } else {
+                break;
+            }
+        }
+
+        Some(start..=end)
+    })
+}
+
 pub(crate) fn insert_task_datetime(
     wtxn: &mut RwTxn,
     database: Database<BEI128, CboRoaringBitmapCodec>,
@@ -168,7 +192,7 @@ pub(crate) fn insert_task_datetime(
     let timestamp = time.unix_timestamp_nanos();
     let mut task_ids = database.get(wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
-    database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(task_ids))?;
+    database.put(wtxn, &timestamp, &task_ids)?;
     Ok(())
 }
 
@@ -184,7 +208,7 @@ pub(crate) fn remove_task_datetime(
         if existing.is_empty() {
             database.delete(wtxn, &timestamp)?;
         } else {
-            database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(existing))?;
+            database.put(wtxn, &timestamp, &existing)?;
         }
     }
 

@@ -383,7 +383,11 @@ impl Queue {
         // tasks that are not processing. The non-processing ones are filtered normally while the processing ones
         // are entirely removed unless the in-memory startedAt variable falls within the date filter.
         // Once we have filtered the two subsets, we put them back together and assign it back to `tasks`.
-        tasks = {
+        tasks = 'started_at: {
+            if after_started_at.is_none() && before_started_at.is_none() {
+                break 'started_at tasks;
+            }
+
             let (mut filtered_non_processing_tasks, mut filtered_processing_tasks) =
                 (&tasks - &**processing_tasks, &tasks & &**processing_tasks);
 

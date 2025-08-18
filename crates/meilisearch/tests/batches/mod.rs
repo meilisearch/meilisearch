@@ -1274,7 +1274,7 @@ async fn test_summarized_batch_cancelation() {
 
 #[actix_web::test]
 async fn test_summarized_batch_deletion() {
-    let server = Server::new_shared();
+    let server = Server::new().await;
     let index = server.unique_index();
     // to avoid being flaky we're only going to delete an already finished batch :(
     let (task, _status_code) = index.create(None).await;
@@ -1293,7 +1293,7 @@ async fn test_summarized_batch_deletion() {
             ".stats.writeChannelCongestion" => "[writeChannelCongestion]",
             ".details.originalFilter" => "?uids=X"
         },
-        @r###"
+        @r#"
     {
       "uid": "[uid]",
       "progress": null,
@@ -1318,7 +1318,7 @@ async fn test_summarized_batch_deletion() {
       "finishedAt": "[date]",
       "batchStrategy": "stopped after the last task of type `taskDeletion` because they cannot be batched with tasks of any other type."
     }
-    "###);
+    "#);
 }
 
 #[actix_web::test]
