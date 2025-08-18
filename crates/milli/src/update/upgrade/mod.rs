@@ -4,7 +4,6 @@ mod v1_13;
 mod v1_14;
 mod v1_15;
 mod v1_16;
-mod v1_17;
 
 use heed::RwTxn;
 use new_hannoy::Latest_V1_18_New_Hannoy;
