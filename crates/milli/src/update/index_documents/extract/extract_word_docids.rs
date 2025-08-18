@@ -2,9 +2,8 @@ use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{self, BufReader};
 
-use heed::{BytesDecode, BytesEncode};
+use heed::BytesDecode;
 use obkv::KvReaderU16;
-use roaring::RoaringBitmap;
 
 use super::helpers::{
     create_sorter, create_writer, try_split_array_at, writer_into_reader, GrenadParameters,
@@ -16,7 +15,7 @@ use crate::index::db_name::DOCID_WORD_POSITIONS;
 use crate::update::del_add::{is_noop_del_add_obkv, DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::sorter_into_reader;
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result};
+use crate::{DocumentId, FieldId, Result};
 
 /// Extracts the word and the documents ids where this word appear.
 ///
@@ -198,48 +197,6 @@ fn words_into_sorter(
         key_buffer.extend_from_slice(&fid.to_be_bytes());
         word_fid_docids_sorter.insert(&key_buffer, value_writer.into_inner().unwrap())?;
     }
-
-    Ok(())
-}
-
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
-fn docids_into_writers<W>(
-    word: &str,
-    deletions: &RoaringBitmap,
-    additions: &RoaringBitmap,
-    writer: &mut grenad::Writer<W>,
-) -> Result<()>
-where
-    W: std::io::Write,
-{
-    if deletions == additions {
-        // if the same value is deleted and added, do nothing.
-        return Ok(());
-    }
-
-    // Write each value in the same KvDelAdd before inserting it in the final writer.
-    let mut obkv = KvWriterDelAdd::memory();
-    // deletions:
-    if !deletions.is_empty() && !deletions.is_subset(additions) {
-        obkv.insert(
-            DelAdd::Deletion,
-            CboRoaringBitmapCodec::bytes_encode(deletions).map_err(|_| {
-                SerializationError::Encoding { db_name: Some(DOCID_WORD_POSITIONS) }
-            })?,
-        )?;
-    }
-    // additions:
-    if !additions.is_empty() {
-        obkv.insert(
-            DelAdd::Addition,
-            CboRoaringBitmapCodec::bytes_encode(additions).map_err(|_| {
-                SerializationError::Encoding { db_name: Some(DOCID_WORD_POSITIONS) }
-            })?,
-        )?;
-    }
-
-    // insert everything in the same writer.
-    writer.insert(word.as_bytes(), obkv.into_inner().unwrap())?;
 
     Ok(())
 }

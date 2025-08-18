@@ -10,6 +10,7 @@ pub mod index_uid;
 pub mod index_uid_pattern;
 pub mod keys;
 pub mod locales;
+pub mod network;
 pub mod settings;
 pub mod star_or;
 pub mod task_view;

@@ -147,6 +147,7 @@ impl<'a> Dump<'a> {
             canceled_by: task.canceled_by,
             details: task.details,
             status: task.status,
+            network: task.network,
             kind: match task.kind {
                 KindDump::DocumentImport {
                     primary_key,

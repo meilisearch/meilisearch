@@ -97,6 +97,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )
         .unwrap();
 

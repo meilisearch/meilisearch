@@ -52,7 +52,7 @@ use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
 use meilisearch_types::features::{
-    ChatCompletionSettings, InstanceTogglableFeatures, Network, RuntimeTogglableFeatures,
+    ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
@@ -63,8 +63,9 @@ use meilisearch_types::milli::vector::{
     Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
 use meilisearch_types::milli::{self, Index};
+use meilisearch_types::network::Network;
 use meilisearch_types::task_view::TaskView;
-use meilisearch_types::tasks::{KindWithContent, Task};
+use meilisearch_types::tasks::{KindWithContent, Task, TaskNetwork};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};
 use milli::vector::db::IndexEmbeddingConfig;
 use processing::ProcessingTasks;
@@ -664,6 +665,16 @@ impl IndexScheduler {
         let rtxn = self.read_txn()?;
         let processing = self.processing_tasks.read().unwrap();
         self.queue.get_task_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
+    }
+
+    pub fn set_task_network(&self, task_id: TaskId, network: TaskNetwork) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        let mut task =
+            self.queue.tasks.get_task(&wtxn, task_id)?.ok_or(Error::TaskNotFound(task_id))?;
+        task.network = Some(network);
+        self.queue.tasks.all_tasks.put(&mut wtxn, &task_id, &task)?;
+        wtxn.commit()?;
+        Ok(())
     }
 
     /// Return the batches matching the query from the user's point of view along

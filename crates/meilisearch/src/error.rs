@@ -9,6 +9,8 @@ use meilisearch_types::milli::OrderBy;
 use serde_json::Value;
 use tokio::task::JoinError;
 
+use crate::routes::indexes::{PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER};
+
 #[derive(Debug, thiserror::Error)]
 pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
@@ -80,6 +82,16 @@ pub enum MeilisearchHttpError {
     MissingSearchHybrid,
     #[error("Invalid request: both `media` and `vector` parameters are present.")]
     MediaAndVector,
+    #[error("Inconsistent `Origin` headers: {} was provided but {} is missing.\n  - Hint: Either both headers should be provided, or none of them", if *is_remote_missing {
+        PROXY_ORIGIN_TASK_UID_HEADER
+    } else { PROXY_ORIGIN_REMOTE_HEADER },
+    if *is_remote_missing {
+        PROXY_ORIGIN_REMOTE_HEADER
+    } else { PROXY_ORIGIN_TASK_UID_HEADER }
+)]
+    InconsistentOriginHeaders { is_remote_missing: bool },
+    #[error("Invalid value for header {header_name}: {msg}")]
+    InvalidHeaderValue { header_name: &'static str, msg: String },
 }
 
 impl MeilisearchHttpError {
@@ -124,6 +136,10 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::InconsistentFacetOrder { .. } => {
                 Code::InvalidMultiSearchFacetOrder
             }
+            MeilisearchHttpError::InconsistentOriginHeaders { .. } => {
+                Code::InconsistentDocumentChangeHeaders
+            }
+            MeilisearchHttpError::InvalidHeaderValue { .. } => Code::InvalidHeaderValue,
         }
     }
 }

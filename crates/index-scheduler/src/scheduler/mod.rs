@@ -268,7 +268,7 @@ impl IndexScheduler {
 
                     self.queue
                         .tasks
-                        .update_task(&mut wtxn, &task)
+                        .update_task(&mut wtxn, &mut task)
                         .map_err(|e| Error::UnrecoverableError(Box::new(e)))?;
                 }
                 if let Some(canceled_by) = canceled_by {
@@ -349,7 +349,7 @@ impl IndexScheduler {
 
                     self.queue
                         .tasks
-                        .update_task(&mut wtxn, &task)
+                        .update_task(&mut wtxn, &mut task)
                         .map_err(|e| Error::UnrecoverableError(Box::new(e)))?;
                 }
             }
