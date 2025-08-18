@@ -447,7 +447,8 @@ async fn remote_sharding_retrieve_vectors() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -455,7 +456,8 @@ async fn remote_sharding_retrieve_vectors() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
@@ -463,7 +465,8 @@ async fn remote_sharding_retrieve_vectors() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms2",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
