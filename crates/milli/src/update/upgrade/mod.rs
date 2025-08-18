@@ -8,7 +8,6 @@ use v1_12::{V1_12_3_To_V1_13_0, V1_12_To_V1_12_3};
 use v1_13::{V1_13_0_To_V1_13_1, V1_13_1_To_Latest_V1_13};
 use v1_14::Latest_V1_13_To_Latest_V1_14;
 use v1_15::Latest_V1_14_To_Latest_V1_15;
-use v1_16::Latest_V1_16_To_V1_17_0;
 
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use crate::progress::{Progress, VariableNameStep};
@@ -35,7 +34,6 @@ const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
     &Latest_V1_13_To_Latest_V1_14 {},
     &Latest_V1_14_To_Latest_V1_15 {},
     &Latest_V1_15_To_V1_16_0 {},
-    &Latest_V1_16_To_V1_17_0 {},
     // This is the last upgrade function, it will be called when the index is up to date.
     // any other upgrade function should be added before this one.
     &ToCurrentNoOp {},
@@ -64,7 +62,8 @@ const fn start(from: (u32, u32, u32)) -> Option<usize> {
         // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
         (1, 15, _) => function_index!(6),
         (1, 16, _) => function_index!(7),
-        (1, 17, _) => function_index!(8),
+        (1, 17, _) => function_index!(7),
+        (1, 18, _) => function_index!(7),
         // We deliberately don't add a placeholder with (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) here to force manually
         // considering dumpless upgrade.
         (_major, _minor, _patch) => return None,
