@@ -1,18 +1,18 @@
+mod new_hannoy;
 mod v1_12;
 mod v1_13;
 mod v1_14;
 mod v1_15;
 mod v1_16;
 mod v1_17;
-mod v1_18;
 
 use heed::RwTxn;
+use new_hannoy::Latest_V1_18_New_Hannoy;
 use v1_12::{V1_12_3_To_V1_13_0, V1_12_To_V1_12_3};
 use v1_13::{V1_13_0_To_V1_13_1, V1_13_1_To_Latest_V1_13};
 use v1_14::Latest_V1_13_To_Latest_V1_14;
 use v1_15::Latest_V1_14_To_Latest_V1_15;
 use v1_16::Latest_V1_15_To_V1_16_0;
-use v1_18::Latest_V1_17_To_V1_18_0;
 
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use crate::progress::{Progress, VariableNameStep};
@@ -38,8 +38,8 @@ const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
     &Latest_V1_13_To_Latest_V1_14 {},
     &Latest_V1_14_To_Latest_V1_15 {},
     &Latest_V1_15_To_V1_16_0 {},
-    &ToTargetNoOp { target: (1, 17, 0) },
-    &Latest_V1_17_To_V1_18_0 {},
+    &ToTargetNoOp { target: (1, 18, 0) },
+    &Latest_V1_18_New_Hannoy {},
     // This is the last upgrade function, it will be called when the index is up to date.
     // any other upgrade function should be added before this one.
     &ToCurrentNoOp {},
@@ -67,10 +67,10 @@ const fn start(from: (u32, u32, u32)) -> Option<usize> {
         (1, 14, _) => function_index!(5),
         // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
         (1, 15, _) => function_index!(6),
-        (1, 16, _) => function_index!(7),
-        (1, 17, _) => function_index!(8),
-        (1, 18, _) => function_index!(9),
-        (1, 19, _) => function_index!(9),
+        (1, 16, _) | (1, 17, _) => function_index!(7),
+        (1, 18, _) => function_index!(8),
+        (1, 19, _) => function_index!(8),
+        (1, 22, _) => function_index!(9),
         // We deliberately don't add a placeholder with (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) here to force manually
         // considering dumpless upgrade.
         (_major, _minor, _patch) => return None,

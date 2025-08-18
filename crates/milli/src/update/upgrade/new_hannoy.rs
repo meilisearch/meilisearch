@@ -6,9 +6,9 @@ use crate::vector::VectorStore;
 use crate::{Index, Result};
 
 #[allow(non_camel_case_types)]
-pub(super) struct Latest_V1_17_To_V1_18_0();
+pub(super) struct Latest_V1_18_New_Hannoy();
 
-impl UpgradeIndex for Latest_V1_17_To_V1_18_0 {
+impl UpgradeIndex for Latest_V1_18_New_Hannoy {
     fn upgrade(
         &self,
         wtxn: &mut RwTxn,
@@ -31,6 +31,6 @@ impl UpgradeIndex for Latest_V1_17_To_V1_18_0 {
     }
 
     fn target_version(&self) -> (u32, u32, u32) {
-        (1, 18, 0)
+        (1, 22, 0)
     }
 }
