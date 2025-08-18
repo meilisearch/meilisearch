@@ -1970,6 +1970,16 @@ impl Index {
         sizes.insert("embedder_category_id", embedder_category_id.stat(rtxn).map(compute_size)?);
         sizes.insert("documents", documents.stat(rtxn).map(compute_size)?);
 
+        // Cellulite
+        const _CELLULITE_DB_CHECK: () = {
+            if Cellulite::nb_dbs() != 3 {
+                panic!("Cellulite database count has changed, please update the code accordingly.")
+            }
+        };
+        sizes.insert("cellulite_item", self.cellulite.item_db_stats(rtxn).map(compute_size)?);
+        sizes.insert("cellulite_cell", self.cellulite.cell_db_stats(rtxn).map(compute_size)?);
+        sizes.insert("cellulite_update", self.cellulite.update_db_stats(rtxn).map(compute_size)?);
+
         Ok(sizes)
     }
 }
