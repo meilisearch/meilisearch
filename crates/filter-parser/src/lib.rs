@@ -949,7 +949,7 @@ pub mod tests {
         ");
 
         insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r"
-        Expected coordinates in the form of a pair of numbers but found a group of 3 numbers instead.
+        Was expecting 2 coordinates but instead found 3.
         20:21 _geoPolygon([1,2],[1,2,3])
         ");
 

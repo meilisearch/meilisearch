@@ -213,7 +213,7 @@ impl Display for Error<'_> {
                 writeln!(f, "The `_geoPolygon` filter expects at least 2 points")?;
             }
             ErrorKind::GeoCoordinatesNotPair(number) => {
-                writeln!(f, "Expected coordinates in the form of a pair of numbers but found a group of {number} numbers instead.")?
+                writeln!(f, "Was expecting 2 coordinates but instead found {number}.")?
             }
             ErrorKind::ReservedGeo(name) => {
                 writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.", name.escape_debug())?
