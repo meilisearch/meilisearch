@@ -522,6 +522,26 @@ pub async fn shared_index_with_geo_documents() -> &'static Index<'static, Shared
         .await
 }
 
+pub async fn shared_index_geojson_documents() -> &'static Index<'static, Shared> {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX
+        .get_or_init(|| async {
+            // Retrieved from https://gitlab-forge.din.developpement-durable.gouv.fr/pub/geomatique/descartes/d-map/-/blob/main/demo/examples/commons/countries.geojson?ref_type=heads
+            let server = Server::new_shared();
+            let index = server._index("SHARED_GEOJSON_DOCUMENTS").to_shared();
+            let countries = include_str!("../documents/geojson/assets/countries.geojson");
+            let lille = serde_json::from_str::<serde_json::Value>(countries).unwrap();
+            let (response, _code) = index._add_documents(Value(lille), Some("name")).await;
+            server.wait_task(response.uid()).await.succeeded();
+
+            let (response, _code) =
+                index._update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
+            server.wait_task(response.uid()).await.succeeded();
+            index
+        })
+        .await
+}
+
 pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
     static INDEX: OnceCell<(Server<Shared>, String)> = OnceCell::const_new();
     let (server, uid) = INDEX

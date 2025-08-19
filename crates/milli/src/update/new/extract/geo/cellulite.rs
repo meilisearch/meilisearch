@@ -31,7 +31,7 @@ impl GeoJsonExtractor {
         index: &Index,
         grenad_parameters: GrenadParameters,
     ) -> Result<Option<Self>> {
-        if index.is_geojson_enabled(rtxn)? {
+        if index.is_geojson_filtering_enabled(rtxn)? {
             Ok(Some(GeoJsonExtractor { grenad_parameters }))
         } else {
             Ok(None)

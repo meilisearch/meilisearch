@@ -51,14 +51,17 @@ impl Display for BadGeoError {
             }
             Self::Lat(lat) => write!(
                 f,
-                "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ",
+                "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees.",
                 lat
             ),
-            Self::Lng(lng) => write!(
-                f,
-                "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ",
-                lng
-            ),
+            Self::Lng(lng) => {
+                let normalized = (lng + 180.0).rem_euclid(360.0) - 180.0;
+                write!(
+                    f,
+                    "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. Hint: try using `{normalized}` instead.",
+                    lng
+                )
+            }
         }
     }
 }
@@ -686,39 +689,42 @@ impl<'a> Filter<'a> {
                 }
             }
             FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
-                if index.is_geo_filtering_enabled(rtxn)? {
-                    let top_right: [f64; 2] = [
-                        top_right_point[0].parse_finite_float()?,
-                        top_right_point[1].parse_finite_float()?,
-                    ];
-                    let bottom_left: [f64; 2] = [
-                        bottom_left_point[0].parse_finite_float()?,
-                        bottom_left_point[1].parse_finite_float()?,
-                    ];
-                    if !(-90.0..=90.0).contains(&top_right[0]) {
-                        return Err(
-                            top_right_point[0].as_external_error(BadGeoError::Lat(top_right[0]))
-                        )?;
-                    }
-                    if !(-180.0..=180.0).contains(&top_right[1]) {
-                        return Err(
-                            top_right_point[1].as_external_error(BadGeoError::Lng(top_right[1]))
-                        )?;
-                    }
-                    if !(-90.0..=90.0).contains(&bottom_left[0]) {
-                        return Err(bottom_left_point[0]
-                            .as_external_error(BadGeoError::Lat(bottom_left[0])))?;
-                    }
-                    if !(-180.0..=180.0).contains(&bottom_left[1]) {
-                        return Err(bottom_left_point[1]
-                            .as_external_error(BadGeoError::Lng(bottom_left[1])))?;
-                    }
-                    if top_right[0] < bottom_left[0] {
-                        return Err(bottom_left_point[1].as_external_error(
-                            BadGeoError::BoundingBoxTopIsBelowBottom(top_right[0], bottom_left[0]),
-                        ))?;
-                    }
+                let top_right: [f64; 2] = [
+                    top_right_point[0].parse_finite_float()?,
+                    top_right_point[1].parse_finite_float()?,
+                ];
+                let bottom_left: [f64; 2] = [
+                    bottom_left_point[0].parse_finite_float()?,
+                    bottom_left_point[1].parse_finite_float()?,
+                ];
+                if !(-90.0..=90.0).contains(&top_right[0]) {
+                    return Err(
+                        top_right_point[0].as_external_error(BadGeoError::Lat(top_right[0]))
+                    )?;
+                }
+                if !(-180.0..=180.0).contains(&top_right[1]) {
+                    return Err(
+                        top_right_point[1].as_external_error(BadGeoError::Lng(top_right[1]))
+                    )?;
+                }
+                if !(-90.0..=90.0).contains(&bottom_left[0]) {
+                    return Err(
+                        bottom_left_point[0].as_external_error(BadGeoError::Lat(bottom_left[0]))
+                    )?;
+                }
+                if !(-180.0..=180.0).contains(&bottom_left[1]) {
+                    return Err(
+                        bottom_left_point[1].as_external_error(BadGeoError::Lng(bottom_left[1]))
+                    )?;
+                }
+                if top_right[0] < bottom_left[0] {
+                    return Err(bottom_left_point[1].as_external_error(
+                        BadGeoError::BoundingBoxTopIsBelowBottom(top_right[0], bottom_left[0]),
+                    ))?;
+                }
 
+                let mut r1 = None;
+                if index.is_geo_filtering_enabled(rtxn)? {
                     // Instead of writing a custom `GeoBoundingBox` filter we're simply going to re-use the range
                     // filter to create the following filter;
                     // `_geo.lat {top_right[0]} TO {bottom_left[0]} AND _geo.lng {top_right[1]} TO {bottom_left[1]}`
@@ -813,9 +819,34 @@ impl<'a> Filter<'a> {
                         )?
                     };
 
-                    Ok(selected_lat & selected_lng)
-                } else {
-                    Err(top_right_point[0].as_external_error(
+                    r1 = Some(selected_lat & selected_lng);
+                }
+
+                let mut r2 = None;
+                if index.is_geojson_filtering_enabled(rtxn)? {
+                    let polygon = geo_types::Polygon::new(
+                        geo_types::LineString(vec![
+                            geo_types::Coord { x: top_right[0], y: top_right[1] },
+                            geo_types::Coord { x: bottom_left[0], y: top_right[1] },
+                            geo_types::Coord { x: bottom_left[0], y: bottom_left[1] },
+                            geo_types::Coord { x: top_right[0], y: bottom_left[1] },
+                        ]),
+                        Vec::new(),
+                    );
+
+                    let result = index
+                        .cellulite
+                        .in_shape(rtxn, &polygon, &mut |_| ())
+                        .map_err(InternalError::CelluliteError)?;
+
+                    r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring
+                }
+
+                match (r1, r2) {
+                    (Some(r1), Some(r2)) => Ok(r1 | r2),
+                    (Some(r1), None) => Ok(r1),
+                    (None, Some(r2)) => Ok(r2),
+                    (None, None) => Err(top_right_point[0].as_external_error(
                         FilterError::AttributeNotFilterable {
                             attribute: RESERVED_GEO_FIELD_NAME,
                             filterable_patterns: filtered_matching_patterns(
@@ -823,11 +854,11 @@ impl<'a> Filter<'a> {
                                 &|features| features.is_filterable(),
                             ),
                         },
-                    ))?
+                    ))?,
                 }
             }
             FilterCondition::GeoPolygon { points } => {
-                if index.is_geojson_enabled(rtxn)? {
+                if index.is_geojson_filtering_enabled(rtxn)? {
                     let polygon = geo_types::Polygon::new(
                         geo_types::LineString(
                             points
@@ -846,8 +877,9 @@ impl<'a> Filter<'a> {
                         .cellulite
                         .in_shape(rtxn, &polygon, &mut |_| ())
                         .map_err(InternalError::CelluliteError)?;
-                    // TODO: Remove once we update roaring
-                    let result = roaring::RoaringBitmap::from_iter(result);
+
+                    let result = roaring::RoaringBitmap::from_iter(result); // TODO: Remove once we update roaring
+
                     Ok(result)
                 } else {
                     Err(points[0][0].as_external_error(FilterError::AttributeNotFilterable {
