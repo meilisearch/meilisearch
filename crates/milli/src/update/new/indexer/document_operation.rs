@@ -91,7 +91,8 @@ impl<'pl> DocumentOperation<'pl> {
 
         let documents_ids = index.documents_ids(rtxn)?;
         let available_docids = ConcurrentAvailableIds::new(documents_ids);
-        let mut docids_version_offsets = hashbrown::HashMap::new();
+        let docids_version_offsets = papaya::HashMap::new();
+        // let mut docids_version_offsets = hashbrown::HashMap::new();
         let primary_key = OnceLock::new();
 
         let payload_count = operations.len();
@@ -198,7 +199,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     new_fields_ids_map: &mut GlobalFieldsIdsMap,
     available_docids: &ConcurrentAvailableIds,
     bytes: &mut u64,
-    main_docids_version_offsets: &hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>,
+    main_docids_version_offsets: &papaya::HashMap<&'pl str, PayloadOperations<'pl>>,
     method: IndexDocumentsMethod,
     payload: &'pl [u8],
 ) -> Result<hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>> {
