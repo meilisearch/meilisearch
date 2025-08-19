@@ -41,7 +41,8 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     let distinct_fid = distinct_fid(distinct, ctx.index, ctx.txn)?;
 
-    if universe.len() < from as u64 {
+    let universe_len = universe.len() as usize;
+    if universe_len < from {
         return Ok(BucketSortOutput {
             docids: vec![],
             scores: vec![],
@@ -166,6 +167,9 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             (Some(max_total_hits), true) => max_total_hits,
             _ => length,
         };
+
+    // if the universe is smaller than the max length to evaluate, we can stop early
+    let max_len_to_evaluate = std::cmp::min(universe_len, max_len_to_evaluate);
 
     while valid_docids.len() < max_len_to_evaluate {
         if time_budget.exceeded() {
