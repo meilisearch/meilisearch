@@ -617,76 +617,76 @@ impl<'a> Filter<'a> {
                 .union(),
             FilterCondition::And(subfilters) => {
                 let mut subfilters_iter = subfilters.iter();
-                if let Some(first_subfilter) = subfilters_iter.next() {
-                    let mut bitmap = Self::inner_evaluate(
-                        &(first_subfilter.clone()).into(),
+                let Some(first_subfilter) = subfilters_iter.next() else {
+                    return Ok(RoaringBitmap::new());
+                };
+
+                let mut bitmap = Self::inner_evaluate(
+                    &(first_subfilter.clone()).into(),
+                    rtxn,
+                    index,
+                    field_ids_map,
+                    filterable_attribute_rules,
+                    universe,
+                )?;
+                for f in subfilters_iter {
+                    if bitmap.is_empty() {
+                        return Ok(bitmap);
+                    }
+                    // TODO We are doing the intersections two times,
+                    //      it could be more efficient
+                    //      Can't I just replace this `&=` by an `=`?
+                    bitmap &= Self::inner_evaluate(
+                        &(f.clone()).into(),
                         rtxn,
                         index,
                         field_ids_map,
                         filterable_attribute_rules,
-                        universe,
+                        Some(&bitmap),
                     )?;
-                    for f in subfilters_iter {
-                        if bitmap.is_empty() {
-                            return Ok(bitmap);
-                        }
-                        // TODO We are doing the intersections two times,
-                        //      it could be more efficient
-                        //      Can't I just replace this `&=` by an `=`?
-                        bitmap &= Self::inner_evaluate(
-                            &(f.clone()).into(),
-                            rtxn,
-                            index,
-                            field_ids_map,
-                            filterable_attribute_rules,
-                            Some(&bitmap),
-                        )?;
-                    }
-                    Ok(bitmap)
-                } else {
-                    Ok(RoaringBitmap::new())
                 }
+                Ok(bitmap)
             }
             FilterCondition::VectorExists { fid: _, embedder, filter } => {
                 super::filter_vector::evaluate(rtxn, index, universe, embedder.clone(), filter)
             }
             FilterCondition::GeoLowerThan { point, radius } => {
-                if index.is_geo_filtering_enabled(rtxn)? {
-                    let base_point: [f64; 2] =
-                        [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
-                    if !(-90.0..=90.0).contains(&base_point[0]) {
-                        return Err(point[0].as_external_error(BadGeoError::Lat(base_point[0])))?;
-                    }
-                    if !(-180.0..=180.0).contains(&base_point[1]) {
-                        return Err(point[1].as_external_error(BadGeoError::Lng(base_point[1])))?;
-                    }
-                    let radius = radius.parse_finite_float()?;
-                    let rtree = match index.geo_rtree(rtxn)? {
-                        Some(rtree) => rtree,
-                        None => return Ok(RoaringBitmap::new()),
-                    };
-
-                    let xyz_base_point = lat_lng_to_xyz(&base_point);
-
-                    let result = rtree
-                        .nearest_neighbor_iter(&xyz_base_point)
-                        .take_while(|point| {
-                            distance_between_two_points(&base_point, &point.data.1)
-                                <= radius + f64::EPSILON
-                        })
-                        .map(|point| point.data.0)
-                        .collect();
-
-                    Ok(result)
-                } else {
-                    Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
+                if !index.is_geo_filtering_enabled(rtxn)? {
+                    return Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                         attribute: RESERVED_GEO_FIELD_NAME,
                         filterable_patterns: filtered_matching_patterns(
                             filterable_attribute_rules,
                             &|features| features.is_filterable(),
                         ),
-                    }))?
+                    }))?;
                 }
+
+                let base_point: [f64; 2] =
+                    [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
+                if !(-90.0..=90.0).contains(&base_point[0]) {
+                    return Err(point[0].as_external_error(BadGeoError::Lat(base_point[0])))?;
+                }
+                if !(-180.0..=180.0).contains(&base_point[1]) {
+                    return Err(point[1].as_external_error(BadGeoError::Lng(base_point[1])))?;
+                }
+                let radius = radius.parse_finite_float()?;
+                let rtree = match index.geo_rtree(rtxn)? {
+                    Some(rtree) => rtree,
+                    None => return Ok(RoaringBitmap::new()),
+                };
+
+                let xyz_base_point = lat_lng_to_xyz(&base_point);
+
+                let result = rtree
+                    .nearest_neighbor_iter(&xyz_base_point)
+                    .take_while(|point| {
+                        distance_between_two_points(&base_point, &point.data.1)
+                            <= radius + f64::EPSILON
+                    })
+                    .map(|point| point.data.0)
+                    .collect();
+
+                Ok(result)
             }
             FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
                 let top_right: [f64; 2] = [
@@ -858,38 +858,40 @@ impl<'a> Filter<'a> {
                 }
             }
             FilterCondition::GeoPolygon { points } => {
-                if index.is_geojson_filtering_enabled(rtxn)? {
-                    let polygon = geo_types::Polygon::new(
-                        geo_types::LineString(
-                            points
-                                .iter()
-                                .map(|p| {
-                                    Ok(geo_types::Coord {
-                                        x: p[0].parse_finite_float()?,
-                                        y: p[1].parse_finite_float()?,
-                                    })
-                                })
-                                .collect::<Result<_, filter_parser::Error>>()?,
-                        ),
-                        Vec::new(),
-                    );
-                    let result = index
-                        .cellulite
-                        .in_shape(rtxn, &polygon, &mut |_| ())
-                        .map_err(InternalError::CelluliteError)?;
-
-                    let result = roaring::RoaringBitmap::from_iter(result); // TODO: Remove once we update roaring
-
-                    Ok(result)
-                } else {
-                    Err(points[0][0].as_external_error(FilterError::AttributeNotFilterable {
-                        attribute: RESERVED_GEOJSON_FIELD_NAME,
-                        filterable_patterns: filtered_matching_patterns(
-                            filterable_attribute_rules,
-                            &|features| features.is_filterable(),
-                        ),
-                    }))?
+                if !index.is_geojson_filtering_enabled(rtxn)? {
+                    return Err(points[0][0].as_external_error(
+                        FilterError::AttributeNotFilterable {
+                            attribute: RESERVED_GEOJSON_FIELD_NAME,
+                            filterable_patterns: filtered_matching_patterns(
+                                filterable_attribute_rules,
+                                &|features| features.is_filterable(),
+                            ),
+                        },
+                    ))?;
                 }
+
+                let polygon = geo_types::Polygon::new(
+                    geo_types::LineString(
+                        points
+                            .iter()
+                            .map(|p| {
+                                Ok(geo_types::Coord {
+                                    x: p[0].parse_finite_float()?,
+                                    y: p[1].parse_finite_float()?,
+                                })
+                            })
+                            .collect::<Result<_, filter_parser::Error>>()?,
+                    ),
+                    Vec::new(),
+                );
+                let result = index
+                    .cellulite
+                    .in_shape(rtxn, &polygon, &mut |_| ())
+                    .map_err(InternalError::CelluliteError)?;
+
+                let result = roaring::RoaringBitmap::from_iter(result); // TODO: Remove once we update roaring
+
+                Ok(result)
             }
         }
     }
