@@ -1220,38 +1220,34 @@ mod tests {
         // georadius have a bad latitude
         let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(
-            error.to_string().starts_with(
-                "Bad latitude `-100`. Latitude must be contained between -90 and 90 degrees."
-            ),
-            "{}",
-            error.to_string()
-        );
+        snapshot!(error.to_string(), @r"
+        Bad latitude `-100`. Latitude must be contained between -90 and 90 degrees.
+        12:16 _geoRadius(-100, 150, 10)
+        ");
 
         // georadius have a bad latitude
         let filter = Filter::from_str("_geoRadius(-90.0000001, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        12:23 _geoRadius(-90.0000001, 150, 10)
+        ");
 
         // georadius have a bad longitude
         let filter = Filter::from_str("_geoRadius(-10, 250, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(
-            error.to_string().contains(
-                "Bad longitude `250`. Longitude must be contained between -180 and 180 degrees."
-            ),
-            "{}",
-            error.to_string(),
-        );
+        snapshot!(error.to_string(), @r"
+        Bad longitude `250`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-110` instead.
+        17:20 _geoRadius(-10, 250, 10)
+        ");
 
         // georadius have a bad longitude
         let filter = Filter::from_str("_geoRadius(-10, 180.000001, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
+        17:27 _geoRadius(-10, 180.000001, 10)
+        ");
     }
 
     #[test]
@@ -1274,73 +1270,73 @@ mod tests {
         let filter =
             Filter::from_str("_geoBoundingBox([-90.0000001, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(
-            error.to_string().starts_with(
-                "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
-            ),
-            "{}",
-            error.to_string()
-        );
+        snapshot!(error.to_string(), @r"
+        Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        18:29 _geoBoundingBox([-90.0000001, 150], [30, 10])
+        ");
 
         // geoboundingbox top left coord have a bad latitude
         let filter =
             Filter::from_str("_geoBoundingBox([90.0000001, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(
-            error.to_string().starts_with(
-                "Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees."
-            ),
-            "{}",
-            error.to_string()
-        );
+        snapshot!(error.to_string(), @r"
+        Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        18:28 _geoBoundingBox([90.0000001, 150], [30, 10])
+        ");
 
         // geoboundingbox bottom right coord have a bad latitude
         let filter =
             Filter::from_str("_geoBoundingBox([30, 10], [-90.0000001, 150])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        28:39 _geoBoundingBox([30, 10], [-90.0000001, 150])
+        ");
 
         // geoboundingbox bottom right coord have a bad latitude
         let filter =
             Filter::from_str("_geoBoundingBox([30, 10], [90.0000001, 150])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        28:38 _geoBoundingBox([30, 10], [90.0000001, 150])
+        ");
 
         // geoboundingbox top left coord have a bad longitude
         let filter =
             Filter::from_str("_geoBoundingBox([-10, 180.000001], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
+        23:33 _geoBoundingBox([-10, 180.000001], [30, 10])
+        ");
 
         // geoboundingbox top left coord have a bad longitude
         let filter =
             Filter::from_str("_geoBoundingBox([-10, -180.000001], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `179.999999` instead.
+        23:34 _geoBoundingBox([-10, -180.000001], [30, 10])
+        ");
 
         // geoboundingbox bottom right coord have a bad longitude
         let filter =
             Filter::from_str("_geoBoundingBox([30, 10], [-10, -180.000001])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `179.999999` instead.
+        33:44 _geoBoundingBox([30, 10], [-10, -180.000001])
+        ");
 
         // geoboundingbox bottom right coord have a bad longitude
         let filter =
             Filter::from_str("_geoBoundingBox([30, 10], [-10, 180.000001])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
+        33:43 _geoBoundingBox([30, 10], [-10, 180.000001])
+        ");
     }
 
     #[test]
