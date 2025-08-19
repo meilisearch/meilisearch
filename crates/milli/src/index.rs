@@ -1060,7 +1060,7 @@ impl Index {
     }
 
     /// Returns true if the geo sorting feature is enabled.
-    pub fn is_geojson_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+    pub fn is_geojson_filtering_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
         let geojson_filter =
             self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geojson());
         Ok(geojson_filter)

@@ -1,4 +1,7 @@
-use crate::{common::Server, json};
+use crate::{
+    common::{shared_index_geojson_documents, Server},
+    json,
+};
 use meili_snap::{json_string, snapshot};
 
 const LILLE: &str = include_str!("assets/lille.geojson");
@@ -280,4 +283,100 @@ async fn partial_update_geojson() {
     let (response, _code) =
         index.search_get("?filter=_geoPolygon([0.9,0.9],[2,0.9],[2,2],[0.9,2])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
+}
+
+#[actix_rt::test]
+async fn geo_bounding_box() {
+    let index = shared_index_geojson_documents().await;
+
+    // The bounding box is a polygon over middle Europe
+    let (response, code) =
+        index.search_get("?filter=_geoBoundingBox([21.43443989912143,50.53987503447863],[0.54979129195425,43.76393151539099])&attributesToRetrieve=name").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response, @r#"
+    {
+      "hits": [
+        {
+          "name": "Austria"
+        },
+        {
+          "name": "Belgium"
+        },
+        {
+          "name": "Bosnia_and_Herzegovina"
+        },
+        {
+          "name": "Switzerland"
+        },
+        {
+          "name": "Czech_Republic"
+        },
+        {
+          "name": "Germany"
+        },
+        {
+          "name": "France"
+        },
+        {
+          "name": "Croatia"
+        },
+        {
+          "name": "Hungary"
+        },
+        {
+          "name": "Italy"
+        },
+        {
+          "name": "Luxembourg"
+        },
+        {
+          "name": "Netherlands"
+        },
+        {
+          "name": "Poland"
+        },
+        {
+          "name": "Romania"
+        },
+        {
+          "name": "Republic_of_Serbia"
+        },
+        {
+          "name": "Slovakia"
+        },
+        {
+          "name": "Slovenia"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 17
+    }
+    "#);
+
+    // Between Russia and Alaska
+    // WARNING: This test doesn't pass, the countries are those I imagine being found but maybe there is also Canada or something
+    let (response, code) = index
+        .search_get("?filter=_geoBoundingBox([70,-148],[63,152])&attributesToRetrieve=name")
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response, @r#"
+    {
+      "hits": [
+        {
+          "name": "Russia"
+        },
+        {
+          "name": "United_States_of_America"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2
+    }
+    "#);
 }
