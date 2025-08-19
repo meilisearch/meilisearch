@@ -472,7 +472,7 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
             tag(","),
             ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
         ),
-        char(')'),
+        preceded(opt(ws(char(','))), char(')')), // Tolerate trailing comma
     )(input)
     .map_cut(ErrorKind::GeoPolygon)?;
 
@@ -836,6 +836,12 @@ pub mod tests {
         insta::assert_snapshot!(p("_geoBoundingBox([12, 13], [14, 15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
         insta::assert_snapshot!(p("NOT _geoBoundingBox([12, 13], [14, 15])"), @"NOT (_geoBoundingBox([{12}, {13}], [{14}, {15}]))");
         insta::assert_snapshot!(p("_geoBoundingBox([12,13],[14,15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
+
+        // Test geo polygon
+        insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15], [16, 17])"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], [{16}, {17}], ])");
+        insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15], [16, 17],)"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], [{16}, {17}], ])");
+        insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15])"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], ])");
+        insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15], [-1.2,2939.2], [1,1])"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], [{-1.2}, {2939.2}], [{1}, {1}], ])");
 
         // Test OR + AND
         insta::assert_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
