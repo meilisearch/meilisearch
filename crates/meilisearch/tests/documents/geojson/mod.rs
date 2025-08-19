@@ -14,7 +14,7 @@ async fn basic_add_settings_and_geojson_documents() {
         index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
     server.wait_task(task.uid()).await.succeeded();
 
-    let (response, _) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     snapshot!(response,
     @r#"
     {
@@ -92,7 +92,7 @@ async fn basic_add_settings_and_geojson_documents() {
     }
     "#);
 
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     snapshot!(response,
     @r#"
     {
@@ -160,11 +160,11 @@ async fn basic_add_geojson_documents_and_settings() {
     }
     "#);
 
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     snapshot!(response,
     @r#"
     {
-      "message": "Index `[uuid]`: Attribute `_geojson` is not filterable. This index does not have configured filterable attributes.\n14:15 _geoPolygon([0,0],[2,0],[2,2],[0,2])",
+      "message": "Index `[uuid]`: Attribute `_geojson` is not filterable. This index does not have configured filterable attributes.\n14:15 _geoPolygon([0,0],[0,2],[2,2],[2,0])",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -174,7 +174,7 @@ async fn basic_add_geojson_documents_and_settings() {
     let (task, _status_code) =
         index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
     server.wait_task(task.uid()).await.succeeded();
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     snapshot!(response,
     @r#"
     {
@@ -217,17 +217,17 @@ async fn add_and_remove_geojson() {
     let (task, _status_code) = index.add_documents(documents, None).await;
     server.wait_task(task.uid()).await.succeeded();
     let (response, _code) =
-        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+        index.search_get("?filter=_geoPolygon([0,0],[0,0.9],[0.9,0.9],[0.9,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
 
     let (task, _) = index.delete_document(0).await;
     server.wait_task(task.uid()).await.succeeded();
     let (response, _code) =
-        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+        index.search_get("?filter=_geoPolygon([0,0],[0,0.9],[0.9,0.9],[0.9,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
 
     // add it back
@@ -240,9 +240,9 @@ async fn add_and_remove_geojson() {
     let (task, _status_code) = index.add_documents(documents, None).await;
     server.wait_task(task.uid()).await.succeeded();
     let (response, _code) =
-        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+        index.search_get("?filter=_geoPolygon([0,0],[0,0.9],[0.9,0.9],[0.9,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
 }
 
@@ -262,9 +262,9 @@ async fn partial_update_geojson() {
     let (task, _status_code) = index.add_documents(documents, None).await;
     server.wait_task(task.uid()).await.succeeded();
     let (response, _code) =
-        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+        index.search_get("?filter=_geoPolygon([0,0],[0,0.9],[0.9,0.9],[0.9,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
 
     let documents = json!([
@@ -276,12 +276,12 @@ async fn partial_update_geojson() {
     let (task, _status_code) = index.update_documents(documents, None).await;
     server.wait_task(task.uid()).await.succeeded();
     let (response, _code) =
-        index.search_get("?filter=_geoPolygon([0,0],[0.9,0],[0.9,0.9],[0,0.9])").await;
+        index.search_get("?filter=_geoPolygon([0,0],[0,0.9],[0.9,0.9],[0.9,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
-    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[2,0],[2,2],[0,2])").await;
+    let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 1);
     let (response, _code) =
-        index.search_get("?filter=_geoPolygon([0.9,0.9],[2,0.9],[2,2],[0.9,2])").await;
+        index.search_get("?filter=_geoPolygon([0.9,0.9],[0.9,2],[2,2],[2,0.9])").await;
     assert_eq!(response.get("hits").unwrap().as_array().unwrap().len(), 0);
 }
 
@@ -291,7 +291,7 @@ async fn geo_bounding_box() {
 
     // The bounding box is a polygon over middle Europe
     let (response, code) =
-        index.search_get("?filter=_geoBoundingBox([21.43443989912143,50.53987503447863],[0.54979129195425,43.76393151539099])&attributesToRetrieve=name").await;
+        index.search_get("?filter=_geoBoundingBox([50.53987503447863,21.43443989912143],[43.76393151539099,0.54979129195425])&attributesToRetrieve=name").await;
     snapshot!(code, @"200 OK");
     snapshot!(response, @r#"
     {
@@ -357,7 +357,6 @@ async fn geo_bounding_box() {
     "#);
 
     // Between Russia and Alaska
-    // WARNING: This test doesn't pass, the countries are those I imagine being found but maybe there is also Canada or something
     let (response, code) = index
         .search_get("?filter=_geoBoundingBox([70,-148],[63,152])&attributesToRetrieve=name")
         .await;
@@ -365,6 +364,9 @@ async fn geo_bounding_box() {
     snapshot!(response, @r#"
     {
       "hits": [
+        {
+          "name": "Canada"
+        },
         {
           "name": "Russia"
         },
@@ -376,7 +378,7 @@ async fn geo_bounding_box() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 2
+      "estimatedTotalHits": 3
     }
     "#);
 }

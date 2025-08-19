@@ -826,10 +826,10 @@ impl<'a> Filter<'a> {
                 if index.is_geojson_filtering_enabled(rtxn)? {
                     let polygon = geo_types::Polygon::new(
                         geo_types::LineString(vec![
-                            geo_types::Coord { x: top_right[0], y: top_right[1] },
-                            geo_types::Coord { x: bottom_left[0], y: top_right[1] },
-                            geo_types::Coord { x: bottom_left[0], y: bottom_left[1] },
-                            geo_types::Coord { x: top_right[0], y: bottom_left[1] },
+                            geo_types::Coord { x: top_right[1], y: top_right[0] },
+                            geo_types::Coord { x: bottom_left[1], y: top_right[0] },
+                            geo_types::Coord { x: bottom_left[1], y: bottom_left[0] },
+                            geo_types::Coord { x: top_right[1], y: bottom_left[0] },
                         ]),
                         Vec::new(),
                     );
@@ -848,7 +848,9 @@ impl<'a> Filter<'a> {
                     (None, Some(r2)) => Ok(r2),
                     (None, None) => Err(top_right_point[0].as_external_error(
                         FilterError::AttributeNotFilterable {
-                            attribute: RESERVED_GEO_FIELD_NAME,
+                            attribute: &format!(
+                                "{RESERVED_GEO_FIELD_NAME}/{RESERVED_GEOJSON_FIELD_NAME}"
+                            ),
                             filterable_patterns: filtered_matching_patterns(
                                 filterable_attribute_rules,
                                 &|features| features.is_filterable(),
@@ -870,20 +872,20 @@ impl<'a> Filter<'a> {
                     ))?;
                 }
 
-                let polygon = geo_types::Polygon::new(
-                    geo_types::LineString(
-                        points
-                            .iter()
-                            .map(|p| {
-                                Ok(geo_types::Coord {
-                                    x: p[0].parse_finite_float()?,
-                                    y: p[1].parse_finite_float()?,
-                                })
-                            })
-                            .collect::<Result<_, filter_parser::Error>>()?,
-                    ),
-                    Vec::new(),
-                );
+                let mut coords = Vec::new();
+                for [lat_token, lng_token] in points {
+                    let lat = lat_token.parse_finite_float()?;
+                    let lng = lng_token.parse_finite_float()?;
+                    if !(-90.0..=90.0).contains(&lat) {
+                        return Err(lat_token.as_external_error(BadGeoError::Lat(lat)))?;
+                    }
+                    if !(-180.0..=180.0).contains(&lng) {
+                        return Err(lng_token.as_external_error(BadGeoError::Lng(lng)))?;
+                    }
+                    coords.push(geo_types::Coord { x: lng, y: lat });
+                }
+
+                let polygon = geo_types::Polygon::new(geo_types::LineString(coords), Vec::new());
                 let result = index
                     .cellulite
                     .in_shape(rtxn, &polygon, &mut |_| ())
@@ -1038,10 +1040,10 @@ mod tests {
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. This index does not have configured filterable attributes.
+        snapshot!(error.to_string(), @r"
+        Attribute `_geo/_geojson` is not filterable. This index does not have configured filterable attributes.
         18:20 _geoBoundingBox([42, 150], [30, 10])
-        "###);
+        ");
 
         let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
@@ -1071,10 +1073,10 @@ mod tests {
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. Available filterable attribute patterns are: `title`.
+        snapshot!(error.to_string(), @r"
+        Attribute `_geo/_geojson` is not filterable. Available filterable attribute patterns are: `title`.
         18:20 _geoBoundingBox([42, 150], [30, 10])
-        "###);
+        ");
 
         let filter = Filter::from_str("name = 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
