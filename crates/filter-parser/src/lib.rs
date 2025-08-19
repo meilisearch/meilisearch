@@ -423,24 +423,31 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
 /// If we parse `_geoBoundingBox` we MUST parse the rest of the expression.
 fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     // we want to allow space BEFORE the _geoBoundingBox but not after
-    let parsed = preceded(
-        tuple((multispace0, word_exact("_geoBoundingBox"))),
-        // if we were able to parse `_geoBoundingBox` and can't parse the rest of the input we return a failure
-        cut(delimited(
-            char('('),
-            separated_list1(
-                tag(","),
-                ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
-            ),
-            char(')'),
-        )),
+
+    let (input, _) = tuple((multispace0, word_exact("_geoBoundingBox")))(input)?;
+
+    // if we were able to parse `_geoBoundingBox` and can't parse the rest of the input we return a failure
+
+    let (input, args) = delimited(
+        char('('),
+        separated_list1(
+            tag(","),
+            ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
+        ),
+        char(')'),
     )(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
+    .map_cut(ErrorKind::GeoBoundingBox)?;
 
-    let (input, args) = parsed?;
-
-    if args.len() != 2 || args[0].len() != 2 || args[1].len() != 2 {
+    if args.len() != 2 {
         return Err(Error::failure_from_kind(input, ErrorKind::GeoBoundingBox));
+    }
+
+    if let Some(offending) = args.iter().find(|a| a.len() != 2) {
+        let context = offending.first().unwrap_or(&input);
+        return Err(Error::failure_from_kind(
+            *context,
+            ErrorKind::GeoCoordinatesNotPair(offending.len()),
+        ));
     }
 
     let res = FilterCondition::GeoBoundingBox {
@@ -469,13 +476,17 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     )(input)
     .map_cut(ErrorKind::GeoPolygon)?;
 
-    if args.len() <= 2 || args.iter().any(|a| a.len() != 2) {
-        let (number, context) = args
-            .iter()
-            .find(|a| a.len() != 2)
-            .map(|a| (a.len(), a.first().unwrap_or(&input)))
-            .unwrap_or((args.len(), &input));
-        return Err(Error::failure_from_kind(*context, ErrorKind::GeoPolygonNotPairs(number)));
+    if args.len() < 2 {
+        let context = args.last().and_then(|a| a.last()).unwrap_or(&input);
+        return Err(Error::failure_from_kind(*context, ErrorKind::GeoPolygonTooFewPoints));
+    }
+
+    if let Some(offending) = args.iter().find(|a| a.len() != 2) {
+        let context = offending.first().unwrap_or(&input);
+        return Err(Error::failure_from_kind(
+            *context,
+            ErrorKind::GeoCoordinatesNotPair(offending.len()),
+        ));
     }
 
     let res = FilterCondition::GeoPolygon {
@@ -912,24 +923,24 @@ pub mod tests {
         1:16 _geoRadius = 12
         "###);
 
-        insta::assert_snapshot!(p("_geoBoundingBox"), @r###"
+        insta::assert_snapshot!(p("_geoBoundingBox"), @r"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        1:16 _geoBoundingBox
-        "###);
+        16:16 _geoBoundingBox
+        ");
 
-        insta::assert_snapshot!(p("_geoBoundingBox = 12"), @r###"
+        insta::assert_snapshot!(p("_geoBoundingBox = 12"), @r"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        1:21 _geoBoundingBox = 12
-        "###);
+        16:21 _geoBoundingBox = 12
+        ");
 
-        insta::assert_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r###"
+        insta::assert_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        1:26 _geoBoundingBox(1.0, 1.0)
-        "###);
+        17:26 _geoBoundingBox(1.0, 1.0)
+        ");
 
         insta::assert_snapshot!(p("_geoPolygon([1,2,3])"), @r"
-        The `_geoPolygon` filter expects pairs of coordinates but found a group of 3 coordinates instead.
-        14:15 _geoPolygon([1,2,3])
+        The `_geoPolygon` filter expects at least 2 points
+        18:19 _geoPolygon([1,2,3])
         ");
 
         insta::assert_snapshot!(p("_geoPolygon(1,2,3)"), @r"
@@ -938,7 +949,7 @@ pub mod tests {
         ");
 
         insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r"
-        The `_geoPolygon` filter expects pairs of coordinates but found a group of 3 coordinates instead.
+        Expected coordinates in the form of a pair of numbers but found a group of 3 numbers instead.
         20:21 _geoPolygon([1,2],[1,2,3])
         ");
 
