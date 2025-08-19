@@ -3,6 +3,7 @@ pub mod batches;
 pub mod compression;
 pub mod deserr;
 pub mod document_formats;
+pub mod enterprise_edition;
 pub mod error;
 pub mod facet_values_sort;
 pub mod features;

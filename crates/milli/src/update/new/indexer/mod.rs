@@ -31,6 +31,7 @@ pub(crate) mod de;
 pub mod document_changes;
 mod document_deletion;
 mod document_operation;
+pub mod enterprise_edition;
 mod extract;
 mod guess_primary_key;
 mod partial_dump;

@@ -10,7 +10,7 @@ use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
 use meilisearch_types::tasks::{
-    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
+    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId, TaskNetwork,
 };
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
@@ -94,6 +94,8 @@ pub struct TaskDump {
         default
     )]
     pub finished_at: Option<OffsetDateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<TaskNetwork>,
 }
 
 // A `Kind` specific version made for the dump. If modified you may break the dump.
@@ -172,6 +174,7 @@ impl From<Task> for TaskDump {
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
+            network: task.network,
         }
     }
 }
@@ -250,8 +253,9 @@ pub(crate) mod test {
     use big_s::S;
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
+    use meilisearch_types::enterprise_edition::network::{Network, Remote};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::{Network, Remote, RuntimeTogglableFeatures};
+    use meilisearch_types::features::RuntimeTogglableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
@@ -384,6 +388,7 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
                     started_at: Some(datetime!(2022-11-20 0:00 UTC)),
                     finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+                    network: None,
                 },
                 None,
             ),
@@ -408,6 +413,7 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
                     started_at: None,
                     finished_at: None,
+                    network: None,
                 },
                 Some(vec![
                     json!({ "id": 4, "race": "leonberg" }).as_object().unwrap().clone(),
@@ -427,6 +433,7 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-15 0:00 UTC),
                     started_at: None,
                     finished_at: None,
+                    network: None,
                 },
                 None,
             ),
@@ -539,7 +546,8 @@ pub(crate) mod test {
     fn create_test_network() -> Network {
         Network {
             local: Some("myself".to_string()),
-            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()) }},
+            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
+            sharding: false,
         }
     }
 

@@ -628,6 +628,7 @@ fn import_dump(
                 &mut new_fields_ids_map,
                 &|| false, // never stop processing a dump
                 progress.clone(),
+                None,
             )?;
 
             let operation_stats = operation_stats.pop().unwrap();

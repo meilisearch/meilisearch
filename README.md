@@ -89,6 +89,26 @@ We also offer a wide range of dedicated guides to all Meilisearch features, such
 
 Finally, for more in-depth information, refer to our articles explaining fundamental Meilisearch concepts such as [documents](https://www.meilisearch.com/docs/learn/core_concepts/documents?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced) and [indexes](https://www.meilisearch.com/docs/learn/core_concepts/indexes?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced).
 
+## 🧾 Editions & Licensing
+
+Meilisearch is available in two editions:
+
+### 🧪 Community Edition (CE)
+
+- Fully open source under the [MIT license](./LICENSE)
+- Core search engine with fast and relevant full-text, semantic or hybrid search
+- Free to use for anyone, including commercial usage
+
+### 🏢 Enterprise Edition (EE)
+
+- Includes advanced features such as:
+  - Sharding
+- Governed by a [commercial license](./LICENSE-EE) or the [Business Source License 1.1](https://mariadb.com/bsl11)
+- Not allowed in production without a commercial agreement with Meilisearch.
+  - You may use, modify, and distribute the Licensed Work for non-production purposes only, such as testing, development, or evaluation.
+
+Want access to Enterprise features? → Contact us at [sales@meilisearch.com](maito:sales@meilisearch.com).
+
 ## 📊 Telemetry
 
 Meilisearch collects **anonymized** user data to help us improve our product. You can [deactivate this](https://www.meilisearch.com/docs/learn/what_is_meilisearch/telemetry?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=telemetry#how-to-disable-data-collection) whenever you want.

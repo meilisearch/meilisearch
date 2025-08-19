@@ -279,6 +279,7 @@ impl Queue {
             details: kind.default_details(),
             status: Status::Enqueued,
             kind: kind.clone(),
+            network: None,
         };
         // For deletion and cancelation tasks, we want to make extra sure that they
         // don't attempt to delete/cancel tasks that are newer than themselves.

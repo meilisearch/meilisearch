@@ -59,6 +59,7 @@ fn test_facet_distribution_with_no_facet_values() {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )
         .unwrap();
 

@@ -1,6 +1,7 @@
 use std::sync::{Arc, RwLock};
 
-use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
+use meilisearch_types::enterprise_edition::network::Network;
+use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
 
