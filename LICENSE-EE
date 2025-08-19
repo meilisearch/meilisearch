@@ -5,7 +5,7 @@ Parameters
 
 Licensor: Meili SAS
 
-Licensed Work: Any file explicitly marked as “Enterprise Edition (EE)” or “governed by the Business Source License”.
+Licensed Work: Any file explicitly marked as “Enterprise Edition (EE)” or “governed by the Business Source License” residing in enterprise_editions modules/folders.
 
 Additional Use Grant:
 You may use, modify, and distribute the Licensed Work for non-production purposes only, such as testing, development, or evaluation.
