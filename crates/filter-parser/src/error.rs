@@ -78,7 +78,7 @@ pub enum ErrorKind<'a> {
     GeoBoundingBox,
     GeoPolygon,
     GeoPolygonTooFewPoints,
-    GeoPolygonNotPairs(usize),
+    GeoCoordinatesNotPair(usize),
     MisusedGeoRadius,
     MisusedGeoBoundingBox,
     VectorFilterLeftover,
@@ -212,8 +212,8 @@ impl Display for Error<'_> {
             ErrorKind::GeoPolygonTooFewPoints => {
                 writeln!(f, "The `_geoPolygon` filter expects at least 2 points")?;
             }
-            ErrorKind::GeoPolygonNotPairs(number) => {
-                writeln!(f, "The `_geoPolygon` filter expects pairs of coordinates but found a group of {number} coordinates instead.")?
+            ErrorKind::GeoCoordinatesNotPair(number) => {
+                writeln!(f, "Expected coordinates in the form of a pair of numbers but found a group of {number} numbers instead.")?
             }
             ErrorKind::ReservedGeo(name) => {
                 writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.", name.escape_debug())?
