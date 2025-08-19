@@ -1,11 +1,12 @@
+use std::cell::RefCell;
 use std::sync::atomic::Ordering;
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
 use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use hashbrown::hash_map::Entry;
-use heed::RoTxn;
+use heed::{RoTxn, WithoutTls};
 use memmap2::Mmap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::slice::ParallelSlice;
@@ -23,7 +24,10 @@ use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
 use crate::update::{ConcurrentAvailableIds, IndexDocumentsMethod};
-use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
+use crate::{
+    DocumentId, Error, FieldIdMapWithMetadata, FieldsIdsMap, GlobalFieldsIdsMap, Index,
+    InternalError, MetadataBuilder, Result, UserError,
+};
 
 #[derive(Default)]
 pub struct DocumentOperation<'pl> {
@@ -64,13 +68,13 @@ impl<'pl> DocumentOperation<'pl> {
 
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::document_operation")]
-    pub fn into_changes<MSP>(
+    pub fn into_changes<'e: 'pl, MSP>(
         self,
         indexer: &'pl Bump,
-        index: &Index,
-        rtxn: &'pl RoTxn<'pl>,
+        index: &'e Index,
+        rtxn: &'pl RoTxn<'pl, WithoutTls>,
         primary_key_from_op: Option<&'pl str>,
-        new_fields_ids_map: &mut FieldsIdsMap,
+        new_fid_map: &mut FieldsIdsMap,
         must_stop_processing: &MSP,
         progress: Progress,
     ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
@@ -79,6 +83,11 @@ impl<'pl> DocumentOperation<'pl> {
     {
         progress.update_progress(IndexingStep::PreparingPayloads);
         let Self { operations } = self;
+
+        let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
+        let fid_map_with_meta = FieldIdMapWithMetadata::new(new_fid_map.clone(), metadata_builder);
+        let global = RwLock::new(fid_map_with_meta);
+        let gfid_map = GlobalFieldsIdsMap::new(&global);
 
         let documents_ids = index.documents_ids(rtxn)?;
         let available_docids = ConcurrentAvailableIds::new(documents_ids);
@@ -89,6 +98,7 @@ impl<'pl> DocumentOperation<'pl> {
         let (step, progress_step) = AtomicPayloadStep::new(payload_count as u32);
         progress.update_progress(progress_step);
 
+        let long_txn_id = rtxn.id();
         let operations_stats = operations
             .into_par_iter()
             .enumerate()
@@ -98,15 +108,21 @@ impl<'pl> DocumentOperation<'pl> {
                 }
                 step.fetch_add(1, Ordering::Relaxed);
 
+                let short = index.read_txn()?;
+                // SAFETY: The long_txn_id comes from the main rtxn and the long lifetime is the one of the long rtxn.
+                let rtxn: &'pl RoTxn<'e, _> = unsafe { extend_rtxn_lifetime(long_txn_id, &short) };
+                let indexer = bumpalo::Bump::new();
+                let mut gfid_map = gfid_map.clone();
+
                 let mut bytes = 0;
                 let result = match operation {
                     Payload::Replace(payload) => extract_addition_payload_changes(
-                        indexer,
+                        &indexer,
                         index,
                         &rtxn,
                         primary_key_from_op,
                         &primary_key,
-                        new_fields_ids_map,
+                        &mut gfid_map,
                         &available_docids,
                         &mut bytes,
                         &docids_version_offsets,
@@ -114,12 +130,12 @@ impl<'pl> DocumentOperation<'pl> {
                         payload,
                     ),
                     Payload::Update(payload) => extract_addition_payload_changes(
-                        indexer,
+                        &indexer,
                         index,
                         &rtxn,
                         primary_key_from_op,
                         &primary_key,
-                        new_fields_ids_map,
+                        &mut gfid_map,
                         &available_docids,
                         &mut bytes,
                         &docids_version_offsets,
@@ -179,7 +195,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     rtxn: &'r RoTxn<'r>,
     primary_key_from_op: Option<&'r str>,
     primary_key: &OnceLock<PrimaryKey<'r>>,
-    new_fields_ids_map: &mut FieldsIdsMap,
+    new_fields_ids_map: &mut GlobalFieldsIdsMap,
     available_docids: &ConcurrentAvailableIds,
     bytes: &mut u64,
     main_docids_version_offsets: &hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>,
@@ -622,4 +638,22 @@ pub fn first_update_pointer(docops: &[InnerDocOp]) -> Option<usize> {
         InnerDocOp::Update(update) => Some(update.content.as_ptr() as usize),
         InnerDocOp::Deletion => None,
     })
+}
+
+/// Extends the lifetime of a read-only transaction.
+/// The `long_txn_id` transaction ID must come from a call to the `RoTxn::id` method.
+///
+/// ## Panics
+///
+/// Panics if the long transaction ID does not match the transaction ID of the short transaction.
+pub unsafe fn extend_rtxn_lifetime<'e, 'long, 'short>(
+    long_txn_id: usize,
+    short: &'short RoTxn<'e, WithoutTls>,
+) -> &'long RoTxn<'e, WithoutTls> {
+    assert_eq!(
+        long_txn_id,
+        short.id(),
+        "Lifetimes can only be extended if they have the same transaction ID"
+    );
+    unsafe { std::mem::transmute(short) }
 }

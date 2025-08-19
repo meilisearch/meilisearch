@@ -4,7 +4,7 @@ use rustc_hash::FxBuildHasher;
 
 use crate::documents::{PrimaryKey, DEFAULT_PRIMARY_KEY};
 use crate::update::new::StdResult;
-use crate::{FieldsIdsMap, Index, Result, UserError};
+use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, Result, UserError};
 
 /// Returns the primary key that has already been set for this index or the
 /// one we will guess by searching for the first key that contains "id" as a substring,
@@ -12,7 +12,7 @@ use crate::{FieldsIdsMap, Index, Result, UserError};
 pub fn retrieve_or_guess_primary_key<'a>(
     rtxn: &'a RoTxn<'a>,
     index: &Index,
-    new_fields_ids_map: &mut FieldsIdsMap,
+    new_fields_ids_map: &mut GlobalFieldsIdsMap, // Use a &mut Mapper: MutFieldIdMapper
     primary_key_from_op: Option<&'a str>,
     first_document: Option<RawMap<'a, FxBuildHasher>>,
 ) -> Result<StdResult<(PrimaryKey<'a>, bool), UserError>> {
@@ -47,7 +47,7 @@ pub fn retrieve_or_guess_primary_key<'a>(
             let guesses: Result<Vec<&str>> = first_document
                 .keys()
                 .filter_map(|name| {
-                    let Some(_) = new_fields_ids_map.insert(name) else {
+                    let Some(_) = new_fields_ids_map.id_or_insert(name) else {
                         return Some(Err(UserError::AttributeLimitReached.into()));
                     };
                     name.to_lowercase().ends_with(DEFAULT_PRIMARY_KEY).then_some(Ok(name))
