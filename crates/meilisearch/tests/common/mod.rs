@@ -529,7 +529,7 @@ pub async fn shared_index_geojson_documents() -> &'static Index<'static, Shared>
             // Retrieved from https://gitlab-forge.din.developpement-durable.gouv.fr/pub/geomatique/descartes/d-map/-/blob/main/demo/examples/commons/countries.geojson?ref_type=heads
             let server = Server::new_shared();
             let index = server._index("SHARED_GEOJSON_DOCUMENTS").to_shared();
-            let countries = include_str!("../documents/geojson/assets/countries.geojson");
+            let countries = include_str!("../documents/geojson/assets/countries.json");
             let lille = serde_json::from_str::<serde_json::Value>(countries).unwrap();
             let (response, _code) = index._add_documents(Value(lille), Some("name")).await;
             server.wait_task(response.uid()).await.succeeded();
