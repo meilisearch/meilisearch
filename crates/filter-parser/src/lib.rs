@@ -454,26 +454,28 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
 /// If we parse `_geoPolygon` we MUST parse the rest of the expression.
 fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     // we want to allow space BEFORE the _geoBoundingBox but not after
-    let parsed = preceded(
-        tuple((multispace0, word_exact("_geoPolygon"))),
-        // if we were able to parse `_geoPolygon` and can't parse the rest of the input we return a failure
-        cut(delimited(
-            char('('),
-            separated_list1(
-                tag(","),
-                ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
-            ),
-            char(')'),
-        )),
+
+    let (input, _) = tuple((multispace0, word_exact("_geoPolygon")))(input)?;
+
+    // if we were able to parse `_geoPolygon` and can't parse the rest of the input we return a failure
+
+    let (input, args): (_, Vec<Vec<LocatedSpan<_, _>>>) = delimited(
+        char('('),
+        separated_list1(
+            tag(","),
+            ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
+        ),
+        char(')'),
     )(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(dbg!(input), ErrorKind::GeoBoundingBox)));
+    .map_cut(ErrorKind::GeoPolygon)?;
 
-    let (input, args) = parsed?;
-
-    // TODO: Return a more specific error
     if args.len() <= 2 || args.iter().any(|a| a.len() != 2) {
-        println!("here");
-        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
+        let (number, context) = args
+            .iter()
+            .find(|a| a.len() != 2)
+            .map(|a| (a.len(), a.first().unwrap_or(&input)))
+            .unwrap_or((args.len(), &input));
+        return Err(Error::failure_from_kind(*context, ErrorKind::GeoPolygonNotPairs(number)));
     }
 
     let res = FilterCondition::GeoPolygon {
@@ -880,25 +882,25 @@ pub mod tests {
         11:12 channel = 🐻 AND followers < 100
         "###);
 
-        insta::assert_snapshot!(p("'OR'"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `\'OR\'`.
+        insta::assert_snapshot!(p("'OR'"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `\'OR\'`.
         1:5 'OR'
-        "###);
+        ");
 
         insta::assert_snapshot!(p("OR"), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
         1:3 OR
         "###);
 
-        insta::assert_snapshot!(p("channel Ponce"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `channel Ponce`.
+        insta::assert_snapshot!(p("channel Ponce"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `channel Ponce`.
         1:14 channel Ponce
-        "###);
+        ");
 
-        insta::assert_snapshot!(p("channel = Ponce OR"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.
+        insta::assert_snapshot!(p("channel = Ponce OR"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` but instead got nothing.
         19:19 channel = Ponce OR
-        "###);
+        ");
 
         insta::assert_snapshot!(p("_geoRadius"), @r###"
         The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
@@ -924,6 +926,31 @@ pub mod tests {
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
         1:26 _geoBoundingBox(1.0, 1.0)
         "###);
+
+        insta::assert_snapshot!(p("_geoPolygon([1,2,3])"), @r"
+        The `_geoPolygon` filter expects pairs of coordinates but found a group of 3 coordinates instead.
+        14:15 _geoPolygon([1,2,3])
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon(1,2,3)"), @r"
+        The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
+        13:19 _geoPolygon(1,2,3)
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r"
+        The `_geoPolygon` filter expects pairs of coordinates but found a group of 3 coordinates instead.
+        20:21 _geoPolygon([1,2],[1,2,3])
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon(1)"), @r"
+        The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
+        13:15 _geoPolygon(1)
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon([1,2)"), @r"
+        The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
+        17:18 _geoPolygon([1,2)
+        ");
 
         insta::assert_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
@@ -980,15 +1007,15 @@ pub mod tests {
         34:35 channel = mv OR followers >= 1000)
         "###);
 
-        insta::assert_snapshot!(p("colour NOT EXIST"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
+        insta::assert_snapshot!(p("colour NOT EXIST"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
-        "###);
+        ");
 
-        insta::assert_snapshot!(p("subscribers 100 TO1000"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
+        insta::assert_snapshot!(p("subscribers 100 TO1000"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
-        "###);
+        ");
 
         insta::assert_snapshot!(p("channel = ponce ORdog != 'bernese mountain'"), @r###"
         Found unexpected characters at the end of the filter: `ORdog != \'bernese mountain\'`. You probably forgot an `OR` or an `AND` rule.
@@ -1113,38 +1140,38 @@ pub mod tests {
         5:7 NOT OR EXISTS AND EXISTS NOT EXISTS
         "###);
 
-        insta::assert_snapshot!(p(r#"value NULL"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NULL`.
+        insta::assert_snapshot!(p(r#"value NULL"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NULL`.
         1:11 value NULL
-        "###);
-        insta::assert_snapshot!(p(r#"value NOT NULL"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NOT NULL`.
+        ");
+        insta::assert_snapshot!(p(r#"value NOT NULL"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NOT NULL`.
         1:15 value NOT NULL
-        "###);
-        insta::assert_snapshot!(p(r#"value EMPTY"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value EMPTY`.
+        ");
+        insta::assert_snapshot!(p(r#"value EMPTY"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value EMPTY`.
         1:12 value EMPTY
-        "###);
-        insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NOT EMPTY`.
+        ");
+        insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NOT EMPTY`.
         1:16 value NOT EMPTY
-        "###);
-        insta::assert_snapshot!(p(r#"value IS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS`.
+        ");
+        insta::assert_snapshot!(p(r#"value IS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS`.
         1:9 value IS
-        "###);
-        insta::assert_snapshot!(p(r#"value IS NOT"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT`.
+        ");
+        insta::assert_snapshot!(p(r#"value IS NOT"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS NOT`.
         1:13 value IS NOT
-        "###);
-        insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS EXISTS`.
+        ");
+        insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS EXISTS`.
         1:16 value IS EXISTS
-        "###);
-        insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT EXISTS`.
+        ");
+        insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS NOT EXISTS`.
         1:20 value IS NOT EXISTS
-        "###);
+        ");
     }
 
     #[test]
