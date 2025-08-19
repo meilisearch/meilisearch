@@ -17,7 +17,9 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::error::MeilisearchHttpError;
-use crate::routes::indexes::proxy::error::{ProxyDocumentChangeError, ReqwestErrorWithoutUrl};
+use crate::routes::indexes::enterprise_edition::proxy::error::{
+    ProxyDocumentChangeError, ReqwestErrorWithoutUrl,
+};
 use crate::routes::SummarizedTaskView;
 
 pub enum Body<T: serde::Serialize> {
@@ -50,7 +52,7 @@ pub async fn proxy<T: serde::Serialize>(
     index_scheduler: &IndexScheduler,
     index_uid: &str,
     req: &HttpRequest,
-    network: meilisearch_types::network::Network,
+    network: meilisearch_types::enterprise_edition::network::Network,
     body: Body<T>,
     task: &meilisearch_types::tasks::Task,
 ) -> Result<(), MeilisearchHttpError> {

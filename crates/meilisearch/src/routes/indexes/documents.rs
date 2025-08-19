@@ -45,7 +45,7 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::proxy::{proxy, Body};
+use crate::routes::indexes::enterprise_edition::proxy::{proxy, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,

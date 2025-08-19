@@ -51,6 +51,7 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
+use meilisearch_types::enterprise_edition::network::Network;
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
@@ -63,7 +64,6 @@ use meilisearch_types::milli::vector::{
     Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
 use meilisearch_types::milli::{self, Index};
-use meilisearch_types::network::Network;
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{KindWithContent, Task, TaskNetwork};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};

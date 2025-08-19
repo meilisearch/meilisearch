@@ -17,7 +17,7 @@ use super::guess_primary_key::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
 use crate::progress::{AtomicPayloadStep, Progress};
 use crate::update::new::document::{DocumentContext, Versions};
-use crate::update::new::indexer::sharding::Shards;
+use crate::update::new::indexer::enterprise_edition::sharding::Shards;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};

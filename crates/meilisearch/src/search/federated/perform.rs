@@ -9,12 +9,12 @@ use std::vec::{IntoIter, Vec};
 use actix_http::StatusCode;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
+use meilisearch_types::enterprise_edition::network::{Network, Remote};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{self, DocumentId, OrderBy, TimeBudget, DEFAULT_VALUES_PER_FACET};
-use meilisearch_types::network::{Network, Remote};
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
 

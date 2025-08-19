@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use milli::update::new::indexer::sharding::Shards;
+use milli::update::new::indexer::enterprise_edition::sharding::Shards;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]

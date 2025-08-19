@@ -31,12 +31,12 @@ pub(crate) mod de;
 pub mod document_changes;
 mod document_deletion;
 mod document_operation;
+pub mod enterprise_edition;
 mod extract;
 mod guess_primary_key;
 mod partial_dump;
 mod post_processing;
 pub mod settings_changes;
-pub mod sharding;
 mod update_by_function;
 mod write;
 
