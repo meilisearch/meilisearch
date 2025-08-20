@@ -38,6 +38,7 @@ pub struct Filter<'a> {
 pub enum BadGeoError {
     Lat(f64),
     Lng(f64),
+    InvalidResolution(usize),
     BoundingBoxTopIsBelowBottom(f64, f64),
 }
 
@@ -49,6 +50,10 @@ impl Display for BadGeoError {
             Self::BoundingBoxTopIsBelowBottom(top, bottom) => {
                 write!(f, "The top latitude `{top}` is below the bottom latitude `{bottom}`.")
             }
+            Self::InvalidResolution(resolution) => write!(
+                f,
+                "Invalid resolution `{resolution}`. Resolution must be between 3 and 1000."
+            ),
             Self::Lat(lat) => write!(
                 f,
                 "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees.",
@@ -650,17 +655,7 @@ impl<'a> Filter<'a> {
             FilterCondition::VectorExists { fid: _, embedder, filter } => {
                 super::filter_vector::evaluate(rtxn, index, universe, embedder.clone(), filter)
             }
-            FilterCondition::GeoLowerThan { point, radius } => {
-                if !index.is_geo_filtering_enabled(rtxn)? {
-                    return Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
-                        attribute: RESERVED_GEO_FIELD_NAME,
-                        filterable_patterns: filtered_matching_patterns(
-                            filterable_attribute_rules,
-                            &|features| features.is_filterable(),
-                        ),
-                    }))?;
-                }
-
+            FilterCondition::GeoLowerThan { point, radius, resolution: res_token } => {
                 let base_point: [f64; 2] =
                     [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
                 if !(-90.0..=90.0).contains(&base_point[0]) {
@@ -670,23 +665,64 @@ impl<'a> Filter<'a> {
                     return Err(point[1].as_external_error(BadGeoError::Lng(base_point[1])))?;
                 }
                 let radius = radius.parse_finite_float()?;
-                let rtree = match index.geo_rtree(rtxn)? {
-                    Some(rtree) => rtree,
-                    None => return Ok(RoaringBitmap::new()),
-                };
+                let mut resolution = 125;
+                if let Some(res_token) = res_token {
+                    resolution = res_token.parse_finite_float()? as usize;
+                    if !(3..=1000).contains(&resolution) {
+                        return Err(
+                            res_token.as_external_error(BadGeoError::InvalidResolution(resolution))
+                        )?;
+                    }
+                }
 
-                let xyz_base_point = lat_lng_to_xyz(&base_point);
+                let mut r1 = None;
+                if index.is_geo_filtering_enabled(rtxn)? {
+                    let rtree = match index.geo_rtree(rtxn)? {
+                        Some(rtree) => rtree,
+                        None => return Ok(RoaringBitmap::new()),
+                    };
 
-                let result = rtree
-                    .nearest_neighbor_iter(&xyz_base_point)
-                    .take_while(|point| {
-                        distance_between_two_points(&base_point, &point.data.1)
-                            <= radius + f64::EPSILON
-                    })
-                    .map(|point| point.data.0)
-                    .collect();
+                    let xyz_base_point = lat_lng_to_xyz(&base_point);
 
-                Ok(result)
+                    let result = rtree
+                        .nearest_neighbor_iter(&xyz_base_point)
+                        .take_while(|point| {
+                            distance_between_two_points(&base_point, &point.data.1)
+                                <= radius + f64::EPSILON
+                        })
+                        .map(|point| point.data.0)
+                        .collect();
+                    r1 = Some(result);
+                }
+
+                let mut r2 = None;
+                if index.is_geojson_filtering_enabled(rtxn)? {
+                    let point = geo_types::Point::new(base_point[1], base_point[0]);
+
+                    let result = index
+                        .cellulite
+                        .in_circle(rtxn, point, radius, resolution)
+                        .map_err(InternalError::CelluliteError)?;
+
+                    r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring
+                }
+
+                match (r1, r2) {
+                    (Some(r1), Some(r2)) => Ok(r1 | r2),
+                    (Some(r1), None) => Ok(r1),
+                    (None, Some(r2)) => Ok(r2),
+                    (None, None) => {
+                        Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
+                            attribute: &format!(
+                                "{RESERVED_GEO_FIELD_NAME}/{RESERVED_GEOJSON_FIELD_NAME}"
+                            ),
+                            filterable_patterns: filtered_matching_patterns(
+                                filterable_attribute_rules,
+                                &|features| features.is_filterable(),
+                            ),
+                        }))?
+                    }
+                }
             }
             FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
                 let top_right: [f64; 2] = [

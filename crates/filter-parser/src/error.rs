@@ -75,6 +75,7 @@ pub enum ExpectedValueKind {
 pub enum ErrorKind<'a> {
     ReservedGeo(&'a str),
     GeoRadius,
+    GeoRadiusArgumentCount(usize),
     GeoBoundingBox,
     GeoPolygon,
     GeoPolygonTooFewPoints,
@@ -201,7 +202,10 @@ impl Display for Error<'_> {
                 writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", escaped_input)?
             }
             ErrorKind::GeoRadius => {
-                writeln!(f, "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.")?
+                writeln!(f, "The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.")?
+            }
+            ErrorKind::GeoRadiusArgumentCount(count) => {
+                writeln!(f, "Was expecting 3 or 4 arguments for `_geoRadius`, but instead found {count}.")?
             }
             ErrorKind::GeoBoundingBox => {
                 writeln!(f, "The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.")?
