@@ -1069,10 +1069,10 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. This index does not have configured filterable attributes.
+        snapshot!(error.to_string(), @r"
+        Attribute `_geo/_geojson` is not filterable. This index does not have configured filterable attributes.
         12:14 _geoRadius(42, 150, 10)
-        "###);
+        ");
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
@@ -1100,12 +1100,12 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
+        let filter = Filter::from_str("_geoRadius(-90, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. Available filterable attribute patterns are: `title`.
-        12:16 _geoRadius(-100, 150, 10)
-        "###);
+        snapshot!(error.to_string(), @r"
+        Attribute `_geo/_geojson` is not filterable. Available filterable attribute patterns are: `title`.
+        12:15 _geoRadius(-90, 150, 10)
+        ");
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
