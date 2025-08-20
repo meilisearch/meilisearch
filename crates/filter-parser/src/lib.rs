@@ -157,7 +157,7 @@ pub enum FilterCondition<'a> {
     Or(Vec<Self>),
     And(Vec<Self>),
     VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
-    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
+    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
     GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
     GeoPolygon { points: Vec<[Token<'a>; 2]> },
 }
@@ -399,23 +399,27 @@ fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// If we parse `_geoRadius` we MUST parse the rest of the expression.
 fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     // we want to allow space BEFORE the _geoRadius but not after
-    let parsed = preceded(
-        tuple((multispace0, word_exact("_geoRadius"))),
-        // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
-        cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
-    )(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::GeoRadius)));
+
+    let (input, _) = tuple((multispace0, word_exact("_geoRadius")))(input)?;
+
+    // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
+
+    let parsed =
+        delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))(input)
+            .map_cut(ErrorKind::GeoRadius);
 
     let (input, args) = parsed?;
 
-    if args.len() != 3 {
-        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoRadius)));
+    if !(3..=4).contains(&args.len()) {
+        return Err(Error::failure_from_kind(input, ErrorKind::GeoRadiusArgumentCount(args.len())));
     }
 
     let res = FilterCondition::GeoLowerThan {
         point: [args[0].into(), args[1].into()],
         radius: args[2].into(),
+        resolution: args.get(3).cloned().map(Token::from),
     };
+
     Ok((input, res))
 }
 
@@ -645,8 +649,11 @@ impl std::fmt::Display for FilterCondition<'_> {
                 }
                 write!(f, " EXISTS")
             }
-            FilterCondition::GeoLowerThan { point, radius } => {
+            FilterCondition::GeoLowerThan { point, radius, resolution: None } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
+            }
+            FilterCondition::GeoLowerThan { point, radius, resolution: Some(resolution) } => {
+                write!(f, "_geoRadius({}, {}, {}, {})", point[0], point[1], radius, resolution)
             }
             FilterCondition::GeoBoundingBox {
                 top_right_point: top_left_point,
@@ -831,6 +838,7 @@ pub mod tests {
         insta::assert_snapshot!(p("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
         insta::assert_snapshot!(p("NOT _geoRadius(12, 13, 14)"), @"NOT (_geoRadius({12}, {13}, {14}))");
         insta::assert_snapshot!(p("_geoRadius(12,13,14)"), @"_geoRadius({12}, {13}, {14})");
+        insta::assert_snapshot!(p("_geoRadius(12,13,14,1000)"), @"_geoRadius({12}, {13}, {14}, {1000})");
 
         // Test geo bounding box
         insta::assert_snapshot!(p("_geoBoundingBox([12, 13], [14, 15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
@@ -919,15 +927,15 @@ pub mod tests {
         19:19 channel = Ponce OR
         ");
 
-        insta::assert_snapshot!(p("_geoRadius"), @r###"
-        The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
-        1:11 _geoRadius
-        "###);
+        insta::assert_snapshot!(p("_geoRadius"), @r"
+        The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.
+        11:11 _geoRadius
+        ");
 
-        insta::assert_snapshot!(p("_geoRadius = 12"), @r###"
-        The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
-        1:16 _geoRadius = 12
-        "###);
+        insta::assert_snapshot!(p("_geoRadius = 12"), @r"
+        The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.
+        11:16 _geoRadius = 12
+        ");
 
         insta::assert_snapshot!(p("_geoBoundingBox"), @r"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.

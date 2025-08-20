@@ -382,3 +382,40 @@ async fn geo_bounding_box() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn geo_radius() {
+    let index = shared_index_geojson_documents().await;
+
+    // 200km around Luxembourg
+    let (response, code) = index
+        .search_get("?filter=_geoRadius(49.4369862,6.5576591,200000)&attributesToRetrieve=name")
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(response, @r#"
+    {
+      "hits": [
+        {
+          "name": "Belgium"
+        },
+        {
+          "name": "Germany"
+        },
+        {
+          "name": "France"
+        },
+        {
+          "name": "Luxembourg"
+        },
+        {
+          "name": "Netherlands"
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 5
+    }
+    "#);
+}
