@@ -444,12 +444,12 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "arroy"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08e6111f351d004bd13e95ab540721272136fd3218b39d3ec95a2ea1c4e6a0a6"
+version = "0.7.0"
+source = "git+https://github.com/meilisearch/arroy.git?rev=1a21e5c0cbe3e106b05d834076a5b727cf46bca1#1a21e5c0cbe3e106b05d834076a5b727cf46bca1"
 dependencies = [
  "bytemuck",
  "byteorder",
+ "crossbeam",
  "enum-iterator",
  "heed",
  "memmap2",
@@ -461,6 +461,7 @@ dependencies = [
  "roaring",
  "tempfile",
  "thiserror 2.0.12",
+ "thread_local",
  "tracing",
 ]
 
@@ -1365,6 +1366,19 @@ checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
 dependencies = [
  "cast",
  "itertools 0.10.5",
+]
+
+[[package]]
+name = "crossbeam"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1137cd7e7fc0fb5d3c5a8678be38ec56e819125d8d7907411fe24ccb943faca8"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-epoch",
+ "crossbeam-queue",
+ "crossbeam-utils",
 ]
 
 [[package]]

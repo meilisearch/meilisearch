@@ -87,14 +87,14 @@ impl<'pl> DocumentOperation<'pl> {
         let mut primary_key = None;
 
         let payload_count = operations.len();
-        let (step, progress_step) = AtomicPayloadStep::new(payload_count as u32);
+        let (step, progress_step) = AtomicPayloadStep::new(payload_count as u64);
         progress.update_progress(progress_step);
 
         for (payload_index, operation) in operations.into_iter().enumerate() {
             if must_stop_processing() {
                 return Err(InternalError::AbortedIndexation.into());
             }
-            step.store(payload_index as u32, Ordering::Relaxed);
+            step.store(payload_index as u64, Ordering::Relaxed);
 
             let mut bytes = 0;
             let result = match operation {
@@ -150,7 +150,7 @@ impl<'pl> DocumentOperation<'pl> {
             };
             operations_stats.push(PayloadStats { document_count, bytes, error });
         }
-        step.store(payload_count as u32, Ordering::Relaxed);
+        step.store(payload_count as u64, Ordering::Relaxed);
 
         // TODO We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
         let mut docids_version_offsets: bumpalo::collections::vec::Vec<_> =
