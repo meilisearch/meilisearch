@@ -18,6 +18,8 @@ use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{lat_lng_to_xyz, DocumentId, GeoPoint, Index, InternalError, Result};
 
+pub mod cellulite;
+
 pub struct GeoExtractor {
     grenad_parameters: GrenadParameters,
 }
