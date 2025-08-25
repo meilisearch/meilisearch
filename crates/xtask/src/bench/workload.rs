@@ -47,7 +47,7 @@ async fn run_commands(
         .as_slice()
         .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
     {
-        super::command::run_batch(meili_client, batch, &workload.assets, &args.asset_folder)
+        super::command::run_batch(meili_client, batch, &workload.assets, &args.common.asset_folder)
             .await?;
     }
 
@@ -64,7 +64,7 @@ async fn run_commands(
         .as_slice()
         .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
     {
-        super::command::run_batch(meili_client, batch, &workload.assets, &args.asset_folder)
+        super::command::run_batch(meili_client, batch, &workload.assets, &args.common.asset_folder)
             .await?;
     }
 
@@ -88,7 +88,7 @@ pub async fn execute(
     args: &BenchDeriveArgs,
     binary_path: Option<&Path>,
 ) -> anyhow::Result<()> {
-    assets::fetch_assets(assets_client, &workload.assets, &args.asset_folder).await?;
+    assets::fetch_assets(assets_client, &workload.assets, &args.common.asset_folder).await?;
 
     let workload_uuid = dashboard_client.create_workload(invocation_uuid, &workload).await?;
 
@@ -156,9 +156,14 @@ async fn execute_run(
         }
     };
 
-    let meilisearch =
-        meili_process::start(meili_client, master_key, workload, &args.asset_folder, run_command)
-            .await?;
+    let meilisearch = meili_process::start(
+        meili_client,
+        master_key,
+        workload,
+        &args.common.asset_folder,
+        run_command,
+    )
+    .await?;
 
     let processor = run_commands(
         dashboard_client,

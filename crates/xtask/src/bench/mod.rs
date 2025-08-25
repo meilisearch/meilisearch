@@ -6,6 +6,7 @@ mod env_info;
 mod meili_process;
 mod workload;
 
+use crate::common::args::CommonArgs;
 use std::io::LineWriter;
 use std::path::PathBuf;
 
@@ -25,14 +26,6 @@ pub fn default_report_folder() -> String {
     "./bench/reports/".into()
 }
 
-pub fn default_asset_folder() -> String {
-    "./bench/assets/".into()
-}
-
-pub fn default_log_filter() -> String {
-    "info".into()
-}
-
 pub fn default_dashboard_url() -> String {
     "http://localhost:9001".into()
 }
@@ -40,6 +33,10 @@ pub fn default_dashboard_url() -> String {
 /// Run benchmarks from a workload
 #[derive(Parser, Debug)]
 pub struct BenchDeriveArgs {
+    /// Common arguments shared with other commands
+    #[command(flatten)]
+    common: CommonArgs,
+
     /// Filename of the workload file, pass multiple filenames
     /// to run multiple workloads in the specified order.
     ///
@@ -59,14 +56,6 @@ pub struct BenchDeriveArgs {
     #[arg(long, default_value_t = default_report_folder())]
     report_folder: String,
 
-    /// Directory to store the remote assets.
-    #[arg(long, default_value_t = default_asset_folder())]
-    asset_folder: String,
-
-    /// Log directives
-    #[arg(short, long, default_value_t = default_log_filter())]
-    log_filter: String,
-
     /// Benchmark dashboard API key
     #[arg(long)]
     api_key: Option<String>,
@@ -74,10 +63,6 @@ pub struct BenchDeriveArgs {
     /// Meilisearch master keys
     #[arg(long)]
     master_key: Option<String>,
-
-    /// Authentication bearer for fetching assets
-    #[arg(long)]
-    assets_key: Option<String>,
 
     /// Reason for the benchmark invocation
     #[arg(short, long)]
@@ -97,7 +82,7 @@ pub struct BenchDeriveArgs {
 pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     // setup logs
     let filter: tracing_subscriber::filter::Targets =
-        args.log_filter.parse().context("invalid --log-filter")?;
+        args.common.log_filter.parse().context("invalid --log-filter")?;
 
     let subscriber = tracing_subscriber::registry().with(
         tracing_subscriber::fmt::layer()
@@ -116,8 +101,11 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     let _scope = rt.enter();
 
     // setup clients
-    let assets_client =
-        Client::new(None, args.assets_key.as_deref(), Some(std::time::Duration::from_secs(3600)))?; // 1h
+    let assets_client = Client::new(
+        None,
+        args.common.assets_key.as_deref(),
+        Some(std::time::Duration::from_secs(3600)),
+    )?; // 1h
 
     let dashboard_client = if args.no_dashboard {
         dashboard::DashboardClient::new_dry()
