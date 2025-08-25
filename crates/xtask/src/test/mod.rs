@@ -5,6 +5,7 @@ use anyhow::{bail, Context};
 use cargo_metadata::semver::Version;
 use clap::Parser;
 
+mod versions;
 mod workload;
 
 pub use workload::TestWorkload;
@@ -51,7 +52,7 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
         )
         .with_context(|| format!("error parsing {} as JSON", workload_file.display()))?;
 
-        let Workload::Test(workload) = workload else {
+        let Workload::Test(mut workload) = workload else {
             bail!("workload file {} is not a test workload", workload_file.display());
         };
 
