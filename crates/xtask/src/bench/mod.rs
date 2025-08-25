@@ -7,14 +7,11 @@ mod meili_process;
 mod workload;
 
 use crate::common::args::CommonArgs;
-use std::io::LineWriter;
+use crate::common::logs::setup_logs;
 use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::Parser;
-use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::Layer;
 
 use self::client::Client;
 use self::workload::Workload;
@@ -80,17 +77,7 @@ pub struct BenchDeriveArgs {
 }
 
 pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
-    // setup logs
-    let filter: tracing_subscriber::filter::Targets =
-        args.common.log_filter.parse().context("invalid --log-filter")?;
-
-    let subscriber = tracing_subscriber::registry().with(
-        tracing_subscriber::fmt::layer()
-            .with_writer(|| LineWriter::new(std::io::stderr()))
-            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-            .with_filter(filter),
-    );
-    tracing::subscriber::set_global_default(subscriber).context("could not setup logging")?;
+    setup_logs(&args.common.log_filter)?;
 
     // fetch environment and build info
     let env = env_info::Environment::generate_from_current_config();
@@ -104,8 +91,8 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     let assets_client = Client::new(
         None,
         args.common.assets_key.as_deref(),
-        Some(std::time::Duration::from_secs(3600)),
-    )?; // 1h
+        Some(std::time::Duration::from_secs(3600)), // 1h
+    )?;
 
     let dashboard_client = if args.no_dashboard {
         dashboard::DashboardClient::new_dry()

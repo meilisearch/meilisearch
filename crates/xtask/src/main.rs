@@ -28,7 +28,7 @@ fn main() -> anyhow::Result<()> {
     match args {
         Command::ListFeatures(args) => list_features(args),
         Command::Bench(args) => xtask::bench::run(args)?,
-        Command::Test(args) => todo!(),
+        Command::Test(args) => xtask::test::run(args)?,
     }
     Ok(())
 }
