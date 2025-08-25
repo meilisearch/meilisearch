@@ -1,4 +1,3 @@
-mod command;
 mod dashboard;
 mod env_info;
 mod meili_process;
@@ -138,7 +137,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                         .with_context(|| format!("error opening {}", workload_file.display()))?,
                 )
                 .with_context(|| format!("error parsing {} as JSON", workload_file.display()))?;
-                
+
                 let Workload::Bench(workload) = workload else {
                     bail!("workload file {} is not a bench workload", workload_file.display());
                 };

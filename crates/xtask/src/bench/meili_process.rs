@@ -2,17 +2,18 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use anyhow::{bail, Context as _};
-use tokio::process::Command;
+use tokio::process::Command as TokioCommand;
 use tokio::time;
 
 use super::workload::BenchWorkload;
 use crate::common::assets::Asset;
 use crate::common::client::Client;
+use crate::common::command::{run as run_command, Command, SyncMode};
 
 pub async fn kill(mut meilisearch: tokio::process::Child) {
     let Some(id) = meilisearch.id() else { return };
 
-    match Command::new("kill").args(["--signal=TERM", &id.to_string()]).spawn() {
+    match TokioCommand::new("kill").args(["--signal=TERM", &id.to_string()]).spawn() {
         Ok(mut cmd) => {
             let Err(error) = cmd.wait().await else { return };
             tracing::warn!(
@@ -50,7 +51,7 @@ pub async fn kill(mut meilisearch: tokio::process::Child) {
 
 #[tracing::instrument]
 pub async fn build() -> anyhow::Result<()> {
-    let mut command = Command::new("cargo");
+    let mut command = TokioCommand::new("cargo");
     command.arg("build").arg("--release").arg("-p").arg("meilisearch");
 
     command.kill_on_drop(true);
@@ -70,7 +71,7 @@ pub async fn start(
     master_key: Option<&str>,
     workload: &BenchWorkload,
     asset_folder: &str,
-    mut command: Command,
+    mut command: TokioCommand,
 ) -> anyhow::Result<tokio::process::Child> {
     command.arg("--db-path").arg("./_xtask_benchmark.ms");
     if let Some(master_key) = master_key {
@@ -98,7 +99,7 @@ async fn wait_for_health(
     asset_folder: &str,
 ) -> anyhow::Result<()> {
     for i in 0..100 {
-        let res = super::command::run(client.clone(), health_command(), assets, asset_folder).await;
+        let res = run_command(client.clone(), health_command(), assets, asset_folder).await;
         if res.is_ok() {
             // check that this is actually the current Meilisearch instance that answered us
             if let Some(exit_code) =
@@ -122,12 +123,12 @@ async fn wait_for_health(
     bail!("meilisearch is not responding")
 }
 
-fn health_command() -> super::command::Command {
-    super::command::Command {
+fn health_command() -> Command {
+    Command {
         route: "/health".into(),
         method: crate::common::client::Method::Get,
         body: Default::default(),
-        synchronous: super::command::SyncMode::WaitForResponse,
+        synchronous: SyncMode::WaitForResponse,
     }
 }
 

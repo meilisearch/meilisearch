@@ -10,12 +10,12 @@ use serde_json::json;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use super::command::SyncMode;
 use super::dashboard::DashboardClient;
 use super::BenchDeriveArgs;
 use crate::bench::meili_process;
 use crate::common::assets::{self, Asset};
 use crate::common::client::Client;
+use crate::common::command::{run_batch as run_command_batch, Command, SyncMode};
 
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
@@ -28,8 +28,8 @@ pub struct BenchWorkload {
     #[serde(default)]
     pub target: String,
     #[serde(default)]
-    pub precommands: Vec<super::command::Command>,
-    pub commands: Vec<super::command::Command>,
+    pub precommands: Vec<Command>,
+    pub commands: Vec<Command>,
 }
 
 async fn run_commands(
@@ -49,8 +49,7 @@ async fn run_commands(
         .as_slice()
         .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
     {
-        super::command::run_batch(meili_client, batch, &workload.assets, &args.common.asset_folder)
-            .await?;
+        run_command_batch(meili_client, batch, &workload.assets, &args.common.asset_folder).await?;
     }
 
     std::fs::create_dir_all(report_folder)
@@ -66,8 +65,7 @@ async fn run_commands(
         .as_slice()
         .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
     {
-        super::command::run_batch(meili_client, batch, &workload.assets, &args.common.asset_folder)
-            .await?;
+        run_command_batch(meili_client, batch, &workload.assets, &args.common.asset_folder).await?;
     }
 
     let processor =
