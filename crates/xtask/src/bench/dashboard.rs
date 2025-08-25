@@ -7,9 +7,9 @@ use tokio::task::AbortHandle;
 use tracing_trace::processor::span_stats::CallStats;
 use uuid::Uuid;
 
-use super::client::Client;
 use super::env_info;
 use super::workload::Workload;
+use crate::common::client::Client;
 
 #[derive(Debug, Clone)]
 pub enum DashboardClient {

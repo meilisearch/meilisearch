@@ -1,5 +1,3 @@
-mod assets;
-mod client;
 mod command;
 mod dashboard;
 mod env_info;
@@ -13,8 +11,8 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::Parser;
 
-use self::client::Client;
 use self::workload::Workload;
+use crate::common::client::Client;
 
 pub fn default_http_addr() -> String {
     "127.0.0.1:7700".to_string()

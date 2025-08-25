@@ -5,9 +5,9 @@ use anyhow::{bail, Context as _};
 use tokio::process::Command;
 use tokio::time;
 
-use super::assets::Asset;
-use super::client::Client;
 use super::workload::Workload;
+use crate::common::assets::Asset;
+use crate::common::client::Client;
 
 pub async fn kill(mut meilisearch: tokio::process::Child) {
     let Some(id) = meilisearch.id() else { return };
@@ -125,7 +125,7 @@ async fn wait_for_health(
 fn health_command() -> super::command::Command {
     super::command::Command {
         route: "/health".into(),
-        method: super::client::Method::Get,
+        method: crate::common::client::Method::Get,
         body: Default::default(),
         synchronous: super::command::SyncMode::WaitForResponse,
     }

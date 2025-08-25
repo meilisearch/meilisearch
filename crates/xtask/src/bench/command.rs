@@ -5,8 +5,8 @@ use std::io::Read as _;
 use anyhow::{bail, Context as _};
 use serde::Deserialize;
 
-use super::assets::{fetch_asset, Asset};
-use super::client::{Client, Method};
+use crate::common::assets::{fetch_asset, Asset};
+use crate::common::client::{Client, Method};
 
 #[derive(Clone, Deserialize)]
 pub struct Command {

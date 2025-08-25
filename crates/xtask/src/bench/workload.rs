@@ -10,13 +10,15 @@ use serde_json::json;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use super::assets::Asset;
-use super::client::Client;
 use super::command::SyncMode;
 use super::dashboard::DashboardClient;
 use super::BenchDeriveArgs;
-use crate::bench::{assets, meili_process};
+use crate::bench::meili_process;
+use crate::common::assets::{self, Asset};
+use crate::common::client::Client;
 
+/// A bench workload.
+/// Not to be confused with [a test workload](crate::test::workload::Workload).
 #[derive(Deserialize)]
 pub struct Workload {
     pub name: String,

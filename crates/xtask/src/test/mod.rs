@@ -2,6 +2,8 @@ use clap::Parser;
 
 use crate::common::{args::CommonArgs, logs::setup_logs};
 
+mod workload;
+
 /// Run tests from a workload
 #[derive(Parser, Debug)]
 pub struct TestDeriveArgs {
