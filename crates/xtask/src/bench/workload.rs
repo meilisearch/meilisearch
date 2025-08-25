@@ -20,7 +20,7 @@ use crate::common::client::Client;
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
 #[derive(Deserialize)]
-pub struct Workload {
+pub struct BenchWorkload {
     pub name: String,
     pub run_count: u16,
     pub extra_cli_args: Vec<String>,
@@ -37,7 +37,7 @@ async fn run_commands(
     logs_client: &Client,
     meili_client: &Client,
     workload_uuid: Uuid,
-    workload: &Workload,
+    workload: &BenchWorkload,
     args: &BenchDeriveArgs,
     run_number: u16,
 ) -> anyhow::Result<JoinHandle<anyhow::Result<File>>> {
@@ -86,7 +86,7 @@ pub async fn execute(
     meili_client: &Client,
     invocation_uuid: Uuid,
     master_key: Option<&str>,
-    workload: Workload,
+    workload: BenchWorkload,
     args: &BenchDeriveArgs,
     binary_path: Option<&Path>,
 ) -> anyhow::Result<()> {
@@ -134,7 +134,7 @@ async fn execute_run(
     meili_client: &Client,
     workload_uuid: Uuid,
     master_key: Option<&str>,
-    workload: &Workload,
+    workload: &BenchWorkload,
     args: &BenchDeriveArgs,
     binary_path: Option<&Path>,
     run_number: u16,

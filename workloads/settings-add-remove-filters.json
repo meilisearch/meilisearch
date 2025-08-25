@@ -1,5 +1,6 @@
 {
   "name": "settings-add-remove-filters.json",
+  "type": "bench",
   "run_count": 5,
   "extra_cli_args": [
     "--max-indexing-threads=4"

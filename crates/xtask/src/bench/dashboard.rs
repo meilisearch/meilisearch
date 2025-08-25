@@ -8,7 +8,7 @@ use tracing_trace::processor::span_stats::CallStats;
 use uuid::Uuid;
 
 use super::env_info;
-use super::workload::Workload;
+use super::workload::BenchWorkload;
 use crate::common::client::Client;
 
 #[derive(Debug, Clone)]
@@ -89,7 +89,7 @@ impl DashboardClient {
     pub async fn create_workload(
         &self,
         invocation_uuid: Uuid,
-        workload: &Workload,
+        workload: &BenchWorkload,
     ) -> anyhow::Result<Uuid> {
         let Self::Client(dashboard_client) = self else { return Ok(Uuid::now_v7()) };
 

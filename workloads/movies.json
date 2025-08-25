@@ -1,5 +1,6 @@
 {
   "name": "movies.json",
+  "type": "bench",
   "run_count": 10,
   "extra_cli_args": [],
   "assets": {

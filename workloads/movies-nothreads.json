@@ -1,5 +1,6 @@
 {
   "name": "movies.json,no-threads",
+  "type": "bench",
   "run_count": 2,
   "extra_cli_args": [
     "--max-indexing-threads=1"

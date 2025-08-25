@@ -5,7 +5,7 @@ use anyhow::{bail, Context as _};
 use tokio::process::Command;
 use tokio::time;
 
-use super::workload::Workload;
+use super::workload::BenchWorkload;
 use crate::common::assets::Asset;
 use crate::common::client::Client;
 
@@ -68,7 +68,7 @@ pub async fn build() -> anyhow::Result<()> {
 pub async fn start(
     client: &Client,
     master_key: Option<&str>,
-    workload: &Workload,
+    workload: &BenchWorkload,
     asset_folder: &str,
     mut command: Command,
 ) -> anyhow::Result<tokio::process::Child> {

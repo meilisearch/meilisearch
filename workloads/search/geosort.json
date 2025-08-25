@@ -1,6 +1,7 @@
 {
     "name": "search-geosort.jsonl_1M",
-    "run_count": 3,
+    "type": "bench",
+  "run_count": 3,
     "target": "search::=trace",
     "extra_cli_args": [],
     "assets": {

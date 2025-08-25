@@ -6,13 +6,14 @@ mod workload;
 
 use crate::common::args::CommonArgs;
 use crate::common::logs::setup_logs;
+use crate::common::workload::Workload;
 use std::path::PathBuf;
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use clap::Parser;
 
-use self::workload::Workload;
 use crate::common::client::Client;
+pub use workload::BenchWorkload;
 
 pub fn default_http_addr() -> String {
     "127.0.0.1:7700".to_string()
@@ -137,6 +138,10 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                         .with_context(|| format!("error opening {}", workload_file.display()))?,
                 )
                 .with_context(|| format!("error parsing {} as JSON", workload_file.display()))?;
+                
+                let Workload::Bench(workload) = workload else {
+                    bail!("workload file {} is not a bench workload", workload_file.display());
+                };
 
                 let workload_name = workload.name.clone();
 
