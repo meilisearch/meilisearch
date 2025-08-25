@@ -29,13 +29,6 @@ pub struct BenchDeriveArgs {
     #[command(flatten)]
     common: CommonArgs,
 
-    /// Filename of the workload file, pass multiple filenames
-    /// to run multiple workloads in the specified order.
-    ///
-    /// Each workload run will get its own report file.
-    #[arg(value_name = "WORKLOAD_FILE", last = false)]
-    workload_file: Vec<PathBuf>,
-
     /// URL of the dashboard.
     #[arg(long, default_value_t = default_dashboard_url())]
     dashboard_url: String,
@@ -52,17 +45,9 @@ pub struct BenchDeriveArgs {
     #[arg(long)]
     api_key: Option<String>,
 
-    /// Meilisearch master keys
-    #[arg(long)]
-    master_key: Option<String>,
-
     /// Reason for the benchmark invocation
     #[arg(short, long)]
     reason: Option<String>,
-
-    /// The maximum time in seconds we allow for fetching the task queue before timing out.
-    #[arg(long, default_value_t = 60)]
-    tasks_queue_timeout_secs: u64,
 
     /// The path to the binary to run.
     ///
@@ -100,14 +85,14 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     // Also we don't want any pesky timeout because we don't know how much time it will take to recover the full trace
     let logs_client = Client::new(
         Some("http://127.0.0.1:7700/logs/stream".into()),
-        args.master_key.as_deref(),
+        args.common.master_key.as_deref(),
         None,
     )?;
 
     let meili_client = Client::new(
         Some("http://127.0.0.1:7700".into()),
-        args.master_key.as_deref(),
-        Some(std::time::Duration::from_secs(args.tasks_queue_timeout_secs)),
+        args.common.master_key.as_deref(),
+        Some(std::time::Duration::from_secs(args.common.tasks_queue_timeout_secs)),
     )?;
 
     // enter runtime
@@ -116,11 +101,11 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         dashboard_client.send_machine_info(&env).await?;
 
         let commit_message = build_info.commit_msg.unwrap_or_default().split('\n').next().unwrap();
-        let max_workloads = args.workload_file.len();
+        let max_workloads = args.common.workload_file.len();
         let reason: Option<&str> = args.reason.as_deref();
         let invocation_uuid = dashboard_client.create_invocation(build_info.clone(), commit_message, env, max_workloads, reason).await?;
 
-        tracing::info!(workload_count = args.workload_file.len(), "handling workload files");
+        tracing::info!(workload_count = args.common.workload_file.len(), "handling workload files");
 
         // main task
         let workload_runs = tokio::spawn(
@@ -128,7 +113,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                 let dashboard_client = dashboard_client.clone();
                 let mut dashboard_urls = Vec::new();
                 async move {
-            for workload_file in args.workload_file.iter() {
+            for workload_file in args.common.workload_file.iter() {
                 let workload: Workload = serde_json::from_reader(
                     std::fs::File::open(workload_file)
                         .with_context(|| format!("error opening {}", workload_file.display()))?,
@@ -147,7 +132,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                     &logs_client,
                     &meili_client,
                     invocation_uuid,
-                    args.master_key.as_deref(),
+                    args.common.master_key.as_deref(),
                     workload,
                     &args,
                     args.binary_path.as_deref(),
