@@ -26,4 +26,4 @@ SOFTWARE.
 
 Certain parts of this codebase are not licensed under the MIT license and governed by the Business Source License 1.1.
 
-See the LICENSE-EE file for details.
+See the LICENSE-EE.md file for details.
