@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use crate::common::{args::CommonArgs, client::Client, logs::setup_logs, workload::Workload};
 use anyhow::{bail, Context};
-use cargo_metadata::semver::Version;
 use clap::Parser;
 
 mod versions;
@@ -16,8 +15,6 @@ pub struct TestDeriveArgs {
     /// Common arguments shared with other commands
     #[command(flatten)]
     common: CommonArgs,
-
-    initial_version: Version,
 }
 
 pub fn run(args: TestDeriveArgs) -> anyhow::Result<()> {
@@ -58,18 +55,10 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
 
         match workload.run(&args, &assets_client, &meili_client).await {
             Ok(_) => {
-                println!(
-                    "✅ Workload {} from file {} completed successfully",
-                    workload.name,
-                    workload_file.display()
-                );
+                println!("✅ Workload {} completed successfully", workload.name,);
             }
             Err(error) => {
-                println!(
-                    "❌ Workload {} from file {} failed: {error}",
-                    workload.name,
-                    workload_file.display()
-                );
+                println!("❌ Workload {} failed: {error}", workload.name,);
                 return Err(error);
             }
         }

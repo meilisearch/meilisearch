@@ -166,7 +166,14 @@ fn check_sha256(name: &str, asset: &Asset, mut file: std::fs::File) -> anyhow::R
             }
         }
         None => {
-            tracing::warn!(sha256 = file_hash, "Skipping hash for asset {name} that doesn't have one. Please add it to workload file");
+            let msg = match name.starts_with("meilisearch-v") {
+                true => "Please add it to xtask/src/test/versions.rs",
+                false => "Please add it to workload file",
+            };
+            tracing::warn!(
+                sha256 = file_hash,
+                "Skipping hash for asset {name} that doesn't have one. {msg}"
+            );
             true
         }
     })

@@ -48,8 +48,10 @@ enum CommandOrUpgradeVec {
 /// A test workload.
 /// Not to be confused with [a bench workload](crate::bench::workload::Workload).
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TestWorkload {
     pub name: String,
+    pub initial_version: Version,
     pub assets: BTreeMap<String, Asset>,
     pub commands: Vec<CommandOrUpgrade>,
 }
@@ -64,7 +66,7 @@ impl TestWorkload {
         // Group commands between upgrades
         let mut commands_or_upgrade = Vec::new();
         let mut current_commands = Vec::new();
-        let mut all_versions = vec![args.initial_version.clone()];
+        let mut all_versions = vec![self.initial_version.clone()];
         for command_or_upgrade in &self.commands {
             match command_or_upgrade {
                 CommandOrUpgrade::Command(command) => current_commands.push(command.clone()),
