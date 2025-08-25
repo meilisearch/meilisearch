@@ -14,9 +14,6 @@ use clap::Parser;
 use crate::common::client::Client;
 pub use workload::BenchWorkload;
 
-pub fn default_http_addr() -> String {
-    "127.0.0.1:7700".to_string()
-}
 pub fn default_report_folder() -> String {
     "./bench/reports/".into()
 }
