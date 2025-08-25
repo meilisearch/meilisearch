@@ -423,6 +423,16 @@ InvalidChatCompletionSearchQueryParamPrompt    , InvalidRequest       , BAD_REQU
 InvalidChatCompletionSearchFilterParamPrompt   , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchIndexUidParamPrompt , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST ;
+// Render
+InvalidRenderTemplate                          , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderTemplateId                        , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderTemplateInline                    , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInput                             , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInputDocumentId                   , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInputInline                       , InvalidRequest       , BAD_REQUEST ;
+RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND ;
+TemplateParsingError                           , InvalidRequest       , BAD_REQUEST ;
+TemplateRenderingError                         , InvalidRequest       , BAD_REQUEST ;
 // Webhooks
 InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
 InvalidWebhookUrl                              , InvalidRequest       , BAD_REQUEST ;

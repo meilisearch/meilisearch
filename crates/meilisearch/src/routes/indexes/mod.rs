@@ -31,6 +31,8 @@ use crate::Opt;
 pub mod documents;
 mod enterprise_edition;
 pub mod facet_search;
+pub mod render;
+mod render_analytics;
 pub mod search;
 mod search_analytics;
 #[cfg(test)]
@@ -79,6 +81,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
+            .service(web::scope("/render").configure(render::configure))
             .service(web::scope("/similar").configure(similar::configure))
             .service(web::scope("/settings").configure(settings::configure)),
     );
