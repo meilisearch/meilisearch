@@ -15,7 +15,7 @@ use super::BenchDeriveArgs;
 use crate::bench::meili_process;
 use crate::common::assets::{self, Asset};
 use crate::common::client::Client;
-use crate::common::command::{run_batch as run_command_batch, Command, SyncMode};
+use crate::common::command::{run_commands, Command};
 
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
@@ -32,7 +32,7 @@ pub struct BenchWorkload {
     pub commands: Vec<Command>,
 }
 
-async fn run_commands(
+async fn run_workload_commands(
     dashboard_client: &DashboardClient,
     logs_client: &Client,
     meili_client: &Client,
@@ -44,13 +44,8 @@ async fn run_commands(
     let report_folder = &args.report_folder;
     let workload_name = &workload.name;
 
-    for batch in workload
-        .precommands
-        .as_slice()
-        .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
-    {
-        run_command_batch(meili_client, batch, &workload.assets, &args.common.asset_folder).await?;
-    }
+    run_commands(meili_client, &workload.precommands, &workload.assets, &args.common.asset_folder)
+        .await?;
 
     std::fs::create_dir_all(report_folder)
         .with_context(|| format!("could not create report directory at {report_folder}"))?;
@@ -60,13 +55,8 @@ async fn run_commands(
 
     let report_handle = start_report(logs_client, trace_filename, &workload.target).await?;
 
-    for batch in workload
-        .commands
-        .as_slice()
-        .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
-    {
-        run_command_batch(meili_client, batch, &workload.assets, &args.common.asset_folder).await?;
-    }
+    run_commands(meili_client, &workload.commands, &workload.assets, &args.common.asset_folder)
+        .await?;
 
     let processor =
         stop_report(dashboard_client, logs_client, workload_uuid, report_filename, report_handle)
@@ -165,7 +155,7 @@ async fn execute_run(
     )
     .await?;
 
-    let processor = run_commands(
+    let processor = run_workload_commands(
         dashboard_client,
         logs_client,
         meili_client,

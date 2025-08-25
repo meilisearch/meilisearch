@@ -1,9 +1,6 @@
+use crate::common::{args::CommonArgs, client::Client, logs::setup_logs};
 use cargo_metadata::semver::Version;
 use clap::Parser;
-use serde::Deserialize;
-
-use crate::common::command::Command;
-use crate::common::{args::CommonArgs, client::Client, logs::setup_logs};
 
 mod workload;
 
@@ -17,13 +14,6 @@ pub struct TestDeriveArgs {
     common: CommonArgs,
 
     initial_version: Version,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-pub enum CommandOrUpgrade {
-    Command(Command),
-    Upgrade { upgrade: Version },
 }
 
 pub fn run(args: TestDeriveArgs) -> anyhow::Result<()> {

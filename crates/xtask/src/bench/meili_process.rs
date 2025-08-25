@@ -8,7 +8,7 @@ use tokio::time;
 use super::workload::BenchWorkload;
 use crate::common::assets::Asset;
 use crate::common::client::Client;
-use crate::common::command::{run as run_command, Command, SyncMode};
+use crate::common::command::{health_command, run as run_command};
 
 pub async fn kill(mut meilisearch: tokio::process::Child) {
     let Some(id) = meilisearch.id() else { return };
@@ -121,15 +121,6 @@ async fn wait_for_health(
         tracing::debug!(attempt = i, "Waiting for Meilisearch to go up");
     }
     bail!("meilisearch is not responding")
-}
-
-fn health_command() -> Command {
-    Command {
-        route: "/health".into(),
-        method: crate::common::client::Method::Get,
-        body: Default::default(),
-        synchronous: SyncMode::WaitForResponse,
-    }
 }
 
 pub fn delete_db() {

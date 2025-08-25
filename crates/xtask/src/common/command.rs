@@ -15,7 +15,7 @@ pub struct Command {
     #[serde(default)]
     pub body: Body,
     #[serde(default)]
-    pub synchronous: SyncMode,
+    synchronous: SyncMode,
 }
 
 #[derive(Default, Clone, Deserialize)]
@@ -64,14 +64,14 @@ impl Display for Command {
 }
 
 #[derive(Default, Debug, Clone, Copy, Deserialize)]
-pub enum SyncMode {
+enum SyncMode {
     DontWait,
     #[default]
     WaitForResponse,
     WaitForTask,
 }
 
-pub async fn run_batch(
+async fn run_batch(
     client: &Client,
     batch: &[Command],
     assets: &BTreeMap<String, Asset>,
@@ -191,4 +191,28 @@ pub async fn run(
     }
 
     Ok(())
+}
+
+pub async fn run_commands(
+    client: &Client,
+    commands: &[Command],
+    assets: &BTreeMap<String, Asset>,
+    asset_folder: &str,
+) -> anyhow::Result<()> {
+    for batch in
+        commands.split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
+    {
+        run_batch(client, batch, assets, asset_folder).await?;
+    }
+
+    Ok(())
+}
+
+pub fn health_command() -> Command {
+    Command {
+        route: "/health".into(),
+        method: crate::common::client::Method::Get,
+        body: Default::default(),
+        synchronous: SyncMode::WaitForResponse,
+    }
 }
