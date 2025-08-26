@@ -101,7 +101,7 @@ pub fn settings_change_extract<
         extractor_alloc.0.reset();
     }
 
-    let total_documents = documents.len() as u32;
+    let total_documents = documents.len() as u64;
     let (step, progress_step) = AtomicDocumentStep::new(total_documents);
     progress.update_progress(progress_step);
 
@@ -132,7 +132,7 @@ pub fn settings_change_extract<
                 .filter_map(|item| documents.item_to_database_document(context, item).transpose());
 
             let res = extractor.process(documents, context).map_err(Arc::new);
-            step.fetch_add(items.as_ref().len() as u32, Ordering::Relaxed);
+            step.fetch_add(items.as_ref().len() as u64, Ordering::Relaxed);
 
             // send back the doc_alloc in the pool
             context.doc_allocs.get_or_default().0.set(std::mem::take(&mut context.doc_alloc));

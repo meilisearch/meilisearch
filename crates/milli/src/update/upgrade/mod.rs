@@ -118,8 +118,8 @@ where
                 target.1,
                 target.2
             ),
-            i as u32,
-            upgrade_path.len() as u32,
+            i as u64,
+            upgrade_path.len() as u64,
         ));
         regenerate_stats |= upgrade.upgrade(wtxn, index, from, progress.clone())?;
         index.put_version(wtxn, target)?;

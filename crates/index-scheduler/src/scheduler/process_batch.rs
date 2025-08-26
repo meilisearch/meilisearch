@@ -403,8 +403,8 @@ impl IndexScheduler {
                 for (step, swap) in swaps.iter().enumerate() {
                     progress.update_progress(VariableNameStep::<SwappingTheIndexes>::new(
                         format!("swapping index {} and {}", swap.indexes.0, swap.indexes.1),
-                        step as u32,
-                        swaps.len() as u32,
+                        step as u64,
+                        swaps.len() as u64,
                     ));
                     self.apply_index_swap(
                         &mut wtxn,
@@ -531,7 +531,7 @@ impl IndexScheduler {
         // 3. before_name -> new_name in the task's KindWithContent
         progress.update_progress(InnerSwappingTwoIndexes::UpdateTheTasks);
         let tasks_to_update = &index_lhs_task_ids | &index_rhs_task_ids;
-        let (atomic, task_progress) = AtomicTaskStep::new(tasks_to_update.len() as u32);
+        let (atomic, task_progress) = AtomicTaskStep::new(tasks_to_update.len() as u64);
         progress.update_progress(task_progress);
 
         for task_id in tasks_to_update {
@@ -592,7 +592,7 @@ impl IndexScheduler {
         // The tasks that have been removed *per batches*.
         let mut affected_batches: HashMap<BatchId, RoaringBitmap> = HashMap::new();
 
-        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
+        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u64);
         progress.update_progress(task_progress);
         for task_id in to_delete_tasks.iter() {
             let task =
@@ -638,7 +638,7 @@ impl IndexScheduler {
 
         progress.update_progress(TaskDeletionProgress::DeletingTasksMetadata);
         let (atomic_progress, task_progress) = AtomicTaskStep::new(
-            (affected_indexes.len() + affected_statuses.len() + affected_kinds.len()) as u32,
+            (affected_indexes.len() + affected_statuses.len() + affected_kinds.len()) as u64,
         );
         progress.update_progress(task_progress);
         for index in affected_indexes.iter() {
@@ -657,7 +657,7 @@ impl IndexScheduler {
         }
 
         progress.update_progress(TaskDeletionProgress::DeletingTasks);
-        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u32);
+        let (atomic_progress, task_progress) = AtomicTaskStep::new(to_delete_tasks.len() as u64);
         progress.update_progress(task_progress);
         for task in to_delete_tasks.iter() {
             self.queue.tasks.all_tasks.delete(wtxn, &task)?;
@@ -674,7 +674,7 @@ impl IndexScheduler {
             }
         }
         progress.update_progress(TaskDeletionProgress::DeletingBatches);
-        let (atomic_progress, batch_progress) = AtomicBatchStep::new(affected_batches.len() as u32);
+        let (atomic_progress, batch_progress) = AtomicBatchStep::new(affected_batches.len() as u64);
         progress.update_progress(batch_progress);
         for (batch_id, to_delete_tasks) in affected_batches {
             if let Some(mut tasks) = self.queue.batch_to_tasks_mapping.get(wtxn, &batch_id)? {
@@ -849,7 +849,7 @@ impl IndexScheduler {
         }
 
         // 3. We now have a list of tasks to cancel, cancel them
-        let (task_progress, progress_obj) = AtomicTaskStep::new(tasks_to_cancel.len() as u32);
+        let (task_progress, progress_obj) = AtomicTaskStep::new(tasks_to_cancel.len() as u64);
         progress.update_progress(progress_obj);
 
         let mut tasks = self.queue.tasks.get_existing_tasks(
@@ -860,7 +860,7 @@ impl IndexScheduler {
         )?;
 
         progress.update_progress(TaskCancelationProgress::UpdatingTasks);
-        let (task_progress, progress_obj) = AtomicTaskStep::new(tasks_to_cancel.len() as u32);
+        let (task_progress, progress_obj) = AtomicTaskStep::new(tasks_to_cancel.len() as u64);
         progress.update_progress(progress_obj);
         for task in tasks.iter_mut() {
             task.status = Status::Canceled;

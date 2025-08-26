@@ -134,7 +134,7 @@ impl IndexScheduler {
         // 2.5 Only copy the update files of the enqueued tasks
         progress.update_progress(SnapshotCreationProgress::SnapshotTheUpdateFiles);
         let enqueued = self.queue.tasks.get_status(&rtxn, Status::Enqueued)?;
-        let (atomic, update_file_progress) = AtomicUpdateFileStep::new(enqueued.len() as u32);
+        let (atomic, update_file_progress) = AtomicUpdateFileStep::new(enqueued.len() as u64);
         progress.update_progress(update_file_progress);
         for task_id in enqueued {
             let task =
@@ -150,12 +150,12 @@ impl IndexScheduler {
         // 3. Snapshot every indexes
         progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexes);
         let index_mapping = self.index_mapper.index_mapping;
-        let nb_indexes = index_mapping.len(&rtxn)? as u32;
+        let nb_indexes = index_mapping.len(&rtxn)? as u64;
 
         for (i, result) in index_mapping.iter(&rtxn)?.enumerate() {
             let (name, uuid) = result?;
             progress.update_progress(VariableNameStep::<SnapshotCreationProgress>::new(
-                name, i as u32, nb_indexes,
+                name, i as u64, nb_indexes,
             ));
             let index = self.index_mapper.index(&rtxn, name)?;
             let dst = temp_snapshot_dir.path().join("indexes").join(uuid.to_string());

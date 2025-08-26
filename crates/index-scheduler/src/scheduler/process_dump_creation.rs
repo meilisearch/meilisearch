@@ -58,7 +58,7 @@ impl IndexScheduler {
         let mut dump_tasks = dump.create_tasks_queue()?;
 
         let (atomic, update_task_progress) =
-            AtomicTaskStep::new(self.queue.tasks.all_tasks.len(&rtxn)? as u32);
+            AtomicTaskStep::new(self.queue.tasks.all_tasks.len(&rtxn)? as u64);
         progress.update_progress(update_task_progress);
 
         for ret in self.queue.tasks.all_tasks.iter(&rtxn)? {
@@ -120,7 +120,7 @@ impl IndexScheduler {
         let mut dump_batches = dump.create_batches_queue()?;
 
         let (atomic_batch_progress, update_batch_progress) =
-            AtomicBatchStep::new(self.queue.batches.all_batches.len(&rtxn)? as u32);
+            AtomicBatchStep::new(self.queue.batches.all_batches.len(&rtxn)? as u64);
         progress.update_progress(update_batch_progress);
 
         for ret in self.queue.batches.all_batches.iter(&rtxn)? {
@@ -150,7 +150,7 @@ impl IndexScheduler {
 
         // 5. Dump the indexes
         progress.update_progress(DumpCreationProgress::DumpTheIndexes);
-        let nb_indexes = self.index_mapper.index_mapping.len(&rtxn)? as u32;
+        let nb_indexes = self.index_mapper.index_mapping.len(&rtxn)? as u64;
         let mut count = 0;
         let () = self.index_mapper.try_for_each_index(&rtxn, |uid, index| -> Result<()> {
             progress.update_progress(VariableNameStep::<DumpCreationProgress>::new(
@@ -179,7 +179,7 @@ impl IndexScheduler {
             let nb_documents = index
                 .number_of_documents(&rtxn)
                 .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?
-                as u32;
+                as u64;
             let (atomic, update_document_progress) = AtomicDocumentStep::new(nb_documents);
             progress.update_progress(update_document_progress);
             let documents = index
