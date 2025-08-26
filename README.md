@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="https://deps.rs/repo/github/meilisearch/meilisearch"><img src="https://deps.rs/repo/github/meilisearch/meilisearch/status.svg" alt="Dependency status"></a>
-  <a href="https://github.com/meilisearch/meilisearch/blob/main/LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
+  <a href="https://github.com/meilisearch/meilisearch/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-informational" alt="License"></a>
   <a href="https://github.com/meilisearch/meilisearch/queue"><img alt="Merge Queues enabled" src="https://img.shields.io/badge/Merge_Queues-enabled-%2357cf60?logo=github"></a>
 </p>
 
@@ -95,7 +95,7 @@ Meilisearch is available in two editions:
 
 ### 🧪 Community Edition (CE)
 
-- Fully open source under the [MIT license](./LICENSE.md)
+- Fully open source under the [MIT license](./LICENSE)
 - Core search engine with fast and relevant full-text, semantic or hybrid search
 - Free to use for anyone, including commercial usage
 
@@ -103,7 +103,7 @@ Meilisearch is available in two editions:
 
 - Includes advanced features such as:
   - Sharding
-- Governed by a [commercial license](./LICENSE-EE.md) or the [Business Source License 1.1](https://mariadb.com/bsl11)
+- Governed by a [commercial license](./LICENSE-EE) or the [Business Source License 1.1](https://mariadb.com/bsl11)
 - Not allowed in production without a commercial agreement with Meilisearch.
   - You may use, modify, and distribute the Licensed Work for non-production purposes only, such as testing, development, or evaluation.
 
