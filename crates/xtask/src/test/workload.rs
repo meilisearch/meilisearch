@@ -1,6 +1,8 @@
 use anyhow::Context;
 use cargo_metadata::semver::Version;
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{
@@ -27,6 +29,29 @@ pub enum CommandOrUpgrade {
 enum CommandOrUpgradeVec<'a> {
     Commands(Vec<&'a mut Command>),
     Upgrade(VersionOrLatest),
+}
+
+fn produce_reference_value(value: &mut Value) {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) => (),
+        Value::String(string) => {
+            if DateTime::parse_from_rfc3339(string.as_str()).is_ok() {
+                *string = String::from("[timestamp]");
+            } else if uuid::Uuid::parse_str(string).is_ok() {
+                *string = String::from("[uuid]");
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                produce_reference_value(value);
+            }
+        }
+        Value::Object(map) => {
+            for (_key, value) in map.iter_mut() {
+                produce_reference_value(value);
+            }
+        },
+    }
 }
 
 /// A test workload.
@@ -104,11 +129,12 @@ impl TestWorkload {
                     .await?;
                     if return_responses {
                         assert_eq!(responses.len(), cloned.len());
-                        for (command, (response, status)) in commands.into_iter().zip(responses) {
+                        for (command, (mut response, status)) in commands.into_iter().zip(responses) {
                             if args.update_responses
                                 || (dbg!(args.add_missing_responses)
                                     && dbg!(command.expected_response.is_none()))
                             {
+                                produce_reference_value(&mut response);
                                 command.expected_response = Some(response);
                                 command.expected_status = Some(status.as_u16());
                             }

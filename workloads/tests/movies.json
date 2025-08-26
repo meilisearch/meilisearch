@@ -30,7 +30,7 @@
       },
       "expectedStatus": 202,
       "expectedResponse": {
-        "enqueuedAt": "2025-08-26T09:31:44.665991Z",
+        "enqueuedAt": "[timestamp]",
         "indexUid": "movies",
         "status": "enqueued",
         "taskUid": 0,
@@ -46,7 +46,7 @@
       },
       "expectedStatus": 202,
       "expectedResponse": {
-        "enqueuedAt": "2025-08-26T09:31:44.732206Z",
+        "enqueuedAt": "[timestamp]",
         "indexUid": "movies",
         "status": "enqueued",
         "taskUid": 1,

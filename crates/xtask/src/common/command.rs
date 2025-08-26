@@ -158,6 +158,46 @@ async fn wait_for_tasks(client: &Client) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn json_eq_ignore(reference: &Value, value: &Value) -> bool {
+    match reference {
+        Value::Null | Value::Bool(_) | Value::Number(_) => reference == value,
+        Value::String(s) => (s.starts_with('[') && s.ends_with(']')) || reference == value,
+        Value::Array(values) => match value {
+            Value::Array(other_values) => {
+                if values.len() != other_values.len() {
+                    return false;
+                }
+                for (value, other_value) in values.iter().zip(other_values.iter()) {
+                    if !json_eq_ignore(value, other_value) {
+                        return false;
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
+        Value::Object(map) => match value {
+            Value::Object(other_map) => {
+                if map.len() != other_map.len() {
+                    return false;
+                }
+                for (key, value) in map.iter() {
+                    match other_map.get(key) {
+                        Some(other_value) => {
+                            if !json_eq_ignore(value, other_value) {
+                                return false;
+                            }
+                        }
+                        None => return false,
+                    }
+                }
+                true
+            }
+            _ => false,
+        },
+    }
+}
+
 #[tracing::instrument(skip(client, command, assets, asset_folder), fields(command = %command))]
 pub async fn run(
     client: &Client,
@@ -222,7 +262,7 @@ pub async fn run(
         if return_value {
             return Ok(Some((response, code)));
         }
-        if &response != expected_response {
+        if !json_eq_ignore(expected_response, &response) {
             let expected_pretty = serde_json::to_string_pretty(expected_response)
                 .context("serializing expected response as pretty JSON")?;
             let response_pretty = serde_json::to_string_pretty(&response)
