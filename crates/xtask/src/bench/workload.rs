@@ -150,8 +150,8 @@ async fn execute_run(
     let meilisearch = meili_process::start(
         meili_client,
         master_key,
-        workload,
-        &args.common.asset_folder,
+        &workload.extra_cli_args,
+        &workload.name,
         run_command,
     )
     .await?;

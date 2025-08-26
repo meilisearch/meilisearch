@@ -5,8 +5,6 @@ use anyhow::{bail, Context as _};
 use tokio::process::Command as TokioCommand;
 use tokio::time;
 
-use super::workload::BenchWorkload;
-use crate::common::assets::Asset;
 use crate::common::client::Client;
 use crate::common::command::{health_command, run as run_command};
 
@@ -65,12 +63,12 @@ pub async fn build() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tracing::instrument(skip(client, master_key, workload), fields(workload = workload.name))]
+#[tracing::instrument(skip(client, master_key), fields(workload = _workload))]
 pub async fn start(
     client: &Client,
     master_key: Option<&str>,
-    workload: &BenchWorkload,
-    asset_folder: &str,
+    extra_cli_args: &[String],
+    _workload: &str,
     mut command: TokioCommand,
 ) -> anyhow::Result<tokio::process::Child> {
     command.arg("--db-path").arg("./_xtask_benchmark.ms");
@@ -79,7 +77,7 @@ pub async fn start(
     }
     command.arg("--experimental-enable-logs-route");
 
-    for extra_arg in workload.extra_cli_args.iter() {
+    for extra_arg in extra_cli_args.iter() {
         command.arg(extra_arg);
     }
 
@@ -87,7 +85,7 @@ pub async fn start(
 
     let mut meilisearch = command.spawn().context("Error starting Meilisearch")?;
 
-    wait_for_health(client, &mut meilisearch, asset_folder).await?;
+    wait_for_health(client, &mut meilisearch).await?;
 
     Ok(meilisearch)
 }
@@ -95,10 +93,9 @@ pub async fn start(
 async fn wait_for_health(
     client: &Client,
     meilisearch: &mut tokio::process::Child,
-    asset_folder: &str,
 ) -> anyhow::Result<()> {
     for i in 0..100 {
-        let res = run_command(client, &health_command(), &BTreeMap::new(), asset_folder, false).await;
+        let res = run_command(client, &health_command(), &BTreeMap::new(), "", false).await;
         if res.is_ok() {
             // check that this is actually the current Meilisearch instance that answered us
             if let Some(exit_code) =
