@@ -1,6 +1,6 @@
 {
-  "name": "movies",
   "type": "test",
+  "name": "movies",
   "initialVersion": "1.12.0",
   "assets": {
     "movies.json": {
@@ -9,5 +9,34 @@
       "sha256": "5b6e4cb660bc20327776e8a33ea197b43d9ec84856710ead1cc87ab24df77de1"
     }
   },
-  "commands": []
+  "commands": [
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "searchableAttributes": [
+            "title",
+            "overview"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ]
+        }
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "movies.json"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ]
 }

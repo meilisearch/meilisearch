@@ -2,10 +2,11 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{Seek as _, Write as _};
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{bail, Context as _};
 use futures_util::TryStreamExt as _;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -19,7 +20,7 @@ use crate::common::command::{run_commands, Command};
 
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct BenchWorkload {
     pub name: String,
     pub run_count: u16,
@@ -35,7 +36,7 @@ pub struct BenchWorkload {
 async fn run_workload_commands(
     dashboard_client: &DashboardClient,
     logs_client: &Client,
-    meili_client: &Client,
+    meili_client: &Arc<Client>,
     workload_uuid: Uuid,
     workload: &BenchWorkload,
     args: &BenchDeriveArgs,
@@ -43,9 +44,10 @@ async fn run_workload_commands(
 ) -> anyhow::Result<JoinHandle<anyhow::Result<File>>> {
     let report_folder = &args.report_folder;
     let workload_name = &workload.name;
+    let assets = Arc::new(workload.assets.clone());
+    let asset_folder = args.common.asset_folder.clone().leak();
 
-    run_commands(meili_client, &workload.precommands, &workload.assets, &args.common.asset_folder)
-        .await?;
+    run_commands(meili_client, &workload.precommands, &assets, asset_folder, false).await?;
 
     std::fs::create_dir_all(report_folder)
         .with_context(|| format!("could not create report directory at {report_folder}"))?;
@@ -55,8 +57,7 @@ async fn run_workload_commands(
 
     let report_handle = start_report(logs_client, trace_filename, &workload.target).await?;
 
-    run_commands(meili_client, &workload.commands, &workload.assets, &args.common.asset_folder)
-        .await?;
+    run_commands(meili_client, &workload.commands, &assets, asset_folder, false).await?;
 
     let processor =
         stop_report(dashboard_client, logs_client, workload_uuid, report_filename, report_handle)
@@ -71,7 +72,7 @@ pub async fn execute(
     assets_client: &Client,
     dashboard_client: &DashboardClient,
     logs_client: &Client,
-    meili_client: &Client,
+    meili_client: &Arc<Client>,
     invocation_uuid: Uuid,
     master_key: Option<&str>,
     workload: BenchWorkload,
@@ -119,7 +120,7 @@ pub async fn execute(
 async fn execute_run(
     dashboard_client: &DashboardClient,
     logs_client: &Client,
-    meili_client: &Client,
+    meili_client: &Arc<Client>,
     workload_uuid: Uuid,
     master_key: Option<&str>,
     workload: &BenchWorkload,

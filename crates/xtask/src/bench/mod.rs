@@ -6,7 +6,7 @@ mod workload;
 use crate::common::args::CommonArgs;
 use crate::common::logs::setup_logs;
 use crate::common::workload::Workload;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::{bail, Context};
 use clap::Parser;
@@ -89,11 +89,11 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         None,
     )?;
 
-    let meili_client = Client::new(
+    let meili_client = Arc::new(Client::new(
         Some("http://127.0.0.1:7700".into()),
         args.common.master_key.as_deref(),
         Some(std::time::Duration::from_secs(args.common.tasks_queue_timeout_secs)),
-    )?;
+    )?);
 
     // enter runtime
 
