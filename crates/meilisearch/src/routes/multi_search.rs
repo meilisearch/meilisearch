@@ -9,6 +9,7 @@ use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
+use uuid::Uuid;
 
 use super::multi_search_analytics::MultiSearchAggregator;
 use crate::analytics::Analytics;
@@ -151,6 +152,7 @@ pub async fn multi_search_with_post(
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
     let permit = search_queue.try_get_search_permit().await?;
+    let request_uid = Uuid::now_v7();
 
     let federated_search = params.into_inner();
 
@@ -188,14 +190,27 @@ pub async fn multi_search_with_post(
 
     let response = match federation {
         Some(federation) => {
+            debug!(
+                request_uid = ?request_uid,
+                federation = ?federation,
+                parameters = ?queries,
+                "Federated-search"
+            );
+
             // check remote header
             let is_proxy = req
                 .headers()
                 .get(PROXY_SEARCH_HEADER)
                 .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
-            let search_result =
-                perform_federated_search(&index_scheduler, queries, federation, features, is_proxy)
-                    .await;
+            let search_result = perform_federated_search(
+                &index_scheduler,
+                queries,
+                federation,
+                features,
+                is_proxy,
+                request_uid,
+            )
+            .await;
             permit.drop().await;
 
             if search_result.is_ok() {
@@ -203,6 +218,13 @@ pub async fn multi_search_with_post(
             }
 
             analytics.publish(multi_aggregate, &req);
+
+            debug!(
+                request_uid = ?request_uid,
+                returns = ?search_result,
+                "Federated-search"
+            );
+
             HttpResponse::Ok().json(search_result?)
         }
         None => {
@@ -216,7 +238,12 @@ pub async fn multi_search_with_post(
                     .map(SearchQueryWithIndex::into_index_query_federation)
                     .enumerate()
                 {
-                    debug!(on_index = query_index, parameters = ?query, "Multi-search");
+                    debug!(
+                        request_uid = ?request_uid,
+                        on_index = query_index,
+                        parameters = ?query,
+                        "Multi-search"
+                    );
 
                     if federation_options.is_some() {
                         return Err((
@@ -258,6 +285,7 @@ pub async fn multi_search_with_post(
                             search_kind,
                             retrieve_vector,
                             features,
+                            request_uid,
                         )
                     })
                     .await
@@ -286,7 +314,11 @@ pub async fn multi_search_with_post(
                 err
             })?;
 
-            debug!(returns = ?search_results, "Multi-search");
+            debug!(
+                request_uid = ?request_uid,
+                returns = ?search_results,
+                "Multi-search"
+            );
 
             HttpResponse::Ok().json(SearchResults { results: search_results })
         }

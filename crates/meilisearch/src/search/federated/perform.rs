@@ -17,6 +17,7 @@ use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{self, DocumentId, OrderBy, TimeBudget, DEFAULT_VALUES_PER_FACET};
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
+use uuid::Uuid;
 
 use super::super::ranking_rules::{self, RankingRules};
 use super::super::{
@@ -39,6 +40,7 @@ pub async fn perform_federated_search(
     federation: Federation,
     features: RoFeatures,
     is_proxy: bool,
+    request_uid: Uuid,
 ) -> Result<FederatedSearchResult, ResponseError> {
     if is_proxy {
         features.check_network("Performing a remote federated search")?;
@@ -170,6 +172,7 @@ pub async fn perform_federated_search(
         facet_stats,
         facets_by_index,
         remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
+        request_uid: Some(request_uid),
     })
 }
 
@@ -439,6 +442,7 @@ fn merge_metadata(
         degraded: degraded_for_host,
         used_negative_operator: host_used_negative_operator,
         remote_errors: _,
+        request_uid: _,
     } in remote_results
     {
         let this_remote_duration = Duration::from_millis(*processing_time_ms as u64);

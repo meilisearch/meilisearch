@@ -36,6 +36,7 @@ use serde_json::{json, Value};
 #[cfg(test)]
 mod mod_test;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
 
@@ -851,6 +852,8 @@ pub struct SearchResult {
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_uid: Option<Uuid>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
@@ -872,6 +875,7 @@ impl fmt::Debug for SearchResult {
             hits_info,
             facet_distribution,
             facet_stats,
+            request_uid,
             semantic_hit_count,
             degraded,
             used_negative_operator,
@@ -900,6 +904,9 @@ impl fmt::Debug for SearchResult {
         }
         if let Some(semantic_hit_count) = semantic_hit_count {
             debug.field("semantic_hit_count", &semantic_hit_count);
+        }
+        if let Some(request_uid) = request_uid {
+            debug.field("request_uid", &request_uid);
         }
 
         debug.finish()
@@ -1120,6 +1127,7 @@ pub fn perform_search(
     search_kind: SearchKind,
     retrieve_vectors: RetrieveVectors,
     features: RoFeatures,
+    request_uid: Uuid,
 ) -> Result<SearchResult, ResponseError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -1237,6 +1245,7 @@ pub fn perform_search(
         degraded,
         used_negative_operator,
         semantic_hit_count,
+        request_uid: Some(request_uid),
     };
     Ok(result)
 }
