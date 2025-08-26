@@ -13,7 +13,7 @@ use crate::common::assets::{fetch_asset, Asset};
 use crate::common::client::{Client, Method};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Command {
     pub route: String,
     pub method: Method,
@@ -25,8 +25,10 @@ pub struct Command {
     pub expected_response: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub register: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key_variable: Option<String>,
     #[serde(default)]
-    synchronous: SyncMode,
+    pub synchronous: SyncMode,
 }
 
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
@@ -46,7 +48,7 @@ impl Body {
     pub fn get(
         self,
         assets: &BTreeMap<String, Asset>,
-        registered: HashMap<String, Value>,
+        registered: &HashMap<String, Value>,
         asset_folder: &str,
     ) -> anyhow::Result<Option<(Vec<u8>, &'static str)>> {
         Ok(match self {
@@ -76,7 +78,7 @@ impl Body {
                 }
 
                 if !registered.is_empty() {
-                    insert_variables(&mut body, &registered);
+                    insert_variables(&mut body, registered);
                 }
 
                 Some((
@@ -105,8 +107,8 @@ impl Display for Command {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize)]
-enum SyncMode {
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum SyncMode {
     DontWait,
     #[default]
     WaitForResponse,
@@ -243,7 +245,7 @@ fn json_eq_ignore(reference: &Value, value: &Value) -> bool {
     }
 }
 
-#[tracing::instrument(skip(client, command, assets, asset_folder), fields(command = %command))]
+#[tracing::instrument(skip(client, command, assets, registered, asset_folder), fields(command = %command))]
 pub async fn run(
     client: &Client,
     command: &Command,
@@ -252,14 +254,44 @@ pub async fn run(
     asset_folder: &str,
     return_value: bool,
 ) -> anyhow::Result<Option<(Value, StatusCode)>> {
+    // Try to replace variables in the route
+    let mut route = &command.route;
+    let mut owned_route;
+    if !registered.is_empty() {
+        while let (Some(pos1), Some(pos2)) = (route.find("{{"), route.rfind("}}")) {
+            if pos2 > pos1 {
+                let name = route[pos1 + 2..pos2].trim();
+                if let Some(replacement) = registered.get(name).and_then(|r| r.as_str()) {
+                    let mut new_route = String::new();
+                    new_route.push_str(&route[..pos1]);
+                    new_route.push_str(replacement);
+                    new_route.push_str(&route[pos2 + 2..]);
+                    owned_route = new_route;
+                    route = &owned_route;
+                    continue;
+                }
+            }
+            break;
+        }
+    }
+
     // memtake the body here to leave an empty body in its place, so that command is not partially moved-out
     let body = command
         .body
         .clone()
-        .get(assets, registered, asset_folder)
+        .get(assets, &registered, asset_folder)
         .with_context(|| format!("while getting body for command {command}"))?;
 
-    let request = client.request(command.method.into(), &command.route);
+    let mut request = client.request(command.method.into(), route);
+
+    // Replace the api key
+    if let Some(var_name) = &command.api_key_variable {
+        if let Some(api_key) = registered.get(var_name).and_then(|v| v.as_str()) {
+            request = request.header("Authorization", format!("Bearer {api_key}"));
+        } else {
+            bail!("could not find API key variable '{var_name}' in registered values");
+        }
+    }
 
     let request = if let Some((body, content_type)) = body {
         request.body(body).header(reqwest::header::CONTENT_TYPE, content_type)
@@ -272,31 +304,35 @@ pub async fn run(
 
     let code = response.status();
 
-    if let Some(expected_status) = command.expected_status {
-        if !return_value && code.as_u16() != expected_status {
-            let response = response
-                .text()
+    if !return_value {
+        if let Some(expected_status) = command.expected_status {
+            if code.as_u16() != expected_status {
+                let response = response
+                    .text()
+                    .await
+                    .context("could not read response body as text")
+                    .context("reading response body when checking expected status")?;
+                bail!("unexpected status code: got {}, expected {expected_status}, response body: '{response}'", code.as_u16());
+            }
+        } else if code.is_client_error() {
+            tracing::error!(%command, %code, "error in workload file");
+            let response: serde_json::Value = response
+                .json()
                 .await
-                .context("could not read response body as text")
-                .context("reading response body when checking expected status")?;
-            bail!("unexpected status code: got {}, expected {expected_status}, response body: '{response}'", code.as_u16());
+                .context("could not deserialize response as JSON")
+                .context("parsing error in workload file when sending command")?;
+            bail!(
+                "error in workload file: server responded with error code {code} and '{response}'"
+            )
+        } else if code.is_server_error() {
+            tracing::error!(%command, %code, "server error");
+            let response: serde_json::Value = response
+                .json()
+                .await
+                .context("could not deserialize response as JSON")
+                .context("parsing server error when sending command")?;
+            bail!("server error: server responded with error code {code} and '{response}'")
         }
-    } else if code.is_client_error() {
-        tracing::error!(%command, %code, "error in workload file");
-        let response: serde_json::Value = response
-            .json()
-            .await
-            .context("could not deserialize response as JSON")
-            .context("parsing error in workload file when sending command")?;
-        bail!("error in workload file: server responded with error code {code} and '{response}'")
-    } else if code.is_server_error() {
-        tracing::error!(%command, %code, "server error");
-        let response: serde_json::Value = response
-            .json()
-            .await
-            .context("could not deserialize response as JSON")
-            .context("parsing server error when sending command")?;
-        bail!("server error: server responded with error code {code} and '{response}'")
     }
 
     if let Some(expected_response) = &command.expected_response {
@@ -357,5 +393,6 @@ pub fn health_command() -> Command {
         synchronous: SyncMode::WaitForResponse,
         expected_status: None,
         expected_response: None,
+        api_key_variable: None,
     }
 }

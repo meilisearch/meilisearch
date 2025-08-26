@@ -28,6 +28,10 @@ pub struct BenchDeriveArgs {
     #[command(flatten)]
     common: CommonArgs,
 
+    /// Meilisearch master keys
+    #[arg(long)]
+    pub master_key: Option<String>,
+
     /// URL of the dashboard.
     #[arg(long, default_value_t = default_dashboard_url())]
     dashboard_url: String,
@@ -84,13 +88,13 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     // Also we don't want any pesky timeout because we don't know how much time it will take to recover the full trace
     let logs_client = Client::new(
         Some("http://127.0.0.1:7700/logs/stream".into()),
-        args.common.master_key.as_deref(),
+        args.master_key.as_deref(),
         None,
     )?;
 
     let meili_client = Arc::new(Client::new(
         Some("http://127.0.0.1:7700".into()),
-        args.common.master_key.as_deref(),
+        args.master_key.as_deref(),
         Some(std::time::Duration::from_secs(args.common.tasks_queue_timeout_secs)),
     )?);
 
@@ -131,7 +135,7 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                     &logs_client,
                     &meili_client,
                     invocation_uuid,
-                    args.common.master_key.as_deref(),
+                    args.master_key.as_deref(),
                     workload,
                     &args,
                     args.binary_path.as_deref(),

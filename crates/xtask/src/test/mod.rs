@@ -1,7 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
 use crate::{
-    common::{args::CommonArgs, client::Client, logs::setup_logs, workload::Workload},
+    common::{
+        args::CommonArgs, client::Client, command::SyncMode, logs::setup_logs, workload::Workload,
+    },
     test::workload::CommandOrUpgrade,
 };
 use anyhow::{bail, Context};
@@ -49,7 +51,7 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
 
     let meili_client = Arc::new(Client::new(
         Some("http://127.0.0.1:7700".into()),
-        args.common.master_key.as_deref(),
+        Some("masterKey"),
         Some(Duration::from_secs(args.common.tasks_queue_timeout_secs)),
     )?);
 
@@ -68,10 +70,17 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
         let has_upgrade =
             workload.commands.iter().any(|c| matches!(c, CommandOrUpgrade::Upgrade { .. }));
 
+        let has_faulty_register = workload.commands.iter().any(|c| {
+            matches!(c, CommandOrUpgrade::Command(cmd) if cmd.synchronous == SyncMode::DontWait && !cmd.register.is_empty())
+        });
+        if has_faulty_register {
+            bail!("workload {} contains commands that register values but are marked as --dont-wait. This is not supported because we cannot guarantee the value will be registered before the next command runs.", workload.name);
+        }
+
         let name = workload.name.clone();
         match workload.run(&args, &assets_client, &meili_client, asset_folder).await {
             Ok(_) => {
-                match args.add_missing_responses || args.update_responses {
+                match args.update_responses {
                     true => println!("🛠️ Workload {name} was updated"),
                     false => println!("✅ Workload {name} passed"),
                 }

@@ -18,10 +18,6 @@ pub struct CommonArgs {
     #[arg(value_name = "WORKLOAD_FILE", last = false)]
     pub workload_file: Vec<PathBuf>,
 
-    /// Meilisearch master keys
-    #[arg(long)]
-    pub master_key: Option<String>,
-
     /// Directory to store the remote assets.
     #[arg(long, default_value_t = default_asset_folder())]
     pub asset_folder: String,

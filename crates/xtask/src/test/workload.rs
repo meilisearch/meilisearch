@@ -25,6 +25,7 @@ use crate::{
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
 pub enum CommandOrUpgrade {
     Command(Command),
     Upgrade { upgrade: VersionOrLatest },
@@ -71,7 +72,11 @@ fn produce_reference_value(value: &mut Value) {
 pub struct TestWorkload {
     pub name: String,
     pub initial_version: Version,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub master_key: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub assets: BTreeMap<String, Asset>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub commands: Vec<CommandOrUpgrade>,
 }
 
@@ -116,7 +121,7 @@ impl TestWorkload {
             .binary_path(&args.common.asset_folder)?;
         let mut process = process::start_meili(
             meili_client,
-            args.common.master_key.as_deref(),
+            Some("masterKey"),
             &[],
             &self.name,
             binary_path.as_deref(),
@@ -144,8 +149,8 @@ impl TestWorkload {
                         for (command, (mut response, status)) in commands.into_iter().zip(responses)
                         {
                             if args.update_responses
-                                || (dbg!(args.add_missing_responses)
-                                    && dbg!(command.expected_response.is_none()))
+                                || (args.add_missing_responses
+                                    && command.expected_response.is_none())
                             {
                                 produce_reference_value(&mut response);
                                 command.expected_response = Some(response);
@@ -159,7 +164,7 @@ impl TestWorkload {
                     let binary_path = version.binary_path(&args.common.asset_folder)?;
                     process = process::start_meili(
                         meili_client,
-                        args.common.master_key.as_deref(),
+                        Some("masterKey"),
                         &[String::from("--experimental-dumpless-upgrade")],
                         &self.name,
                         binary_path.as_deref(),
