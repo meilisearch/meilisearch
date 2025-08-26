@@ -64,12 +64,13 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
 
         let name = workload.name.clone();
         match workload.run(&args, &assets_client, &meili_client, asset_folder).await {
-            Ok(_) => {
-                println!("✅ Workload {name} completed successfully");
+            Ok(_) => match args.add_missing_responses || args.update_responses {
+                true => println!("🛠️ Workload {name} was updated"),
+                false => println!("✅ Workload {name} passed"),
             }
             Err(error) => {
                 println!("❌ Workload {name} failed: {error}");
-                println!("Is this intentional? If so, rerun with --update-responses to update the workload files.");
+                println!("💡 Is this intentional? If so, rerun with --update-responses to update the workload files.");
                 return Err(error);
             }
         }
