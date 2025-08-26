@@ -255,7 +255,7 @@ pub(crate) mod test {
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::enterprise_edition::network::{Network, Remote};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::RuntimeTogglableFeatures;
+    use meilisearch_types::features::{ChatCompletionSettings, RuntimeTogglableFeatures};
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
@@ -531,6 +531,11 @@ pub(crate) mod test {
         let network = create_test_network();
         dump.create_network(network).unwrap();
 
+        // ========== chat completions features
+        let chat_completions_settings = create_test_chat_completions_settings();
+        let mut chat_completions = dump.create_chat_completions_settings().unwrap();
+        chat_completions.push_settings("default", &chat_completions_settings).unwrap();
+
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
         dump.persist_to(&mut file).unwrap();
@@ -548,6 +553,29 @@ pub(crate) mod test {
             local: Some("myself".to_string()),
             remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
             sharding: false,
+        }
+    }
+
+    fn create_test_chat_completions_settings() -> ChatCompletionSettings {
+        use meilisearch_types::features::{
+            ChatCompletionPrompts, ChatCompletionSettings, ChatCompletionSource,
+        };
+
+        ChatCompletionSettings {
+            source: ChatCompletionSource::OpenAi,
+            org_id: Some("test-org".to_string()),
+            project_id: Some("test-project".to_string()),
+            api_version: Some("v1".to_string()),
+            deployment_id: None,
+            base_url: Some("https://api.openai.com/v1/".to_string()),
+            api_key: Some("sk-test123456789".to_string()),
+            prompts: ChatCompletionPrompts {
+                system: "Test system prompt".to_string(),
+                search_description: "Test search description".to_string(),
+                search_q_param: "Test q param".to_string(),
+                search_filter_param: "Test filter param".to_string(),
+                search_index_uid_param: "Test index uid param".to_string(),
+            },
         }
     }
 
@@ -603,5 +631,18 @@ pub(crate) mod test {
         // ==== checking the network
         let expected = create_test_network();
         assert_eq!(&expected, dump.network().unwrap().unwrap());
+
+        // ==== checking the chat completions settings
+        let mut chat_settings_iter = dump.chat_completions_settings().unwrap();
+
+        if let Some(Ok((name, settings))) = chat_settings_iter.next() {
+            println!("Name: {}, Settings: {:?}", name, settings);
+            let expected = create_test_chat_completions_settings();
+            assert_eq!(name, "default");
+            assert_eq!(settings, expected);
+            assert!(chat_settings_iter.next().is_none());
+        } else {
+            panic!("Expected chat completion settings not found");
+        }
     }
 }
