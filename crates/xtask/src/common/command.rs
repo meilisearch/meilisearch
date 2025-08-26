@@ -185,6 +185,32 @@ pub async fn run(
         request.send().await.with_context(|| format!("error sending command: {}", command))?;
 
     let code = response.status();
+    
+    if let Some(expected_response) = &command.expected_response {
+        let response: serde_json::Value = response
+            .json()
+            .await
+            .context("could not deserialize response as JSON")
+            .context("parsing response when checking expected response")?;
+        if return_value {
+            return Ok(Some((response, code)));
+        }
+        if &response != expected_response {
+            let expected_pretty = serde_json::to_string_pretty(expected_response)
+                .context("serializing expected response as pretty JSON")?;
+            let response_pretty = serde_json::to_string_pretty(&response)
+                .context("serializing response as pretty JSON")?;
+            let diff = SimpleDiff::from_str(&expected_pretty, &response_pretty, "expected", "got");
+            bail!("unexpected response:\n{diff}");
+        }
+    } else if return_value {
+        let response: serde_json::Value = response
+            .json()
+            .await
+            .context("could not deserialize response as JSON")
+            .context("parsing response when recording expected response")?;
+        return Ok(Some((response, code)));
+    }
 
     if let Some(expected_status) = command.expected_status {
         if code.as_u16() != expected_status {
@@ -211,29 +237,6 @@ pub async fn run(
             .context("could not deserialize response as JSON")
             .context("parsing server error when sending command")?;
         bail!("server error: server responded with error code {code} and '{response}'")
-    }
-
-    if return_value {
-        let response: serde_json::Value = response
-            .json()
-            .await
-            .context("could not deserialize response as JSON")
-            .context("parsing response when recording expected response")?;
-        return Ok(Some((response, code)));
-    } else if let Some(expected_response) = &command.expected_response {
-        let response: serde_json::Value = response
-            .json()
-            .await
-            .context("could not deserialize response as JSON")
-            .context("parsing response when checking expected response")?;
-        if &response != expected_response {
-            let expected_pretty = serde_json::to_string_pretty(expected_response)
-                .context("serializing expected response as pretty JSON")?;
-            let response_pretty = serde_json::to_string_pretty(&response)
-                .context("serializing response as pretty JSON")?;
-            let diff = SimpleDiff::from_str(&expected_pretty, &response_pretty, "expected", "got");
-            bail!("unexpected response:\n{diff}");
-        }
     }
 
     Ok(None)
