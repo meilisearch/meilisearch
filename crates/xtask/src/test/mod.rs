@@ -1,6 +1,9 @@
 use std::{sync::Arc, time::Duration};
 
-use crate::common::{args::CommonArgs, client::Client, logs::setup_logs, workload::Workload};
+use crate::{
+    common::{args::CommonArgs, client::Client, logs::setup_logs, workload::Workload},
+    test::workload::CommandOrUpgrade,
+};
 use anyhow::{bail, Context};
 use clap::Parser;
 
@@ -62,11 +65,19 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
             bail!("workload file {} is not a test workload", workload_file.display());
         };
 
+        let has_upgrade =
+            workload.commands.iter().any(|c| matches!(c, CommandOrUpgrade::Upgrade { .. }));
+
         let name = workload.name.clone();
         match workload.run(&args, &assets_client, &meili_client, asset_folder).await {
-            Ok(_) => match args.add_missing_responses || args.update_responses {
-                true => println!("🛠️ Workload {name} was updated"),
-                false => println!("✅ Workload {name} passed"),
+            Ok(_) => {
+                match args.add_missing_responses || args.update_responses {
+                    true => println!("🛠️ Workload {name} was updated"),
+                    false => println!("✅ Workload {name} passed"),
+                }
+                if !has_upgrade {
+                    println!("⚠️ Warning: this workload doesn't contain an upgrade. The whole point of these tests is to test upgrades! Please add one.");
+                }
             }
             Err(error) => {
                 println!("❌ Workload {name} failed: {error}");
