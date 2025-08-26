@@ -3,7 +3,7 @@ use cargo_metadata::semver::Version;
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, io::Write, sync::Arc};
 
 use crate::{
     common::{
@@ -50,7 +50,7 @@ fn produce_reference_value(value: &mut Value) {
             for (_key, value) in map.iter_mut() {
                 produce_reference_value(value);
             }
-        },
+        }
     }
 }
 
@@ -129,7 +129,8 @@ impl TestWorkload {
                     .await?;
                     if return_responses {
                         assert_eq!(responses.len(), cloned.len());
-                        for (command, (mut response, status)) in commands.into_iter().zip(responses) {
+                        for (command, (mut response, status)) in commands.into_iter().zip(responses)
+                        {
                             if args.update_responses
                                 || (dbg!(args.add_missing_responses)
                                     && dbg!(command.expected_response.is_none()))
@@ -165,10 +166,14 @@ impl TestWorkload {
             });
 
             let workload = Workload::Test(self);
-            let file = std::fs::File::create(&args.common.workload_file[0]).with_context(|| {
-                format!("could not open {}", args.common.workload_file[0].display())
+            let mut file =
+                std::fs::File::create(&args.common.workload_file[0]).with_context(|| {
+                    format!("could not open {}", args.common.workload_file[0].display())
+                })?;
+            serde_json::to_writer_pretty(&file, &workload).with_context(|| {
+                format!("could not write to {}", args.common.workload_file[0].display())
             })?;
-            serde_json::to_writer_pretty(file, &workload).with_context(|| {
+            file.write_all(b"\n").with_context(|| {
                 format!("could not write to {}", args.common.workload_file[0].display())
             })?;
             tracing::info!("Updated workload file {}", args.common.workload_file[0].display());
