@@ -28,6 +28,14 @@
           ]
         }
       },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "2025-08-26T09:31:44.665991Z",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 0,
+        "type": "settingsUpdate"
+      },
       "synchronous": "DontWait"
     },
     {
@@ -35,6 +43,14 @@
       "method": "POST",
       "body": {
         "asset": "movies.json"
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "2025-08-26T09:31:44.732206Z",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 1,
+        "type": "documentAdditionOrUpdate"
       },
       "synchronous": "WaitForTask"
     }

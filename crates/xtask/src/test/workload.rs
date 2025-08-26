@@ -8,44 +8,14 @@ use crate::{
         assets::{fetch_assets, Asset},
         client::Client,
         command::{run_commands, Command},
+        process::{self, delete_db, kill_meili},
         workload::Workload,
     },
-    test::{versions::expand_assets_with_versions, TestDeriveArgs},
+    test::{
+        versions::{expand_assets_with_versions, VersionOrLatest},
+        TestDeriveArgs,
+    },
 };
-
-#[derive(Clone)]
-pub enum VersionOrLatest {
-    Version(Version),
-    Latest,
-}
-
-impl<'a> Deserialize<'a> for VersionOrLatest {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'a>,
-    {
-        let s: &str = Deserialize::deserialize(deserializer)?;
-
-        if s.eq_ignore_ascii_case("latest") {
-            Ok(VersionOrLatest::Latest)
-        } else {
-            let version = Version::parse(s).map_err(serde::de::Error::custom)?;
-            Ok(VersionOrLatest::Version(version))
-        }
-    }
-}
-
-impl Serialize for VersionOrLatest {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            VersionOrLatest::Version(v) => serializer.serialize_str(&v.to_string()),
-            VersionOrLatest::Latest => serializer.serialize_str("latest"),
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
@@ -105,6 +75,19 @@ impl TestWorkload {
         expand_assets_with_versions(&mut self.assets, &all_versions).await?;
         fetch_assets(assets_client, &self.assets, &args.common.asset_folder).await?;
 
+        // Run server
+        delete_db().await;
+        let binary_path = VersionOrLatest::Version(self.initial_version.clone())
+            .binary_path(&args.common.asset_folder)?;
+        let mut process = process::start_meili(
+            meili_client,
+            args.common.master_key.as_deref(),
+            &[],
+            &self.name,
+            binary_path.as_deref(),
+        )
+        .await?;
+
         let assets = Arc::new(self.assets.clone());
         let return_responses = dbg!(args.add_missing_responses || args.update_responses);
         for command_or_upgrade in commands_or_upgrade {
@@ -133,7 +116,16 @@ impl TestWorkload {
                     }
                 }
                 CommandOrUpgradeVec::Upgrade(version) => {
-                    todo!()
+                    kill_meili(process).await;
+                    let binary_path = version.binary_path(&args.common.asset_folder)?;
+                    process = process::start_meili(
+                        meili_client,
+                        args.common.master_key.as_deref(),
+                        &[String::from("--experimental-dumpless-upgrade")],
+                        &self.name,
+                        binary_path.as_deref(),
+                    ).await?;
+                    tracing::info!("Upgraded to {version}");
                 }
             }
         }

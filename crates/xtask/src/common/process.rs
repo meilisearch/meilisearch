@@ -9,7 +9,7 @@ use tokio::time;
 use crate::common::client::Client;
 use crate::common::command::{health_command, run as run_command};
 
-pub async fn kill(mut meilisearch: tokio::process::Child) {
+pub async fn kill_meili(mut meilisearch: tokio::process::Child) {
     let Some(id) = meilisearch.id() else { return };
 
     match TokioCommand::new("kill").args(["--signal=TERM", &id.to_string()]).spawn() {
@@ -65,15 +65,13 @@ async fn build() -> anyhow::Result<()> {
 }
 
 #[tracing::instrument(skip(client, master_key), fields(workload = _workload))]
-pub async fn start(
+pub async fn start_meili(
     client: &Client,
     master_key: Option<&str>,
     extra_cli_args: &[String],
     _workload: &str,
     binary_path: Option<&Path>,
 ) -> anyhow::Result<tokio::process::Child> {
-    delete_db();
-
     let mut command = match binary_path {
         Some(binary_path) => tokio::process::Command::new(binary_path),
         None => {
@@ -102,6 +100,21 @@ pub async fn start(
     }
 
     command.kill_on_drop(true);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Some(binary_path) = binary_path {
+            let mut perms = tokio::fs::metadata(binary_path)
+                .await
+                .with_context(|| format!("could not get metadata for {binary_path:?}"))?
+                .permissions();
+            perms.set_mode(perms.mode() | 0o111);
+            tokio::fs::set_permissions(binary_path, perms)
+                .await
+                .with_context(|| format!("could not set permissions for {binary_path:?}"))?;
+        }
+    }
 
     let mut meilisearch = command.spawn().context("Error starting Meilisearch")?;
 
@@ -139,6 +152,6 @@ async fn wait_for_health(
     bail!("meilisearch is not responding")
 }
 
-async fn delete_db() {
+pub async fn delete_db() {
     let _ = tokio::fs::remove_dir_all("./_xtask_benchmark.ms").await;
 }

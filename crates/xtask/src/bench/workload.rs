@@ -16,7 +16,7 @@ use super::BenchDeriveArgs;
 use crate::common::assets::{self, Asset};
 use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
-use crate::common::meili_process;
+use crate::common::process::{self, delete_db, start_meili};
 
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
@@ -128,7 +128,9 @@ async fn execute_run(
     binary_path: Option<&Path>,
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
-    let meilisearch = meili_process::start(
+    delete_db().await;
+    
+    let meilisearch = start_meili(
         meili_client,
         master_key,
         &workload.extra_cli_args,
@@ -148,7 +150,7 @@ async fn execute_run(
     )
     .await?;
 
-    meili_process::kill(meilisearch).await;
+    process::kill_meili(meilisearch).await;
 
     tracing::info!(run_number, "Successful run");
 

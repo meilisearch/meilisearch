@@ -1,9 +1,67 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Display, path::PathBuf};
 
 use crate::common::assets::{Asset, AssetFormat};
 use anyhow::Context;
 use cargo_metadata::semver::Version;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone)]
+pub enum VersionOrLatest {
+    Version(Version),
+    Latest,
+}
+
+impl<'a> Deserialize<'a> for VersionOrLatest {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        let s: &str = Deserialize::deserialize(deserializer)?;
+
+        if s.eq_ignore_ascii_case("latest") {
+            Ok(VersionOrLatest::Latest)
+        } else {
+            let version = Version::parse(s).map_err(serde::de::Error::custom)?;
+            Ok(VersionOrLatest::Version(version))
+        }
+    }
+}
+
+impl Serialize for VersionOrLatest {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            VersionOrLatest::Version(v) => serializer.serialize_str(&v.to_string()),
+            VersionOrLatest::Latest => serializer.serialize_str("latest"),
+        }
+    }
+}
+
+impl VersionOrLatest {
+    pub fn binary_path(&self, asset_folder: &str) -> anyhow::Result<Option<PathBuf>> {
+        match self {
+            VersionOrLatest::Version(version) => {
+                let mut asset_folder: PathBuf = asset_folder.parse().context("parsing asset folder")?;
+                let arch = get_arch()?;
+                let local_filename = format!("meilisearch-{version}-{arch}");
+                asset_folder.push(local_filename);
+                Ok(Some(asset_folder))
+            }
+            VersionOrLatest::Latest => Ok(None),
+        }
+    }
+}
+
+impl Display for VersionOrLatest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            VersionOrLatest::Version(v) => v.fmt(f),
+            VersionOrLatest::Latest => write!(f, "latest"),
+        }
+    }
+}
 
 async fn get_sha256(version: &Version, asset_name: &str) -> anyhow::Result<String> {
     // If version is lower than 1.15 there is no point in trying to get the sha256, GitHub didn't support it
@@ -45,7 +103,7 @@ async fn get_sha256(version: &Version, asset_name: &str) -> anyhow::Result<Strin
     Ok(sha256)
 }
 
-async fn add_asset(assets: &mut BTreeMap<String, Asset>, version: &Version) -> anyhow::Result<()> {
+pub fn get_arch() -> anyhow::Result<&'static str> {
     let arch;
 
     // linux-aarch64
@@ -82,6 +140,11 @@ async fn add_asset(assets: &mut BTreeMap<String, Asset>, version: &Version) -> a
         anyhow::bail!("unsupported platform");
     }
 
+    Ok(arch)
+}
+
+async fn add_asset(assets: &mut BTreeMap<String, Asset>, version: &Version) -> anyhow::Result<()> {
+    let arch = get_arch()?;
     let local_filename = format!("meilisearch-{version}-{arch}");
     if assets.contains_key(&local_filename) {
         return Ok(());
