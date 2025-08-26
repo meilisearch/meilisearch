@@ -128,31 +128,12 @@ async fn execute_run(
     binary_path: Option<&Path>,
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
-    meili_process::delete_db();
-
-    let run_command = match binary_path {
-        Some(binary_path) => tokio::process::Command::new(binary_path),
-        None => {
-            meili_process::build().await?;
-            let mut command = tokio::process::Command::new("cargo");
-            command
-                .arg("run")
-                .arg("--release")
-                .arg("-p")
-                .arg("meilisearch")
-                .arg("--bin")
-                .arg("meilisearch")
-                .arg("--");
-            command
-        }
-    };
-
     let meilisearch = meili_process::start(
         meili_client,
         master_key,
         &workload.extra_cli_args,
         &workload.name,
-        run_command,
+        binary_path,
     )
     .await?;
 

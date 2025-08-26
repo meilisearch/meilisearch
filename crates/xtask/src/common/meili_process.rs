@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{bail, Context as _};
@@ -48,7 +49,7 @@ pub async fn kill(mut meilisearch: tokio::process::Child) {
 }
 
 #[tracing::instrument]
-pub async fn build() -> anyhow::Result<()> {
+async fn build() -> anyhow::Result<()> {
     let mut command = TokioCommand::new("cargo");
     command.arg("build").arg("--release").arg("-p").arg("meilisearch");
 
@@ -69,8 +70,27 @@ pub async fn start(
     master_key: Option<&str>,
     extra_cli_args: &[String],
     _workload: &str,
-    mut command: TokioCommand,
+    binary_path: Option<&Path>,
 ) -> anyhow::Result<tokio::process::Child> {
+    delete_db();
+
+    let mut command = match binary_path {
+        Some(binary_path) => tokio::process::Command::new(binary_path),
+        None => {
+            build().await?;
+            let mut command = tokio::process::Command::new("cargo");
+            command
+                .arg("run")
+                .arg("--release")
+                .arg("-p")
+                .arg("meilisearch")
+                .arg("--bin")
+                .arg("meilisearch")
+                .arg("--");
+            command
+        }
+    };
+
     command.arg("--db-path").arg("./_xtask_benchmark.ms");
     if let Some(master_key) = master_key {
         command.arg("--master-key").arg(master_key);
@@ -119,6 +139,6 @@ async fn wait_for_health(
     bail!("meilisearch is not responding")
 }
 
-pub fn delete_db() {
-    let _ = std::fs::remove_dir_all("./_xtask_benchmark.ms");
+async fn delete_db() {
+    let _ = tokio::fs::remove_dir_all("./_xtask_benchmark.ms").await;
 }
