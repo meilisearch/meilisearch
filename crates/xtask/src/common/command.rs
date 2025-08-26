@@ -185,7 +185,34 @@ pub async fn run(
         request.send().await.with_context(|| format!("error sending command: {}", command))?;
 
     let code = response.status();
-    
+
+    if let Some(expected_status) = command.expected_status {
+        if !return_value && code.as_u16() != expected_status {
+            let response = response
+                .text()
+                .await
+                .context("could not read response body as text")
+                .context("reading response body when checking expected status")?;
+            bail!("unexpected status code: got {}, expected {expected_status}, response body: '{response}'", code.as_u16());
+        }
+    } else if code.is_client_error() {
+        tracing::error!(%command, %code, "error in workload file");
+        let response: serde_json::Value = response
+            .json()
+            .await
+            .context("could not deserialize response as JSON")
+            .context("parsing error in workload file when sending command")?;
+        bail!("error in workload file: server responded with error code {code} and '{response}'")
+    } else if code.is_server_error() {
+        tracing::error!(%command, %code, "server error");
+        let response: serde_json::Value = response
+            .json()
+            .await
+            .context("could not deserialize response as JSON")
+            .context("parsing server error when sending command")?;
+        bail!("server error: server responded with error code {code} and '{response}'")
+    }
+
     if let Some(expected_response) = &command.expected_response {
         let response: serde_json::Value = response
             .json()
@@ -210,33 +237,6 @@ pub async fn run(
             .context("could not deserialize response as JSON")
             .context("parsing response when recording expected response")?;
         return Ok(Some((response, code)));
-    }
-
-    if let Some(expected_status) = command.expected_status {
-        if code.as_u16() != expected_status {
-            let response = response
-                .text()
-                .await
-                .context("could not read response body as text")
-                .context("reading response body when checking expected status")?;
-            bail!("unexpected status code: got {}, expected {expected_status}, response body: '{response}'", code.as_u16());
-        }
-    } else if code.is_client_error() {
-        tracing::error!(%command, %code, "error in workload file");
-        let response: serde_json::Value = response
-            .json()
-            .await
-            .context("could not deserialize response as JSON")
-            .context("parsing error in workload file when sending command")?;
-        bail!("error in workload file: server responded with error code {code} and '{response}'")
-    } else if code.is_server_error() {
-        tracing::error!(%command, %code, "server error");
-        let response: serde_json::Value = response
-            .json()
-            .await
-            .context("could not deserialize response as JSON")
-            .context("parsing server error when sending command")?;
-        bail!("server error: server responded with error code {code} and '{response}'")
     }
 
     Ok(None)
