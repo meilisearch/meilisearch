@@ -1,6 +1,5 @@
 mod dashboard;
 mod env_info;
-mod meili_process;
 mod workload;
 
 use crate::common::args::CommonArgs;

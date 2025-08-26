@@ -13,10 +13,10 @@ use uuid::Uuid;
 
 use super::dashboard::DashboardClient;
 use super::BenchDeriveArgs;
-use crate::bench::meili_process;
 use crate::common::assets::{self, Asset};
 use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
+use crate::common::meili_process;
 
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
