@@ -107,7 +107,10 @@ fn query_batches_simple() {
 
     if !batches[0].stats.progress_trace.is_empty() {
         batches[0].stats.progress_trace.clear();
-        batches[0].stats.progress_trace.insert("processing tasks".to_string(), "deterministic_duration".into());
+        batches[0]
+            .stats
+            .progress_trace
+            .insert("processing tasks".to_string(), "deterministic_duration".into());
     }
 
     // Insta cannot snapshot our batches because the batch stats contains an enum as key: https://github.com/mitsuhiko/insta/issues/689
