@@ -87,7 +87,7 @@ pub async fn start(
 
     let mut meilisearch = command.spawn().context("Error starting Meilisearch")?;
 
-    wait_for_health(client, &mut meilisearch, &workload.assets, asset_folder).await?;
+    wait_for_health(client, &mut meilisearch, asset_folder).await?;
 
     Ok(meilisearch)
 }
@@ -95,11 +95,10 @@ pub async fn start(
 async fn wait_for_health(
     client: &Client,
     meilisearch: &mut tokio::process::Child,
-    assets: &BTreeMap<String, Asset>,
     asset_folder: &str,
 ) -> anyhow::Result<()> {
     for i in 0..100 {
-        let res = run_command(client, &health_command(), assets, asset_folder, false).await;
+        let res = run_command(client, &health_command(), &BTreeMap::new(), asset_folder, false).await;
         if res.is_ok() {
             // check that this is actually the current Meilisearch instance that answered us
             if let Some(exit_code) =
