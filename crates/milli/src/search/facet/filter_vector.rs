@@ -82,7 +82,7 @@ fn evaluate_inner(
     embedding_configs: &[IndexEmbeddingConfig],
     filter: &VectorFilter<'_>,
 ) -> crate::Result<RoaringBitmap> {
-    let index_version = index.get_version(rtxn)?.unwrap();
+    let backend = index.get_vector_store(rtxn)?;
     let embedder_name = embedder.value();
     let available_embedders =
         || embedding_configs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
@@ -98,7 +98,7 @@ fn evaluate_inner(
         .ok_or_else(|| EmbedderDoesNotExist { embedder, available: available_embedders() })?;
 
     let vector_store = VectorStore::new(
-        index_version,
+        backend,
         index.vector_store,
         embedder_info.embedder_id,
         embedding_config.config.quantized(),

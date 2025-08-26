@@ -4,6 +4,7 @@ use heed::{RoTxn, RwTxn, Unspecified};
 use ordered_float::OrderedFloat;
 use rand::SeedableRng as _;
 use roaring::RoaringBitmap;
+use serde::{Deserialize, Serialize};
 
 use crate::progress::Progress;
 use crate::vector::Embeddings;
@@ -12,8 +13,15 @@ const HANNOY_EF_CONSTRUCTION: usize = 125;
 const HANNOY_M: usize = 16;
 const HANNOY_M0: usize = 32;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum VectorStoreBackend {
+    #[default]
+    Arroy,
+    Hannoy,
+}
+
 pub struct VectorStore {
-    version: (u32, u32, u32),
+    backend: VectorStoreBackend,
     database: hannoy::Database<Unspecified>,
     embedder_index: u8,
     quantized: bool,
@@ -21,22 +29,16 @@ pub struct VectorStore {
 
 impl VectorStore {
     pub fn new(
-        version: (u32, u32, u32),
+        backend: VectorStoreBackend,
         database: hannoy::Database<Unspecified>,
         embedder_index: u8,
         quantized: bool,
     ) -> Self {
-        Self { version, database, embedder_index, quantized }
+        Self { backend, database, embedder_index, quantized }
     }
 
     pub fn embedder_index(&self) -> u8 {
         self.embedder_index
-    }
-
-    /// Whether we must use the arroy to read the vector store.
-    pub fn version_uses_arroy(&self) -> bool {
-        let (major, minor, _patch) = self.version;
-        major == 1 && minor < 18
     }
 
     fn arroy_readers<'a, D: arroy::Distance>(
@@ -87,7 +89,7 @@ impl VectorStore {
     where
         F: FnOnce(&RoaringBitmap) -> O,
     {
-        if self.version_uses_arroy() {
+        if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
                 self._arroy_items_in_store(rtxn, self.arroy_quantized_db(), store_id, with_items)
                     .map_err(Into::into)
@@ -142,7 +144,7 @@ impl VectorStore {
     }
 
     pub fn dimensions(&self, rtxn: &RoTxn) -> crate::Result<Option<usize>> {
-        if self.version_uses_arroy() {
+        if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
                 Ok(self
                     .arroy_readers(rtxn, self.arroy_quantized_db())
@@ -497,7 +499,7 @@ impl VectorStore {
         item: hannoy::ItemId,
     ) -> crate::Result<bool> {
         for index in vector_store_range_for_embedder(self.embedder_index) {
-            let contains = if self.version_uses_arroy() {
+            let contains = if self.backend == VectorStoreBackend::Arroy {
                 if self.quantized {
                     let writer = arroy::Writer::new(self.arroy_quantized_db(), index, dimension);
                     if writer.is_empty(rtxn)? {
@@ -538,7 +540,7 @@ impl VectorStore {
         limit: usize,
         filter: Option<&RoaringBitmap>,
     ) -> crate::Result<Vec<(ItemId, f32)>> {
-        if self.version_uses_arroy() {
+        if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
                 self._arroy_nns_by_item(rtxn, self.arroy_quantized_db(), item, limit, filter)
                     .map_err(Into::into)
@@ -614,7 +616,7 @@ impl VectorStore {
         limit: usize,
         filter: Option<&RoaringBitmap>,
     ) -> crate::Result<Vec<(ItemId, f32)>> {
-        if self.version_uses_arroy() {
+        if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
                 self._arroy_nns_by_vector(rtxn, self.arroy_quantized_db(), vector, limit, filter)
                     .map_err(Into::into)
@@ -687,7 +689,7 @@ impl VectorStore {
     pub fn item_vectors(&self, rtxn: &RoTxn, item_id: u32) -> crate::Result<Vec<Vec<f32>>> {
         let mut vectors = Vec::new();
 
-        if self.version_uses_arroy() {
+        if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
                 for reader in self.arroy_readers(rtxn, self.arroy_quantized_db()) {
                     if let Some(vec) = reader?.item_vector(rtxn, item_id)? {

@@ -31,7 +31,7 @@ use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
-use crate::vector::{Embedding, HannoyStats, VectorStore};
+use crate::vector::{Embedding, HannoyStats, VectorStore, VectorStoreBackend};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -87,6 +87,7 @@ pub mod main_key {
     pub const DOCUMENTS_STATS: &str = "documents_stats";
     pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
     pub const CHAT: &str = "chat";
+    pub const VECTOR_STORE_BACKEND: &str = "vector_store_backend";
 }
 
 pub mod db_name {
@@ -452,6 +453,35 @@ impl Index {
     /// Get the version of the database. `None` if it was never set.
     pub fn get_version(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<(u32, u32, u32)>> {
         self.main.remap_types::<Str, VersionCodec>().get(rtxn, main_key::VERSION_KEY)
+    }
+
+    /* vector store */
+    /// Writes the vector store
+    pub(crate) fn put_vector_store(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        backend: VectorStoreBackend,
+    ) -> Result<()> {
+        Ok(self.main.remap_types::<Str, SerdeJson<VectorStoreBackend>>().put(
+            wtxn,
+            main_key::VECTOR_STORE_BACKEND,
+            &backend,
+        )?)
+    }
+
+    pub(crate) fn get_vector_store(&self, rtxn: &RoTxn<'_>) -> Result<VectorStoreBackend> {
+        Ok(self
+            .main
+            .remap_types::<Str, SerdeJson<VectorStoreBackend>>()
+            .get(rtxn, main_key::VECTOR_STORE_BACKEND)?
+            .unwrap_or_default())
+    }
+
+    pub(crate) fn delete_vector_store(&self, wtxn: &mut RwTxn<'_>) -> Result<bool> {
+        Ok(self
+            .main
+            .remap_types::<Str, SerdeJson<VectorStoreBackend>>()
+            .delete(wtxn, main_key::VECTOR_STORE_BACKEND)?)
     }
 
     /* documents ids */
@@ -1769,12 +1799,13 @@ impl Index {
     ) -> Result<BTreeMap<String, EmbeddingsWithMetadata>> {
         let mut res = BTreeMap::new();
         let embedders = self.embedding_configs();
-        let index_version = self.get_version(rtxn)?.unwrap();
+        let backend = self.get_vector_store(rtxn)?;
+
         for config in embedders.embedding_configs(rtxn)? {
             let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
             let has_fragments = config.config.embedder_options.has_fragments();
             let reader = VectorStore::new(
-                index_version,
+                backend,
                 self.vector_store,
                 embedder_info.embedder_id,
                 config.config.quantized(),
@@ -1797,11 +1828,12 @@ impl Index {
     pub fn hannoy_stats(&self, rtxn: &RoTxn<'_>) -> Result<HannoyStats> {
         let mut stats = HannoyStats::default();
         let embedding_configs = self.embedding_configs();
-        let index_version = self.get_version(rtxn)?.unwrap();
+        let backend = self.get_vector_store(rtxn)?;
+
         for config in embedding_configs.embedding_configs(rtxn)? {
             let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
             let reader = VectorStore::new(
-                index_version,
+                backend,
                 self.vector_store,
                 embedder_id,
                 config.config.quantized(),

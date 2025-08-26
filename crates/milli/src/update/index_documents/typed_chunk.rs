@@ -619,7 +619,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let _entered = span.enter();
 
             let embedders = index.embedding_configs();
-            let index_version = index.get_version(wtxn)?.unwrap();
+            let backend = index.get_vector_store(wtxn)?;
 
             let mut remove_vectors_builder = MergerBuilder::new(KeepFirst);
             let mut manual_vectors_builder = MergerBuilder::new(KeepFirst);
@@ -678,12 +678,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 .get(&embedder_name)
                 .is_some_and(|conf| conf.is_quantized);
             // FIXME: allow customizing distance
-            let writer = VectorStore::new(
-                index_version,
-                index.vector_store,
-                infos.embedder_id,
-                binary_quantized,
-            );
+            let writer =
+                VectorStore::new(backend, index.vector_store, infos.embedder_id, binary_quantized);
 
             // remove vectors for docids we want them removed
             let merger = remove_vectors_builder.build();

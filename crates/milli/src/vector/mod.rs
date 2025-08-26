@@ -19,7 +19,7 @@ pub use distribution::DistributionShift;
 pub use embedder::{Embedder, EmbedderOptions, EmbeddingConfig, SearchQuery};
 pub use embeddings::Embeddings;
 pub use runtime::{RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment};
-pub use store::{HannoyStats, VectorStore};
+pub use store::{HannoyStats, VectorStore, VectorStoreBackend};
 
 pub const REQUEST_PARALLELISM: usize = 40;
 

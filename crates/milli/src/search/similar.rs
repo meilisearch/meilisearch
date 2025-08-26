@@ -72,12 +72,10 @@ impl<'a> Similar<'a> {
                 crate::UserError::InvalidSimilarEmbedder(self.embedder_name.to_owned())
             })?;
 
-        let reader = VectorStore::new(
-            self.index.get_version(self.rtxn)?.unwrap(),
-            self.index.vector_store,
-            embedder_index,
-            self.quantized,
-        );
+        let backend = self.index.get_vector_store(self.rtxn)?;
+
+        let reader =
+            VectorStore::new(backend, self.index.vector_store, embedder_index, self.quantized);
         let results = reader.nns_by_item(
             self.rtxn,
             self.id,

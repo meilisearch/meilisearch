@@ -17,13 +17,14 @@ impl UpgradeIndex for Latest_V1_18_New_Hannoy {
         progress: Progress,
     ) -> Result<bool> {
         let embedding_configs = index.embedding_configs();
-        let index_version = index.get_version(wtxn)?.unwrap();
+        let backend = index.get_vector_store(wtxn)?;
         for config in embedding_configs.embedding_configs(wtxn)? {
             // TODO use the embedder name to display progress
+            /// REMOVE THIS FILE, IMPLEMENT CONVERSION AS A SETTING CHANGE
             let quantized = config.config.quantized();
             let embedder_id = embedding_configs.embedder_id(wtxn, &config.name)?.unwrap();
             let vector_store =
-                VectorStore::new(index_version, index.vector_store, embedder_id, quantized);
+                VectorStore::new(backend, index.vector_store, embedder_id, quantized);
             vector_store.convert_from_arroy(wtxn, progress.clone())?;
         }
 

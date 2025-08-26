@@ -131,7 +131,7 @@ where
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
 
         let vector_arroy = index.vector_store;
-        let index_version = index.get_version(wtxn)?.unwrap();
+        let backend = index.get_vector_store(wtxn)?;
         let hannoy_writers: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
             .iter()
@@ -145,12 +145,8 @@ where
                     })?;
 
                 let dimensions = runtime.embedder.dimensions();
-                let writer = VectorStore::new(
-                    index_version,
-                    vector_arroy,
-                    embedder_index,
-                    runtime.is_quantized,
-                );
+                let writer =
+                    VectorStore::new(backend, vector_arroy, embedder_index, runtime.is_quantized);
 
                 Ok((
                     embedder_index,
@@ -352,7 +348,7 @@ fn hannoy_writers_from_embedder_actions<'indexer>(
     index_embedder_category_ids: &'indexer std::collections::HashMap<String, u8>,
 ) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, VectorStore, usize)>> {
     let vector_arroy = index.vector_store;
-    let index_version = index.get_version(rtxn)?.unwrap();
+    let backend = index.get_vector_store(rtxn)?;
 
     embedders
         .inner_as_ref()
@@ -371,7 +367,7 @@ fn hannoy_writers_from_embedder_actions<'indexer>(
                     )));
                 };
                 let writer = VectorStore::new(
-                    index_version,
+                    backend,
                     vector_arroy,
                     embedder_category_id,
                     action.was_quantized,
@@ -394,16 +390,13 @@ fn delete_old_embedders_and_fragments<SD>(
 where
     SD: SettingsDelta,
 {
+    let backend = index.get_vector_store(wtxn)?;
     for action in settings_delta.embedder_actions().values() {
         let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() else {
             continue;
         };
-        let reader = VectorStore::new(
-            index.get_version(wtxn)?.unwrap(),
-            index.vector_store,
-            *embedder_id,
-            action.was_quantized,
-        );
+        let reader =
+            VectorStore::new(backend, index.vector_store, *embedder_id, action.was_quantized);
         let Some(dimensions) = reader.dimensions(wtxn)? else {
             continue;
         };
@@ -419,12 +412,7 @@ where
         let Some(infos) = index.embedding_configs().embedder_info(wtxn, embedder_name)? else {
             continue;
         };
-        let arroy = VectorStore::new(
-            index.get_version(wtxn)?.unwrap(),
-            index.vector_store,
-            infos.embedder_id,
-            was_quantized,
-        );
+        let arroy = VectorStore::new(backend, index.vector_store, infos.embedder_id, was_quantized);
         let Some(dimensions) = arroy.dimensions(wtxn)? else {
             continue;
         };

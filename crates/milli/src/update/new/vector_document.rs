@@ -120,9 +120,9 @@ impl<'t> VectorDocumentFromDb<'t> {
         config: &IndexEmbeddingConfig,
         status: &EmbeddingStatus,
     ) -> Result<VectorEntry<'t>> {
-        let index_version = self.index.get_version(self.rtxn)?.unwrap();
+        let backend = self.index.get_vector_store(self.rtxn)?;
         let reader = VectorStore::new(
-            index_version,
+            backend,
             self.index.vector_store,
             embedder_id,
             config.config.quantized(),

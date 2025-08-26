@@ -834,7 +834,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             None
         };
 
-        let index_version = self.index.get_version(wtxn)?.unwrap();
+        let backend = self.index.get_vector_store(wtxn)?;
         let readers: BTreeMap<&str, (VectorStore, &RoaringBitmap)> = settings_diff
             .embedding_config_updates
             .iter()
@@ -843,7 +843,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     action.write_back()
                 {
                     let reader = VectorStore::new(
-                        index_version,
+                        backend,
                         self.index.vector_store,
                         *embedder_id,
                         action.was_quantized,
@@ -949,7 +949,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                 continue;
             };
             let hannoy = VectorStore::new(
-                index_version,
+                backend,
                 self.index.vector_store,
                 infos.embedder_id,
                 was_quantized,

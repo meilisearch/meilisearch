@@ -54,14 +54,11 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         vector_candidates: &RoaringBitmap,
     ) -> Result<()> {
         let target = &self.target;
+        let backend = ctx.index.get_vector_store(ctx.txn)?;
 
         let before = Instant::now();
-        let reader = VectorStore::new(
-            ctx.index.get_version(ctx.txn)?.unwrap(),
-            ctx.index.vector_store,
-            self.embedder_index,
-            self.quantized,
-        );
+        let reader =
+            VectorStore::new(backend, ctx.index.vector_store, self.embedder_index, self.quantized);
         let results = reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
         self.cached_sorted_docids = results.into_iter();
         *ctx.vector_store_stats.get_or_insert_default() += VectorStoreStats {
