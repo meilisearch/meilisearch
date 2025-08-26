@@ -55,11 +55,11 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
 
     let asset_folder = args.common.asset_folder.clone().leak();
     for workload_file in &args.common.workload_file {
-        let workload: Workload = serde_json::from_reader(
-            std::fs::File::open(workload_file)
-                .with_context(|| format!("error opening {}", workload_file.display()))?,
-        )
-        .with_context(|| format!("error parsing {} as JSON", workload_file.display()))?;
+        let string = tokio::fs::read_to_string(workload_file)
+            .await
+            .with_context(|| format!("error reading {}", workload_file.display()))?;
+        let workload: Workload = serde_json::from_str(string.trim())
+            .with_context(|| format!("error parsing {} as JSON", workload_file.display()))?;
 
         let Workload::Test(workload) = workload else {
             bail!("workload file {} is not a test workload", workload_file.display());

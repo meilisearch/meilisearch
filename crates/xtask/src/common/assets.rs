@@ -8,7 +8,7 @@ use sha2::Digest;
 
 use super::client::Client;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Asset {
     pub local_location: Option<String>,
     pub remote_location: Option<String>,
@@ -18,7 +18,7 @@ pub struct Asset {
     pub sha256: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Default, Copy, Clone)]
+#[derive(Serialize, Deserialize, Default, Copy, Clone, Debug)]
 pub enum AssetFormat {
     #[default]
     Auto,

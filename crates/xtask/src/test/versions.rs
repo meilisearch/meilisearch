@@ -5,7 +5,7 @@ use anyhow::Context;
 use cargo_metadata::semver::Version;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum VersionOrLatest {
     Version(Version),
     Latest,

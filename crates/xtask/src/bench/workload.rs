@@ -20,7 +20,7 @@ use crate::common::process::{self, delete_db, start_meili};
 
 /// A bench workload.
 /// Not to be confused with [a test workload](crate::test::workload::Workload).
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct BenchWorkload {
     pub name: String,
     pub run_count: u16,

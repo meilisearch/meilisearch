@@ -12,7 +12,7 @@ use similar_asserts::SimpleDiff;
 use crate::common::assets::{fetch_asset, Asset};
 use crate::common::client::{Client, Method};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Command {
     pub route: String,
@@ -27,7 +27,7 @@ pub struct Command {
     synchronous: SyncMode,
 }
 
-#[derive(Default, Clone, Serialize, Deserialize)]
+#[derive(Default, Clone, Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum Body {
     Inline {

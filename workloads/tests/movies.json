@@ -55,6 +55,9 @@
       "synchronous": "WaitForTask"
     },
     {
+      "upgrade": "latest"
+    },
+    {
       "route": "indexes/movies/search?q=bitcoin",
       "method": "GET",
       "body": null,
@@ -128,7 +131,7 @@
         ],
         "limit": 20,
         "offset": 0,
-        "processingTimeMs": 1,
+        "processingTimeMs": "[duration]",
         "query": "bitcoin"
       },
       "synchronous": "DontWait"
@@ -139,6 +142,7 @@
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
+        "avgDocumentSize": 499,
         "fieldDistribution": {
           "genres": 31944,
           "id": 31944,
@@ -148,7 +152,10 @@
           "title": 31944
         },
         "isIndexing": false,
-        "numberOfDocuments": 31944
+        "numberOfDocuments": 31944,
+        "numberOfEmbeddedDocuments": 0,
+        "numberOfEmbeddings": 0,
+        "rawDocumentDbSize": 16220160
       },
       "synchronous": "DontWait"
     }

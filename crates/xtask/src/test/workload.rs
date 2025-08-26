@@ -19,7 +19,7 @@ use crate::{
     },
 };
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum CommandOrUpgrade {
     Command(Command),
@@ -52,8 +52,8 @@ fn produce_reference_value(value: &mut Value) {
                     "processingTimeMs" => {
                         *value = Value::String(String::from("[duration]"));
                         continue;
-                    },
-                    _ => produce_reference_value(value)
+                    }
+                    _ => produce_reference_value(value),
                 }
             }
         }
@@ -62,7 +62,7 @@ fn produce_reference_value(value: &mut Value) {
 
 /// A test workload.
 /// Not to be confused with [a bench workload](crate::bench::workload::Workload).
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TestWorkload {
     pub name: String,
