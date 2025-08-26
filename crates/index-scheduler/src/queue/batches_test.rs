@@ -104,6 +104,12 @@ fn query_batches_simple() {
     batches[0].started_at = OffsetDateTime::UNIX_EPOCH;
     assert!(batches[0].enqueued_at.is_some());
     batches[0].enqueued_at = None;
+
+    if !batches[0].stats.progress_trace.is_empty() {
+        batches[0].stats.progress_trace.clear();
+        batches[0].stats.progress_trace.insert("processing tasks".to_string(), "deterministic_duration".into());
+    }
+
     // Insta cannot snapshot our batches because the batch stats contains an enum as key: https://github.com/mitsuhiko/insta/issues/689
     let batch = serde_json::to_string_pretty(&batches[0]).unwrap();
     snapshot!(batch, @r###"
@@ -122,6 +128,9 @@ fn query_batches_simple() {
         },
         "indexUids": {
           "catto": 1
+        },
+        "progressTrace": {
+          "processing tasks": "deterministic_duration"
         }
       },
       "startedAt": "1970-01-01T00:00:00Z",
