@@ -7,6 +7,7 @@ use anyhow::{bail, Context as _};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use similar_asserts::SimpleDiff;
 
 use crate::common::assets::{fetch_asset, Asset};
 use crate::common::client::{Client, Method};
@@ -92,8 +93,8 @@ async fn run_batch(
 
     let mut tasks = Vec::with_capacity(batch.len());
     for batch in batch {
-        let client2 = Arc::clone(&client);
-        let assets2 = Arc::clone(&assets);
+        let client2 = Arc::clone(client);
+        let assets2 = Arc::clone(assets);
         tasks.push(tokio::spawn(async move {
             run(&client2, &batch, &assets2, asset_folder, return_response).await
         }));
@@ -112,7 +113,7 @@ async fn run_batch(
     match sync {
         SyncMode::DontWait => {}
         SyncMode::WaitForResponse => {}
-        SyncMode::WaitForTask => wait_for_tasks(&client).await?,
+        SyncMode::WaitForTask => wait_for_tasks(client).await?,
     }
 
     Ok(outputs)
@@ -226,7 +227,12 @@ pub async fn run(
             .context("could not deserialize response as JSON")
             .context("parsing response when checking expected response")?;
         if &response != expected_response {
-            bail!("unexpected response: got '{response}', expected '{expected_response}'");
+            let expected_pretty = serde_json::to_string_pretty(expected_response)
+                .context("serializing expected response as pretty JSON")?;
+            let response_pretty = serde_json::to_string_pretty(&response)
+                .context("serializing response as pretty JSON")?;
+            let diff = SimpleDiff::from_str(&expected_pretty, &response_pretty, "expected", "got");
+            bail!("unexpected response:\n{diff}");
         }
     }
 

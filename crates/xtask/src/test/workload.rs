@@ -124,7 +124,8 @@ impl TestWorkload {
                         &[String::from("--experimental-dumpless-upgrade")],
                         &self.name,
                         binary_path.as_deref(),
-                    ).await?;
+                    )
+                    .await?;
                     tracing::info!("Upgraded to {version}");
                 }
             }

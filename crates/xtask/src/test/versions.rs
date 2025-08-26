@@ -43,7 +43,8 @@ impl VersionOrLatest {
     pub fn binary_path(&self, asset_folder: &str) -> anyhow::Result<Option<PathBuf>> {
         match self {
             VersionOrLatest::Version(version) => {
-                let mut asset_folder: PathBuf = asset_folder.parse().context("parsing asset folder")?;
+                let mut asset_folder: PathBuf =
+                    asset_folder.parse().context("parsing asset folder")?;
                 let arch = get_arch()?;
                 let local_filename = format!("meilisearch-{version}-{arch}");
                 asset_folder.push(local_filename);

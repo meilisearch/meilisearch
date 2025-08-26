@@ -129,7 +129,7 @@ async fn execute_run(
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
     delete_db().await;
-    
+
     let meilisearch = start_meili(
         meili_client,
         master_key,
