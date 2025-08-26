@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::time::Duration;
 
@@ -128,7 +128,9 @@ async fn wait_for_health(
     meilisearch: &mut tokio::process::Child,
 ) -> anyhow::Result<()> {
     for i in 0..100 {
-        let res = run_command(client, &health_command(), &BTreeMap::new(), "", false).await;
+        let res =
+            run_command(client, &health_command(), &BTreeMap::new(), HashMap::new(), "", false)
+                .await;
         if res.is_ok() {
             // check that this is actually the current Meilisearch instance that answered us
             if let Some(exit_code) =

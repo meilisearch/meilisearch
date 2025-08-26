@@ -3,7 +3,11 @@ use cargo_metadata::semver::Version;
 use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::BTreeMap, io::Write, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    io::Write,
+    sync::Arc,
+};
 
 use crate::{
     common::{
@@ -121,6 +125,7 @@ impl TestWorkload {
 
         let assets = Arc::new(self.assets.clone());
         let return_responses = dbg!(args.add_missing_responses || args.update_responses);
+        let mut registered = HashMap::new();
         for command_or_upgrade in commands_or_upgrade {
             match command_or_upgrade {
                 CommandOrUpgradeVec::Commands(commands) => {
@@ -130,6 +135,7 @@ impl TestWorkload {
                         &cloned,
                         &assets,
                         asset_folder,
+                        &mut registered,
                         return_responses,
                     )
                     .await?;

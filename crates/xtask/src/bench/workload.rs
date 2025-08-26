@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{Seek as _, Write as _};
 use std::path::Path;
@@ -47,7 +47,15 @@ async fn run_workload_commands(
     let assets = Arc::new(workload.assets.clone());
     let asset_folder = args.common.asset_folder.clone().leak();
 
-    run_commands(meili_client, &workload.precommands, &assets, asset_folder, false).await?;
+    run_commands(
+        meili_client,
+        &workload.precommands,
+        &assets,
+        asset_folder,
+        &mut HashMap::new(),
+        false,
+    )
+    .await?;
 
     std::fs::create_dir_all(report_folder)
         .with_context(|| format!("could not create report directory at {report_folder}"))?;
@@ -57,7 +65,15 @@ async fn run_workload_commands(
 
     let report_handle = start_report(logs_client, trace_filename, &workload.target).await?;
 
-    run_commands(meili_client, &workload.commands, &assets, asset_folder, false).await?;
+    run_commands(
+        meili_client,
+        &workload.commands,
+        &assets,
+        asset_folder,
+        &mut HashMap::new(),
+        false,
+    )
+    .await?;
 
     let processor =
         stop_report(dashboard_client, logs_client, workload_uuid, report_filename, report_handle)
