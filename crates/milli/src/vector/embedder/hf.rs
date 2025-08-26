@@ -6,8 +6,9 @@ use hf_hub::api::sync::Api;
 use hf_hub::{Repo, RepoType};
 use tokenizers::{PaddingParams, Tokenizer};
 
-pub use super::error::{EmbedError, Error, NewEmbedderError};
-use super::{DistributionShift, Embedding, EmbeddingCache};
+use super::EmbeddingCache;
+use crate::vector::error::{EmbedError, NewEmbedderError};
+use crate::vector::{DistributionShift, Embedding};
 
 #[derive(
     Debug,

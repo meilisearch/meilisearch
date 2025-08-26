@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
 pub use meilisearch_types::milli;
-use meilisearch_types::milli::vector::hf::OverridePooling;
+use meilisearch_types::milli::vector::embedder::hf::OverridePooling;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use tracing::debug;

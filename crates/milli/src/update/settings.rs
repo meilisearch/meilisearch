@@ -33,6 +33,7 @@ use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::reindex;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
+use crate::vector::embedder::{openai, rest};
 use crate::vector::json_template::JsonTemplate;
 use crate::vector::settings::{
     EmbedderAction, EmbedderSource, EmbeddingSettings, EmbeddingValidationContext, NestingContext,
@@ -2208,39 +2209,29 @@ pub fn validate_embedding_settings(
     if let Some(request) = request.as_ref().set() {
         let request = match with_fragments {
             WithFragments::Yes { indexing_fragments, search_fragments } => {
-                crate::vector::rest::RequestData::new(
-                    request.to_owned(),
-                    indexing_fragments,
-                    search_fragments,
-                )
-                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+                rest::RequestData::new(request.to_owned(), indexing_fragments, search_fragments)
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
             }
-            WithFragments::No => crate::vector::rest::RequestData::new(
-                request.to_owned(),
-                Default::default(),
-                Default::default(),
-            )
-            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into())),
+            WithFragments::No => {
+                rest::RequestData::new(request.to_owned(), Default::default(), Default::default())
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+            }
             WithFragments::Maybe => {
                 let mut indexing_fragments = BTreeMap::new();
                 indexing_fragments.insert("test".to_string(), serde_json::json!("test"));
-                crate::vector::rest::RequestData::new(
-                    request.to_owned(),
-                    indexing_fragments,
-                    Default::default(),
-                )
-                .or_else(|_| {
-                    crate::vector::rest::RequestData::new(
-                        request.to_owned(),
-                        Default::default(),
-                        Default::default(),
-                    )
-                })
-                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+                rest::RequestData::new(request.to_owned(), indexing_fragments, Default::default())
+                    .or_else(|_| {
+                        rest::RequestData::new(
+                            request.to_owned(),
+                            Default::default(),
+                            Default::default(),
+                        )
+                    })
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
             }
         }?;
         if let Some(response) = response.as_ref().set() {
-            crate::vector::rest::Response::new(response.to_owned(), &request)
+            rest::Response::new(response.to_owned(), &request)
                 .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
         }
     }
@@ -2293,11 +2284,12 @@ pub fn validate_embedding_settings(
     match inferred_source {
         EmbedderSource::OpenAi => {
             if let Setting::Set(model) = &model {
-                let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
-                    .ok_or(crate::error::UserError::InvalidOpenAiModel {
+                let model = openai::EmbeddingModel::from_name(model.as_str()).ok_or(
+                    crate::error::UserError::InvalidOpenAiModel {
                         embedder_name: name.to_owned(),
                         model: model.clone(),
-                    })?;
+                    },
+                )?;
                 if let Setting::Set(dimensions) = dimensions {
                     if !model.supports_overriding_dimensions()
                         && dimensions != model.default_dimensions()

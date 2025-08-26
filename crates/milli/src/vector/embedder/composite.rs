@@ -2,13 +2,13 @@ use std::time::Instant;
 
 use hannoy::Distance;
 
-use super::error::CompositeEmbedderContainsHuggingFace;
-use super::{
-    hf, manual, ollama, openai, rest, DistributionShift, EmbedError, Embedding, EmbeddingCache,
-    NewEmbedderError,
-};
+use super::{hf, manual, ollama, openai, rest, Embedding, EmbeddingCache};
 use crate::progress::EmbedderStats;
+use crate::vector::error::{CompositeEmbedderContainsHuggingFace, EmbedError, NewEmbedderError};
+use crate::vector::DistributionShift;
 use crate::ThreadPoolNoAbort;
+
+pub(in crate::vector) const MAX_COMPOSITE_DISTANCE: f32 = 0.01;
 
 #[derive(Debug)]
 pub enum SubEmbedder {
@@ -336,7 +336,7 @@ fn check_similarity(
         };
 
         let distance = hannoy::distances::Cosine::distance(&left, &right);
-        if distance > super::MAX_COMPOSITE_DISTANCE {
+        if distance > crate::vector::embedder::composite::MAX_COMPOSITE_DISTANCE {
             return Err(NewEmbedderError::composite_embedding_value_mismatch(distance, hint));
         }
     }

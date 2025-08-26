@@ -355,7 +355,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
         context: crate::vector::settings::NestingContext,
         field: crate::vector::settings::MetaEmbeddingSetting,
     },
-    #[error("`.embedders.{embedder_name}.model`: Invalid model `{model}` for OpenAI. Supported models: {:?}", crate::vector::openai::EmbeddingModel::supported_models())]
+    #[error("`.embedders.{embedder_name}.model`: Invalid model `{model}` for OpenAI. Supported models: {:?}", crate::vector::embedder::openai::EmbeddingModel::supported_models())]
     InvalidOpenAiModel { embedder_name: String, model: String },
     #[error("`.embedders.{embedder_name}`: Missing field `{field}` (note: this field is mandatory for source `{source_}`)")]
     MissingFieldForSource {
