@@ -23,9 +23,9 @@ impl UpgradeIndex for Latest_V1_18_New_Hannoy {
             /// REMOVE THIS FILE, IMPLEMENT CONVERSION AS A SETTING CHANGE
             let quantized = config.config.quantized();
             let embedder_id = embedding_configs.embedder_id(wtxn, &config.name)?.unwrap();
-            let vector_store =
+            let mut vector_store =
                 VectorStore::new(backend, index.vector_store, embedder_id, quantized);
-            vector_store.convert_from_arroy(wtxn, progress.clone())?;
+            vector_store.change_backend(wtxn, progress.clone())?;
         }
 
         Ok(false)

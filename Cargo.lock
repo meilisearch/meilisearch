@@ -444,9 +444,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "arroy"
-version = "0.6.1"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08e6111f351d004bd13e95ab540721272136fd3218b39d3ec95a2ea1c4e6a0a6"
+checksum = "8578a72223dfa13dfd9fc144d15260d134361789ebdea9b16e85a511edc73c7d"
 dependencies = [
  "bytemuck",
  "byteorder",

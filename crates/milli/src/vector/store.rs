@@ -173,43 +173,93 @@ impl VectorStore {
         }
     }
 
-    pub fn convert_from_arroy(&self, wtxn: &mut RwTxn, progress: Progress) -> crate::Result<()> {
-        if self.quantized {
-            let dimensions = self
-                .arroy_readers(wtxn, self.arroy_quantized_db())
-                .next()
-                .transpose()?
-                .map(|reader| reader.dimensions());
+    pub fn change_backend(&mut self, wtxn: &mut RwTxn, progress: Progress) -> crate::Result<()> {
+        if self.backend == VectorStoreBackend::Arroy {
+            self.backend = VectorStoreBackend::Hannoy;
+            if self.quantized {
+                let dimensions = self
+                    .arroy_readers(wtxn, self.arroy_quantized_db())
+                    .next()
+                    .transpose()?
+                    .map(|reader| reader.dimensions());
 
-            let Some(dimensions) = dimensions else { return Ok(()) };
+                let Some(dimensions) = dimensions else { return Ok(()) };
 
-            for index in vector_store_range_for_embedder(self.embedder_index) {
-                let mut rng = rand::rngs::StdRng::from_entropy();
-                let writer = hannoy::Writer::new(self.quantized_db(), index, dimensions);
-                let mut builder = writer.builder(&mut rng).progress(progress.clone());
-                builder.prepare_arroy_conversion(wtxn)?;
-                builder.build::<HANNOY_M, HANNOY_M0>(wtxn)?;
+                for index in vector_store_range_for_embedder(self.embedder_index) {
+                    let mut rng = rand::rngs::StdRng::from_entropy();
+                    let writer = hannoy::Writer::new(self.quantized_db(), index, dimensions);
+                    let mut builder = writer.builder(&mut rng).progress(progress.clone());
+                    builder.prepare_arroy_conversion(wtxn)?;
+                    builder.build::<HANNOY_M, HANNOY_M0>(wtxn)?;
+                }
+
+                Ok(())
+            } else {
+                let dimensions = self
+                    .arroy_readers(wtxn, self.arroy_angular_db())
+                    .next()
+                    .transpose()?
+                    .map(|reader| reader.dimensions());
+
+                let Some(dimensions) = dimensions else { return Ok(()) };
+
+                for index in vector_store_range_for_embedder(self.embedder_index) {
+                    let mut rng = rand::rngs::StdRng::from_entropy();
+                    let writer = hannoy::Writer::new(self.angular_db(), index, dimensions);
+                    let mut builder = writer.builder(&mut rng).progress(progress.clone());
+                    builder.prepare_arroy_conversion(wtxn)?;
+                    builder.build::<HANNOY_M, HANNOY_M0>(wtxn)?;
+                }
+
+                Ok(())
             }
-
-            Ok(())
         } else {
-            let dimensions = self
-                .arroy_readers(wtxn, self.arroy_angular_db())
-                .next()
-                .transpose()?
-                .map(|reader| reader.dimensions());
+            self.backend = VectorStoreBackend::Arroy;
 
-            let Some(dimensions) = dimensions else { return Ok(()) };
+            if self.quantized {
+                /// FIXME: make sure that all of the functions in the vector store can work both in arroy and hannoy
+                /// (the existing implementation was assuming that only reads could happen in arroy)
+                /// bonus points for making it harder to forget switching on arroy on hannoy when modifying the code
+                let dimensions = self
+                    .readers(wtxn, self.quantized_db())
+                    .next()
+                    .transpose()?
+                    .map(|reader| reader.dimensions());
 
-            for index in vector_store_range_for_embedder(self.embedder_index) {
-                let mut rng = rand::rngs::StdRng::from_entropy();
-                let writer = hannoy::Writer::new(self.angular_db(), index, dimensions);
-                let mut builder = writer.builder(&mut rng).progress(progress.clone());
-                builder.prepare_arroy_conversion(wtxn)?;
-                builder.build::<HANNOY_M, HANNOY_M0>(wtxn)?;
+                let Some(dimensions) = dimensions else { return Ok(()) };
+
+                for index in vector_store_range_for_embedder(self.embedder_index) {
+                    let mut rng = rand::rngs::StdRng::from_entropy();
+                    let writer = arroy::Writer::new(self.arroy_quantized_db(), index, dimensions);
+                    let mut builder = writer.builder(&mut rng);
+                    let builder =
+                        builder.progress(|step| progress.update_progress_from_arroy(step));
+                    builder.prepare_hannoy_conversion(wtxn)?;
+                    builder.build(wtxn)?;
+                }
+
+                Ok(())
+            } else {
+                let dimensions = self
+                    .readers(wtxn, self.angular_db())
+                    .next()
+                    .transpose()?
+                    .map(|reader| reader.dimensions());
+
+                let Some(dimensions) = dimensions else { return Ok(()) };
+
+                for index in vector_store_range_for_embedder(self.embedder_index) {
+                    let mut rng = rand::rngs::StdRng::from_entropy();
+                    let writer = arroy::Writer::new(self.arroy_angular_db(), index, dimensions);
+                    let mut builder = writer.builder(&mut rng);
+                    let builder =
+                        builder.progress(|step| progress.update_progress_from_arroy(step));
+                    builder.prepare_hannoy_conversion(wtxn)?;
+                    builder.build(wtxn)?;
+                }
+
+                Ok(())
             }
-
-            Ok(())
         }
     }
 
