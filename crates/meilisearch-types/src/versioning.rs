@@ -72,7 +72,7 @@ pub fn parse_version(version: &str) -> Result<(u32, u32, u32), VersionFileError>
 pub enum VersionFileError {
     #[error(
         "Meilisearch (v{}) failed to infer the version of the database.
-        To update Meilisearch please follow our guide on https://www.meilisearch.com/docs/learn/update_and_migration/updating.",
+        To update Meilisearch please follow our guide on <https://www.meilisearch.com/docs/learn/update_and_migration/updating>.",
         env!("CARGO_PKG_VERSION").to_string()
     )]
     MissingVersionFile,
@@ -80,7 +80,7 @@ pub enum VersionFileError {
     MalformedVersionFile { context: String },
     #[error(
         "Your database version ({major}.{minor}.{patch}) is incompatible with your current engine version ({}).\n\
-        To migrate data between Meilisearch versions, please follow our guide on https://www.meilisearch.com/docs/learn/update_and_migration/updating.",
+        To migrate data between Meilisearch versions, please follow our guide on <https://www.meilisearch.com/docs/learn/update_and_migration/updating>.",
         env!("CARGO_PKG_VERSION").to_string()
     )]
     VersionMismatch { major: u32, minor: u32, patch: u32 },
