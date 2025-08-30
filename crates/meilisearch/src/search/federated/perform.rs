@@ -15,6 +15,7 @@ use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{self, DocumentId, OrderBy, TimeBudget, DEFAULT_VALUES_PER_FACET};
+use rayon::prelude::*;
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
 
@@ -81,10 +82,46 @@ pub async fn perform_federated_search(
         params.has_remote,
     );
 
-    for (index_uid, queries) in partitioned_queries.local_queries_by_index {
-        // note: this is the only place we open `index_uid`
-        search_by_index.execute(index_uid, queries, &params)?;
+    // Get the number of indexes for preallocation
+    let index_count = partitioned_queries.local_queries_by_index.len();
+
+    // Run local queries in parallel
+    let results: Result<Vec<SearchByIndex>, ResponseError> = partitioned_queries
+        .local_queries_by_index
+        .into_par_iter()
+        .map(|(index_uid, queries)| {
+            let mut local_search = SearchByIndex::new(
+                federation.clone(),
+                index_count,
+                params.has_remote,
+            );
+            local_search.execute(index_uid.clone(), queries, &params)?;
+            Ok(local_search)
+        })
+        .collect();
+
+    // Merge all parallel results into the main search_by_index
+    let mut search_by_index = SearchByIndex::new(federation.clone(), index_count, params.has_remote);
+
+    for result in results? {
+        search_by_index.results_by_index.extend(result.results_by_index);
+        search_by_index.query_vectors.extend(result.query_vectors);
+
+        if let Some(count) = result.semantic_hit_count {
+            *search_by_index.semantic_hit_count.get_or_insert(0) += count;
+        }
+
+        match (&mut search_by_index.facet_order, result.facet_order) {
+            (FacetOrder::ByFacet(main), FacetOrder::ByFacet(other)) => {
+                main.extend(other);
+            }
+            (FacetOrder::ByIndex(main), FacetOrder::ByIndex(other)) => {
+                main.extend(other);
+            }
+            _ => {}
+        }
     }
+
 
     // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
     search_by_index.check_unused_facets(index_scheduler)?;
