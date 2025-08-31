@@ -1,20 +1,19 @@
 use std::fmt;
 
 /// Represents a filter condition.
-/// This is a simplified version for testing purposes.
-/// The complete implementation will be done in issue #3642.
+/// This is a simplified version that will be expanded in issue #3642.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterCondition<'a> {
     /// Equality filter: field = value
     Equal(&'a str, &'a str),
-    /// Range filter: field > value
-    GreaterThan(&'a str, &'a str),
-    /// Range filter: field >= value
-    GreaterThanOrEqual(&'a str, &'a str),
-    /// Range filter: field < value
-    LessThan(&'a str, &'a str),
-    /// Range filter: field <= value
-    LessThanOrEqual(&'a str, &'a str),
+}
+
+impl<'a> fmt::Display for FilterCondition<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            FilterCondition::Equal(field, value) => write!(f, "{} = {}", field, value),
+        }
+    }
 }
 
 impl<'a> fmt::Display for FilterCondition<'a> {

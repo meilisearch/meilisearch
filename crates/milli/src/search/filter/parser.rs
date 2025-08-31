@@ -14,7 +14,11 @@ fn parse_filter_expression(input: &str) -> Result<Filter, Error> {
     // Existing parsing logic
     todo!()
 }
+/// This is a placeholder for the filter parser
+/// The full implementation will be added in issue #3642
+pub struct FilterParser;
 
+// The parser implementation will be added in issue #3642
 /// Parse sub-object filter syntax: field { conditions }
 /// Returns (field, conditions) if the input matches the syntax
 fn parse_sub_object_filter(input: &str) -> Option<(&str, &str)> {

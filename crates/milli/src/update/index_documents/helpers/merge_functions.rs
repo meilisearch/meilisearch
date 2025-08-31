@@ -21,6 +21,16 @@ pub fn serialize_roaring_bitmap(bitmap: &RoaringBitmap, buffer: &mut Vec<u8>) ->
     bitmap.serialize_into(buffer)
 }
 
+/// Extract document IDs from sub-object IDs by stripping low bits
+pub fn strip_sub_object_bits(bitmap: &RoaringBitmap, sub_object_bits: u8) -> RoaringBitmap {
+    let mut result = RoaringBitmap::new();
+    for id in bitmap.iter() {
+        let doc_id = id >> sub_object_bits;
+        result.insert(doc_id);
+    }
+    result
+}
+
 pub struct MergeRoaringBitmaps;
 
 impl MergeFunction for MergeRoaringBitmaps {

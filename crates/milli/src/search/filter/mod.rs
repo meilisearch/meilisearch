@@ -1,9 +1,9 @@
 mod condition;
 mod filter;
 mod parser;
-mod sub_object_filter;
+
+// The sub-object filter module will be implemented in issue #3642
 
 pub use condition::FilterCondition;
 pub use filter::Filter;
 pub use parser::FilterParser;
-pub use sub_object_filter::SubObjectFilter;
