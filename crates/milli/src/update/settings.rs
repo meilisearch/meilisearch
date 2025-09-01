@@ -41,6 +41,7 @@ use crate::vector::settings::{
 };
 use crate::vector::{
     Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
+    VectorStoreBackend,
 };
 use crate::{
     ChannelCongestion, FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result,
@@ -199,6 +200,7 @@ pub struct Settings<'a, 't, 'i> {
     prefix_search: Setting<PrefixSearch>,
     facet_search: Setting<bool>,
     chat: Setting<ChatSettings>,
+    vector_store: Setting<VectorStoreBackend>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -238,6 +240,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
             indexer_config,
         }
     }
@@ -474,6 +477,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_chat(&mut self) {
         self.chat = Setting::Reset;
+    }
+
+    pub fn set_vector_store(&mut self, value: VectorStoreBackend) {
+        self.vector_store = Setting::Set(value);
+    }
+
+    pub fn reset_vector_store(&mut self) {
+        self.vector_store = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1417,7 +1428,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    pub fn legacy_execute<FP, FA>(
+    fn legacy_execute<FP, FA>(
         mut self,
         progress_callback: FP,
         should_abort: FA,
@@ -1486,6 +1497,51 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
+    fn execute_vector_backend<'indexer, MSP>(
+        &mut self,
+        must_stop_processing: &'indexer MSP,
+        progress: &'indexer Progress,
+    ) -> Result<()>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        let new_backend = match self.vector_store {
+            Setting::Set(new_backend) => {
+                self.index.put_vector_store(self.wtxn, new_backend)?;
+                new_backend
+            }
+            Setting::Reset => {
+                self.index.delete_vector_store(self.wtxn)?;
+                VectorStoreBackend::default()
+            }
+            Setting::NotSet => return Ok(()),
+        };
+        let old_backend = self.index.get_vector_store(self.wtxn)?;
+
+        if old_backend == new_backend {
+            return Ok(());
+        }
+
+        let embedding_configs = self.index.embedding_configs();
+        for config in embedding_configs.embedding_configs(self.wtxn)? {
+            if must_stop_processing() {
+                return Err(crate::InternalError::AbortedIndexation.into());
+            }
+            /// TODO use the embedder name to display progress
+            let quantized = config.config.quantized();
+            let embedder_id = embedding_configs.embedder_id(self.wtxn, &config.name)?.unwrap();
+            let mut vector_store = crate::vector::VectorStore::new(
+                old_backend,
+                self.index.vector_store,
+                embedder_id,
+                quantized,
+            );
+            vector_store.change_backend(self.wtxn, progress.clone(), must_stop_processing)?;
+        }
+
+        Ok(())
+    }
+
     pub fn execute<'indexer, MSP>(
         mut self,
         must_stop_processing: &'indexer MSP,
@@ -1495,6 +1551,9 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     where
         MSP: Fn() -> bool + Sync,
     {
+        // execute any pending vector store backend change
+        self.execute_vector_backend(must_stop_processing, progress)?;
+
         // force the old indexer if the environment says so
         if self.indexer_config.experimental_no_edition_2024_for_settings {
             return self
@@ -1536,6 +1595,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             facet_search: Setting::NotSet,
             disable_on_numbers: Setting::NotSet,
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
             wtxn: _,
             index: _,
             indexer_config: _,
