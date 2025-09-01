@@ -274,7 +274,6 @@ impl VectorStore {
                 if writer.need_build(wtxn)? {
                     let mut builder = writer.builder(rng).progress(progress.clone());
                     builder
-                        .available_memory(available_memory.unwrap_or(usize::MAX))
                         .cancel(cancel)
                         .ef_construction(HANNOY_EF_CONSTRUCTION)
                         .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
@@ -292,14 +291,12 @@ impl VectorStore {
                     let writer = writer.prepare_changing_distance::<Hamming>(wtxn)?;
                     let mut builder = writer.builder(rng).progress(progress.clone());
                     builder
-                        .available_memory(available_memory.unwrap_or(usize::MAX))
                         .cancel(cancel)
                         .ef_construction(HANNOY_EF_CONSTRUCTION)
                         .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
                 } else if writer.need_build(wtxn)? {
                     let mut builder = writer.builder(rng).progress(progress.clone());
                     builder
-                        .available_memory(available_memory.unwrap_or(usize::MAX))
                         .cancel(cancel)
                         .ef_construction(HANNOY_EF_CONSTRUCTION)
                         .build::<HANNOY_M, HANNOY_M0>(wtxn)?;

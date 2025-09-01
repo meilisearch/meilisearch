@@ -2613,9 +2613,9 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.0.4"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a80496a4713fefbf4ea388b30288afaa23566173510a694d838e0a85a3ada5c0"
+checksum = "4b6a412d145918473a8257706599a1088c505047eef9cc6c63c494c95786044f"
 dependencies = [
  "bytemuck",
  "byteorder",
