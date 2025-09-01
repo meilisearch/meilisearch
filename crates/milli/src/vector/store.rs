@@ -13,7 +13,18 @@ const HANNOY_EF_CONSTRUCTION: usize = 125;
 const HANNOY_M: usize = 16;
 const HANNOY_M0: usize = 32;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    Serialize,
+    Deserialize,
+    deserr::Deserr,
+    utoipa::ToSchema,
+)]
 pub enum VectorStoreBackend {
     #[default]
     Arroy,
