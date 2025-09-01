@@ -104,7 +104,15 @@ impl VectorStore {
         }
     }
 
-    pub fn change_backend(&mut self, wtxn: &mut RwTxn, progress: Progress) -> crate::Result<()> {
+    pub fn change_backend<MSP>(
+        &mut self,
+        wtxn: &mut RwTxn,
+        progress: Progress,
+        must_stop_processing: MSP,
+    ) -> crate::Result<()>
+    where
+        MSP: Fn() -> bool + Sync + Send,
+    {
         if self.backend == VectorStoreBackend::Arroy {
             self.backend = VectorStoreBackend::Hannoy;
             if self.quantized {
@@ -139,6 +147,7 @@ impl VectorStore {
                     let mut rng = rand::rngs::StdRng::from_entropy();
                     let writer = hannoy::Writer::new(self._hannoy_angular_db(), index, dimensions);
                     let mut builder = writer.builder(&mut rng).progress(progress.clone());
+                    builder.cancel(must_stop_processing);
                     builder.prepare_arroy_conversion(wtxn)?;
                     builder.build::<HANNOY_M, HANNOY_M0>(wtxn)?;
                 }
