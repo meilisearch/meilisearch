@@ -469,7 +469,7 @@ impl Index {
         )?)
     }
 
-    pub(crate) fn get_vector_store(&self, rtxn: &RoTxn<'_>) -> Result<VectorStoreBackend> {
+    pub fn get_vector_store(&self, rtxn: &RoTxn<'_>) -> Result<VectorStoreBackend> {
         Ok(self
             .main
             .remap_types::<Str, SerdeJson<VectorStoreBackend>>()
