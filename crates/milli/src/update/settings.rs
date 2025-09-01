@@ -26,11 +26,12 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::progress::{EmbedderStats, Progress};
+use crate::progress::{EmbedderStats, Progress, VariableNameStep};
 use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::reindex;
+use crate::update::new::steps::SettingsIndexerStep;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
 use crate::vector::embedder::{openai, rest};
@@ -1522,14 +1523,23 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             return Ok(());
         }
 
-        let embedding_configs = self.index.embedding_configs();
-        for config in embedding_configs.embedding_configs(self.wtxn)? {
+        let embedders = self.index.embedding_configs();
+        let embedding_configs = embedders.embedding_configs(self.wtxn)?;
+        enum VectorStoreBackendChangeIndex {}
+        let embedder_count = embedding_configs.len();
+
+        for (i, config) in embedding_configs.into_iter().enumerate() {
             if must_stop_processing() {
                 return Err(crate::InternalError::AbortedIndexation.into());
             }
-            /// TODO use the embedder name to display progress
+            let embedder_name = &config.name;
+            progress.update_progress(VariableNameStep::<VectorStoreBackendChangeIndex>::new(
+                format!("Changing vector store backend for embedder `{embedder_name}`"),
+                i as u32,
+                embedder_count as u32,
+            ));
             let quantized = config.config.quantized();
-            let embedder_id = embedding_configs.embedder_id(self.wtxn, &config.name)?.unwrap();
+            let embedder_id = embedders.embedder_id(self.wtxn, &config.name)?.unwrap();
             let mut vector_store = crate::vector::VectorStore::new(
                 old_backend,
                 self.index.vector_store,
@@ -1551,11 +1561,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     where
         MSP: Fn() -> bool + Sync,
     {
+        progress.update_progress(SettingsIndexerStep::ChangingVectorStore);
         // execute any pending vector store backend change
         self.execute_vector_backend(must_stop_processing, progress)?;
 
         // force the old indexer if the environment says so
         if self.indexer_config.experimental_no_edition_2024_for_settings {
+            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
             return self
                 .legacy_execute(
                     |indexing_step| tracing::debug!(update = ?indexing_step),
@@ -1601,6 +1613,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             indexer_config: _,
         } = &self
         {
+            progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
+
             self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
             let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
@@ -1639,6 +1653,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 Ok(None)
             }
         } else {
+            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
+
             self.legacy_execute(
                 |indexing_step| tracing::debug!(update = ?indexing_step),
                 must_stop_processing,
