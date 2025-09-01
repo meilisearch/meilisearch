@@ -158,6 +158,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_vector_store_setting(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.vector_store_setting {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "vector_store_setting",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/860",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
