@@ -119,10 +119,10 @@ impl VectorStore {
         &mut self,
         wtxn: &mut RwTxn,
         progress: Progress,
-        must_stop_processing: MSP,
+        must_stop_processing: &MSP,
     ) -> crate::Result<()>
     where
-        MSP: Fn() -> bool + Sync + Send,
+        MSP: Fn() -> bool + Sync,
     {
         if self.backend == VectorStoreBackend::Arroy {
             self.backend = VectorStoreBackend::Hannoy;
