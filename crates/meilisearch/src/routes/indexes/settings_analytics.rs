@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::locales::{Locale, LocalizedAttributesRuleView};
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::vector::VectorStoreBackend;
 use meilisearch_types::milli::FilterableAttributesRule;
 use meilisearch_types::settings::{
     ChatSettings, FacetingSettings, PaginationSettings, PrefixSearchSettings,
@@ -40,6 +41,7 @@ pub struct SettingsAnalytics {
     pub facet_search: FacetSearchAnalytics,
     pub prefix_search: PrefixSearchAnalytics,
     pub chat: ChatAnalytics,
+    pub vector_store: VectorStoreAnalytics,
 }
 
 impl Aggregate for SettingsAnalytics {
@@ -200,6 +202,10 @@ impl Aggregate for SettingsAnalytics {
                 value: new.prefix_search.value.or(self.prefix_search.value),
             },
             chat: ChatAnalytics { set: new.chat.set | self.chat.set },
+            vector_store: VectorStoreAnalytics {
+                set: new.vector_store.set | self.vector_store.set,
+                value: new.vector_store.value.or(self.vector_store.value),
+            },
         })
     }
 
@@ -691,5 +697,21 @@ impl ChatAnalytics {
 
     pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { chat: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct VectorStoreAnalytics {
+    pub set: bool,
+    pub value: Option<VectorStoreBackend>,
+}
+
+impl VectorStoreAnalytics {
+    pub fn new(settings: Option<&VectorStoreBackend>) -> Self {
+        Self { set: settings.is_some(), value: settings.copied() }
+    }
+
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { vector_store: self, ..Default::default() }
     }
 }

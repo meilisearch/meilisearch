@@ -14,6 +14,7 @@ use milli::proximity::ProximityPrecision;
 pub use milli::update::ChatSettings;
 use milli::update::Setting;
 use milli::vector::db::IndexEmbeddingConfig;
+use milli::vector::VectorStoreBackend;
 use milli::{Criterion, CriterionError, FilterableAttributesRule, Index, DEFAULT_VALUES_PER_FACET};
 use serde::{Deserialize, Serialize, Serializer};
 use utoipa::ToSchema;
@@ -320,6 +321,11 @@ pub struct Settings<T> {
     #[schema(value_type = Option<ChatSettings>)]
     pub chat: Setting<ChatSettings>,
 
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsVectorStore>)]
+    #[schema(value_type = Option<VectorStoreBackend>)]
+    pub vector_store: Setting<VectorStoreBackend>,
+
     #[serde(skip)]
     #[deserr(skip)]
     pub _kind: PhantomData<T>,
@@ -386,6 +392,7 @@ impl Settings<Checked> {
             facet_search: Setting::Reset,
             prefix_search: Setting::Reset,
             chat: Setting::Reset,
+            vector_store: Setting::Reset,
             _kind: PhantomData,
         }
     }
@@ -413,6 +420,7 @@ impl Settings<Checked> {
             facet_search,
             prefix_search,
             chat,
+            vector_store,
             _kind,
         } = self;
 
@@ -437,6 +445,7 @@ impl Settings<Checked> {
             localized_attributes: localized_attributes_rules,
             facet_search,
             prefix_search,
+            vector_store,
             chat,
             _kind: PhantomData,
         }
@@ -489,6 +498,7 @@ impl Settings<Unchecked> {
             facet_search: self.facet_search,
             prefix_search: self.prefix_search,
             chat: self.chat,
+            vector_store: self.vector_store,
             _kind: PhantomData,
         }
     }
@@ -569,6 +579,7 @@ impl Settings<Unchecked> {
             facet_search: other.facet_search.or(self.facet_search),
             prefix_search: other.prefix_search.or(self.prefix_search),
             chat: other.chat.clone().or(self.chat.clone()),
+            vector_store: other.vector_store.or(self.vector_store),
             _kind: PhantomData,
         }
     }
@@ -608,6 +619,7 @@ pub fn apply_settings_to_builder(
         facet_search,
         prefix_search,
         chat,
+        vector_store,
         _kind,
     } = settings;
 
@@ -825,6 +837,12 @@ pub fn apply_settings_to_builder(
         Setting::Reset => builder.reset_chat(),
         Setting::NotSet => (),
     }
+
+    match vector_store {
+        Setting::Set(vector_store) => builder.set_vector_store(*vector_store),
+        Setting::Reset => builder.reset_vector_store(),
+        Setting::NotSet => (),
+    }
 }
 
 pub enum SecretPolicy {
@@ -922,6 +940,9 @@ pub fn settings(
             (name, SettingEmbeddingSettings { inner: Setting::Set(config.into()) })
         })
         .collect();
+
+    let vector_store = index.get_vector_store(rtxn)?;
+
     let embedders = Setting::Set(embedders);
     let search_cutoff_ms = index.search_cutoff(rtxn)?;
     let localized_attributes_rules = index.localized_attributes_rules(rtxn)?;
@@ -968,6 +989,7 @@ pub fn settings(
         facet_search: Setting::Set(facet_search),
         prefix_search: Setting::Set(prefix_search.unwrap_or_default()),
         chat: Setting::Set(chat),
+        vector_store: Setting::Set(vector_store),
         _kind: PhantomData,
     };
 
@@ -1197,6 +1219,7 @@ pub(crate) mod test {
             facet_search: Setting::NotSet,
             prefix_search: Setting::NotSet,
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
             _kind: PhantomData::<Unchecked>,
         };
 
@@ -1229,6 +1252,7 @@ pub(crate) mod test {
             facet_search: Setting::NotSet,
             prefix_search: Setting::NotSet,
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
 
             _kind: PhantomData::<Unchecked>,
         };
