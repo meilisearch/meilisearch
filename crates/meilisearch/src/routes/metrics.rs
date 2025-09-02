@@ -1,4 +1,3 @@
-use actix_web::http::header;
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
 use index_scheduler::{IndexScheduler, Query};
@@ -8,7 +7,6 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::tasks::Status;
 use prometheus::{Encoder, TextEncoder};
 use time::OffsetDateTime;
-use tracing::Instrument;
 use utoipa::OpenApi;
 
 use crate::extractors::authentication::policies::ActionPolicy;
