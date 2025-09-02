@@ -133,7 +133,7 @@ jobs:
         with:
           repository: meilisearch/meilisearch-java
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: 8
           distribution: 'zulu'
