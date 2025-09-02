@@ -1529,6 +1529,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         enum VectorStoreBackendChangeIndex {}
         let embedder_count = embedding_configs.len();
 
+        let rtxn = self.index.read_txn()?;
+
         for (i, config) in embedding_configs.into_iter().enumerate() {
             if must_stop_processing() {
                 return Err(crate::InternalError::AbortedIndexation.into());
@@ -1541,13 +1543,20 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             ));
             let quantized = config.config.quantized();
             let embedder_id = embedders.embedder_id(self.wtxn, &config.name)?.unwrap();
-            let mut vector_store = crate::vector::VectorStore::new(
+            let vector_store = crate::vector::VectorStore::new(
                 old_backend,
                 self.index.vector_store,
                 embedder_id,
                 quantized,
             );
-            vector_store.change_backend(self.wtxn, progress.clone(), must_stop_processing)?;
+
+            vector_store.change_backend(
+                &rtxn,
+                self.wtxn,
+                progress.clone(),
+                must_stop_processing,
+                self.indexer_config.max_memory,
+            )?;
         }
 
         Ok(())
