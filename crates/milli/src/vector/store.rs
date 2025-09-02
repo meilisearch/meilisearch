@@ -27,7 +27,11 @@ const HANNOY_M0: usize = 32;
 )]
 pub enum VectorStoreBackend {
     #[default]
+    #[deserr(rename = "stable")]
+    #[serde(rename = "stable")]
     Arroy,
+    #[deserr(rename = "experimental")]
+    #[serde(rename = "experimental")]
     Hannoy,
 }
 
