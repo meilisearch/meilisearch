@@ -153,32 +153,29 @@ impl VectorStore {
 
                 Ok(())
             }
-        } else {
-            if self.quantized {
-                self._hannoy_to_arroy_bq::<
+        } else if self.quantized {
+            self._hannoy_to_arroy_bq::<
                 hannoy::distances::Hamming,
                 arroy::distances::BinaryQuantizedCosine,
                 _>(rtxn, wtxn, &progress, &mut rng, available_memory, &must_stop_processing)
-            } else {
-                let dimensions = self
-                    ._hannoy_readers(wtxn, self._hannoy_angular_db())
-                    .next()
-                    .transpose()?
-                    .map(|reader| reader.dimensions());
+        } else {
+            let dimensions = self
+                ._hannoy_readers(wtxn, self._hannoy_angular_db())
+                .next()
+                .transpose()?
+                .map(|reader| reader.dimensions());
 
-                let Some(dimensions) = dimensions else { return Ok(()) };
+            let Some(dimensions) = dimensions else { return Ok(()) };
 
-                for index in vector_store_range_for_embedder(self.embedder_index) {
-                    let writer = arroy::Writer::new(self._arroy_angular_db(), index, dimensions);
-                    let mut builder = writer.builder(&mut rng);
-                    let builder =
-                        builder.progress(|step| progress.update_progress_from_arroy(step));
-                    builder.prepare_hannoy_conversion(wtxn)?;
-                    builder.build(wtxn)?;
-                }
-
-                Ok(())
+            for index in vector_store_range_for_embedder(self.embedder_index) {
+                let writer = arroy::Writer::new(self._arroy_angular_db(), index, dimensions);
+                let mut builder = writer.builder(&mut rng);
+                let builder = builder.progress(|step| progress.update_progress_from_arroy(step));
+                builder.prepare_hannoy_conversion(wtxn)?;
+                builder.build(wtxn)?;
             }
+
+            Ok(())
         }
     }
 
