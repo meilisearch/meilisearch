@@ -645,7 +645,7 @@ impl VectorStore {
     pub fn aggregate_stats(
         &self,
         rtxn: &RoTxn,
-        stats: &mut HannoyStats,
+        stats: &mut VectorStoreStats,
     ) -> Result<(), crate::Error> {
         if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
@@ -1161,7 +1161,7 @@ where
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct HannoyStats {
+pub struct VectorStoreStats {
     pub number_of_embeddings: u64,
     pub documents: RoaringBitmap,
 }

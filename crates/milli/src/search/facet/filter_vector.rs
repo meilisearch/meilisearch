@@ -3,7 +3,7 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use crate::error::{DidYouMean, Error};
 use crate::vector::db::IndexEmbeddingConfig;
-use crate::vector::{HannoyStats, VectorStore};
+use crate::vector::{VectorStoreStats, VectorStore};
 use crate::Index;
 
 #[derive(Debug, thiserror::Error)]
@@ -134,7 +134,7 @@ fn evaluate_inner(
             }
 
             let user_provided_docids = embedder_info.embedding_status.user_provided_docids();
-            let mut stats = HannoyStats::default();
+            let mut stats = VectorStoreStats::default();
             vector_store.aggregate_stats(rtxn, &mut stats)?;
             stats.documents - user_provided_docids.clone()
         }
@@ -143,13 +143,13 @@ fn evaluate_inner(
             user_provided_docids.clone()
         }
         VectorFilter::Regenerate => {
-            let mut stats = HannoyStats::default();
+            let mut stats = VectorStoreStats::default();
             vector_store.aggregate_stats(rtxn, &mut stats)?;
             let skip_regenerate = embedder_info.embedding_status.skip_regenerate_docids();
             stats.documents - skip_regenerate
         }
         VectorFilter::None => {
-            let mut stats = HannoyStats::default();
+            let mut stats = VectorStoreStats::default();
             vector_store.aggregate_stats(rtxn, &mut stats)?;
             stats.documents
         }

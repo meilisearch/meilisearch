@@ -143,10 +143,10 @@ impl IndexStats {
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
     pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
-        let hannoy_stats = index.hannoy_stats(rtxn)?;
+        let vector_store_stats = index.vector_store_stats(rtxn)?;
         Ok(IndexStats {
-            number_of_embeddings: Some(hannoy_stats.number_of_embeddings),
-            number_of_embedded_documents: Some(hannoy_stats.documents.len()),
+            number_of_embeddings: Some(vector_store_stats.number_of_embeddings),
+            number_of_embedded_documents: Some(vector_store_stats.documents.len()),
             documents_database_stats: index.documents_stats(rtxn)?.unwrap_or_default(),
             number_of_documents: None,
             database_size: index.on_disk_size()?,

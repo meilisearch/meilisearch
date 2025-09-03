@@ -31,7 +31,7 @@ use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
-use crate::vector::{Embedding, HannoyStats, VectorStore, VectorStoreBackend};
+use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};
 use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
@@ -1825,8 +1825,8 @@ impl Index {
         Ok(PrefixSettings { compute_prefixes, max_prefix_length: 4, prefix_count_threshold: 100 })
     }
 
-    pub fn hannoy_stats(&self, rtxn: &RoTxn<'_>) -> Result<HannoyStats> {
-        let mut stats = HannoyStats::default();
+    pub fn vector_store_stats(&self, rtxn: &RoTxn<'_>) -> Result<VectorStoreStats> {
+        let mut stats = VectorStoreStats::default();
         let embedding_configs = self.embedding_configs();
         let backend = self.get_vector_store(rtxn)?;
 
