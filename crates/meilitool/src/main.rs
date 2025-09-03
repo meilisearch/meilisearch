@@ -142,7 +142,7 @@ enum Command {
 
 #[derive(Clone, ValueEnum)]
 enum IndexPart {
-    /// Will make the hannoy index hot.
+    /// Will make the vector index hot.
     Hannoy,
 }
 

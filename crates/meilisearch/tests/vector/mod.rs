@@ -10,11 +10,11 @@ use std::str::FromStr;
 
 use meili_snap::{json_string, snapshot};
 use meilisearch::option::MaxThreads;
+pub use rest::create_mock;
 
 use crate::common::index::Index;
 use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 use crate::json;
-pub use rest::create_mock;
 
 pub async fn get_server_vector() -> Server {
     Server::new().await
@@ -684,7 +684,7 @@ async fn clear_documents() {
     }
     "###);
 
-    // Make sure the hannoy DB has been cleared
+    // Make sure the vector DB has been cleared
     let (documents, _code) =
         index.search_post(json!({ "vector": [1, 1, 1], "hybrid": {"embedder": "manual"} })).await;
     snapshot!(documents, @r#"

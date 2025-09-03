@@ -67,7 +67,7 @@ where
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 
-    let hannoy_memory = grenad_parameters.max_memory;
+    let vector_memory = grenad_parameters.max_memory;
 
     let (grenad_parameters, total_bbbuffer_capacity) =
         indexer_memory_settings(pool.current_num_threads(), grenad_parameters);
@@ -132,7 +132,7 @@ where
 
         let vector_arroy = index.vector_store;
         let backend = index.get_vector_store(wtxn)?;
-        let hannoy_writers: Result<HashMap<_, _>> = embedders
+        let vector_stores: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
             .iter()
             .map(|(embedder_name, runtime)| {
@@ -155,10 +155,10 @@ where
             })
             .collect();
 
-        let mut hannoy_writers = hannoy_writers?;
+        let mut vector_stores = vector_stores?;
 
         let congestion =
-            write_to_db(writer_receiver, finished_extraction, index, wtxn, &hannoy_writers)?;
+            write_to_db(writer_receiver, finished_extraction, index, wtxn, &vector_stores)?;
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
@@ -172,8 +172,8 @@ where
                 wtxn,
                 indexing_context.progress,
                 index_embeddings,
-                hannoy_memory,
-                &mut hannoy_writers,
+                vector_memory,
+                &mut vector_stores,
                 None,
                 &indexing_context.must_stop_processing,
             )
@@ -229,7 +229,7 @@ where
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
 
-    let hannoy_memory = grenad_parameters.max_memory;
+    let vector_memory = grenad_parameters.max_memory;
 
     let (grenad_parameters, total_bbbuffer_capacity) =
         indexer_memory_settings(pool.current_num_threads(), grenad_parameters);
@@ -286,7 +286,7 @@ where
         let new_embedders = settings_delta.new_embedders();
         let embedder_actions = settings_delta.embedder_actions();
         let index_embedder_category_ids = settings_delta.new_embedder_category_id();
-        let mut hannoy_writers = hannoy_writers_from_embedder_actions(
+        let mut vector_stores = vector_stores_from_embedder_actions(
             index,
             wtxn,
             embedder_actions,
@@ -295,7 +295,7 @@ where
         )?;
 
         let congestion =
-            write_to_db(writer_receiver, finished_extraction, index, wtxn, &hannoy_writers)?;
+            write_to_db(writer_receiver, finished_extraction, index, wtxn, &vector_stores)?;
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
@@ -309,8 +309,8 @@ where
                 wtxn,
                 indexing_context.progress,
                 index_embeddings,
-                hannoy_memory,
-                &mut hannoy_writers,
+                vector_memory,
+                &mut vector_stores,
                 Some(embedder_actions),
                 &indexing_context.must_stop_processing,
             )
@@ -340,7 +340,7 @@ where
     Ok(congestion)
 }
 
-fn hannoy_writers_from_embedder_actions<'indexer>(
+fn vector_stores_from_embedder_actions<'indexer>(
     index: &Index,
     rtxn: &RoTxn,
     embedder_actions: &'indexer BTreeMap<String, EmbedderAction>,

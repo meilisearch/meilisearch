@@ -255,9 +255,9 @@ impl<'a> From<FrameGrantR<'a>> for FrameWithHeader<'a> {
 #[repr(u8)]
 pub enum EntryHeader {
     DbOperation(DbOperation),
-    HannoyDeleteVector(HannoyDeleteVector),
-    HannoySetVectors(HannoySetVectors),
-    HannoySetVector(HannoySetVector),
+    DeleteVector(DeleteVector),
+    SetVectors(SetVectors),
+    SetVector(SetVector),
 }
 
 impl EntryHeader {
@@ -268,9 +268,9 @@ impl EntryHeader {
     const fn variant_id(&self) -> u8 {
         match self {
             EntryHeader::DbOperation(_) => 0,
-            EntryHeader::HannoyDeleteVector(_) => 1,
-            EntryHeader::HannoySetVectors(_) => 2,
-            EntryHeader::HannoySetVector(_) => 3,
+            EntryHeader::DeleteVector(_) => 1,
+            EntryHeader::SetVectors(_) => 2,
+            EntryHeader::SetVector(_) => 3,
         }
     }
 
@@ -286,26 +286,26 @@ impl EntryHeader {
     }
 
     const fn total_delete_vector_size() -> usize {
-        Self::variant_size() + mem::size_of::<HannoyDeleteVector>()
+        Self::variant_size() + mem::size_of::<DeleteVector>()
     }
 
     /// The `dimensions` corresponds to the number of `f32` in the embedding.
     fn total_set_vectors_size(count: usize, dimensions: usize) -> usize {
         let embedding_size = dimensions * mem::size_of::<f32>();
-        Self::variant_size() + mem::size_of::<HannoySetVectors>() + embedding_size * count
+        Self::variant_size() + mem::size_of::<SetVectors>() + embedding_size * count
     }
 
     fn total_set_vector_size(dimensions: usize) -> usize {
         let embedding_size = dimensions * mem::size_of::<f32>();
-        Self::variant_size() + mem::size_of::<HannoySetVector>() + embedding_size
+        Self::variant_size() + mem::size_of::<SetVector>() + embedding_size
     }
 
     fn header_size(&self) -> usize {
         let payload_size = match self {
             EntryHeader::DbOperation(op) => mem::size_of_val(op),
-            EntryHeader::HannoyDeleteVector(adv) => mem::size_of_val(adv),
-            EntryHeader::HannoySetVectors(asvs) => mem::size_of_val(asvs),
-            EntryHeader::HannoySetVector(asv) => mem::size_of_val(asv),
+            EntryHeader::DeleteVector(adv) => mem::size_of_val(adv),
+            EntryHeader::SetVectors(asvs) => mem::size_of_val(asvs),
+            EntryHeader::SetVector(asv) => mem::size_of_val(asv),
         };
         Self::variant_size() + payload_size
     }
@@ -319,19 +319,19 @@ impl EntryHeader {
                 EntryHeader::DbOperation(header)
             }
             1 => {
-                let header_bytes = &remaining[..mem::size_of::<HannoyDeleteVector>()];
+                let header_bytes = &remaining[..mem::size_of::<DeleteVector>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::HannoyDeleteVector(header)
+                EntryHeader::DeleteVector(header)
             }
             2 => {
-                let header_bytes = &remaining[..mem::size_of::<HannoySetVectors>()];
+                let header_bytes = &remaining[..mem::size_of::<SetVectors>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::HannoySetVectors(header)
+                EntryHeader::SetVectors(header)
             }
             3 => {
-                let header_bytes = &remaining[..mem::size_of::<HannoySetVector>()];
+                let header_bytes = &remaining[..mem::size_of::<SetVector>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::HannoySetVector(header)
+                EntryHeader::SetVector(header)
             }
             id => panic!("invalid variant id: {id}"),
         }
@@ -341,9 +341,9 @@ impl EntryHeader {
         let (first, remaining) = header_bytes.split_first_mut().unwrap();
         let payload_bytes = match self {
             EntryHeader::DbOperation(op) => bytemuck::bytes_of(op),
-            EntryHeader::HannoyDeleteVector(adv) => bytemuck::bytes_of(adv),
-            EntryHeader::HannoySetVectors(asvs) => bytemuck::bytes_of(asvs),
-            EntryHeader::HannoySetVector(asv) => bytemuck::bytes_of(asv),
+            EntryHeader::DeleteVector(adv) => bytemuck::bytes_of(adv),
+            EntryHeader::SetVectors(asvs) => bytemuck::bytes_of(asvs),
+            EntryHeader::SetVector(asv) => bytemuck::bytes_of(asv),
         };
         *first = self.variant_id();
         remaining.copy_from_slice(payload_bytes);
@@ -378,7 +378,7 @@ impl DbOperation {
 
 #[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
 #[repr(transparent)]
-pub struct HannoyDeleteVector {
+pub struct DeleteVector {
     pub docid: DocumentId,
 }
 
@@ -386,13 +386,13 @@ pub struct HannoyDeleteVector {
 #[repr(C)]
 /// The embeddings are in the remaining space and represents
 /// non-aligned [f32] each with dimensions f32s.
-pub struct HannoySetVectors {
+pub struct SetVectors {
     pub docid: DocumentId,
     pub embedder_id: u8,
     _padding: [u8; 3],
 }
 
-impl HannoySetVectors {
+impl SetVectors {
     fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         &frame[skip..]
@@ -416,14 +416,14 @@ impl HannoySetVectors {
 #[repr(C)]
 /// The embeddings are in the remaining space and represents
 /// non-aligned [f32] each with dimensions f32s.
-pub struct HannoySetVector {
+pub struct SetVector {
     pub docid: DocumentId,
     pub embedder_id: u8,
     pub extractor_id: u8,
     _padding: [u8; 2],
 }
 
-impl HannoySetVector {
+impl SetVector {
     fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         &frame[skip..]
@@ -553,7 +553,7 @@ impl<'b> ExtractorBbqueueSender<'b> {
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
-        let payload_header = EntryHeader::HannoyDeleteVector(HannoyDeleteVector { docid });
+        let payload_header = EntryHeader::DeleteVector(DeleteVector { docid });
         let total_length = EntryHeader::total_delete_vector_size();
         if total_length > max_grant {
             panic!("The entry is larger ({total_length} bytes) than the BBQueue max grant ({max_grant} bytes)");
@@ -589,8 +589,8 @@ impl<'b> ExtractorBbqueueSender<'b> {
         // to zero to allocate no extra space at all
         let dimensions = embeddings.first().map_or(0, |emb| emb.len());
 
-        let hannoy_set_vector = HannoySetVectors { docid, embedder_id, _padding: [0; 3] };
-        let payload_header = EntryHeader::HannoySetVectors(hannoy_set_vector);
+        let set_vectors = SetVectors { docid, embedder_id, _padding: [0; 3] };
+        let payload_header = EntryHeader::SetVectors(set_vectors);
         let total_length = EntryHeader::total_set_vectors_size(embeddings.len(), dimensions);
         if total_length > max_grant {
             let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
@@ -650,9 +650,8 @@ impl<'b> ExtractorBbqueueSender<'b> {
         // to zero to allocate no extra space at all
         let dimensions = embedding.as_ref().map_or(0, |emb| emb.len());
 
-        let hannoy_set_vector =
-            HannoySetVector { docid, embedder_id, extractor_id, _padding: [0; 2] };
-        let payload_header = EntryHeader::HannoySetVector(hannoy_set_vector);
+        let set_vector = SetVector { docid, embedder_id, extractor_id, _padding: [0; 2] };
+        let payload_header = EntryHeader::SetVector(set_vector);
         let total_length = EntryHeader::total_set_vector_size(dimensions);
         if total_length > max_grant {
             let mut value_file = tempfile::tempfile().map(BufWriter::new)?;

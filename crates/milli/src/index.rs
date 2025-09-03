@@ -178,7 +178,7 @@ pub struct Index {
     /// Maps the document id, the facet field id and the strings.
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
-    /// Maps an embedder name to its id in the hannoy store.
+    /// Maps an embedder name to its id in the vector store.
     pub(crate) embedder_category_id: Database<Unspecified, Unspecified>,
     /// Vector store based on hannoy™.
     pub vector_store: hannoy::Database<Unspecified>,
@@ -1881,7 +1881,7 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_store: vector_hannoy,
+            vector_store,
             embedder_category_id,
             documents,
         } = self;
@@ -1952,7 +1952,7 @@ impl Index {
             "field_id_docid_facet_strings",
             field_id_docid_facet_strings.stat(rtxn).map(compute_size)?,
         );
-        sizes.insert("vector_hannoy", vector_hannoy.stat(rtxn).map(compute_size)?);
+        sizes.insert("vector_store", vector_store.stat(rtxn).map(compute_size)?);
         sizes.insert("embedder_category_id", embedder_category_id.stat(rtxn).map(compute_size)?);
         sizes.insert("documents", documents.stat(rtxn).map(compute_size)?);
 

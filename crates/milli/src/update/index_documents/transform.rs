@@ -948,13 +948,13 @@ impl<'a, 'i> Transform<'a, 'i> {
             else {
                 continue;
             };
-            let hannoy = VectorStore::new(
+            let vector_store = VectorStore::new(
                 backend,
                 self.index.vector_store,
                 infos.embedder_id,
                 was_quantized,
             );
-            let Some(dimensions) = hannoy.dimensions(wtxn)? else {
+            let Some(dimensions) = vector_store.dimensions(wtxn)? else {
                 continue;
             };
             for fragment_id in fragment_ids {
@@ -962,17 +962,17 @@ impl<'a, 'i> Transform<'a, 'i> {
 
                 if infos.embedding_status.user_provided_docids().is_empty() {
                     // no user provided: clear store
-                    hannoy.clear_store(wtxn, *fragment_id, dimensions)?;
+                    vector_store.clear_store(wtxn, *fragment_id, dimensions)?;
                     continue;
                 }
 
                 // some user provided, remove only the ids that are not user provided
-                let to_delete = hannoy.items_in_store(wtxn, *fragment_id, |items| {
+                let to_delete = vector_store.items_in_store(wtxn, *fragment_id, |items| {
                     items - infos.embedding_status.user_provided_docids()
                 })?;
 
                 for to_delete in to_delete {
-                    hannoy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
+                    vector_store.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
                 }
             }
         }

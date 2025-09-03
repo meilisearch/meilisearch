@@ -505,7 +505,7 @@ where
 
         for (embedder_name, dimension) in dimension {
             let wtxn = &mut *self.wtxn;
-            let vector_hannoy = self.index.vector_store;
+            let vector_store = self.index.vector_store;
             let cancel = &self.should_abort;
 
             let embedder_index =
@@ -525,7 +525,7 @@ where
 
             pool.install(|| {
                 let mut writer =
-                    VectorStore::new(backend, vector_hannoy, embedder_index, was_quantized);
+                    VectorStore::new(backend, vector_store, embedder_index, was_quantized);
                 writer.build_and_quantize(
                     wtxn,
                     // In the settings we don't have any progress to share
