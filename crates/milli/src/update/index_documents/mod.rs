@@ -522,7 +522,7 @@ where
                 .is_some_and(|conf| conf.is_quantized);
             let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
-            pool.install(|| {
+            pool.install(|| -> Result<()> {
                 let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
                 writer.build_and_quantize(
                     wtxn,
@@ -538,6 +538,8 @@ where
             })
             .map_err(InternalError::from)??;
         }
+
+        self.index.cellulite.build(self.wtxn, &Progress::default())?;
 
         self.execute_prefix_databases(
             word_docids.map(MergerBuilder::build),
