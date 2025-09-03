@@ -1,0 +1,39 @@
+name: Test Sub-Object Filtering
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'crates/milli/src/search/filter/**'
+      - 'crates/milli/tests/sub_object_filtering.rs'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'crates/milli/src/search/filter/**'
+      - 'crates/milli/tests/sub_object_filtering.rs'
+
+jobs:
+  test:
+    name: Run sub-object filtering tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --package milli
+
+      - name: Run tests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --package milli --test sub_object_filtering
