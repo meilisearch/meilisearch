@@ -18,8 +18,7 @@ use nom::sequence::{terminated, tuple};
 use Condition::*;
 
 use crate::error::IResultExt;
-use crate::value::parse_vector_value;
-use crate::value::parse_vector_value_cut;
+use crate::value::{parse_dotted_value_cut, parse_dotted_value_part};
 use crate::Error;
 use crate::ErrorKind;
 use crate::VectorFilter;
@@ -142,13 +141,13 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     }
 
     let (input, embedder_name) =
-        parse_vector_value_cut(input, ErrorKind::VectorFilterInvalidEmbedder)?;
+        parse_dotted_value_cut(input, ErrorKind::VectorFilterInvalidEmbedder)?;
 
     let (input, filter) = alt((
         map(
             preceded(tag(".fragments"), |input| {
                 let (input, _) = tag(".")(input).map_cut(ErrorKind::VectorFilterMissingFragment)?;
-                parse_vector_value_cut(input, ErrorKind::VectorFilterInvalidFragment)
+                parse_dotted_value_cut(input, ErrorKind::VectorFilterInvalidFragment)
             }),
             VectorFilter::Fragment,
         ),
@@ -159,7 +158,7 @@ fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>
     ))(input)?;
 
     if let Ok((input, point)) = tag::<_, _, ()>(".")(input) {
-        let opt_value = parse_vector_value(input).ok().map(|(_, v)| v);
+        let opt_value = parse_dotted_value_part(input).ok().map(|(_, v)| v);
         let value =
             opt_value.as_ref().map(|v| v.value().to_owned()).unwrap_or_else(|| point.to_string());
         let context = opt_value.map(|v| v.original_span()).unwrap_or(point);
