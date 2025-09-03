@@ -284,6 +284,14 @@ impl BatchQueue {
                 if Some(batch_id) == processing.batch.as_ref().map(|batch| batch.uid) {
                     let mut batch = processing.batch.as_ref().unwrap().to_batch();
                     batch.progress = processing.get_progress_view();
+                    // Add progress_trace from the current progress state
+                    if let Some(progress) = &processing.progress {
+                        batch.stats.progress_trace = progress
+                            .accumulated_durations()
+                            .into_iter()
+                            .map(|(k, v)| (k, v.into()))
+                            .collect();
+                    }
                     Ok(batch)
                 } else {
                     self.get_batch(rtxn, batch_id)

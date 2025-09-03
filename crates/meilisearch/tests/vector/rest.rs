@@ -2184,6 +2184,7 @@ async fn last_error_stats() {
         ".progress" => "[ignored]",
         ".stats.embedderRequests.total" => "[ignored]",
         ".stats.embedderRequests.failed" => "[ignored]",
+        ".stats.progressTrace" => "[ignored]",
         ".startedAt" => "[ignored]"
     }), @r#"
     {
@@ -2204,6 +2205,7 @@ async fn last_error_stats() {
         "indexUids": {
           "doggo": 1
         },
+        "progressTrace": "[ignored]",
         "embedderRequests": {
           "total": "[ignored]",
           "failed": "[ignored]",
