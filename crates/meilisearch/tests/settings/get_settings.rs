@@ -194,6 +194,11 @@ test_setting_routes!(
             "searchParameters": {}
         }
     },
+    {
+      setting: vector_store,
+      update_verb: patch,
+      default_value: "stable"
+    },
 );
 
 #[actix_rt::test]
