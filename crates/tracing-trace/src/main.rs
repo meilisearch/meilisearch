@@ -59,7 +59,7 @@ fn fibo_recursive(n: u32) -> u32 {
     if n == 1 {
         return 2;
     }
-    return fibo_recursive(n - 1) - fibo_recursive(n - 2);
+    fibo_recursive(n - 1) - fibo_recursive(n - 2)
 }
 
 use tracing_error::ExtractSpanTrace as _;

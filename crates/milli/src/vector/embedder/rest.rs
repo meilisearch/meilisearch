@@ -8,14 +8,12 @@ use rayon::slice::ParallelSlice as _;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::error::EmbedErrorKind;
-use super::json_template::{InjectableValue, JsonTemplate};
-use super::{
-    DistributionShift, EmbedError, Embedding, EmbeddingCache, NewEmbedderError, SearchQuery,
-    REQUEST_PARALLELISM,
-};
+use super::EmbeddingCache;
 use crate::error::FaultSource;
 use crate::progress::EmbedderStats;
+use crate::vector::error::{EmbedError, EmbedErrorKind, NewEmbedderError};
+use crate::vector::json_template::{InjectableValue, JsonTemplate};
+use crate::vector::{DistributionShift, Embedding, SearchQuery, REQUEST_PARALLELISM};
 use crate::ThreadPoolNoAbort;
 
 // retrying in case of failure
@@ -315,7 +313,7 @@ impl Embedder {
     }
 
     pub fn chunk_count_hint(&self) -> usize {
-        super::REQUEST_PARALLELISM
+        crate::vector::REQUEST_PARALLELISM
     }
 
     pub fn prompt_count_in_chunk_hint(&self) -> usize {

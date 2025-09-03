@@ -1,14 +1,14 @@
 use std::time::Instant;
 
-use arroy::Distance;
+use hannoy::Distance;
 
-use super::error::CompositeEmbedderContainsHuggingFace;
-use super::{
-    hf, manual, ollama, openai, rest, DistributionShift, EmbedError, Embedding, EmbeddingCache,
-    NewEmbedderError,
-};
+use super::{hf, manual, ollama, openai, rest, Embedding, EmbeddingCache};
 use crate::progress::EmbedderStats;
+use crate::vector::error::{CompositeEmbedderContainsHuggingFace, EmbedError, NewEmbedderError};
+use crate::vector::DistributionShift;
 use crate::ThreadPoolNoAbort;
+
+pub(in crate::vector) const MAX_COMPOSITE_DISTANCE: f32 = 0.01;
 
 #[derive(Debug)]
 pub enum SubEmbedder {
@@ -324,20 +324,19 @@ fn check_similarity(
     }
 
     for (left, right) in left.into_iter().zip(right) {
-        let left = arroy::internals::UnalignedVector::from_slice(&left);
-        let right = arroy::internals::UnalignedVector::from_slice(&right);
-        let left = arroy::internals::Leaf {
-            header: arroy::distances::Cosine::new_header(&left),
+        let left = hannoy::internals::UnalignedVector::from_slice(&left);
+        let right = hannoy::internals::UnalignedVector::from_slice(&right);
+        let left = hannoy::internals::Item {
+            header: hannoy::distances::Cosine::new_header(&left),
             vector: left,
         };
-        let right = arroy::internals::Leaf {
-            header: arroy::distances::Cosine::new_header(&right),
+        let right = hannoy::internals::Item {
+            header: hannoy::distances::Cosine::new_header(&right),
             vector: right,
         };
 
-        let distance = arroy::distances::Cosine::built_distance(&left, &right);
-
-        if distance > super::MAX_COMPOSITE_DISTANCE {
+        let distance = hannoy::distances::Cosine::distance(&left, &right);
+        if distance > crate::vector::embedder::composite::MAX_COMPOSITE_DISTANCE {
             return Err(NewEmbedderError::composite_embedding_value_mismatch(distance, hint));
         }
     }

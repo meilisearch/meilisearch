@@ -15,7 +15,7 @@ use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
-use crate::vector::{ArroyWrapper, Embedder, Embeddings, RuntimeEmbedders};
+use crate::vector::{Embedder, Embeddings, RuntimeEmbedders, VectorStore};
 use crate::{Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
@@ -23,9 +23,9 @@ pub fn write_to_db(
     finished_extraction: &AtomicBool,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    arroy_writers: &HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
+    vector_stores: &HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
 ) -> Result<ChannelCongestion> {
-    // Used by by the ArroySetVector to copy the embedding into an
+    // Used by by the HannoySetVector to copy the embedding into an
     // aligned memory area, required by arroy to accept a new vector.
     let mut aligned_embedding = Vec::new();
     let span = tracing::trace_span!(target: "indexing::write_db", "all");
@@ -56,7 +56,7 @@ pub fn write_to_db(
             ReceiverAction::LargeVectors(large_vectors) => {
                 let LargeVectors { docid, embedder_id, .. } = large_vectors;
                 let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                    vector_stores.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 for embedding in large_vectors.read_embeddings(*dimensions) {
                     embeddings.push(embedding.to_vec()).unwrap();
@@ -68,7 +68,7 @@ pub fn write_to_db(
                 large_vector @ LargeVector { docid, embedder_id, extractor_id, .. },
             ) => {
                 let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                    vector_stores.get(&embedder_id).expect("requested a missing embedder");
                 let embedding = large_vector.read_embedding(*dimensions);
                 writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
             }
@@ -80,12 +80,12 @@ pub fn write_to_db(
             &mut writer_receiver,
             index,
             wtxn,
-            arroy_writers,
+            vector_stores,
             &mut aligned_embedding,
         )?;
     }
 
-    write_from_bbqueue(&mut writer_receiver, index, wtxn, arroy_writers, &mut aligned_embedding)?;
+    write_from_bbqueue(&mut writer_receiver, index, wtxn, vector_stores, &mut aligned_embedding)?;
 
     Ok(ChannelCongestion {
         attempts: writer_receiver.sent_messages_attempts(),
@@ -115,8 +115,8 @@ pub fn build_vectors<MSP>(
     wtxn: &mut RwTxn<'_>,
     progress: &Progress,
     index_embeddings: Vec<IndexEmbeddingConfig>,
-    arroy_memory: Option<usize>,
-    arroy_writers: &mut HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
+    vector_memory: Option<usize>,
+    vector_stores: &mut HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
     embeder_actions: Option<&BTreeMap<String, EmbedderAction>>,
     must_stop_processing: &MSP,
 ) -> Result<()>
@@ -129,18 +129,18 @@ where
 
     let seed = rand::random();
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    for (_index, (embedder_name, _embedder, writer, dimensions)) in arroy_writers {
+    for (_index, (embedder_name, _embedder, writer, dimensions)) in vector_stores {
         let dimensions = *dimensions;
         let is_being_quantized = embeder_actions
             .and_then(|actions| actions.get(*embedder_name).map(|action| action.is_being_quantized))
             .unwrap_or(false);
         writer.build_and_quantize(
             wtxn,
-            progress,
+            progress.clone(),
             &mut rng,
             dimensions,
             is_being_quantized,
-            arroy_memory,
+            vector_memory,
             must_stop_processing,
         )?;
     }
@@ -181,7 +181,7 @@ pub fn write_from_bbqueue(
     writer_receiver: &mut WriterBbqueueReceiver<'_>,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    arroy_writers: &HashMap<u8, (&str, &crate::vector::Embedder, ArroyWrapper, usize)>,
+    vector_stores: &HashMap<u8, (&str, &crate::vector::Embedder, VectorStore, usize)>,
     aligned_embedding: &mut Vec<f32>,
 ) -> crate::Result<()> {
     while let Some(frame_with_header) = writer_receiver.recv_frame() {
@@ -221,17 +221,17 @@ pub fn write_from_bbqueue(
                     },
                 }
             }
-            EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid }) => {
-                for (_index, (_name, _embedder, writer, dimensions)) in arroy_writers {
+            EntryHeader::DeleteVector(DeleteVector { docid }) => {
+                for (_index, (_name, _embedder, writer, dimensions)) in vector_stores {
                     let dimensions = *dimensions;
                     writer.del_items(wtxn, dimensions, docid)?;
                 }
             }
-            EntryHeader::ArroySetVectors(asvs) => {
-                let ArroySetVectors { docid, embedder_id, .. } = asvs;
+            EntryHeader::SetVectors(asvs) => {
+                let SetVectors { docid, embedder_id, .. } = asvs;
                 let frame = frame_with_header.frame();
                 let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                    vector_stores.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
                 writer.del_items(wtxn, *dimensions, docid)?;
@@ -245,12 +245,10 @@ pub fn write_from_bbqueue(
                     writer.add_items(wtxn, docid, &embeddings)?;
                 }
             }
-            EntryHeader::ArroySetVector(
-                asv @ ArroySetVector { docid, embedder_id, extractor_id, .. },
-            ) => {
+            EntryHeader::SetVector(asv @ SetVector { docid, embedder_id, extractor_id, .. }) => {
                 let frame = frame_with_header.frame();
                 let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                    vector_stores.get(&embedder_id).expect("requested a missing embedder");
                 let embedding = asv.read_all_embeddings_into_vec(frame, aligned_embedding);
 
                 if embedding.is_empty() {

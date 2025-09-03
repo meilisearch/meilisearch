@@ -55,6 +55,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             composite_embedders: Some(false),
             chat_completions: Some(false),
             multimodal: Some(false),
+            vector_store_setting: Some(false),
         })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -103,6 +104,8 @@ pub struct RuntimeTogglableFeatures {
     pub chat_completions: Option<bool>,
     #[deserr(default)]
     pub multimodal: Option<bool>,
+    #[deserr(default)]
+    pub vector_store_setting: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -117,6 +120,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             composite_embedders,
             chat_completions,
             multimodal,
+            vector_store_setting,
         } = value;
 
         Self {
@@ -129,6 +133,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             composite_embedders: Some(composite_embedders),
             chat_completions: Some(chat_completions),
             multimodal: Some(multimodal),
+            vector_store_setting: Some(vector_store_setting),
         }
     }
 }
@@ -144,6 +149,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     composite_embedders: bool,
     chat_completions: bool,
     multimodal: bool,
+    vector_store_setting: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -162,6 +168,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             composite_embedders: new.composite_embedders,
             chat_completions: new.chat_completions,
             multimodal: new.multimodal,
+            vector_store_setting: new.vector_store_setting,
         })
     }
 
@@ -189,6 +196,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             composite_embedders: Some(false),
             chat_completions: Some(false),
             multimodal: Some(false),
+            vector_store_setting: Some(false),
          })),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -232,6 +240,10 @@ async fn patch_features(
             .unwrap_or(old_features.composite_embedders),
         chat_completions: new_features.0.chat_completions.unwrap_or(old_features.chat_completions),
         multimodal: new_features.0.multimodal.unwrap_or(old_features.multimodal),
+        vector_store_setting: new_features
+            .0
+            .vector_store_setting
+            .unwrap_or(old_features.vector_store_setting),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -247,6 +259,7 @@ async fn patch_features(
         composite_embedders,
         chat_completions,
         multimodal,
+        vector_store_setting,
     } = new_features;
 
     analytics.publish(
@@ -260,6 +273,7 @@ async fn patch_features(
             composite_embedders,
             chat_completions,
             multimodal,
+            vector_store_setting,
         },
         &req,
     );

@@ -142,8 +142,8 @@ enum Command {
 
 #[derive(Clone, ValueEnum)]
 enum IndexPart {
-    /// Will make the arroy index hot.
-    Arroy,
+    /// Will make the vector index hot.
+    Hannoy,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -658,12 +658,12 @@ fn hair_dryer(
             let rtxn = index.read_txn()?;
             for part in index_parts {
                 match part {
-                    IndexPart::Arroy => {
+                    IndexPart::Hannoy => {
                         let mut count = 0;
-                        let total = index.vector_arroy.len(&rtxn)?;
-                        eprintln!("Hair drying arroy for {uid}...");
+                        let total = index.vector_store.len(&rtxn)?;
+                        eprintln!("Hair drying hannoy for {uid}...");
                         for (i, result) in index
-                            .vector_arroy
+                            .vector_store
                             .remap_types::<Bytes, Bytes>()
                             .iter(&rtxn)?
                             .enumerate()

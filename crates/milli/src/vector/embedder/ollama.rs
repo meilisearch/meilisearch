@@ -3,12 +3,12 @@ use std::time::Instant;
 use rayon::iter::{IntoParallelIterator as _, ParallelIterator as _};
 use rayon::slice::ParallelSlice as _;
 
-use super::error::{EmbedError, EmbedErrorKind, NewEmbedderError, NewEmbedderErrorKind};
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
-use super::{DistributionShift, EmbeddingCache, REQUEST_PARALLELISM};
+use super::EmbeddingCache;
 use crate::error::FaultSource;
 use crate::progress::EmbedderStats;
-use crate::vector::Embedding;
+use crate::vector::error::{EmbedError, EmbedErrorKind, NewEmbedderError, NewEmbedderErrorKind};
+use crate::vector::{DistributionShift, Embedding, REQUEST_PARALLELISM};
 use crate::ThreadPoolNoAbort;
 
 #[derive(Debug)]
@@ -88,7 +88,7 @@ impl Embedder {
             Err(NewEmbedderError {
                 kind:
                     NewEmbedderErrorKind::CouldNotDetermineDimension(EmbedError {
-                        kind: super::error::EmbedErrorKind::RestOtherStatusCode(404, error),
+                        kind: EmbedErrorKind::RestOtherStatusCode(404, error),
                         fault: _,
                     }),
                 fault: _,

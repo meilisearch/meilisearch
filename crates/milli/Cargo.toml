@@ -87,7 +87,8 @@ rhai = { version = "1.22.2", features = [
     "no_time",
     "sync",
 ] }
-arroy = "0.6.2"
+arroy = "0.6.3"
+hannoy = "0.0.5"
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
@@ -95,6 +96,7 @@ url = "2.5.4"
 hashbrown = "0.15.4"
 bumpalo = "3.18.1"
 bumparaw-collections = "0.1.4"
+steppe = { version = "0.4.0", default-features = false }
 thread_local = "1.1.9"
 allocator-api2 = "0.3.0"
 rustc-hash = "2.1.1"
@@ -109,7 +111,11 @@ utoipa = { version = "5.4.0", features = [
     "openapi_extensions",
 ] }
 lru = "0.14.0"
-twox-hash = { version = "2.1.1", default-features = false, features = ["std", "xxhash3_64", "xxhash64"] }
+twox-hash = { version = "2.1.1", default-features = false, features = [
+    "std",
+    "xxhash3_64",
+    "xxhash64",
+] }
 
 [dev-dependencies]
 mimalloc = { version = "0.1.47", default-features = false }

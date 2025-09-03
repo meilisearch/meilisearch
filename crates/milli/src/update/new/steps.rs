@@ -22,6 +22,14 @@ make_enum_progress! {
 }
 
 make_enum_progress! {
+    pub enum SettingsIndexerStep {
+        ChangingVectorStore,
+        UsingStableIndexer,
+        UsingExperimentalIndexer,
+    }
+}
+
+make_enum_progress! {
     pub enum PostProcessingFacets {
         StringsBulk,
         StringsIncremental,

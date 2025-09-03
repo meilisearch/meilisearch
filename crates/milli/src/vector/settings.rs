@@ -8,12 +8,12 @@ use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use super::composite::SubEmbedderOptions;
-use super::hf::OverridePooling;
-use super::{ollama, openai, DistributionShift, EmbedderOptions};
 use crate::prompt::{default_max_bytes, PromptData};
 use crate::update::Setting;
-use crate::vector::EmbeddingConfig;
+use crate::vector::embedder::composite::{self, SubEmbedderOptions};
+use crate::vector::embedder::hf::{self, OverridePooling};
+use crate::vector::embedder::{manual, ollama, openai, rest, EmbedderOptions};
+use crate::vector::{DistributionShift, EmbeddingConfig};
 use crate::UserError;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
@@ -1789,12 +1789,7 @@ pub struct Fragment {
 
 impl EmbeddingSettings {
     fn from_hugging_face(
-        super::hf::EmbedderOptions {
-        model,
-        revision,
-        distribution,
-        pooling,
-    }: super::hf::EmbedderOptions,
+        hf::EmbedderOptions { model, revision, distribution, pooling }: hf::EmbedderOptions,
         document_template: Setting<String>,
         document_template_max_bytes: Setting<usize>,
         quantized: Option<bool>,
@@ -1822,13 +1817,13 @@ impl EmbeddingSettings {
     }
 
     fn from_openai(
-        super::openai::EmbedderOptions {
+        openai::EmbedderOptions {
             url,
             api_key,
             embedding_model,
             dimensions,
             distribution,
-        }: super::openai::EmbedderOptions,
+        }: openai::EmbedderOptions,
         document_template: Setting<String>,
         document_template_max_bytes: Setting<usize>,
         quantized: Option<bool>,
@@ -1856,13 +1851,13 @@ impl EmbeddingSettings {
     }
 
     fn from_ollama(
-        super::ollama::EmbedderOptions {
-          embedding_model,
-          url,
-          api_key,
-          distribution,
-          dimensions,
-        }: super::ollama::EmbedderOptions,
+        ollama::EmbedderOptions {
+            embedding_model,
+            url,
+            api_key,
+            distribution,
+            dimensions,
+        }: ollama::EmbedderOptions,
         document_template: Setting<String>,
         document_template_max_bytes: Setting<usize>,
         quantized: Option<bool>,
@@ -1890,7 +1885,7 @@ impl EmbeddingSettings {
     }
 
     fn from_user_provided(
-        super::manual::EmbedderOptions { dimensions, distribution }: super::manual::EmbedderOptions,
+        manual::EmbedderOptions { dimensions, distribution }: manual::EmbedderOptions,
         quantized: Option<bool>,
     ) -> Self {
         Self {
@@ -1916,7 +1911,7 @@ impl EmbeddingSettings {
     }
 
     fn from_rest(
-        super::rest::EmbedderOptions {
+        rest::EmbedderOptions {
             api_key,
             dimensions,
             url,
@@ -1926,7 +1921,7 @@ impl EmbeddingSettings {
             response,
             distribution,
             headers,
-        }: super::rest::EmbedderOptions,
+        }: rest::EmbedderOptions,
         document_template: Setting<String>,
         document_template_max_bytes: Setting<usize>,
         quantized: Option<bool>,
@@ -2015,37 +2010,36 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                 document_template_max_bytes,
                 quantized,
             ),
-            super::EmbedderOptions::Composite(super::composite::EmbedderOptions {
-                search,
-                index,
-            }) => Self {
-                source: Setting::Set(EmbedderSource::Composite),
-                model: Setting::NotSet,
-                revision: Setting::NotSet,
-                pooling: Setting::NotSet,
-                api_key: Setting::NotSet,
-                dimensions: Setting::NotSet,
-                binary_quantized: Setting::some_or_not_set(quantized),
-                document_template: Setting::NotSet,
-                document_template_max_bytes: Setting::NotSet,
-                url: Setting::NotSet,
-                indexing_fragments: Setting::NotSet,
-                search_fragments: Setting::NotSet,
-                request: Setting::NotSet,
-                response: Setting::NotSet,
-                headers: Setting::NotSet,
-                distribution: Setting::some_or_not_set(search.distribution()),
-                search_embedder: Setting::Set(SubEmbeddingSettings::from_options(
-                    search,
-                    Setting::NotSet,
-                    Setting::NotSet,
-                )),
-                indexing_embedder: Setting::Set(SubEmbeddingSettings::from_options(
-                    index,
-                    Setting::Set(prompt.template),
-                    document_template_max_bytes,
-                )),
-            },
+            super::EmbedderOptions::Composite(composite::EmbedderOptions { search, index }) => {
+                Self {
+                    source: Setting::Set(EmbedderSource::Composite),
+                    model: Setting::NotSet,
+                    revision: Setting::NotSet,
+                    pooling: Setting::NotSet,
+                    api_key: Setting::NotSet,
+                    dimensions: Setting::NotSet,
+                    binary_quantized: Setting::some_or_not_set(quantized),
+                    document_template: Setting::NotSet,
+                    document_template_max_bytes: Setting::NotSet,
+                    url: Setting::NotSet,
+                    indexing_fragments: Setting::NotSet,
+                    search_fragments: Setting::NotSet,
+                    request: Setting::NotSet,
+                    response: Setting::NotSet,
+                    headers: Setting::NotSet,
+                    distribution: Setting::some_or_not_set(search.distribution()),
+                    search_embedder: Setting::Set(SubEmbeddingSettings::from_options(
+                        search,
+                        Setting::NotSet,
+                        Setting::NotSet,
+                    )),
+                    indexing_embedder: Setting::Set(SubEmbeddingSettings::from_options(
+                        index,
+                        Setting::Set(prompt.template),
+                        document_template_max_bytes,
+                    )),
+                }
+            }
         }
     }
 }
@@ -2212,7 +2206,7 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
                 )
                 .into(),
                 EmbedderSource::Composite => {
-                    super::EmbedderOptions::Composite(super::composite::EmbedderOptions {
+                    super::EmbedderOptions::Composite(composite::EmbedderOptions {
                         // it is important to give the distribution to the search here, as this is from where we'll retrieve it
                         search: SubEmbedderOptions::from_settings(
                             search_embedder.set().unwrap(),
@@ -2290,9 +2284,9 @@ impl SubEmbedderOptions {
         dimensions: Setting<usize>,
         distribution: Setting<DistributionShift>,
     ) -> Self {
-        let mut options = super::openai::EmbedderOptions::with_default_model(None);
+        let mut options = openai::EmbedderOptions::with_default_model(None);
         if let Some(model) = model.set() {
-            if let Some(model) = super::openai::EmbeddingModel::from_name(&model) {
+            if let Some(model) = openai::EmbeddingModel::from_name(&model) {
                 options.embedding_model = model;
             }
         }
@@ -2314,7 +2308,7 @@ impl SubEmbedderOptions {
         pooling: Setting<OverridePooling>,
         distribution: Setting<DistributionShift>,
     ) -> Self {
-        let mut options = super::hf::EmbedderOptions::default();
+        let mut options = hf::EmbedderOptions::default();
         if let Some(model) = model.set() {
             options.model = model;
             // Reset the revision if we are setting the model.
@@ -2334,10 +2328,7 @@ impl SubEmbedderOptions {
         SubEmbedderOptions::HuggingFace(options)
     }
     fn user_provided(dimensions: usize, distribution: Setting<DistributionShift>) -> Self {
-        Self::UserProvided(super::manual::EmbedderOptions {
-            dimensions,
-            distribution: distribution.set(),
-        })
+        Self::UserProvided(manual::EmbedderOptions { dimensions, distribution: distribution.set() })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -2352,7 +2343,7 @@ impl SubEmbedderOptions {
         dimensions: Setting<usize>,
         distribution: Setting<DistributionShift>,
     ) -> Self {
-        Self::Rest(super::rest::EmbedderOptions {
+        Self::Rest(rest::EmbedderOptions {
             api_key: api_key.set(),
             dimensions: dimensions.set(),
             url,
@@ -2386,11 +2377,7 @@ impl SubEmbedderOptions {
         distribution: Setting<DistributionShift>,
     ) -> Self {
         let mut options: ollama::EmbedderOptions =
-            super::ollama::EmbedderOptions::with_default_model(
-                api_key.set(),
-                url.set(),
-                dimensions.set(),
-            );
+            ollama::EmbedderOptions::with_default_model(api_key.set(), url.set(), dimensions.set());
         if let Some(model) = model.set() {
             options.embedding_model = model;
         }

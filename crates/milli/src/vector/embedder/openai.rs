@@ -5,13 +5,12 @@ use ordered_float::OrderedFloat;
 use rayon::iter::{IntoParallelIterator, ParallelIterator as _};
 use rayon::slice::ParallelSlice as _;
 
-use super::error::{EmbedError, NewEmbedderError};
 use super::rest::{Embedder as RestEmbedder, EmbedderOptions as RestEmbedderOptions};
-use super::{DistributionShift, EmbeddingCache, REQUEST_PARALLELISM};
+use super::{DistributionShift, EmbeddingCache};
 use crate::error::FaultSource;
 use crate::progress::EmbedderStats;
-use crate::vector::error::EmbedErrorKind;
-use crate::vector::Embedding;
+use crate::vector::error::{EmbedError, EmbedErrorKind, NewEmbedderError};
+use crate::vector::{Embedding, REQUEST_PARALLELISM};
 use crate::ThreadPoolNoAbort;
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]

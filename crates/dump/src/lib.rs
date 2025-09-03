@@ -331,6 +331,7 @@ pub(crate) mod test {
             facet_search: Setting::NotSet,
             prefix_search: Setting::NotSet,
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
             _kind: std::marker::PhantomData,
         };
         settings.check()

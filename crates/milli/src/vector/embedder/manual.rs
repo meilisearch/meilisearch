@@ -1,6 +1,5 @@
-use super::error::EmbedError;
-use super::DistributionShift;
-use crate::vector::Embedding;
+use crate::vector::error::EmbedError;
+use crate::vector::{DistributionShift, Embedding};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Embedder {
