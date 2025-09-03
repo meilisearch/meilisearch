@@ -3,7 +3,7 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use crate::error::{DidYouMean, Error};
 use crate::vector::db::IndexEmbeddingConfig;
-use crate::vector::{VectorStoreStats, VectorStore};
+use crate::vector::{VectorStore, VectorStoreStats};
 use crate::Index;
 
 #[derive(Debug, thiserror::Error)]
