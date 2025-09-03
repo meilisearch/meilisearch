@@ -1,5 +1,6 @@
 {
   "name": "search-hackernews.ndjson_1M",
+  "type": "bench",
   "run_count": 3,
   "target": "search::=trace",
   "extra_cli_args": [],

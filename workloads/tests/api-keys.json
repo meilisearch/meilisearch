@@ -1,0 +1,221 @@
+{
+  "type": "test",
+  "name": "api-keys",
+  "initialVersion": "1.12.0",
+  "commands": [
+    {
+      "route": "keys",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "actions": [
+            "search",
+            "documents.add"
+          ],
+          "description": "Test API Key",
+          "expiresAt": null,
+          "indexes": [
+            "movies"
+          ]
+        }
+      },
+      "expectedStatus": 201,
+      "expectedResponse": {
+        "actions": [
+          "search",
+          "documents.add"
+        ],
+        "createdAt": "[timestamp]",
+        "description": "Test API Key",
+        "expiresAt": null,
+        "indexes": [
+          "movies"
+        ],
+        "key": "c6f64630bad2996b1f675007c8800168e14adf5d6a7bb1a400a6d2b158050eaf",
+        "name": null,
+        "uid": "[uuid]",
+        "updatedAt": "[timestamp]"
+      },
+      "register": {
+        "key": "/key"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "keys/{{ key }}",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "actions": [
+          "search",
+          "documents.add"
+        ],
+        "createdAt": "[timestamp]",
+        "description": "Test API Key",
+        "expiresAt": null,
+        "indexes": [
+          "movies"
+        ],
+        "key": "c6f64630bad2996b1f675007c8800168e14adf5d6a7bb1a400a6d2b158050eaf",
+        "name": null,
+        "uid": "[uuid]",
+        "updatedAt": "[timestamp]"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "/indexes",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "primaryKey": "id",
+          "uid": "movies"
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 0,
+        "type": "indexCreation"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "id": 287947,
+          "overview": "A boy is given the ability to become an adult superhero in times of need with a single magic word.",
+          "poster": "https://image.tmdb.org/t/p/w1280/xnopI5Xtky18MPhK40cZAGAOVeV.jpg",
+          "release_date": "2019-03-23",
+          "title": "Shazam"
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 1,
+        "type": "documentAdditionOrUpdate"
+      },
+      "apiKeyVariable": "key",
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/search?q=shazam",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 0,
+        "hits": [],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "shazam"
+      },
+      "apiKeyVariable": "key",
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "upgrade": "latest"
+    },
+    {
+      "route": "indexes/movies/search?q=shazam",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 1,
+        "hits": [
+          {
+            "id": 287947,
+            "overview": "A boy is given the ability to become an adult superhero in times of need with a single magic word.",
+            "poster": "https://image.tmdb.org/t/p/w1280/xnopI5Xtky18MPhK40cZAGAOVeV.jpg",
+            "release_date": "2019-03-23",
+            "title": "Shazam"
+          }
+        ],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "shazam"
+      },
+      "apiKeyVariable": "key",
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents/287947",
+      "method": "DELETE",
+      "body": null,
+      "expectedStatus": 403,
+      "expectedResponse": {
+        "code": "invalid_api_key",
+        "link": "https://docs.meilisearch.com/errors#invalid_api_key",
+        "message": "The provided API key is invalid.",
+        "type": "auth"
+      },
+      "apiKeyVariable": "key",
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "id": 287948,
+          "overview": "Shazam turns evil and the world is in danger.",
+          "poster": "https://image.tmdb.org/t/p/w1280/xnopI5Xtky18MPhK40cZAGAOVeV.jpg",
+          "release_date": "2032-03-23",
+          "title": "Shazam 2"
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 3,
+        "type": "documentAdditionOrUpdate"
+      },
+      "apiKeyVariable": "key",
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/search?q=shaza",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 2,
+        "hits": [
+          {
+            "id": 287947,
+            "overview": "A boy is given the ability to become an adult superhero in times of need with a single magic word.",
+            "poster": "https://image.tmdb.org/t/p/w1280/xnopI5Xtky18MPhK40cZAGAOVeV.jpg",
+            "release_date": "2019-03-23",
+            "title": "Shazam"
+          },
+          {
+            "id": 287948,
+            "overview": "Shazam turns evil and the world is in danger.",
+            "poster": "https://image.tmdb.org/t/p/w1280/xnopI5Xtky18MPhK40cZAGAOVeV.jpg",
+            "release_date": "2032-03-23",
+            "title": "Shazam 2"
+          }
+        ],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "shaza"
+      },
+      "apiKeyVariable": "key",
+      "synchronous": "WaitForResponse"
+    }
+  ]
+}
