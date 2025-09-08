@@ -834,7 +834,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             None
         };
 
-        let backend = self.index.get_vector_store(wtxn)?;
+        let backend = self.index.get_vector_store(wtxn)?.unwrap_or_default();
         let readers: BTreeMap<&str, (VectorStore, &RoaringBitmap)> = settings_diff
             .embedding_config_updates
             .iter()

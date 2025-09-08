@@ -131,7 +131,7 @@ where
         let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
 
         let vector_arroy = index.vector_store;
-        let backend = index.get_vector_store(wtxn)?;
+        let backend = index.get_vector_store(wtxn)?.unwrap_or_default();
         let vector_stores: Result<HashMap<_, _>> = embedders
             .inner_as_ref()
             .iter()
@@ -348,7 +348,7 @@ fn vector_stores_from_embedder_actions<'indexer>(
     index_embedder_category_ids: &'indexer std::collections::HashMap<String, u8>,
 ) -> Result<HashMap<u8, (&'indexer str, &'indexer Embedder, VectorStore, usize)>> {
     let vector_arroy = index.vector_store;
-    let backend = index.get_vector_store(rtxn)?;
+    let backend = index.get_vector_store(rtxn)?.unwrap_or_default();
 
     embedders
         .inner_as_ref()
@@ -390,7 +390,7 @@ fn delete_old_embedders_and_fragments<SD>(
 where
     SD: SettingsDelta,
 {
-    let backend = index.get_vector_store(wtxn)?;
+    let backend = index.get_vector_store(wtxn)?.unwrap_or_default();
     for action in settings_delta.embedder_actions().values() {
         let Some(WriteBackToDocuments { embedder_id, .. }) = action.write_back() else {
             continue;

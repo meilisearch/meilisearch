@@ -54,7 +54,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         vector_candidates: &RoaringBitmap,
     ) -> Result<()> {
         let target = &self.target;
-        let backend = ctx.index.get_vector_store(ctx.txn)?;
+        let backend = ctx.index.get_vector_store(ctx.txn)?.unwrap_or_default();
 
         let before = Instant::now();
         let reader =

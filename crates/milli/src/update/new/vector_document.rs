@@ -120,7 +120,7 @@ impl<'t> VectorDocumentFromDb<'t> {
         config: &IndexEmbeddingConfig,
         status: &EmbeddingStatus,
     ) -> Result<VectorEntry<'t>> {
-        let backend = self.index.get_vector_store(self.rtxn)?;
+        let backend = self.index.get_vector_store(self.rtxn)?.unwrap_or_default();
         let reader = VectorStore::new(
             backend,
             self.index.vector_store,

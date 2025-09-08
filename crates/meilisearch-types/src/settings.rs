@@ -989,7 +989,10 @@ pub fn settings(
         facet_search: Setting::Set(facet_search),
         prefix_search: Setting::Set(prefix_search.unwrap_or_default()),
         chat: Setting::Set(chat),
-        vector_store: Setting::Set(vector_store),
+        vector_store: match vector_store {
+            Some(vector_store) => Setting::Set(vector_store),
+            None => Setting::Reset,
+        },
         _kind: PhantomData,
     };
 

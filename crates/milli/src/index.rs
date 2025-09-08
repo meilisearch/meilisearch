@@ -469,12 +469,11 @@ impl Index {
         )?)
     }
 
-    pub fn get_vector_store(&self, rtxn: &RoTxn<'_>) -> Result<VectorStoreBackend> {
+    pub fn get_vector_store(&self, rtxn: &RoTxn<'_>) -> Result<Option<VectorStoreBackend>> {
         Ok(self
             .main
             .remap_types::<Str, SerdeJson<VectorStoreBackend>>()
-            .get(rtxn, main_key::VECTOR_STORE_BACKEND)?
-            .unwrap_or_default())
+            .get(rtxn, main_key::VECTOR_STORE_BACKEND)?)
     }
 
     pub(crate) fn delete_vector_store(&self, wtxn: &mut RwTxn<'_>) -> Result<bool> {
@@ -1799,7 +1798,7 @@ impl Index {
     ) -> Result<BTreeMap<String, EmbeddingsWithMetadata>> {
         let mut res = BTreeMap::new();
         let embedders = self.embedding_configs();
-        let backend = self.get_vector_store(rtxn)?;
+        let backend = self.get_vector_store(rtxn)?.unwrap_or_default();
 
         for config in embedders.embedding_configs(rtxn)? {
             let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
@@ -1828,7 +1827,7 @@ impl Index {
     pub fn vector_store_stats(&self, rtxn: &RoTxn<'_>) -> Result<VectorStoreStats> {
         let mut stats = VectorStoreStats::default();
         let embedding_configs = self.embedding_configs();
-        let backend = self.get_vector_store(rtxn)?;
+        let backend = self.get_vector_store(rtxn)?.unwrap_or_default();
 
         for config in embedding_configs.embedding_configs(rtxn)? {
             let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();

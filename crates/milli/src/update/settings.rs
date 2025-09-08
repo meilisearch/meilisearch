@@ -1506,7 +1506,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     where
         MSP: Fn() -> bool + Sync,
     {
-        let old_backend = self.index.get_vector_store(self.wtxn)?;
+        let old_backend = self.index.get_vector_store(self.wtxn)?.unwrap_or_default();
 
         let new_backend = match self.vector_store {
             Setting::Set(new_backend) => {

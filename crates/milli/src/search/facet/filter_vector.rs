@@ -82,7 +82,7 @@ fn evaluate_inner(
     embedding_configs: &[IndexEmbeddingConfig],
     filter: &VectorFilter<'_>,
 ) -> crate::Result<RoaringBitmap> {
-    let backend = index.get_vector_store(rtxn)?;
+    let backend = index.get_vector_store(rtxn)?.unwrap_or_default();
     let embedder_name = embedder.value();
     let available_embedders =
         || embedding_configs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();

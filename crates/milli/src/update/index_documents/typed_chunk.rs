@@ -619,7 +619,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let _entered = span.enter();
 
             let embedders = index.embedding_configs();
-            let backend = index.get_vector_store(wtxn)?;
+            let backend = index.get_vector_store(wtxn)?.unwrap_or_default();
 
             let mut remove_vectors_builder = MergerBuilder::new(KeepFirst);
             let mut manual_vectors_builder = MergerBuilder::new(KeepFirst);
