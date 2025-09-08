@@ -65,6 +65,7 @@ const fn start(from: (u32, u32, u32)) -> Option<usize> {
         (1, 17, _) => function_index!(7),
         (1, 18, _) => function_index!(7),
         (1, 19, _) => function_index!(7),
+        (1, 20, _) => function_index!(7),
         // We deliberately don't add a placeholder with (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) here to force manually
         // considering dumpless upgrade.
         (_major, _minor, _patch) => return None,
