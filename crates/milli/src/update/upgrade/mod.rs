@@ -37,6 +37,7 @@ const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
     &Latest_V1_15_To_V1_16_0 {},
     &ToTargetNoOp { target: (1, 18, 0) },
     &ToTargetNoOp { target: (1, 19, 0) },
+    &ToTargetNoOp { target: (1, 20, 0) },
     // This is the last upgrade function, it will be called when the index is up to date.
     // any other upgrade function should be added before this one.
     &ToCurrentNoOp {},
@@ -67,6 +68,7 @@ const fn start(from: (u32, u32, u32)) -> Option<usize> {
         (1, 16, _) | (1, 17, _) => function_index!(7),
         (1, 18, _) => function_index!(8),
         (1, 19, _) => function_index!(9),
+        (1, 20, _) => function_index!(10),
         // We deliberately don't add a placeholder with (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) here to force manually
         // considering dumpless upgrade.
         (_major, _minor, _patch) => return None,

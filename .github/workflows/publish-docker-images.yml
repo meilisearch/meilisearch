@@ -19,7 +19,7 @@ jobs:
     permissions:
       id-token: write # This is needed to use Cosign in keyless mode
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       # If we are running a cron or manual job ('schedule' or 'workflow_dispatch' event), it means we are publishing the `nightly` tag, so not considered stable.
       # If we have pushed a tag, and the tag has the v<nmumber>.<number>.<number> format, it means we are publishing an official release, so considered stable.
