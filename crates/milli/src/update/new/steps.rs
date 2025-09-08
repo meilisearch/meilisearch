@@ -12,11 +12,13 @@ make_enum_progress! {
         MergingWordCaches,
         MergingWordProximity,
         WritingGeoPoints,
+        WritingGeoJson,
         WaitingForDatabaseWrites,
         WaitingForExtractors,
         WritingEmbeddingsToDatabase,
         PostProcessingFacets,
         PostProcessingWords,
+        BuildingGeoJson,
         Finalizing,
     }
 }

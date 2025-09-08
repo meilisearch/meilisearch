@@ -16,7 +16,7 @@ use crate::update::settings::InnerIndexSettings;
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
 use crate::vector::{ArroyWrapper, Embedder, Embeddings, RuntimeEmbedders};
-use crate::{Error, Index, InternalError, Result, UserError};
+use crate::{DocumentId, Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
     mut writer_receiver: WriterBbqueueReceiver<'_>,
@@ -71,6 +71,14 @@ pub fn write_to_db(
                     arroy_writers.get(&embedder_id).expect("requested a missing embedder");
                 let embedding = large_vector.read_embedding(*dimensions);
                 writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
+            }
+            ReceiverAction::LargeGeoJson(LargeGeoJson { docid, geojson }) => {
+                // It cannot be a deletion because it's large. Deletions are always small
+                let geojson: &[u8] = &geojson;
+                index
+                    .cellulite
+                    .add_raw_zerometry(wtxn, docid, geojson)
+                    .map_err(InternalError::CelluliteError)?;
             }
         }
 
@@ -264,6 +272,19 @@ pub fn write_from_bbqueue(
                     }
                     writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
                 }
+            }
+            EntryHeader::CelluliteItem(docid) => {
+                let frame = frame_with_header.frame();
+                let skip = EntryHeader::variant_size() + std::mem::size_of::<DocumentId>();
+                let geojson = &frame[skip..];
+
+                index
+                    .cellulite
+                    .add_raw_zerometry(wtxn, docid, geojson)
+                    .map_err(InternalError::CelluliteError)?;
+            }
+            EntryHeader::CelluliteRemove(docid) => {
+                index.cellulite.delete(wtxn, docid).map_err(InternalError::CelluliteError)?;
             }
         }
     }
