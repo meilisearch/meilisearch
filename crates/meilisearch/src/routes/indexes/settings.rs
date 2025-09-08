@@ -790,7 +790,7 @@ fn validate_settings(
     }
 
     if let Setting::Set(_) = &settings.vector_store {
-        features.check_vector_store_setting("setting `vectorStore`  in the index settings")?;
+        features.check_vector_store_setting("setting `vectorStore` in the index settings")?;
     }
 
     Ok(settings.validate()?)
