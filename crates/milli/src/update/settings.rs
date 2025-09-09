@@ -26,13 +26,15 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::progress::{EmbedderStats, Progress};
+use crate::progress::{EmbedderStats, Progress, VariableNameStep};
 use crate::prompt::{default_max_bytes, default_template_text, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::reindex;
+use crate::update::new::steps::SettingsIndexerStep;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
+use crate::vector::embedder::{openai, rest};
 use crate::vector::json_template::JsonTemplate;
 use crate::vector::settings::{
     EmbedderAction, EmbedderSource, EmbeddingSettings, EmbeddingValidationContext, NestingContext,
@@ -40,6 +42,7 @@ use crate::vector::settings::{
 };
 use crate::vector::{
     Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
+    VectorStoreBackend,
 };
 use crate::{
     ChannelCongestion, FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result,
@@ -198,6 +201,7 @@ pub struct Settings<'a, 't, 'i> {
     prefix_search: Setting<PrefixSearch>,
     facet_search: Setting<bool>,
     chat: Setting<ChatSettings>,
+    vector_store: Setting<VectorStoreBackend>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -237,6 +241,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
             indexer_config,
         }
     }
@@ -473,6 +478,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_chat(&mut self) {
         self.chat = Setting::Reset;
+    }
+
+    pub fn set_vector_store(&mut self, value: VectorStoreBackend) {
+        self.vector_store = Setting::Set(value);
+    }
+
+    pub fn reset_vector_store(&mut self) {
+        self.vector_store = Setting::Reset;
     }
 
     #[tracing::instrument(
@@ -1416,7 +1429,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    pub fn legacy_execute<FP, FA>(
+    fn legacy_execute<FP, FA>(
         mut self,
         progress_callback: FP,
         should_abort: FA,
@@ -1485,6 +1498,70 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
+    fn execute_vector_backend<'indexer, MSP>(
+        &mut self,
+        must_stop_processing: &'indexer MSP,
+        progress: &'indexer Progress,
+    ) -> Result<()>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        let old_backend = self.index.get_vector_store(self.wtxn)?.unwrap_or_default();
+
+        let new_backend = match self.vector_store {
+            Setting::Set(new_backend) => {
+                self.index.put_vector_store(self.wtxn, new_backend)?;
+                new_backend
+            }
+            Setting::Reset => {
+                self.index.delete_vector_store(self.wtxn)?;
+                VectorStoreBackend::default()
+            }
+            Setting::NotSet => return Ok(()),
+        };
+
+        if old_backend == new_backend {
+            return Ok(());
+        }
+
+        let embedders = self.index.embedding_configs();
+        let embedding_configs = embedders.embedding_configs(self.wtxn)?;
+        enum VectorStoreBackendChangeIndex {}
+        let embedder_count = embedding_configs.len();
+
+        let rtxn = self.index.read_txn()?;
+
+        for (i, config) in embedding_configs.into_iter().enumerate() {
+            if must_stop_processing() {
+                return Err(crate::InternalError::AbortedIndexation.into());
+            }
+            let embedder_name = &config.name;
+            progress.update_progress(VariableNameStep::<VectorStoreBackendChangeIndex>::new(
+                format!("Changing vector store backend for embedder `{embedder_name}`"),
+                i as u32,
+                embedder_count as u32,
+            ));
+            let quantized = config.config.quantized();
+            let embedder_id = embedders.embedder_id(self.wtxn, &config.name)?.unwrap();
+            let vector_store = crate::vector::VectorStore::new(
+                old_backend,
+                self.index.vector_store,
+                embedder_id,
+                quantized,
+            );
+
+            vector_store.change_backend(
+                &rtxn,
+                self.wtxn,
+                progress.clone(),
+                must_stop_processing,
+                self.indexer_config.max_memory,
+            )?;
+        }
+
+        Ok(())
+    }
+
     pub fn execute<'indexer, MSP>(
         mut self,
         must_stop_processing: &'indexer MSP,
@@ -1494,8 +1571,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     where
         MSP: Fn() -> bool + Sync,
     {
+        progress.update_progress(SettingsIndexerStep::ChangingVectorStore);
+        // execute any pending vector store backend change
+        self.execute_vector_backend(must_stop_processing, progress)?;
+
         // force the old indexer if the environment says so
         if self.indexer_config.experimental_no_edition_2024_for_settings {
+            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
             return self
                 .legacy_execute(
                     |indexing_step| tracing::debug!(update = ?indexing_step),
@@ -1535,11 +1617,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             facet_search: Setting::NotSet,
             disable_on_numbers: Setting::NotSet,
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
             wtxn: _,
             index: _,
             indexer_config: _,
         } = &self
         {
+            progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
+
             self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
             let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
@@ -1578,6 +1663,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 Ok(None)
             }
         } else {
+            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
+
             self.legacy_execute(
                 |indexing_step| tracing::debug!(update = ?indexing_step),
                 must_stop_processing,
@@ -2208,39 +2295,29 @@ pub fn validate_embedding_settings(
     if let Some(request) = request.as_ref().set() {
         let request = match with_fragments {
             WithFragments::Yes { indexing_fragments, search_fragments } => {
-                crate::vector::rest::RequestData::new(
-                    request.to_owned(),
-                    indexing_fragments,
-                    search_fragments,
-                )
-                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+                rest::RequestData::new(request.to_owned(), indexing_fragments, search_fragments)
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
             }
-            WithFragments::No => crate::vector::rest::RequestData::new(
-                request.to_owned(),
-                Default::default(),
-                Default::default(),
-            )
-            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into())),
+            WithFragments::No => {
+                rest::RequestData::new(request.to_owned(), Default::default(), Default::default())
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+            }
             WithFragments::Maybe => {
                 let mut indexing_fragments = BTreeMap::new();
                 indexing_fragments.insert("test".to_string(), serde_json::json!("test"));
-                crate::vector::rest::RequestData::new(
-                    request.to_owned(),
-                    indexing_fragments,
-                    Default::default(),
-                )
-                .or_else(|_| {
-                    crate::vector::rest::RequestData::new(
-                        request.to_owned(),
-                        Default::default(),
-                        Default::default(),
-                    )
-                })
-                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+                rest::RequestData::new(request.to_owned(), indexing_fragments, Default::default())
+                    .or_else(|_| {
+                        rest::RequestData::new(
+                            request.to_owned(),
+                            Default::default(),
+                            Default::default(),
+                        )
+                    })
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
             }
         }?;
         if let Some(response) = response.as_ref().set() {
-            crate::vector::rest::Response::new(response.to_owned(), &request)
+            rest::Response::new(response.to_owned(), &request)
                 .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
         }
     }
@@ -2293,11 +2370,12 @@ pub fn validate_embedding_settings(
     match inferred_source {
         EmbedderSource::OpenAi => {
             if let Setting::Set(model) = &model {
-                let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
-                    .ok_or(crate::error::UserError::InvalidOpenAiModel {
+                let model = openai::EmbeddingModel::from_name(model.as_str()).ok_or(
+                    crate::error::UserError::InvalidOpenAiModel {
                         embedder_name: name.to_owned(),
                         model: model.clone(),
-                    })?;
+                    },
+                )?;
                 if let Setting::Set(dimensions) = dimensions {
                     if !model.supports_overriding_dimensions()
                         && dimensions != model.default_dimensions()

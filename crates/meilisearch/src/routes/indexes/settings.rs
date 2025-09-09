@@ -520,6 +520,17 @@ make_setting_routes!(
         camelcase_attr: "chat",
         analytics: ChatAnalytics
     },
+    {
+        route: "/vector-store",
+        update_verb: patch,
+        value_type: meilisearch_types::milli::vector::VectorStoreBackend,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsVectorStore,
+        >,
+        attr: vector_store,
+        camelcase_attr: "vectorStore",
+        analytics: VectorStoreAnalytics
+    },
 );
 
 #[utoipa::path(
@@ -610,6 +621,7 @@ pub async fn update_all(
             facet_search: FacetSearchAnalytics::new(new_settings.facet_search.as_ref().set()),
             prefix_search: PrefixSearchAnalytics::new(new_settings.prefix_search.as_ref().set()),
             chat: ChatAnalytics::new(new_settings.chat.as_ref().set()),
+            vector_store: VectorStoreAnalytics::new(new_settings.vector_store.as_ref().set()),
         },
         &req,
     );
@@ -665,8 +677,15 @@ pub async fn get_all(
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
     let mut new_settings = settings(&index, &rtxn, SecretPolicy::HideSecrets)?;
-    if index_scheduler.features().check_chat_completions("showing index `chat` settings").is_err() {
+
+    let features = index_scheduler.features();
+
+    if features.check_chat_completions("showing index `chat` settings").is_err() {
         new_settings.chat = Setting::NotSet;
+    }
+
+    if features.check_vector_store_setting("showing index `vectorStore` settings").is_err() {
+        new_settings.vector_store = Setting::NotSet;
     }
 
     debug!(returns = ?new_settings, "Get all settings");
@@ -768,6 +787,10 @@ fn validate_settings(
 
     if let Setting::Set(_chat) = &settings.chat {
         features.check_chat_completions("setting `chat` in the index settings")?;
+    }
+
+    if let Setting::Set(_) = &settings.vector_store {
+        features.check_vector_store_setting("setting `vectorStore` in the index settings")?;
     }
 
     Ok(settings.validate()?)

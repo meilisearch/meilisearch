@@ -27,9 +27,9 @@ impl UpgradeIndex for Latest_V1_13_To_Latest_V1_14 {
         let rtxn = index.read_txn()?;
         arroy::upgrade::from_0_5_to_0_6::<Cosine>(
             &rtxn,
-            index.vector_arroy.remap_data_type(),
+            index.vector_store.remap_types(),
             wtxn,
-            index.vector_arroy.remap_data_type(),
+            index.vector_store.remap_types(),
         )?;
 
         Ok(false)

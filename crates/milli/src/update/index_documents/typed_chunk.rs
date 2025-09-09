@@ -27,7 +27,7 @@ use crate::update::index_documents::helpers::{
 };
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::db::{EmbeddingStatusDelta, IndexEmbeddingConfig};
-use crate::vector::ArroyWrapper;
+use crate::vector::VectorStore;
 use crate::{
     lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
     Result, SerializationError, U8StrStrCodec,
@@ -619,6 +619,7 @@ pub(crate) fn write_typed_chunk_into_index(
             let _entered = span.enter();
 
             let embedders = index.embedding_configs();
+            let backend = index.get_vector_store(wtxn)?.unwrap_or_default();
 
             let mut remove_vectors_builder = MergerBuilder::new(KeepFirst);
             let mut manual_vectors_builder = MergerBuilder::new(KeepFirst);
@@ -677,7 +678,8 @@ pub(crate) fn write_typed_chunk_into_index(
                 .get(&embedder_name)
                 .is_some_and(|conf| conf.is_quantized);
             // FIXME: allow customizing distance
-            let writer = ArroyWrapper::new(index.vector_arroy, infos.embedder_id, binary_quantized);
+            let writer =
+                VectorStore::new(backend, index.vector_store, infos.embedder_id, binary_quantized);
 
             // remove vectors for docids we want them removed
             let merger = remove_vectors_builder.build();

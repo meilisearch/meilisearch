@@ -396,6 +396,7 @@ InvalidDocumentEditionContext                  , InvalidRequest       , BAD_REQU
 InvalidDocumentEditionFunctionFilter           , InvalidRequest       , BAD_REQUEST ;
 EditDocumentsByFunctionError                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsIndexChat                       , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsVectorStore                     , InvalidRequest       , BAD_REQUEST ;
 // Export
 InvalidExportUrl                               , InvalidRequest       , BAD_REQUEST ;
 InvalidExportApiKey                            , InvalidRequest       , BAD_REQUEST ;

@@ -68,7 +68,7 @@ pub fn v1_10_to_v1_11(
             )
         })?;
         let index_read_database =
-            try_opening_poly_database(&index_env, &index_rtxn, db_name::VECTOR_ARROY)
+            try_opening_poly_database(&index_env, &index_rtxn, db_name::VECTOR_STORE)
                 .with_context(|| format!("while updating date format for index `{uid}`"))?;
 
         let mut index_wtxn = index_env.write_txn().with_context(|| {
@@ -79,7 +79,7 @@ pub fn v1_10_to_v1_11(
         })?;
 
         let index_write_database =
-            try_opening_poly_database(&index_env, &index_wtxn, db_name::VECTOR_ARROY)
+            try_opening_poly_database(&index_env, &index_wtxn, db_name::VECTOR_STORE)
                 .with_context(|| format!("while updating date format for index `{uid}`"))?;
 
         meilisearch_types::milli::arroy::upgrade::cosine_from_0_4_to_0_5(

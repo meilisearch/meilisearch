@@ -3,15 +3,16 @@ mod v1_13;
 mod v1_14;
 mod v1_15;
 mod v1_16;
+
 use heed::RwTxn;
 use v1_12::{V1_12_3_To_V1_13_0, V1_12_To_V1_12_3};
 use v1_13::{V1_13_0_To_V1_13_1, V1_13_1_To_Latest_V1_13};
 use v1_14::Latest_V1_13_To_Latest_V1_14;
 use v1_15::Latest_V1_14_To_Latest_V1_15;
+use v1_16::Latest_V1_15_To_V1_16_0;
 
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use crate::progress::{Progress, VariableNameStep};
-use crate::update::upgrade::v1_16::Latest_V1_15_To_V1_16_0;
 use crate::{Index, InternalError, Result};
 
 trait UpgradeIndex {
@@ -34,6 +35,9 @@ const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
     &Latest_V1_13_To_Latest_V1_14 {},
     &Latest_V1_14_To_Latest_V1_15 {},
     &Latest_V1_15_To_V1_16_0 {},
+    &ToTargetNoOp { target: (1, 18, 0) },
+    &ToTargetNoOp { target: (1, 19, 0) },
+    &ToTargetNoOp { target: (1, 20, 0) },
     // This is the last upgrade function, it will be called when the index is up to date.
     // any other upgrade function should be added before this one.
     &ToCurrentNoOp {},
@@ -61,11 +65,10 @@ const fn start(from: (u32, u32, u32)) -> Option<usize> {
         (1, 14, _) => function_index!(5),
         // We must handle the current version in the match because in case of a failure some index may have been upgraded but not other.
         (1, 15, _) => function_index!(6),
-        (1, 16, _) => function_index!(7),
-        (1, 17, _) => function_index!(7),
-        (1, 18, _) => function_index!(7),
-        (1, 19, _) => function_index!(7),
-        (1, 20, _) => function_index!(7),
+        (1, 16, _) | (1, 17, _) => function_index!(7),
+        (1, 18, _) => function_index!(8),
+        (1, 19, _) => function_index!(9),
+        (1, 20, _) => function_index!(10),
         // We deliberately don't add a placeholder with (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) here to force manually
         // considering dumpless upgrade.
         (_major, _minor, _patch) => return None,
@@ -146,5 +149,27 @@ impl UpgradeIndex for ToCurrentNoOp {
 
     fn target_version(&self) -> (u32, u32, u32) {
         (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH)
+    }
+}
+
+/// Perform no operation during the upgrade except changing to the specified target version.
+#[allow(non_camel_case_types)]
+struct ToTargetNoOp {
+    pub target: (u32, u32, u32),
+}
+
+impl UpgradeIndex for ToTargetNoOp {
+    fn upgrade(
+        &self,
+        _wtxn: &mut RwTxn,
+        _index: &Index,
+        _original: (u32, u32, u32),
+        _progress: Progress,
+    ) -> Result<bool> {
+        Ok(false)
+    }
+
+    fn target_version(&self) -> (u32, u32, u32) {
+        self.target
     }
 }

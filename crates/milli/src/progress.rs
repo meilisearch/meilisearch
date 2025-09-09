@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use enum_iterator::Sequence;
+use enum_iterator::Sequence as _;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::Serialize;
@@ -278,6 +278,30 @@ impl<U: Send + Sync + 'static> Step for VariableNameStep<U> {
     }
 }
 
+// Integration with steppe
+
+impl steppe::Progress for Progress {
+    fn update(&self, sub_progress: impl steppe::Step) {
+        self.update_progress(Compat(sub_progress));
+    }
+}
+
+struct Compat<T: steppe::Step>(T);
+
+impl<T: steppe::Step> Step for Compat<T> {
+    fn name(&self) -> Cow<'static, str> {
+        self.0.name()
+    }
+
+    fn current(&self) -> u32 {
+        self.0.current().try_into().unwrap_or(u32::MAX)
+    }
+
+    fn total(&self) -> u32 {
+        self.0.total().try_into().unwrap_or(u32::MAX)
+    }
+}
+
 impl Step for arroy::MainStep {
     fn name(&self) -> Cow<'static, str> {
         match self {
@@ -292,6 +316,7 @@ impl Step for arroy::MainStep {
             arroy::MainStep::WritingNodesToDatabase => "writing nodes to database",
             arroy::MainStep::DeleteExtraneousTrees => "delete extraneous trees",
             arroy::MainStep::WriteTheMetadata => "write the metadata",
+            arroy::MainStep::ConvertingHannoyToArroy => "converting hannoy to arroy",
         }
         .into()
     }

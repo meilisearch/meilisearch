@@ -205,6 +205,7 @@ struct Infos {
     experimental_no_snapshot_compaction: bool,
     experimental_no_edition_2024_for_dumps: bool,
     experimental_no_edition_2024_for_settings: bool,
+    experimental_vector_store_setting: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -307,6 +308,7 @@ impl Infos {
             composite_embedders,
             chat_completions,
             multimodal,
+            vector_store_setting,
         } = features;
 
         // We're going to override every sensible information.
@@ -332,6 +334,7 @@ impl Infos {
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
             experimental_no_edition_2024_for_dumps,
+            experimental_vector_store_setting: vector_store_setting,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != PathBuf::from("./data.ms"),
             import_dump: import_dump.is_some(),

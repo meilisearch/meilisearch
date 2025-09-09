@@ -2,7 +2,8 @@ use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
 use serde_json::Value;
 
-use super::{EmbedError, Embedder, Embedding};
+use super::error::EmbedError;
+use super::{Embedder, Embedding};
 use crate::progress::EmbedderStats;
 use crate::{DocumentId, Result, ThreadPoolNoAbort};
 type ExtractorId = u8;

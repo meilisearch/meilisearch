@@ -475,7 +475,7 @@ impl<'doc> OnEmbed<'doc> for OnEmbeddingDocumentUpdates<'doc, '_> {
     }
     fn process_embedding_error(
         &mut self,
-        error: crate::vector::hf::EmbedError,
+        error: crate::vector::error::EmbedError,
         embedder_name: &'doc str,
         unused_vectors_distribution: &UnusedVectorsDistributionBump,
         metadata: BVec<'doc, Metadata<'doc>>,

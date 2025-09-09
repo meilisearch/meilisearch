@@ -6,10 +6,10 @@ use hf_hub::api::sync::ApiError;
 use itertools::Itertools as _;
 
 use super::parsed_vectors::ParsedVectorsDiff;
-use super::rest::ConfigurationSource;
-use super::MAX_COMPOSITE_DISTANCE;
 use crate::error::FaultSource;
 use crate::update::new::vector_document::VectorDocument;
+use crate::vector::embedder::composite::MAX_COMPOSITE_DISTANCE;
+use crate::vector::embedder::rest::ConfigurationSource;
 use crate::{FieldDistribution, PanicCatched};
 
 #[derive(Debug, thiserror::Error)]
