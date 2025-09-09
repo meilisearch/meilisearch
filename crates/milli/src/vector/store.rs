@@ -1056,6 +1056,7 @@ impl VectorStore {
             let dimensions = arroy_reader.dimensions();
             let hannoy_writer: hannoy::Writer<HD> =
                 hannoy::Writer::new(self.database.remap_types(), index, dimensions);
+            // Since the bq mode of arroy and hannoy are not compatible, we have to clear and re-insert everything
             hannoy_writer.clear(hannoy_wtxn)?;
             for entry in arroy_reader.iter(arroy_rtxn)? {
                 let (item, mut vector) = entry?;
@@ -1093,6 +1094,7 @@ impl VectorStore {
             let dimensions = hannoy_reader.dimensions();
             let arroy_writer: arroy::Writer<AD> =
                 arroy::Writer::new(self.database.remap_types(), index, dimensions);
+            // Since the bq mode of arroy and hannoy are not compatible, we have to clear and re-insert everything
             arroy_writer.clear(arroy_wtxn)?;
             for entry in hannoy_reader.iter(hannoy_rtxn)? {
                 let (item, mut vector) = entry?;
