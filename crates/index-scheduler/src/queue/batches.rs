@@ -275,10 +275,10 @@ impl BatchQueue {
     pub(crate) fn get_existing_batches(
         &self,
         rtxn: &RoTxn,
-        tasks: impl IntoIterator<Item = BatchId>,
+        batches: impl IntoIterator<Item = BatchId>,
         processing: &ProcessingTasks,
     ) -> Result<Vec<Batch>> {
-        tasks
+        batches
             .into_iter()
             .map(|batch_id| {
                 if Some(batch_id) == processing.batch.as_ref().map(|batch| batch.uid) {
@@ -295,7 +295,7 @@ impl BatchQueue {
                     Ok(batch)
                 } else {
                     self.get_batch(rtxn, batch_id)
-                        .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                        .and_then(|batch| batch.ok_or(Error::CorruptedTaskQueue))
                 }
             })
             .collect::<Result<_>>()

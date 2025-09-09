@@ -88,11 +88,12 @@ impl Progress {
     }
 
     pub fn accumulated_durations(&self) -> IndexMap<String, String> {
-        let mut inner = self.steps.write().unwrap();
-        let InnerProgress { steps, durations, .. } = &mut *inner;
+        let inner = self.steps.read().unwrap();
+        let InnerProgress { steps, durations, .. } = &*inner;
+        let mut durations = durations.clone();
 
         let now = Instant::now();
-        push_steps_durations(steps, durations, now, 0);
+        push_steps_durations(steps, &mut durations, now, 0);
 
         durations.drain(..).map(|(name, duration)| (name, format!("{duration:.2?}"))).collect()
     }
