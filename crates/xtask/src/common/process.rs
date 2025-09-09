@@ -1,18 +1,18 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{bail, Context as _};
-use tokio::process::Command;
+use tokio::process::Command as TokioCommand;
 use tokio::time;
 
-use super::assets::Asset;
-use super::client::Client;
-use super::workload::Workload;
+use crate::common::client::Client;
+use crate::common::command::{health_command, run as run_command};
 
-pub async fn kill(mut meilisearch: tokio::process::Child) {
+pub async fn kill_meili(mut meilisearch: tokio::process::Child) {
     let Some(id) = meilisearch.id() else { return };
 
-    match Command::new("kill").args(["--signal=TERM", &id.to_string()]).spawn() {
+    match TokioCommand::new("kill").args(["--signal=TERM", &id.to_string()]).spawn() {
         Ok(mut cmd) => {
             let Err(error) = cmd.wait().await else { return };
             tracing::warn!(
@@ -49,8 +49,8 @@ pub async fn kill(mut meilisearch: tokio::process::Child) {
 }
 
 #[tracing::instrument]
-pub async fn build() -> anyhow::Result<()> {
-    let mut command = Command::new("cargo");
+async fn build() -> anyhow::Result<()> {
+    let mut command = TokioCommand::new("cargo");
     command.arg("build").arg("--release").arg("-p").arg("meilisearch");
 
     command.kill_on_drop(true);
@@ -64,29 +64,61 @@ pub async fn build() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tracing::instrument(skip(client, master_key, workload), fields(workload = workload.name))]
-pub async fn start(
+#[tracing::instrument(skip(client, master_key), fields(workload = _workload))]
+pub async fn start_meili(
     client: &Client,
     master_key: Option<&str>,
-    workload: &Workload,
-    asset_folder: &str,
-    mut command: Command,
+    extra_cli_args: &[String],
+    _workload: &str,
+    binary_path: Option<&Path>,
 ) -> anyhow::Result<tokio::process::Child> {
+    let mut command = match binary_path {
+        Some(binary_path) => tokio::process::Command::new(binary_path),
+        None => {
+            build().await?;
+            let mut command = tokio::process::Command::new("cargo");
+            command
+                .arg("run")
+                .arg("--release")
+                .arg("-p")
+                .arg("meilisearch")
+                .arg("--bin")
+                .arg("meilisearch")
+                .arg("--");
+            command
+        }
+    };
+
     command.arg("--db-path").arg("./_xtask_benchmark.ms");
     if let Some(master_key) = master_key {
         command.arg("--master-key").arg(master_key);
     }
     command.arg("--experimental-enable-logs-route");
 
-    for extra_arg in workload.extra_cli_args.iter() {
+    for extra_arg in extra_cli_args.iter() {
         command.arg(extra_arg);
     }
 
     command.kill_on_drop(true);
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Some(binary_path) = binary_path {
+            let mut perms = tokio::fs::metadata(binary_path)
+                .await
+                .with_context(|| format!("could not get metadata for {binary_path:?}"))?
+                .permissions();
+            perms.set_mode(perms.mode() | 0o111);
+            tokio::fs::set_permissions(binary_path, perms)
+                .await
+                .with_context(|| format!("could not set permissions for {binary_path:?}"))?;
+        }
+    }
+
     let mut meilisearch = command.spawn().context("Error starting Meilisearch")?;
 
-    wait_for_health(client, &mut meilisearch, &workload.assets, asset_folder).await?;
+    wait_for_health(client, &mut meilisearch).await?;
 
     Ok(meilisearch)
 }
@@ -94,11 +126,11 @@ pub async fn start(
 async fn wait_for_health(
     client: &Client,
     meilisearch: &mut tokio::process::Child,
-    assets: &BTreeMap<String, Asset>,
-    asset_folder: &str,
 ) -> anyhow::Result<()> {
     for i in 0..100 {
-        let res = super::command::run(client.clone(), health_command(), assets, asset_folder).await;
+        let res =
+            run_command(client, &health_command(), &BTreeMap::new(), HashMap::new(), "", false)
+                .await;
         if res.is_ok() {
             // check that this is actually the current Meilisearch instance that answered us
             if let Some(exit_code) =
@@ -122,15 +154,6 @@ async fn wait_for_health(
     bail!("meilisearch is not responding")
 }
 
-fn health_command() -> super::command::Command {
-    super::command::Command {
-        route: "/health".into(),
-        method: super::client::Method::Get,
-        body: Default::default(),
-        synchronous: super::command::SyncMode::WaitForResponse,
-    }
-}
-
-pub fn delete_db() {
-    let _ = std::fs::remove_dir_all("./_xtask_benchmark.ms");
+pub async fn delete_db() {
+    let _ = tokio::fs::remove_dir_all("./_xtask_benchmark.ms").await;
 }
