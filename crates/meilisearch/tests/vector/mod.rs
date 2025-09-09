@@ -3,7 +3,7 @@ mod fragments;
 #[cfg(feature = "test-ollama")]
 mod ollama;
 mod openai;
-mod rest;
+pub mod rest;
 mod settings;
 
 use std::str::FromStr;
@@ -14,11 +14,6 @@ use meilisearch::option::MaxThreads;
 use crate::common::index::Index;
 use crate::common::{default_settings, GetAllDocumentsOptions, Server};
 use crate::json;
-pub use rest::create_mock;
-
-pub async fn get_server_vector() -> Server {
-    Server::new().await
-}
 
 #[actix_rt::test]
 async fn add_remove_user_provided() {

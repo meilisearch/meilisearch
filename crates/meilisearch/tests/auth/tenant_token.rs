@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ::time::format_description::well_known::Rfc3339;
 use maplit::hashmap;
@@ -467,6 +467,7 @@ async fn error_access_forbidden_routes() {
     server.use_api_key(&web_token);
 
     for ((method, route), actions) in AUTHORIZATIONS.iter() {
+        let actions = actions.iter().flat_map(|s| s.iter()).copied().collect::<HashSet<_>>();
         if !actions.contains("search") {
             let (mut response, code) = server.dummy_request(method, route).await;
             response["message"] = serde_json::json!(null);

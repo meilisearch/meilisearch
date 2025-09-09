@@ -61,7 +61,9 @@ use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
 use nom::sequence::{delimited, preceded, terminated, tuple};
 use nom::Finish;
+pub use nom::Slice;
 use nom_locate::LocatedSpan;
+pub use value::parse_dotted_value_part;
 pub(crate) use value::parse_value;
 use value::word_exact;
 

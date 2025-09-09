@@ -80,8 +80,8 @@ pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, 
     }
 }
 
-/// vector_value          = ( non_dot_word | singleQuoted | doubleQuoted)
-pub fn parse_vector_value(input: Span) -> IResult<Token> {
+/// dotted_value_part          = ( non_dot_word | singleQuoted | doubleQuoted)
+pub fn parse_dotted_value_part(input: Span) -> IResult<Token> {
     pub fn non_dot_word(input: Span) -> IResult<Token> {
         let (input, word) = take_while1(|c| is_value_component(c) && c != '.')(input)?;
         Ok((input, word.into()))
@@ -113,8 +113,8 @@ pub fn parse_vector_value(input: Span) -> IResult<Token> {
     }
 }
 
-pub fn parse_vector_value_cut<'a>(input: Span<'a>, kind: ErrorKind<'a>) -> IResult<'a, Token<'a>> {
-    parse_vector_value(input).map_err(|e| match e {
+pub fn parse_dotted_value_cut<'a>(input: Span<'a>, kind: ErrorKind<'a>) -> IResult<'a, Token<'a>> {
+    parse_dotted_value_part(input).map_err(|e| match e {
         nom::Err::Failure(e) => match e.kind() {
             ErrorKind::Char(c) if *c == '"' || *c == '\'' => {
                 crate::Error::failure_from_kind(input, ErrorKind::VectorFilterInvalidQuotes)

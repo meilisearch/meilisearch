@@ -817,7 +817,45 @@ pub enum EmbedderOptions {
 }
 
 impl EmbedderOptions {
-    pub fn fragment(&self, name: &str) -> Option<&serde_json::Value> {
+    pub fn has_fragments(&self) -> bool {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => false,
+            EmbedderOptions::Rest(embedder_options) => {
+                !embedder_options.indexing_fragments.is_empty()
+            }
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.index {
+                    !embedder_options.indexing_fragments.is_empty()
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
+    pub fn indexing_fragments(&self) -> Vec<String> {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => vec![],
+            EmbedderOptions::Rest(embedder_options) => {
+                embedder_options.indexing_fragments.keys().cloned().collect()
+            }
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.index {
+                    embedder_options.indexing_fragments.keys().cloned().collect()
+                } else {
+                    vec![]
+                }
+            }
+        }
+    }
+
+    pub fn indexing_fragment(&self, name: &str) -> Option<&serde_json::Value> {
         match &self {
             EmbedderOptions::HuggingFace(_)
             | EmbedderOptions::OpenAi(_)
@@ -836,20 +874,37 @@ impl EmbedderOptions {
         }
     }
 
-    pub fn has_fragments(&self) -> bool {
+    pub fn search_fragments(&self) -> Vec<String> {
         match &self {
             EmbedderOptions::HuggingFace(_)
             | EmbedderOptions::OpenAi(_)
             | EmbedderOptions::Ollama(_)
-            | EmbedderOptions::UserProvided(_) => false,
+            | EmbedderOptions::UserProvided(_) => vec![],
             EmbedderOptions::Rest(embedder_options) => {
-                !embedder_options.indexing_fragments.is_empty()
+                embedder_options.search_fragments.keys().cloned().collect()
             }
             EmbedderOptions::Composite(embedder_options) => {
-                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.index {
-                    !embedder_options.indexing_fragments.is_empty()
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.search {
+                    embedder_options.search_fragments.keys().cloned().collect()
                 } else {
-                    false
+                    vec![]
+                }
+            }
+        }
+    }
+
+    pub fn search_fragment(&self, name: &str) -> Option<&serde_json::Value> {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => None,
+            EmbedderOptions::Rest(embedder_options) => embedder_options.search_fragments.get(name),
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.search {
+                    embedder_options.search_fragments.get(name)
+                } else {
+                    None
                 }
             }
         }

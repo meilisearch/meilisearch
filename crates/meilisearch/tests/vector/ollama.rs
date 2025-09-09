@@ -4,9 +4,8 @@ use std::env::VarError;
 
 use meili_snap::{json_string, snapshot};
 
-use crate::common::{GetAllDocumentsOptions, Value};
+use crate::common::{GetAllDocumentsOptions, Server, Value};
 use crate::json;
-use crate::vector::get_server_vector;
 
 pub enum Endpoint {
     /// Deprecated, undocumented endpoint
@@ -92,7 +91,7 @@ async fn test_both_apis() {
         return;
     };
 
-    let server = get_server_vector().await;
+    let server = Server::new().await;
 
     let index = server.index("doggo");
 
