@@ -12,6 +12,12 @@ use crate::vector::settings::RemoveFragments;
 use crate::vector::EmbeddingConfig;
 use crate::{CboRoaringBitmapCodec, DocumentId, UserError};
 
+/// DB representation of an embedder configuration.
+///
+/// # Warning
+///
+/// This type is serialized in and deserialized from the DB, any modification should either go
+/// through dumpless upgrade or be backward-compatible
 #[derive(Debug, Deserialize, Serialize)]
 pub struct IndexEmbeddingConfig {
     pub name: String,

@@ -35,6 +35,11 @@ pub enum Embedder {
 }
 
 /// Configuration for an embedder.
+///
+/// # Warning
+///
+/// This type is serialized in and deserialized from the DB, any modification should either go
+/// through dumpless upgrade or be backward-compatible
 #[derive(Debug, Clone, Default, serde::Deserialize, serde::Serialize)]
 pub struct EmbeddingConfig {
     /// Options of the embedder, specific to each kind of embedder
@@ -53,6 +58,11 @@ impl EmbeddingConfig {
 }
 
 /// Options of an embedder, specific to each kind of embedder.
+///
+/// # Warning
+///
+/// This type is serialized in and deserialized from the DB, any modification should either go
+/// through dumpless upgrade or be backward-compatible
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub enum EmbedderOptions {
     HuggingFace(hf::EmbedderOptions),

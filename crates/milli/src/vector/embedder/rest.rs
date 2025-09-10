@@ -133,6 +133,12 @@ impl RequestData {
     }
 }
 
+/// Inert embedder options for a rest embedder.
+///
+/// # Warning
+///
+/// This type is serialized in and deserialized from the DB, any modification should either go
+/// through dumpless upgrade or be backward-compatible
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct EmbedderOptions {
     pub api_key: Option<String>,
