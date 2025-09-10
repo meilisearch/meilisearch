@@ -140,7 +140,9 @@ pub struct EmbedderOptions {
     pub dimensions: Option<usize>,
     pub url: String,
     pub request: Value,
+    #[serde(default)] // backward compatibility
     pub search_fragments: BTreeMap<String, Value>,
+    #[serde(default)] // backward compatibility
     pub indexing_fragments: BTreeMap<String, Value>,
     pub response: Value,
     pub headers: BTreeMap<String, String>,
