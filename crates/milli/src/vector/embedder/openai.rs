@@ -13,6 +13,12 @@ use crate::vector::error::{EmbedError, EmbedErrorKind, NewEmbedderError};
 use crate::vector::{Embedding, REQUEST_PARALLELISM};
 use crate::ThreadPoolNoAbort;
 
+/// Inert embedder options for an openai embedder.
+///
+/// # Warning
+///
+/// This type is serialized in and deserialized from the DB, any modification should either go
+/// through dumpless upgrade or be backward-compatible
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct EmbedderOptions {
     pub url: Option<String>,

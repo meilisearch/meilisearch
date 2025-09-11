@@ -7,6 +7,12 @@ pub struct Embedder {
     distribution: Option<DistributionShift>,
 }
 
+/// Inert embedder options for a manual embedder.
+///
+/// # Warning
+///
+/// This type is serialized in and deserialized from the DB, any modification should either go
+/// through dumpless upgrade or be backward-compatible
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
 pub struct EmbedderOptions {
     pub dimensions: usize,
