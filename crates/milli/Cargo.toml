@@ -88,7 +88,7 @@ rhai = { version = "1.22.2", features = [
     "sync",
 ] }
 arroy = "0.6.3"
-hannoy = { version = "0.0.6", features = ["arroy"] }
+hannoy = { version = "0.0.7", features = ["arroy"] }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
