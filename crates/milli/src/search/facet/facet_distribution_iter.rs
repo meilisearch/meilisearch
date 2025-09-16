@@ -38,7 +38,7 @@ where
     let highest_level = get_highest_level(rtxn, db, field_id)?;
 
     if let Some(first_bound) = get_first_facet_value::<BytesRefCodec, _>(rtxn, db, field_id)? {
-        fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
+        let _ = fd.iterate(candidates, highest_level, first_bound, usize::MAX)?;
         Ok(())
     } else {
         Ok(())

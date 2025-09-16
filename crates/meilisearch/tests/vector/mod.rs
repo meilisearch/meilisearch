@@ -249,7 +249,7 @@ async fn user_provide_mismatched_embedding_dimension() {
     "###);
 }
 
-async fn generate_default_user_provided_documents(server: &Server) -> Index {
+async fn generate_default_user_provided_documents(server: &Server) -> Index<'_> {
     let index = server.index("doggo");
 
     let (response, code) = index

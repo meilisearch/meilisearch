@@ -219,7 +219,7 @@ struct SearchResultByQueryIterItem<'a> {
 
 fn merge_index_local_results(
     results_by_query: Vec<SearchResultByQuery<'_>>,
-) -> impl Iterator<Item = SearchResultByQueryIterItem> + '_ {
+) -> impl Iterator<Item = SearchResultByQueryIterItem<'_>> + '_ {
     itertools::kmerge_by(
         results_by_query.into_iter().map(SearchResultByQueryIter::new),
         |left: &SearchResultByQueryIterItem, right: &SearchResultByQueryIterItem| {

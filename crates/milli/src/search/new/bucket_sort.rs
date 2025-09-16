@@ -354,15 +354,14 @@ fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
             logger.add_to_results(&candidates);
             valid_docids.extend_from_slice(&candidates);
             valid_scores
-                .extend(std::iter::repeat(ranking_rule_scores.to_owned()).take(candidates.len()));
+                .extend(std::iter::repeat_n(ranking_rule_scores.to_owned(), candidates.len()));
         }
     } else {
         // if we have passed the offset already, add some of the documents (up to the limit)
         let candidates = candidates.iter().take(length - valid_docids.len()).collect::<Vec<u32>>();
         logger.add_to_results(&candidates);
         valid_docids.extend_from_slice(&candidates);
-        valid_scores
-            .extend(std::iter::repeat(ranking_rule_scores.to_owned()).take(candidates.len()));
+        valid_scores.extend(std::iter::repeat_n(ranking_rule_scores.to_owned(), candidates.len()));
     }
 
     *cur_offset += candidates.len() as usize;

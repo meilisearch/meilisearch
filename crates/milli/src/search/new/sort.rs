@@ -79,7 +79,7 @@ impl<'ctx, Query> Sort<'ctx, Query> {
             return Ok(false);
         };
 
-        Ok(!displayed_fields.iter().any(|&field| field == field_name))
+        Ok(!displayed_fields.contains(&field_name))
     }
 }
 

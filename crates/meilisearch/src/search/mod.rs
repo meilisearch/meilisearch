@@ -2080,7 +2080,7 @@ pub(crate) fn parse_filter(
     facets: &Value,
     filter_parsing_error_code: Code,
     features: RoFeatures,
-) -> Result<Option<Filter>, ResponseError> {
+) -> Result<Option<Filter<'_>>, ResponseError> {
     let filter = match facets {
         Value::String(expr) => Filter::from_str(expr).map_err(|e| e.into()),
         Value::Array(arr) => parse_filter_array(arr).map_err(|e| e.into()),
@@ -2117,7 +2117,7 @@ pub(crate) fn parse_filter(
     Ok(filter)
 }
 
-fn parse_filter_array(arr: &[Value]) -> Result<Option<Filter>, MeilisearchHttpError> {
+fn parse_filter_array(arr: &'_ [Value]) -> Result<Option<Filter<'_>>, MeilisearchHttpError> {
     let mut ands = Vec::new();
     for value in arr {
         match value {

@@ -12,6 +12,7 @@ use tokio::task::JoinError;
 use crate::routes::indexes::{PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER};
 
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::large_enum_variant)]
 pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
             .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", "))]

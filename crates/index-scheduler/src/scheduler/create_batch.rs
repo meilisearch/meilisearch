@@ -66,6 +66,7 @@ pub(crate) enum DocumentOperation {
 
 /// A [batch](Batch) that combines multiple tasks operating on an index.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum IndexOperation {
     DocumentOperation {
         index_uid: String,

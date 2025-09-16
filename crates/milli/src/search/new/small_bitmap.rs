@@ -401,7 +401,7 @@ impl Iterator for SmallBitmapInternalIter<'_> {
                     *cur &= *cur - 1;
                     Some(idx + *base)
                 } else if next.is_empty() {
-                    return None;
+                    None
                 } else {
                     *base += 64;
                     *cur = next[0];

@@ -19,6 +19,7 @@ use crate::ThreadPoolNoAbort;
 
 /// An embedder can be used to transform text into embeddings.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Embedder {
     /// An embedder based on running local models, fetched from the Hugging Face Hub.
     HuggingFace(hf::Embedder),
@@ -64,6 +65,7 @@ impl EmbeddingConfig {
 /// This type is serialized in and deserialized from the DB, any modification should either go
 /// through dumpless upgrade or be backward-compatible
 #[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum EmbedderOptions {
     HuggingFace(hf::EmbedderOptions),
     OpenAi(openai::EmbedderOptions),

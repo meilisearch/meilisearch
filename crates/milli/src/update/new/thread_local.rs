@@ -138,7 +138,7 @@ impl<T: MostlySend> ThreadLocal<T> {
         self.inner.get_or_default().as_ref()
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<T> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         IterMut(self.inner.iter_mut())
     }
 }
