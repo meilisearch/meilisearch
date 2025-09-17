@@ -78,7 +78,7 @@ pub enum ErrorKind<'a> {
     GeoRadiusArgumentCount(usize),
     GeoBoundingBox,
     GeoPolygon,
-    GeoPolygonTooFewPoints,
+    GeoPolygonNotEnoughPoints(usize),
     GeoCoordinatesNotPair(usize),
     MisusedGeoRadius,
     MisusedGeoBoundingBox,
@@ -213,8 +213,8 @@ impl Display for Error<'_> {
             ErrorKind::GeoPolygon => {
                 writeln!(f, "The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.")?
             }
-            ErrorKind::GeoPolygonTooFewPoints => {
-                writeln!(f, "The `_geoPolygon` filter expects at least 2 points")?;
+            ErrorKind::GeoPolygonNotEnoughPoints(n) => {
+                writeln!(f, "The `_geoPolygon` filter expects at least 3 points but only {n} were specified")?;
             }
             ErrorKind::GeoCoordinatesNotPair(number) => {
                 writeln!(f, "Was expecting 2 coordinates but instead found {number}.")?

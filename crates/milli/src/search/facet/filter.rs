@@ -699,12 +699,9 @@ impl<'a> Filter<'a> {
                 if index.is_geojson_filtering_enabled(rtxn)? {
                     let point = geo_types::Point::new(base_point[1], base_point[0]);
 
-                    let result = index
-                        .cellulite
-                        .in_circle(rtxn, point, radius, resolution)
-                        .map_err(InternalError::CelluliteError)?;
+                    let result = index.cellulite.in_circle(rtxn, point, radius, resolution)?;
 
-                    r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring
+                    r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring in meilisearch
                 }
 
                 match (r1, r2) {

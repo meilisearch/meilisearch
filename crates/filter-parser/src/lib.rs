@@ -465,7 +465,7 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
 /// geoPolygon     = "_geoPolygon([[" WS* float WS* "," WS* float WS* "],+])"
 /// If we parse `_geoPolygon` we MUST parse the rest of the expression.
 fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
-    // we want to allow space BEFORE the _geoBoundingBox but not after
+    // we want to allow space BEFORE the _geoPolygon but not after
 
     let (input, _) = tuple((multispace0, word_exact("_geoPolygon")))(input)?;
 
@@ -481,9 +481,12 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     )(input)
     .map_cut(ErrorKind::GeoPolygon)?;
 
-    if args.len() < 2 {
+    if args.len() < 3 {
         let context = args.last().and_then(|a| a.last()).unwrap_or(&input);
-        return Err(Error::failure_from_kind(*context, ErrorKind::GeoPolygonTooFewPoints));
+        return Err(Error::failure_from_kind(
+            *context,
+            ErrorKind::GeoPolygonNotEnoughPoints(args.len()),
+        ));
     }
 
     if let Some(offending) = args.iter().find(|a| a.len() != 2) {

@@ -539,6 +539,7 @@ impl ErrorCode for milli::Error {
                         | cellulite::Error::CannotConvertLineToCell(_, _, _) => Code::Internal,
                         cellulite::Error::InvalidGeoJson(_) => Code::InvalidDocumentGeojsonField,
                     },
+                    UserError::MalformedGeojson(_) => Code::InvalidDocumentGeojsonField,
                 }
             }
         }
