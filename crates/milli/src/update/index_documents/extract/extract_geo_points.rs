@@ -10,7 +10,7 @@ use crate::error::GeoError;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::extract_finite_float_from_value;
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
-use crate::{DocumentId, FieldId, InternalError, Result};
+use crate::{DocumentId, FieldId, InternalError, Result, UserError};
 
 /// Extracts the geographical coordinates contained in each document under the `_geo` field.
 ///
@@ -174,9 +174,8 @@ fn extract_geojson_field(
     match settings.geojson_fid {
         Some(fid) if settings.filterable_attributes_rules.iter().any(|rule| rule.has_geojson()) => {
             let value = obkv.get(fid).map(KvReaderDelAdd::from_slice).and_then(|r| r.get(deladd));
-            // TODO: That's a user error, not an internal error
             Ok(value
-                .map(|v| serde_json::from_slice(v).map_err(InternalError::SerdeJson))
+                .map(|v| GeoJson::from_reader(v).map_err(UserError::MalformedGeojson))
                 .transpose()?)
         }
         _ => Ok(None),
