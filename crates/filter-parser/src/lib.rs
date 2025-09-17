@@ -851,8 +851,6 @@ pub mod tests {
 
         // Test geo polygon
         insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15], [16, 17])"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], [{16}, {17}], ])");
-        insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15], [16, 17],)"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], [{16}, {17}], ])");
-        insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15])"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], ])");
         insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15], [-1.2,2939.2], [1,1])"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], [{-1.2}, {2939.2}], [{1}, {1}], ])");
 
         // Test OR + AND
@@ -957,7 +955,7 @@ pub mod tests {
         ");
 
         insta::assert_snapshot!(p("_geoPolygon([1,2,3])"), @r"
-        The `_geoPolygon` filter expects at least 2 points
+        The `_geoPolygon` filter expects at least 3 points but only 1 were specified
         18:19 _geoPolygon([1,2,3])
         ");
 
@@ -966,9 +964,14 @@ pub mod tests {
         13:19 _geoPolygon(1,2,3)
         ");
 
-        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r"
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2],[1,2,3])"), @r"
         Was expecting 2 coordinates but instead found 3.
-        20:21 _geoPolygon([1,2],[1,2,3])
+        26:27 _geoPolygon([1,2],[1,2],[1,2,3])
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r"
+        The `_geoPolygon` filter expects at least 3 points but only 2 were specified
+        24:25 _geoPolygon([1,2],[1,2,3])
         ");
 
         insta::assert_snapshot!(p("_geoPolygon(1)"), @r"
