@@ -21,6 +21,7 @@ pub fn is_reserved_keyword(keyword: &str) -> bool {
         .contains(&keyword)
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("internal: {0}.")]
@@ -115,6 +116,7 @@ pub enum FieldIdMapMissingEntry {
     FieldName { field_name: String, process: &'static str },
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum UserError {
     #[error(transparent)]

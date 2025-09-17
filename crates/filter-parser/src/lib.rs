@@ -191,6 +191,7 @@ impl<'a> FilterCondition<'a> {
             FilterCondition::VectorExists { .. }
             | FilterCondition::GeoLowerThan { .. }
             | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::GeoPolygon { .. }
             | FilterCondition::In { .. } => None,
         }
     }

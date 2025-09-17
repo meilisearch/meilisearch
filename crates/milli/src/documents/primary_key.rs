@@ -48,6 +48,7 @@ pub enum PrimaryKey<'a> {
     Nested { name: &'a str },
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum DocumentIdExtractionError {
     InvalidDocumentId(UserError),
     MissingDocumentId,

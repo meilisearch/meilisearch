@@ -523,7 +523,7 @@ where
                 .is_some_and(|conf| conf.is_quantized);
             let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
-            pool.install(|| {
+            pool.install(|| -> Result<_> {
                 let mut writer =
                     VectorStore::new(backend, vector_store, embedder_index, was_quantized);
                 writer.build_and_quantize(
@@ -541,7 +541,7 @@ where
             .map_err(InternalError::from)??;
         }
 
-        self.index.cellulite.build(self.wtxn, &Progress::default())?;
+        self.index.cellulite.build(self.wtxn, &self.should_abort, &Progress::default())?;
 
         self.execute_prefix_databases(
             word_docids.map(MergerBuilder::build),

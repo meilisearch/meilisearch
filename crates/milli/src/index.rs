@@ -244,7 +244,7 @@ impl Index {
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
         let vector_store = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
-        let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn)?;
+        let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn, "cellulite")?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
@@ -1972,13 +1972,17 @@ impl Index {
 
         // Cellulite
         const _CELLULITE_DB_CHECK: () = {
-            if Cellulite::nb_dbs() != 3 {
+            if Cellulite::nb_dbs() != 4 {
                 panic!("Cellulite database count has changed, please update the code accordingly.")
             }
         };
         sizes.insert("cellulite_item", self.cellulite.item_db_stats(rtxn).map(compute_size)?);
         sizes.insert("cellulite_cell", self.cellulite.cell_db_stats(rtxn).map(compute_size)?);
         sizes.insert("cellulite_update", self.cellulite.update_db_stats(rtxn).map(compute_size)?);
+        sizes.insert(
+            "cellulite_metadata",
+            self.cellulite.metadata_db_stats(rtxn).map(compute_size)?,
+        );
 
         Ok(sizes)
     }
