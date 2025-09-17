@@ -1896,7 +1896,7 @@ impl Index {
             field_id_docid_facet_strings,
             vector_store,
             embedder_category_id,
-            cellulite: _,
+            cellulite,
             documents,
         } = self;
 
@@ -1976,13 +1976,10 @@ impl Index {
                 panic!("Cellulite database count has changed, please update the code accordingly.")
             }
         };
-        sizes.insert("cellulite_item", self.cellulite.item_db_stats(rtxn).map(compute_size)?);
-        sizes.insert("cellulite_cell", self.cellulite.cell_db_stats(rtxn).map(compute_size)?);
-        sizes.insert("cellulite_update", self.cellulite.update_db_stats(rtxn).map(compute_size)?);
-        sizes.insert(
-            "cellulite_metadata",
-            self.cellulite.metadata_db_stats(rtxn).map(compute_size)?,
-        );
+        sizes.insert("cellulite_item", cellulite.item_db_stats(rtxn).map(compute_size)?);
+        sizes.insert("cellulite_cell", cellulite.cell_db_stats(rtxn).map(compute_size)?);
+        sizes.insert("cellulite_update", cellulite.update_db_stats(rtxn).map(compute_size)?);
+        sizes.insert("cellulite_metadata", cellulite.metadata_db_stats(rtxn).map(compute_size)?);
 
         Ok(sizes)
     }

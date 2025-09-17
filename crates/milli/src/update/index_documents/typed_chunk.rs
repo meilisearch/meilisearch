@@ -632,7 +632,6 @@ pub(crate) fn write_typed_chunk_into_index(
             let mut iter = merger.into_stream_merger_iter()?;
             while let Some((key, value)) = iter.next()? {
                 // convert the key back to a u32 (4 bytes)
-                tracing::warn!("Key: {:?}, length: {}", key, key.len());
                 let docid = key.try_into().map(DocumentId::from_be_bytes).unwrap();
 
                 let deladd_obkv = KvReaderDelAdd::from_slice(value);
@@ -640,14 +639,9 @@ pub(crate) fn write_typed_chunk_into_index(
                     index.cellulite.delete(wtxn, docid)?;
                 }
                 if let Some(value) = deladd_obkv.get(DelAdd::Addition) {
-                    tracing::warn!("Adding one geojson to cellulite");
-
                     let geojson =
                         geojson::GeoJson::from_reader(value).map_err(UserError::SerdeJson)?;
-                    index
-                        .cellulite
-                        .add(wtxn, docid, &geojson)
-                        .map_err(InternalError::CelluliteError)?;
+                    index.cellulite.add(wtxn, docid, &geojson)?;
                 }
             }
         }
