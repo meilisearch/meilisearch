@@ -189,7 +189,11 @@ where
 
         println!("Building geojson");
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
-        index.cellulite.build(wtxn, indexing_context.progress)?;
+        index.cellulite.build(
+            wtxn,
+            &indexing_context.must_stop_processing,
+            indexing_context.progress,
+        )?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
@@ -322,7 +326,11 @@ where
         .unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
-        index.cellulite.build(wtxn, indexing_context.progress)?;
+        index.cellulite.build(
+            wtxn,
+            &indexing_context.must_stop_processing,
+            indexing_context.progress,
+        )?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 

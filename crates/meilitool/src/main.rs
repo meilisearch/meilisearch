@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use std::fs::{read_dir, read_to_string, remove_file, File};
 use std::io::{BufWriter, Write as _};
 use std::path::PathBuf;

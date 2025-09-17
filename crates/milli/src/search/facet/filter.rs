@@ -872,10 +872,10 @@ impl<'a> Filter<'a> {
 
                     let result = index
                         .cellulite
-                        .in_shape(rtxn, &polygon, &mut |_| ())
-                        .map_err(InternalError::CelluliteError)?;
+                        .in_shape(rtxn, &polygon)
+                        .map_err(InternalError::CelluliteError)?; // TODO: error code in invalid
 
-                    r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring
+                    r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring in meilisearch
                 }
 
                 match (r1, r2) {
@@ -924,10 +924,10 @@ impl<'a> Filter<'a> {
                 let polygon = geo_types::Polygon::new(geo_types::LineString(coords), Vec::new());
                 let result = index
                     .cellulite
-                    .in_shape(rtxn, &polygon, &mut |_| ())
-                    .map_err(InternalError::CelluliteError)?;
+                    .in_shape(rtxn, &polygon)
+                    .map_err(InternalError::CelluliteError)?; // TODO: update error code
 
-                let result = roaring::RoaringBitmap::from_iter(result); // TODO: Remove once we update roaring
+                let result = roaring::RoaringBitmap::from_iter(result); // TODO: Remove once we update roaring in meilisearch
 
                 Ok(result)
             }

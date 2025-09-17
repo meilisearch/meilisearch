@@ -17,7 +17,6 @@ use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
 use crate::vector::{Embedder, Embeddings, RuntimeEmbedders, VectorStore};
 use crate::{DocumentId, Error, Index, InternalError, Result, UserError};
-use crate::{Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
     mut writer_receiver: WriterBbqueueReceiver<'_>,

@@ -230,6 +230,7 @@ pub fn request_threads() -> &'static ThreadPoolNoAbort {
 
 /// Extract chunked data and send it into lmdb_writer_sx sender:
 /// - documents
+#[allow(clippy::too_many_arguments)]
 fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
