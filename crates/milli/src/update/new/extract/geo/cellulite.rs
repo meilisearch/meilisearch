@@ -205,7 +205,10 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
                         if let Some(geojson) = updated_geo {
                             let geojson =
                                 GeoJson::from_str(geojson.get()).map_err(UserError::from)?;
-                            let geometry = Geometry::try_from(geojson).map_err(UserError::from)?;
+                            let mut geometry =
+                                Geometry::try_from(geojson).map_err(UserError::from)?;
+                            cellulite::densify_geom(&mut geometry);
+
                             let buf = ZerometryCodec::bytes_encode(&geometry).unwrap();
 
                             match &mut data_ref.spilled_inserted {
@@ -230,7 +233,8 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor {
 
                     if let Some(geojson) = inserted_geo {
                         let geojson = GeoJson::from_str(geojson.get()).map_err(UserError::from)?;
-                        let geometry = Geometry::try_from(geojson).map_err(UserError::from)?;
+                        let mut geometry = Geometry::try_from(geojson).map_err(UserError::from)?;
+                        cellulite::densify_geom(&mut geometry);
                         let mut bytes = Vec::new();
                         Zerometry::write_from_geometry(&mut bytes, &geometry)?;
 
