@@ -97,6 +97,7 @@ impl CompatV2ToV3 {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum CompatIndexV2ToV3 {
     V2(v2::V2IndexReader),
     Compat(Box<CompatIndexV1ToV2>),

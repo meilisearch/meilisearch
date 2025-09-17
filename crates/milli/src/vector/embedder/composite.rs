@@ -11,6 +11,7 @@ use crate::ThreadPoolNoAbort;
 pub(in crate::vector) const MAX_COMPOSITE_DISTANCE: f32 = 0.01;
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum SubEmbedder {
     /// An embedder based on running local models, fetched from the Hugging Face Hub.
     HuggingFace(hf::Embedder),

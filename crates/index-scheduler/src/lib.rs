@@ -1,3 +1,6 @@
+// The main Error type is large and boxing the large variant make the pattern matching fails
+#![allow(clippy::result_large_err)]
+
 /*!
 This crate defines the index scheduler, which is responsible for:
 1. Keeping references to meilisearch's indexes and mapping them to their
@@ -344,7 +347,7 @@ impl IndexScheduler {
         Ok(this)
     }
 
-    fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
+    fn read_txn(&self) -> Result<RoTxn<'_, WithoutTls>> {
         self.env.read_txn().map_err(|e| e.into())
     }
 
@@ -757,7 +760,7 @@ impl IndexScheduler {
 
     /// Register a new task coming from a dump in the scheduler.
     /// By taking a mutable ref we're pretty sure no one will ever import a dump while actix is running.
-    pub fn register_dumped_task(&mut self) -> Result<Dump> {
+    pub fn register_dumped_task(&mut self) -> Result<Dump<'_>> {
         Dump::new(self)
     }
 
@@ -806,10 +809,8 @@ impl IndexScheduler {
                                 .queue
                                 .tasks
                                 .get_task(self.rtxn, task_id)
-                                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
-                                .ok_or_else(|| {
-                                    io::Error::new(io::ErrorKind::Other, Error::CorruptedTaskQueue)
-                                })?;
+                                .map_err(io::Error::other)?
+                                .ok_or_else(|| io::Error::other(Error::CorruptedTaskQueue))?;
 
                             serde_json::to_writer(&mut self.buffer, &TaskView::from_task(&task))?;
                             self.buffer.push(b'\n');

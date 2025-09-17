@@ -116,7 +116,7 @@ impl<'a> Token<'a> {
         self.span
     }
 
-    pub fn parse_finite_float(&self) -> Result<f64, Error> {
+    pub fn parse_finite_float(&self) -> Result<f64, Error<'a>> {
         let value: f64 = self.value().parse().map_err(|e| self.as_external_error(e))?;
         if value.is_finite() {
             Ok(value)
@@ -166,7 +166,7 @@ pub enum TraversedElement<'a> {
 }
 
 impl<'a> FilterCondition<'a> {
-    pub fn use_contains_operator(&self) -> Option<&Token> {
+    pub fn use_contains_operator(&self) -> Option<&Token<'a>> {
         match self {
             FilterCondition::Condition { fid: _, op } => match op {
                 Condition::GreaterThan(_)
@@ -193,7 +193,7 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
-    pub fn use_vector_filter(&self) -> Option<&Token> {
+    pub fn use_vector_filter(&self) -> Option<&Token<'a>> {
         match self {
             FilterCondition::Condition { .. } => None,
             FilterCondition::Not(this) => this.use_vector_filter(),
@@ -207,7 +207,7 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
-    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token> + '_> {
+    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token<'a>> + '_> {
         if depth == 0 {
             return Box::new(std::iter::empty());
         }
@@ -228,7 +228,7 @@ impl<'a> FilterCondition<'a> {
     }
 
     /// Returns the first token found at the specified depth, `None` if no token at this depth.
-    pub fn token_at_depth(&self, depth: usize) -> Option<&Token> {
+    pub fn token_at_depth(&self, depth: usize) -> Option<&Token<'a>> {
         match self {
             FilterCondition::Condition { fid, .. } if depth == 0 => Some(fid),
             FilterCondition::Or(subfilters) => {
@@ -651,7 +651,7 @@ pub mod tests {
     /// Create a raw [Token]. You must specify the string that appear BEFORE your element followed by your element
     pub fn rtok<'a>(before: &'a str, value: &'a str) -> Token<'a> {
         // if the string is empty we still need to return 1 for the line number
-        let lines = before.is_empty().then_some(1).unwrap_or_else(|| before.lines().count());
+        let lines = if before.is_empty() { 1 } else { before.lines().count() };
         let offset = before.chars().count();
         // the extra field is not checked in the tests so we can set it to nothing
         unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "") }.into()

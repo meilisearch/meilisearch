@@ -1,4 +1,5 @@
 #![allow(clippy::type_complexity)]
+#![allow(clippy::result_large_err)]
 
 #[cfg(not(windows))]
 #[cfg(test)]

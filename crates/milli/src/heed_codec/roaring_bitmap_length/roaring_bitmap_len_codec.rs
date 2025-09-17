@@ -19,14 +19,14 @@ impl RoaringBitmapLenCodec {
             if cookie == SERIAL_COOKIE_NO_RUNCONTAINER {
                 (bytes.read_u32::<LittleEndian>()? as usize, true)
             } else if (cookie as u16) == SERIAL_COOKIE {
-                return Err(io::Error::new(io::ErrorKind::Other, "run containers are unsupported"));
+                return Err(io::Error::other("run containers are unsupported"));
             } else {
-                return Err(io::Error::new(io::ErrorKind::Other, "unknown cookie value"));
+                return Err(io::Error::other("unknown cookie value"));
             }
         };
 
         if size > u16::MAX as usize + 1 {
-            return Err(io::Error::new(io::ErrorKind::Other, "size is greater than supported"));
+            return Err(io::Error::other("size is greater than supported"));
         }
 
         let mut description_bytes = vec![0u8; size * 4];

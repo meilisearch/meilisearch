@@ -370,7 +370,7 @@ fn ureq_error_into_error(error: ureq::Error) -> Error {
             }
             Err(e) => e.into(),
         },
-        ureq::Error::Transport(transport) => io::Error::new(io::ErrorKind::Other, transport).into(),
+        ureq::Error::Transport(transport) => io::Error::other(transport).into(),
     }
 }
 

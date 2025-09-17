@@ -124,7 +124,7 @@ pub fn parse_not_exists(input: Span) -> IResult<FilterCondition> {
     Ok((input, FilterCondition::Not(Box::new(FilterCondition::Condition { fid: key, op: Exists }))))
 }
 
-fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter<'_>)> {
+fn parse_vectors(input: Span) -> IResult<(Token, Option<Token>, VectorFilter)> {
     let (input, _) = multispace0(input)?;
     let (input, fid) = tag("_vectors")(input)?;
 

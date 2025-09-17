@@ -137,7 +137,7 @@ impl<'a> SearchForFacetValues<'a> {
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
                     if exact_words_fst.is_some_and(|fst| fst.contains(query)) {
                         if fst.contains(query) {
-                            self.fetch_original_facets_using_normalized(
+                            let _ = self.fetch_original_facets_using_normalized(
                                 fid,
                                 query,
                                 query,

@@ -315,7 +315,9 @@ impl<'a> heed::BytesDecode<'a> for KeyIdActionCodec {
 impl<'a> heed::BytesEncode<'a> for KeyIdActionCodec {
     type EItem = (&'a KeyId, &'a Action, Option<&'a [u8]>);
 
-    fn bytes_encode((key_id, action, index): &Self::EItem) -> StdResult<Cow<[u8]>, BoxedError> {
+    fn bytes_encode(
+        (key_id, action, index): &'_ Self::EItem,
+    ) -> StdResult<Cow<'_, [u8]>, BoxedError> {
         let mut bytes = Vec::new();
 
         bytes.extend_from_slice(key_id.as_bytes());

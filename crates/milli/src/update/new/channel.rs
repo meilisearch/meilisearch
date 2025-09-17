@@ -52,10 +52,10 @@ const MAX_FRAME_HEADER_SIZE: usize = 9;
 /// a message in this queue only if it is empty to avoid filling
 /// the channel *and* the BBQueue.
 pub fn extractor_writer_bbqueue(
-    bbbuffers: &mut Vec<BBBuffer>,
+    bbbuffers: &'_ mut Vec<BBBuffer>,
     total_bbbuffer_capacity: usize,
     channel_capacity: usize,
-) -> (ExtractorBbqueueSender, WriterBbqueueReceiver) {
+) -> (ExtractorBbqueueSender<'_>, WriterBbqueueReceiver<'_>) {
     let current_num_threads = rayon::current_num_threads();
     let bbbuffer_capacity = total_bbbuffer_capacity.checked_div(current_num_threads).unwrap();
     bbbuffers.resize_with(current_num_threads, || BBBuffer::new(bbbuffer_capacity));

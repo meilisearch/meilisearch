@@ -225,11 +225,11 @@ impl<'a> Filter<'a> {
         Ok(Some(Self { condition }))
     }
 
-    pub fn use_contains_operator(&self) -> Option<&Token> {
+    pub fn use_contains_operator(&self) -> Option<&Token<'_>> {
         self.condition.use_contains_operator()
     }
 
-    pub fn use_vector_filter(&self) -> Option<&Token> {
+    pub fn use_vector_filter(&self) -> Option<&Token<'_>> {
         self.condition.use_vector_filter()
     }
 }

@@ -1,4 +1,6 @@
+#![allow(clippy::result_large_err)]
 #![allow(rustdoc::private_intra_doc_links)]
+
 #[macro_use]
 pub mod error;
 pub mod analytics;

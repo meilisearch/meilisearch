@@ -621,7 +621,7 @@ impl From<HeedError> for Error {
             // TODO use the encoding
             HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),
             HeedError::Decoding(_) => InternalError(Serialization(Decoding { db_name: None })),
-            HeedError::EnvAlreadyOpened { .. } => UserError(EnvAlreadyOpened),
+            HeedError::EnvAlreadyOpened => UserError(EnvAlreadyOpened),
         }
     }
 }
