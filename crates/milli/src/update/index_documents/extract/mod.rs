@@ -244,9 +244,7 @@ fn send_original_documents_data(
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
 
-    tracing::warn!("Do we have a geojson");
     if settings_diff.reindex_geojson() {
-        tracing::warn!("Yes we do");
         let documents_chunk_cloned = original_documents_chunk.clone();
         let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
         let settings_diff = settings_diff.clone();

@@ -870,10 +870,7 @@ impl<'a> Filter<'a> {
                         Vec::new(),
                     );
 
-                    let result = index
-                        .cellulite
-                        .in_shape(rtxn, &polygon)
-                        .map_err(InternalError::CelluliteError)?; // TODO: error code in invalid
+                    let result = index.cellulite.in_shape(rtxn, &polygon)?;
 
                     r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring in meilisearch
                 }
@@ -922,10 +919,7 @@ impl<'a> Filter<'a> {
                 }
 
                 let polygon = geo_types::Polygon::new(geo_types::LineString(coords), Vec::new());
-                let result = index
-                    .cellulite
-                    .in_shape(rtxn, &polygon)
-                    .map_err(InternalError::CelluliteError)?; // TODO: update error code
+                let result = index.cellulite.in_shape(rtxn, &polygon)?;
 
                 let result = roaring::RoaringBitmap::from_iter(result); // TODO: Remove once we update roaring in meilisearch
 

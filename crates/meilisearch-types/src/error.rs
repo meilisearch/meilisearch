@@ -5,6 +5,7 @@ use actix_web::{self as aweb, HttpResponseBuilder};
 use aweb::http::header;
 use aweb::rt::task::JoinError;
 use convert_case::Casing;
+use milli::cellulite;
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -239,6 +240,7 @@ InconsistentDocumentChangeHeaders              , InvalidRequest       , BAD_REQU
 InvalidDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentSort                            , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentGeojsonField                    , InvalidRequest       , BAD_REQUEST ;
 InvalidHeaderValue                             , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions                        , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorsType                             , InvalidRequest       , BAD_REQUEST ;
@@ -527,7 +529,16 @@ impl ErrorCode for milli::Error {
                     | UserError::DocumentEditionCompilationError(_) => {
                         Code::EditDocumentsByFunctionError
                     }
-                    UserError::CelluliteError(_) => Code::Internal,
+                    UserError::CelluliteError(err) => match err {
+                        cellulite::Error::BuildCanceled
+                        | cellulite::Error::VersionMismatchOnBuild(_)
+                        | cellulite::Error::DatabaseDoesntExists
+                        | cellulite::Error::Heed(_)
+                        | cellulite::Error::InvalidGeometry(_)
+                        | cellulite::Error::InternalDocIdMissing(_, _)
+                        | cellulite::Error::CannotConvertLineToCell(_, _, _) => Code::Internal,
+                        cellulite::Error::InvalidGeoJson(_) => Code::InvalidDocumentGeojsonField,
+                    },
                 }
             }
         }

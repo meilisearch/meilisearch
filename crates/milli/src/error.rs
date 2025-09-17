@@ -121,6 +121,8 @@ pub enum FieldIdMapMissingEntry {
 pub enum UserError {
     #[error(transparent)]
     CelluliteError(#[from] cellulite::Error),
+    #[error("Malformed geojson: {0}")]
+    MalformedGeojson(serde_json::Error),
     #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
     #[error(transparent)]
