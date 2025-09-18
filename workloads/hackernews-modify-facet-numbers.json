@@ -1,5 +1,6 @@
 {
   "name": "hackernews.modify_facet_numbers",
+  "type": "bench",
   "run_count": 3,
   "extra_cli_args": [],
   "assets": {

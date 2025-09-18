@@ -1,36 +1,20 @@
-mod assets;
-mod client;
-mod command;
 mod dashboard;
 mod env_info;
-mod meili_process;
 mod workload;
 
-use std::io::LineWriter;
-use std::path::PathBuf;
+use crate::common::args::CommonArgs;
+use crate::common::logs::setup_logs;
+use crate::common::workload::Workload;
+use std::{path::PathBuf, sync::Arc};
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 use clap::Parser;
-use tracing_subscriber::fmt::format::FmtSpan;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::Layer;
 
-use self::client::Client;
-use self::workload::Workload;
+use crate::common::client::Client;
+pub use workload::BenchWorkload;
 
-pub fn default_http_addr() -> String {
-    "127.0.0.1:7700".to_string()
-}
 pub fn default_report_folder() -> String {
     "./bench/reports/".into()
-}
-
-pub fn default_asset_folder() -> String {
-    "./bench/assets/".into()
-}
-
-pub fn default_log_filter() -> String {
-    "info".into()
 }
 
 pub fn default_dashboard_url() -> String {
@@ -40,12 +24,13 @@ pub fn default_dashboard_url() -> String {
 /// Run benchmarks from a workload
 #[derive(Parser, Debug)]
 pub struct BenchDeriveArgs {
-    /// Filename of the workload file, pass multiple filenames
-    /// to run multiple workloads in the specified order.
-    ///
-    /// Each workload run will get its own report file.
-    #[arg(value_name = "WORKLOAD_FILE", last = false)]
-    workload_file: Vec<PathBuf>,
+    /// Common arguments shared with other commands
+    #[command(flatten)]
+    common: CommonArgs,
+
+    /// Meilisearch master keys
+    #[arg(long)]
+    pub master_key: Option<String>,
 
     /// URL of the dashboard.
     #[arg(long, default_value_t = default_dashboard_url())]
@@ -59,33 +44,13 @@ pub struct BenchDeriveArgs {
     #[arg(long, default_value_t = default_report_folder())]
     report_folder: String,
 
-    /// Directory to store the remote assets.
-    #[arg(long, default_value_t = default_asset_folder())]
-    asset_folder: String,
-
-    /// Log directives
-    #[arg(short, long, default_value_t = default_log_filter())]
-    log_filter: String,
-
     /// Benchmark dashboard API key
     #[arg(long)]
     api_key: Option<String>,
 
-    /// Meilisearch master keys
-    #[arg(long)]
-    master_key: Option<String>,
-
-    /// Authentication bearer for fetching assets
-    #[arg(long)]
-    assets_key: Option<String>,
-
     /// Reason for the benchmark invocation
     #[arg(short, long)]
     reason: Option<String>,
-
-    /// The maximum time in seconds we allow for fetching the task queue before timing out.
-    #[arg(long, default_value_t = 60)]
-    tasks_queue_timeout_secs: u64,
 
     /// The path to the binary to run.
     ///
@@ -95,17 +60,7 @@ pub struct BenchDeriveArgs {
 }
 
 pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
-    // setup logs
-    let filter: tracing_subscriber::filter::Targets =
-        args.log_filter.parse().context("invalid --log-filter")?;
-
-    let subscriber = tracing_subscriber::registry().with(
-        tracing_subscriber::fmt::layer()
-            .with_writer(|| LineWriter::new(std::io::stderr()))
-            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
-            .with_filter(filter),
-    );
-    tracing::subscriber::set_global_default(subscriber).context("could not setup logging")?;
+    setup_logs(&args.common.log_filter)?;
 
     // fetch environment and build info
     let env = env_info::Environment::generate_from_current_config();
@@ -116,8 +71,11 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
     let _scope = rt.enter();
 
     // setup clients
-    let assets_client =
-        Client::new(None, args.assets_key.as_deref(), Some(std::time::Duration::from_secs(3600)))?; // 1h
+    let assets_client = Client::new(
+        None,
+        args.common.assets_key.as_deref(),
+        Some(std::time::Duration::from_secs(3600)), // 1h
+    )?;
 
     let dashboard_client = if args.no_dashboard {
         dashboard::DashboardClient::new_dry()
@@ -134,11 +92,11 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         None,
     )?;
 
-    let meili_client = Client::new(
+    let meili_client = Arc::new(Client::new(
         Some("http://127.0.0.1:7700".into()),
         args.master_key.as_deref(),
-        Some(std::time::Duration::from_secs(args.tasks_queue_timeout_secs)),
-    )?;
+        Some(std::time::Duration::from_secs(args.common.tasks_queue_timeout_secs)),
+    )?);
 
     // enter runtime
 
@@ -146,11 +104,11 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
         dashboard_client.send_machine_info(&env).await?;
 
         let commit_message = build_info.commit_msg.unwrap_or_default().split('\n').next().unwrap();
-        let max_workloads = args.workload_file.len();
+        let max_workloads = args.common.workload_file.len();
         let reason: Option<&str> = args.reason.as_deref();
         let invocation_uuid = dashboard_client.create_invocation(build_info.clone(), commit_message, env, max_workloads, reason).await?;
 
-        tracing::info!(workload_count = args.workload_file.len(), "handling workload files");
+        tracing::info!(workload_count = args.common.workload_file.len(), "handling workload files");
 
         // main task
         let workload_runs = tokio::spawn(
@@ -158,12 +116,16 @@ pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
                 let dashboard_client = dashboard_client.clone();
                 let mut dashboard_urls = Vec::new();
                 async move {
-            for workload_file in args.workload_file.iter() {
+            for workload_file in args.common.workload_file.iter() {
                 let workload: Workload = serde_json::from_reader(
                     std::fs::File::open(workload_file)
                         .with_context(|| format!("error opening {}", workload_file.display()))?,
                 )
                 .with_context(|| format!("error parsing {} as JSON", workload_file.display()))?;
+
+                let Workload::Bench(workload) = workload else {
+                    bail!("workload file {} is not a bench workload", workload_file.display());
+                };
 
                 let workload_name = workload.name.clone();
 

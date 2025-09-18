@@ -24,6 +24,11 @@ TBD
 - [ ] If not, add the `no db change` label to your PR, and you're good to merge.
 - [ ] If yes, add the `db change` label to your PR. You'll receive a message explaining you what to do.
 
+### Reminders when adding features
+
+- [ ] Write unit tests using insta
+- [ ] Write declarative integration tests in [workloads/tests](https://github.com/meilisearch/meilisearch/tree/main/workloads/test). Specify the routes to call and then call `cargo xtask test workloads/tests/YOUR_TEST.json --update-responses` so that responses are automatically filled.
+
 ### Reminders when modifying the API
 
 - [ ] Update the openAPI file with utoipa:
