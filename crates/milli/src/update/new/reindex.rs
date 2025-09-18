@@ -1,6 +1,7 @@
 use heed::RwTxn;
 
 use super::document::{Document, DocumentFromDb};
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::progress::{self, AtomicSubStep, Progress};
 use crate::{FieldDistribution, Index, Result};
 
@@ -22,8 +23,13 @@ pub fn field_distribution(index: &Index, wtxn: &mut RwTxn<'_>, progress: &Progre
         let Some(document) = DocumentFromDb::new(docid, wtxn, index, &field_id_map)? else {
             continue;
         };
-        let geo_iter = document.geo_field().transpose().map(|res| res.map(|rv| ("_geo", rv)));
-        for res in document.iter_top_level_fields().chain(geo_iter) {
+        let geo_iter =
+            document.geo_field().transpose().map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
+        let geojson_iter = document
+            .geojson_field()
+            .transpose()
+            .map(|res| res.map(|rv| (RESERVED_GEOJSON_FIELD_NAME, rv)));
+        for res in document.iter_top_level_fields().chain(geo_iter).chain(geojson_iter) {
             let (field_name, _) = res?;
             if let Some(count) = distribution.get_mut(field_name) {
                 *count += 1;
