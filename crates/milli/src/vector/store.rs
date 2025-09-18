@@ -1046,6 +1046,10 @@ impl VectorStore {
     where
         R: rand::Rng + rand::SeedableRng,
     {
+        // No work if distances are the same
+        if AD::name() == HD::name() {
+            return Ok(());
+        }
         for index in vector_store_range_for_embedder(self.embedder_index) {
             let arroy_reader: arroy::Reader<AD> =
                 match arroy::Reader::open(arroy_rtxn, index, self.database.remap_types()) {
@@ -1084,6 +1088,10 @@ impl VectorStore {
     where
         R: rand::Rng + rand::SeedableRng,
     {
+        // No work if distances are the same
+        if AD::name() == HD::name() {
+            return Ok(());
+        }
         for index in vector_store_range_for_embedder(self.embedder_index) {
             let hannoy_reader: hannoy::Reader<HD> =
                 match hannoy::Reader::open(hannoy_rtxn, index, self.database.remap_types()) {
@@ -1098,12 +1106,8 @@ impl VectorStore {
             arroy_writer.clear(arroy_wtxn)?;
             for entry in hannoy_reader.iter(hannoy_rtxn)? {
                 let (item, mut vector) = entry?;
-                // hannoy bug? the `vector` here can be longer than `dimensions`.
-                // workaround: truncating.
-                if vector.len() > dimensions {
-                    vector.truncate(dimensions);
-                }
-                // arroy and hannoy disagreement over the 0 value
+                debug_assert!(vector.len() == dimensions);
+                // arroy and hannoy disagreement over the 0 value if distance is Hamming
                 // - arroy does:
                 //     - if x >= 0 => 1
                 //     - if x < 0 => -1
