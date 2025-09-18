@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 4320 # 72h
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.85
+      - uses: dtolnay/rust-toolchain@1.89
         with:
           profile: minimal
 
