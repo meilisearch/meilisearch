@@ -187,7 +187,6 @@ where
             facet_field_ids_delta,
         )?;
 
-        println!("Building geojson");
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
         index.cellulite.build(
             wtxn,
