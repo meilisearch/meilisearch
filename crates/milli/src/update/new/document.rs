@@ -552,7 +552,10 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
                 Err(error) => return Some(Err(error.into())),
             };
 
-            if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
+            if name == RESERVED_VECTORS_FIELD_NAME
+                || name == RESERVED_GEO_FIELD_NAME
+                || name == RESERVED_GEOJSON_FIELD_NAME
+            {
                 continue;
             }
 
@@ -585,7 +588,10 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
                 Err(_) => return Some(()),
             };
 
-            if name == RESERVED_VECTORS_FIELD_NAME || name == RESERVED_GEO_FIELD_NAME {
+            if name == RESERVED_VECTORS_FIELD_NAME
+                || name == RESERVED_GEO_FIELD_NAME
+                || name == RESERVED_GEOJSON_FIELD_NAME
+            {
                 continue;
             }
 
@@ -595,7 +601,10 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
     }
 
     fn top_level_field(&self, k: &str) -> Result<Option<&'a RawValue>> {
-        if k == RESERVED_VECTORS_FIELD_NAME || k == RESERVED_GEO_FIELD_NAME {
+        if k == RESERVED_VECTORS_FIELD_NAME
+            || k == RESERVED_GEO_FIELD_NAME
+            || k == RESERVED_GEOJSON_FIELD_NAME
+        {
             return Ok(None);
         }
         self.get(k)

@@ -10,15 +10,23 @@ use rhai::EvalAltResult;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::documents::{self, DocumentsBatchCursorError};
 use crate::thread_pool_no_abort::PanicCatched;
 use crate::vector::settings::EmbeddingSettings;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
-    [RESERVED_GEO_FIELD_NAME, "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"]
-        .contains(&keyword)
+    [
+        RESERVED_GEO_FIELD_NAME,
+        RESERVED_GEOJSON_FIELD_NAME,
+        "_geoDistance",
+        "_geoPoint",
+        "_geoRadius",
+        "_geoBoundingBox",
+        "_geoPolygon",
+    ]
+    .contains(&keyword)
 }
 
 #[allow(clippy::large_enum_variant)]
