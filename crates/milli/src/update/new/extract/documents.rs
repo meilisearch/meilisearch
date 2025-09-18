@@ -71,15 +71,16 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                         context.index,
                         &context.db_fields_ids_map,
                     )?;
-                    let geo_iter = content
-                        .geo_field()
-                        .transpose()
-                        .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
-                    for res in content.iter_top_level_fields().chain(geo_iter) {
+
+                    let geo_iter = content.geo_field().transpose().map(|res| {
+                        res.map(|rv| (RESERVED_GEO_FIELD_NAME.to_string(), rv.to_owned()))
+                    });
+
+                    for res in content.iter_all_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
-                            .entry_ref(f)
+                            .entry_ref(f.as_str())
                             .or_default();
                         *entry -= 1;
                     }
@@ -90,29 +91,32 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                     let docid = update.docid();
                     let content =
                         update.current(&context.rtxn, context.index, &context.db_fields_ids_map)?;
-                    let geo_iter = content
-                        .geo_field()
-                        .transpose()
-                        .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
-                    for res in content.iter_top_level_fields().chain(geo_iter) {
+
+                    let geo_iter = content.geo_field().transpose().map(|res| {
+                        res.map(|rv| (RESERVED_GEO_FIELD_NAME.to_string(), rv.to_owned()))
+                    });
+
+                    for res in content.iter_all_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
-                            .entry_ref(f)
+                            .entry_ref(f.as_str())
                             .or_default();
                         *entry -= 1;
                     }
+
                     let content =
                         update.merged(&context.rtxn, context.index, &context.db_fields_ids_map)?;
-                    let geo_iter = content
-                        .geo_field()
-                        .transpose()
-                        .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
-                    for res in content.iter_top_level_fields().chain(geo_iter) {
+
+                    let geo_iter = content.geo_field().transpose().map(|res| {
+                        res.map(|rv| (RESERVED_GEO_FIELD_NAME.to_string(), rv.to_owned()))
+                    });
+
+                    for res in content.iter_all_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
-                            .entry_ref(f)
+                            .entry_ref(f.as_str())
                             .or_default();
                         *entry += 1;
                     }
@@ -139,15 +143,16 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                 DocumentChange::Insertion(insertion) => {
                     let docid = insertion.docid();
                     let content = insertion.inserted();
-                    let geo_iter = content
-                        .geo_field()
-                        .transpose()
-                        .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
-                    for res in content.iter_top_level_fields().chain(geo_iter) {
+
+                    let geo_iter = content.geo_field().transpose().map(|res| {
+                        res.map(|rv| (RESERVED_GEO_FIELD_NAME.to_string(), rv.to_owned()))
+                    });
+
+                    for res in content.iter_all_fields().chain(geo_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
-                            .entry_ref(f)
+                            .entry_ref(f.as_str())
                             .or_default();
                         *entry += 1;
                     }
