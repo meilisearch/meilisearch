@@ -109,9 +109,9 @@ fn extract_lat_lng(
     }
 }
 
-/// Extracts the geographical coordinates contained in each document under the `_geo` field.
+/// Extracts the geographical coordinates contained in each document under the `_geojson` field.
 ///
-/// Returns the generated grenad reader containing the docid as key associated to the (latitude, longitude)
+/// Returns the generated grenad reader containing the docid as key associated to its zerometry
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::extract")]
 pub fn extract_geojson<R: io::Read + io::Seek>(
     obkv_documents: grenad::Reader<R>,
@@ -124,8 +124,6 @@ pub fn extract_geojson<R: io::Read + io::Seek>(
         indexer.chunk_compression_level,
         tempfile::tempfile()?,
     );
-
-    tracing::info!("Extracting one geojson");
 
     let mut cursor = obkv_documents.into_cursor()?;
     while let Some((docid_bytes, value)) = cursor.move_on_next()? {
@@ -149,12 +147,10 @@ pub fn extract_geojson<R: io::Read + io::Seek>(
         if del_geojson != add_geojson {
             let mut obkv = KvWriterDelAdd::memory();
             if del_geojson.is_some() {
-                #[allow(clippy::drop_non_drop)]
                 // We don't need to store the geojson, we'll just delete it by id
                 obkv.insert(DelAdd::Deletion, [])?;
             }
             if let Some(geojson) = add_geojson {
-                #[allow(clippy::drop_non_drop)]
                 obkv.insert(DelAdd::Addition, geojson.to_string().as_bytes())?;
             }
             let bytes = obkv.into_inner()?;
