@@ -180,12 +180,6 @@ pub async fn get_metrics(
 
     let response = String::from_utf8(buffer).expect("Failed to convert bytes to string");
 
-    // We cannot specify the version with ContentType(TEXT_PLAIN_UTF_8) so we have to write everything by hand :(
-    // see the following for what should be returned: https://prometheus.io/docs/instrumenting/content_negotiation/#content-type-response
-    let content_type = ("content-type", "text/plain; version=0.0.4; charset=utf-8");
-
-    Ok(HttpResponse::Ok()
-        // .insert_header(header::ContentType(mime::TEXT_PLAIN_UTF_8))
-        .insert_header(content_type)
-        .body(response))
+    let content_type = ("content-type", prometheus::TEXT_FORMAT);
+    Ok(HttpResponse::Ok().insert_header(content_type).body(response))
 }
