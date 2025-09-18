@@ -244,7 +244,7 @@ impl Index {
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
         let vector_store = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
-        let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn, "cellulite")?;
+        let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn, CELLULITE)?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
