@@ -16,6 +16,7 @@ use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::OrderBy;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
@@ -131,6 +132,8 @@ pub struct FederatedSearchResult {
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
     #[serde(default, skip_serializing_if = "FederatedFacets::is_empty")]
     pub facets_by_index: FederatedFacets,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_uid: Option<Uuid>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_errors: Option<BTreeMap<String, ResponseError>>,
@@ -156,6 +159,7 @@ impl fmt::Debug for FederatedSearchResult {
             facet_stats,
             facets_by_index,
             remote_errors,
+            request_uid,
         } = self;
 
         let mut debug = f.debug_struct("SearchResult");
@@ -187,6 +191,9 @@ impl fmt::Debug for FederatedSearchResult {
         }
         if let Some(remote_errors) = remote_errors {
             debug.field("remote_errors", &remote_errors);
+        }
+        if let Some(request_uid) = request_uid {
+            debug.field("request_uid", &request_uid);
         }
 
         debug.finish()
