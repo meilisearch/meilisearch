@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 pub mod batch_view;
 pub mod batches;
 pub mod compression;

@@ -10,17 +10,26 @@ use rhai::EvalAltResult;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::documents::{self, DocumentsBatchCursorError};
 use crate::thread_pool_no_abort::PanicCatched;
 use crate::vector::settings::EmbeddingSettings;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
-    [RESERVED_GEO_FIELD_NAME, "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"]
-        .contains(&keyword)
+    [
+        RESERVED_GEO_FIELD_NAME,
+        RESERVED_GEOJSON_FIELD_NAME,
+        "_geoDistance",
+        "_geoPoint",
+        "_geoRadius",
+        "_geoBoundingBox",
+        "_geoPolygon",
+    ]
+    .contains(&keyword)
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("internal: {0}.")]
@@ -80,6 +89,8 @@ pub enum InternalError {
     #[error(transparent)]
     HannoyError(#[from] hannoy::Error),
     #[error(transparent)]
+    CelluliteError(#[from] cellulite::Error),
+    #[error(transparent)]
     VectorEmbeddingError(#[from] crate::vector::Error),
 }
 
@@ -99,6 +110,12 @@ pub enum SerializationError {
     InvalidNumberSerialization,
 }
 
+impl From<cellulite::Error> for Error {
+    fn from(error: cellulite::Error) -> Self {
+        Self::UserError(UserError::CelluliteError(error))
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum FieldIdMapMissingEntry {
     #[error("unknown field id {field_id} coming from the {process} process")]
@@ -107,8 +124,13 @@ pub enum FieldIdMapMissingEntry {
     FieldName { field_name: String, process: &'static str },
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum UserError {
+    #[error(transparent)]
+    CelluliteError(#[from] cellulite::Error),
+    #[error("Malformed geojson: {0}")]
+    MalformedGeojson(serde_json::Error),
     #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
     #[error(transparent)]
@@ -153,6 +175,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     },
     #[error(transparent)]
     InvalidGeoField(#[from] Box<GeoError>),
+    #[error(transparent)]
+    GeoJsonError(#[from] geojson::Error),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
     #[error("Invalid vector dimensions in document with id `{document_id}` in `._vectors.{embedder_name}`.\n  - note: embedding #{embedding_index} has dimensions {found}\n  - note: embedder `{embedder_name}` requires {expected}")]

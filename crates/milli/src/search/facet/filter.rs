@@ -12,7 +12,9 @@ use roaring::{MultiOps, RoaringBitmap};
 use serde_json::Value;
 
 use super::facet_range_search;
-use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+};
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec};
@@ -36,6 +38,7 @@ pub struct Filter<'a> {
 pub enum BadGeoError {
     Lat(f64),
     Lng(f64),
+    InvalidResolution(usize),
     BoundingBoxTopIsBelowBottom(f64, f64),
 }
 
@@ -47,16 +50,23 @@ impl Display for BadGeoError {
             Self::BoundingBoxTopIsBelowBottom(top, bottom) => {
                 write!(f, "The top latitude `{top}` is below the bottom latitude `{bottom}`.")
             }
+            Self::InvalidResolution(resolution) => write!(
+                f,
+                "Invalid resolution `{resolution}`. Resolution must be between 3 and 1000."
+            ),
             Self::Lat(lat) => write!(
                 f,
-                "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees. ",
+                "Bad latitude `{}`. Latitude must be contained between -90 and 90 degrees.",
                 lat
             ),
-            Self::Lng(lng) => write!(
-                f,
-                "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. ",
-                lng
-            ),
+            Self::Lng(lng) => {
+                let normalized = (lng + 180.0).rem_euclid(360.0) - 180.0;
+                write!(
+                    f,
+                    "Bad longitude `{}`. Longitude must be contained between -180 and 180 degrees. Hint: try using `{normalized}` instead.",
+                    lng
+                )
+            }
         }
     }
 }
@@ -612,50 +622,61 @@ impl<'a> Filter<'a> {
                 .union(),
             FilterCondition::And(subfilters) => {
                 let mut subfilters_iter = subfilters.iter();
-                if let Some(first_subfilter) = subfilters_iter.next() {
-                    let mut bitmap = Self::inner_evaluate(
-                        &(first_subfilter.clone()).into(),
+                let Some(first_subfilter) = subfilters_iter.next() else {
+                    return Ok(RoaringBitmap::new());
+                };
+
+                let mut bitmap = Self::inner_evaluate(
+                    &(first_subfilter.clone()).into(),
+                    rtxn,
+                    index,
+                    field_ids_map,
+                    filterable_attribute_rules,
+                    universe,
+                )?;
+                for f in subfilters_iter {
+                    if bitmap.is_empty() {
+                        return Ok(bitmap);
+                    }
+                    // TODO We are doing the intersections two times,
+                    //      it could be more efficient
+                    //      Can't I just replace this `&=` by an `=`?
+                    bitmap &= Self::inner_evaluate(
+                        &(f.clone()).into(),
                         rtxn,
                         index,
                         field_ids_map,
                         filterable_attribute_rules,
-                        universe,
+                        Some(&bitmap),
                     )?;
-                    for f in subfilters_iter {
-                        if bitmap.is_empty() {
-                            return Ok(bitmap);
-                        }
-                        // TODO We are doing the intersections two times,
-                        //      it could be more efficient
-                        //      Can't I just replace this `&=` by an `=`?
-                        bitmap &= Self::inner_evaluate(
-                            &(f.clone()).into(),
-                            rtxn,
-                            index,
-                            field_ids_map,
-                            filterable_attribute_rules,
-                            Some(&bitmap),
-                        )?;
-                    }
-                    Ok(bitmap)
-                } else {
-                    Ok(RoaringBitmap::new())
                 }
+                Ok(bitmap)
             }
             FilterCondition::VectorExists { fid: _, embedder, filter } => {
                 super::filter_vector::evaluate(rtxn, index, universe, embedder.clone(), filter)
             }
-            FilterCondition::GeoLowerThan { point, radius } => {
+            FilterCondition::GeoLowerThan { point, radius, resolution: res_token } => {
+                let base_point: [f64; 2] =
+                    [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
+                if !(-90.0..=90.0).contains(&base_point[0]) {
+                    return Err(point[0].as_external_error(BadGeoError::Lat(base_point[0])))?;
+                }
+                if !(-180.0..=180.0).contains(&base_point[1]) {
+                    return Err(point[1].as_external_error(BadGeoError::Lng(base_point[1])))?;
+                }
+                let radius = radius.parse_finite_float()?;
+                let mut resolution = 125;
+                if let Some(res_token) = res_token {
+                    resolution = res_token.parse_finite_float()? as usize;
+                    if !(3..=1000).contains(&resolution) {
+                        return Err(
+                            res_token.as_external_error(BadGeoError::InvalidResolution(resolution))
+                        )?;
+                    }
+                }
+
+                let mut r1 = None;
                 if index.is_geo_filtering_enabled(rtxn)? {
-                    let base_point: [f64; 2] =
-                        [point[0].parse_finite_float()?, point[1].parse_finite_float()?];
-                    if !(-90.0..=90.0).contains(&base_point[0]) {
-                        return Err(point[0].as_external_error(BadGeoError::Lat(base_point[0])))?;
-                    }
-                    if !(-180.0..=180.0).contains(&base_point[1]) {
-                        return Err(point[1].as_external_error(BadGeoError::Lng(base_point[1])))?;
-                    }
-                    let radius = radius.parse_finite_float()?;
                     let rtree = match index.geo_rtree(rtxn)? {
                         Some(rtree) => rtree,
                         None => return Ok(RoaringBitmap::new()),
@@ -671,52 +692,72 @@ impl<'a> Filter<'a> {
                         })
                         .map(|point| point.data.0)
                         .collect();
+                    r1 = Some(result);
+                }
 
-                    Ok(result)
-                } else {
-                    Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
-                        attribute: RESERVED_GEO_FIELD_NAME,
-                        filterable_patterns: filtered_matching_patterns(
-                            filterable_attribute_rules,
-                            &|features| features.is_filterable(),
-                        ),
-                    }))?
+                let mut r2 = None;
+                if index.is_geojson_filtering_enabled(rtxn)? {
+                    let point = geo_types::Point::new(base_point[1], base_point[0]);
+
+                    let result = index.cellulite.in_circle(rtxn, point, radius, resolution)?;
+
+                    r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring in meilisearch
+                }
+
+                match (r1, r2) {
+                    (Some(r1), Some(r2)) => Ok(r1 | r2),
+                    (Some(r1), None) => Ok(r1),
+                    (None, Some(r2)) => Ok(r2),
+                    (None, None) => {
+                        Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
+                            attribute: &format!(
+                                "{RESERVED_GEO_FIELD_NAME}/{RESERVED_GEOJSON_FIELD_NAME}"
+                            ),
+                            filterable_patterns: filtered_matching_patterns(
+                                filterable_attribute_rules,
+                                &|features| features.is_filterable(),
+                            ),
+                        }))?
+                    }
                 }
             }
             FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
-                if index.is_geo_filtering_enabled(rtxn)? {
-                    let top_right: [f64; 2] = [
-                        top_right_point[0].parse_finite_float()?,
-                        top_right_point[1].parse_finite_float()?,
-                    ];
-                    let bottom_left: [f64; 2] = [
-                        bottom_left_point[0].parse_finite_float()?,
-                        bottom_left_point[1].parse_finite_float()?,
-                    ];
-                    if !(-90.0..=90.0).contains(&top_right[0]) {
-                        return Err(
-                            top_right_point[0].as_external_error(BadGeoError::Lat(top_right[0]))
-                        )?;
-                    }
-                    if !(-180.0..=180.0).contains(&top_right[1]) {
-                        return Err(
-                            top_right_point[1].as_external_error(BadGeoError::Lng(top_right[1]))
-                        )?;
-                    }
-                    if !(-90.0..=90.0).contains(&bottom_left[0]) {
-                        return Err(bottom_left_point[0]
-                            .as_external_error(BadGeoError::Lat(bottom_left[0])))?;
-                    }
-                    if !(-180.0..=180.0).contains(&bottom_left[1]) {
-                        return Err(bottom_left_point[1]
-                            .as_external_error(BadGeoError::Lng(bottom_left[1])))?;
-                    }
-                    if top_right[0] < bottom_left[0] {
-                        return Err(bottom_left_point[1].as_external_error(
-                            BadGeoError::BoundingBoxTopIsBelowBottom(top_right[0], bottom_left[0]),
-                        ))?;
-                    }
+                let top_right: [f64; 2] = [
+                    top_right_point[0].parse_finite_float()?,
+                    top_right_point[1].parse_finite_float()?,
+                ];
+                let bottom_left: [f64; 2] = [
+                    bottom_left_point[0].parse_finite_float()?,
+                    bottom_left_point[1].parse_finite_float()?,
+                ];
+                if !(-90.0..=90.0).contains(&top_right[0]) {
+                    return Err(
+                        top_right_point[0].as_external_error(BadGeoError::Lat(top_right[0]))
+                    )?;
+                }
+                if !(-180.0..=180.0).contains(&top_right[1]) {
+                    return Err(
+                        top_right_point[1].as_external_error(BadGeoError::Lng(top_right[1]))
+                    )?;
+                }
+                if !(-90.0..=90.0).contains(&bottom_left[0]) {
+                    return Err(
+                        bottom_left_point[0].as_external_error(BadGeoError::Lat(bottom_left[0]))
+                    )?;
+                }
+                if !(-180.0..=180.0).contains(&bottom_left[1]) {
+                    return Err(
+                        bottom_left_point[1].as_external_error(BadGeoError::Lng(bottom_left[1]))
+                    )?;
+                }
+                if top_right[0] < bottom_left[0] {
+                    return Err(bottom_left_point[1].as_external_error(
+                        BadGeoError::BoundingBoxTopIsBelowBottom(top_right[0], bottom_left[0]),
+                    ))?;
+                }
 
+                let mut r1 = None;
+                if index.is_geo_filtering_enabled(rtxn)? {
                     // Instead of writing a custom `GeoBoundingBox` filter we're simply going to re-use the range
                     // filter to create the following filter;
                     // `_geo.lat {top_right[0]} TO {bottom_left[0]} AND _geo.lng {top_right[1]} TO {bottom_left[1]}`
@@ -811,18 +852,75 @@ impl<'a> Filter<'a> {
                         )?
                     };
 
-                    Ok(selected_lat & selected_lng)
-                } else {
-                    Err(top_right_point[0].as_external_error(
+                    r1 = Some(selected_lat & selected_lng);
+                }
+
+                let mut r2 = None;
+                if index.is_geojson_filtering_enabled(rtxn)? {
+                    let polygon = geo_types::Polygon::new(
+                        geo_types::LineString(vec![
+                            geo_types::Coord { x: top_right[1], y: top_right[0] },
+                            geo_types::Coord { x: bottom_left[1], y: top_right[0] },
+                            geo_types::Coord { x: bottom_left[1], y: bottom_left[0] },
+                            geo_types::Coord { x: top_right[1], y: bottom_left[0] },
+                        ]),
+                        Vec::new(),
+                    );
+
+                    let result = index.cellulite.in_shape(rtxn, &polygon)?;
+
+                    r2 = Some(RoaringBitmap::from_iter(result)); // TODO: Remove once we update roaring in meilisearch
+                }
+
+                match (r1, r2) {
+                    (Some(r1), Some(r2)) => Ok(r1 | r2),
+                    (Some(r1), None) => Ok(r1),
+                    (None, Some(r2)) => Ok(r2),
+                    (None, None) => Err(top_right_point[0].as_external_error(
                         FilterError::AttributeNotFilterable {
-                            attribute: RESERVED_GEO_FIELD_NAME,
+                            attribute: &format!(
+                                "{RESERVED_GEO_FIELD_NAME}/{RESERVED_GEOJSON_FIELD_NAME}"
+                            ),
                             filterable_patterns: filtered_matching_patterns(
                                 filterable_attribute_rules,
                                 &|features| features.is_filterable(),
                             ),
                         },
-                    ))?
+                    ))?,
                 }
+            }
+            FilterCondition::GeoPolygon { points } => {
+                if !index.is_geojson_filtering_enabled(rtxn)? {
+                    return Err(points[0][0].as_external_error(
+                        FilterError::AttributeNotFilterable {
+                            attribute: RESERVED_GEOJSON_FIELD_NAME,
+                            filterable_patterns: filtered_matching_patterns(
+                                filterable_attribute_rules,
+                                &|features| features.is_filterable(),
+                            ),
+                        },
+                    ))?;
+                }
+
+                let mut coords = Vec::new();
+                for [lat_token, lng_token] in points {
+                    let lat = lat_token.parse_finite_float()?;
+                    let lng = lng_token.parse_finite_float()?;
+                    if !(-90.0..=90.0).contains(&lat) {
+                        return Err(lat_token.as_external_error(BadGeoError::Lat(lat)))?;
+                    }
+                    if !(-180.0..=180.0).contains(&lng) {
+                        return Err(lng_token.as_external_error(BadGeoError::Lng(lng)))?;
+                    }
+                    coords.push(geo_types::Coord { x: lng, y: lat });
+                }
+
+                let polygon = geo_types::Polygon::new(geo_types::LineString(coords), Vec::new());
+                let result = index.cellulite.in_shape(rtxn, &polygon)?;
+
+                let result = roaring::RoaringBitmap::from_iter(result); // TODO: Remove once we update roaring in meilisearch
+
+                Ok(result)
             }
         }
     }
@@ -962,17 +1060,17 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. This index does not have configured filterable attributes.
+        snapshot!(error.to_string(), @r"
+        Attribute `_geo/_geojson` is not filterable. This index does not have configured filterable attributes.
         12:14 _geoRadius(42, 150, 10)
-        "###);
+        ");
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. This index does not have configured filterable attributes.
+        snapshot!(error.to_string(), @r"
+        Attribute `_geo/_geojson` is not filterable. This index does not have configured filterable attributes.
         18:20 _geoBoundingBox([42, 150], [30, 10])
-        "###);
+        ");
 
         let filter = Filter::from_str("dog = \"bernese mountain\"").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
@@ -993,19 +1091,19 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
+        let filter = Filter::from_str("_geoRadius(-90, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. Available filterable attribute patterns are: `title`.
-        12:16 _geoRadius(-100, 150, 10)
-        "###);
+        snapshot!(error.to_string(), @r"
+        Attribute `_geo/_geojson` is not filterable. Available filterable attribute patterns are: `title`.
+        12:15 _geoRadius(-90, 150, 10)
+        ");
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        snapshot!(error.to_string(), @r###"
-        Attribute `_geo` is not filterable. Available filterable attribute patterns are: `title`.
+        snapshot!(error.to_string(), @r"
+        Attribute `_geo/_geojson` is not filterable. Available filterable attribute patterns are: `title`.
         18:20 _geoBoundingBox([42, 150], [30, 10])
-        "###);
+        ");
 
         let filter = Filter::from_str("name = 12").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
@@ -1153,38 +1251,34 @@ mod tests {
         // georadius have a bad latitude
         let filter = Filter::from_str("_geoRadius(-100, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(
-            error.to_string().starts_with(
-                "Bad latitude `-100`. Latitude must be contained between -90 and 90 degrees."
-            ),
-            "{}",
-            error.to_string()
-        );
+        snapshot!(error.to_string(), @r"
+        Bad latitude `-100`. Latitude must be contained between -90 and 90 degrees.
+        12:16 _geoRadius(-100, 150, 10)
+        ");
 
         // georadius have a bad latitude
         let filter = Filter::from_str("_geoRadius(-90.0000001, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        12:23 _geoRadius(-90.0000001, 150, 10)
+        ");
 
         // georadius have a bad longitude
         let filter = Filter::from_str("_geoRadius(-10, 250, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(
-            error.to_string().contains(
-                "Bad longitude `250`. Longitude must be contained between -180 and 180 degrees."
-            ),
-            "{}",
-            error.to_string(),
-        );
+        snapshot!(error.to_string(), @r"
+        Bad longitude `250`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-110` instead.
+        17:20 _geoRadius(-10, 250, 10)
+        ");
 
         // georadius have a bad longitude
         let filter = Filter::from_str("_geoRadius(-10, 180.000001, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
+        17:27 _geoRadius(-10, 180.000001, 10)
+        ");
     }
 
     #[test]
@@ -1207,73 +1301,73 @@ mod tests {
         let filter =
             Filter::from_str("_geoBoundingBox([-90.0000001, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(
-            error.to_string().starts_with(
-                "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
-            ),
-            "{}",
-            error.to_string()
-        );
+        snapshot!(error.to_string(), @r"
+        Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        18:29 _geoBoundingBox([-90.0000001, 150], [30, 10])
+        ");
 
         // geoboundingbox top left coord have a bad latitude
         let filter =
             Filter::from_str("_geoBoundingBox([90.0000001, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(
-            error.to_string().starts_with(
-                "Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees."
-            ),
-            "{}",
-            error.to_string()
-        );
+        snapshot!(error.to_string(), @r"
+        Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        18:28 _geoBoundingBox([90.0000001, 150], [30, 10])
+        ");
 
         // geoboundingbox bottom right coord have a bad latitude
         let filter =
             Filter::from_str("_geoBoundingBox([30, 10], [-90.0000001, 150])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad latitude `-90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        28:39 _geoBoundingBox([30, 10], [-90.0000001, 150])
+        ");
 
         // geoboundingbox bottom right coord have a bad latitude
         let filter =
             Filter::from_str("_geoBoundingBox([30, 10], [90.0000001, 150])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad latitude `90.0000001`. Latitude must be contained between -90 and 90 degrees.
+        28:38 _geoBoundingBox([30, 10], [90.0000001, 150])
+        ");
 
         // geoboundingbox top left coord have a bad longitude
         let filter =
             Filter::from_str("_geoBoundingBox([-10, 180.000001], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
+        23:33 _geoBoundingBox([-10, 180.000001], [30, 10])
+        ");
 
         // geoboundingbox top left coord have a bad longitude
         let filter =
             Filter::from_str("_geoBoundingBox([-10, -180.000001], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `179.999999` instead.
+        23:34 _geoBoundingBox([-10, -180.000001], [30, 10])
+        ");
 
         // geoboundingbox bottom right coord have a bad longitude
         let filter =
             Filter::from_str("_geoBoundingBox([30, 10], [-10, -180.000001])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `-180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `179.999999` instead.
+        33:44 _geoBoundingBox([30, 10], [-10, -180.000001])
+        ");
 
         // geoboundingbox bottom right coord have a bad longitude
         let filter =
             Filter::from_str("_geoBoundingBox([30, 10], [-10, 180.000001])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
-        assert!(error.to_string().contains(
-            "Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees."
-        ));
+        snapshot!(error.to_string(), @r"
+        Bad longitude `180.000001`. Longitude must be contained between -180 and 180 degrees. Hint: try using `-179.999999` instead.
+        33:43 _geoBoundingBox([30, 10], [-10, 180.000001])
+        ");
     }
 
     #[test]
