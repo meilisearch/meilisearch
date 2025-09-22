@@ -1852,7 +1852,7 @@ async fn add_documents_with_geo_field() {
         .await;
     snapshot!(code, @"200 OK");
     // we are expecting docs 4 and 3 first as they have geo
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }),
     @r###"
     {
       "hits": [
@@ -1884,7 +1884,8 @@ async fn add_documents_with_geo_field() {
       "processingTimeMs": "[time]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1939,7 +1940,7 @@ async fn update_documents_with_geo_field() {
     let (response, code) = index.search_post(json!({"sort": ["_geoPoint(10,0):asc"]})).await;
     snapshot!(code, @"200 OK");
     // we are expecting docs 4 and 3 first as they have geo
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }),
     @r###"
     {
       "hits": [
@@ -1971,7 +1972,8 @@ async fn update_documents_with_geo_field() {
       "processingTimeMs": "[time]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -2043,7 +2045,7 @@ async fn update_documents_with_geo_field() {
     let (response, code) = index.search_post(json!({"sort": ["_geoPoint(10,0):asc"]})).await;
     snapshot!(code, @"200 OK");
     // the search response should not have changed: we are expecting docs 4 and 3 first as they have geo
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }),
     @r###"
     {
       "hits": [
@@ -2076,7 +2078,8 @@ async fn update_documents_with_geo_field() {
       "processingTimeMs": "[time]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 }

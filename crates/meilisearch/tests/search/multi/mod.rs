@@ -93,13 +93,14 @@ async fn federation_empty_list() {
 
     let (response, code) = server.multi_search(json!({"federation": {}, "queries": []})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 0
+      "estimatedTotalHits": 0,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -164,7 +165,7 @@ async fn simple_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     [
       {
         "indexUid": "SHARED_DOCUMENTS",
@@ -182,7 +183,8 @@ async fn simple_search_single_index() {
         "processingTimeMs": "[duration]",
         "limit": 20,
         "offset": 0,
-        "estimatedTotalHits": 1
+        "estimatedTotalHits": 1,
+        "requestUid": "[uuid]"
       },
       {
         "indexUid": "SHARED_DOCUMENTS",
@@ -200,7 +202,8 @@ async fn simple_search_single_index() {
         "processingTimeMs": "[duration]",
         "limit": 20,
         "offset": 0,
-        "estimatedTotalHits": 1
+        "estimatedTotalHits": 1,
+        "requestUid": "[uuid]"
       }
     ]
     "###);
@@ -217,7 +220,7 @@ async fn federation_single_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -237,7 +240,8 @@ async fn federation_single_search_single_index() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 1
+      "estimatedTotalHits": 1,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -256,7 +260,7 @@ async fn federation_multiple_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -308,7 +312,8 @@ async fn federation_multiple_search_single_index() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 5
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -325,7 +330,7 @@ async fn federation_two_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -358,7 +363,8 @@ async fn federation_two_search_single_index() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 2
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -457,7 +463,7 @@ async fn simple_search_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     [
       {
         "indexUid": "SHARED_DOCUMENTS",
@@ -475,7 +481,8 @@ async fn simple_search_two_indexes() {
         "processingTimeMs": "[duration]",
         "limit": 20,
         "offset": 0,
-        "estimatedTotalHits": 1
+        "estimatedTotalHits": 1,
+        "requestUid": "[uuid]"
       },
       {
         "indexUid": "SHARED_NESTED_DOCUMENTS",
@@ -516,7 +523,8 @@ async fn simple_search_two_indexes() {
         "processingTimeMs": "[duration]",
         "limit": 20,
         "offset": 0,
-        "estimatedTotalHits": 2
+        "estimatedTotalHits": 2,
+        "requestUid": "[uuid]"
       }
     ]
     "###);
@@ -535,7 +543,7 @@ async fn federation_two_search_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -596,7 +604,8 @@ async fn federation_two_search_two_indexes() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -626,7 +635,7 @@ async fn federation_multiple_search_multiple_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -795,7 +804,8 @@ async fn federation_multiple_search_multiple_indexes() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 12
+      "estimatedTotalHits": 12,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1101,7 +1111,7 @@ async fn federation_filter() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1140,7 +1150,8 @@ async fn federation_filter() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1177,7 +1188,7 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1266,7 +1277,8 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -1278,7 +1290,7 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1353,7 +1365,8 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1449,7 +1462,7 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1538,7 +1551,8 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -1551,7 +1565,7 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1626,7 +1640,8 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1704,7 +1719,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1831,7 +1846,8 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 10
+      "estimatedTotalHits": 10,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -1844,7 +1860,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1915,7 +1931,8 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 6
+      "estimatedTotalHits": 6,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1936,7 +1953,7 @@ async fn federation_sort_different_ranking_rules() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2063,7 +2080,8 @@ async fn federation_sort_different_ranking_rules() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 10
+      "estimatedTotalHits": 10,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -2142,7 +2160,7 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2269,7 +2287,8 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 10
+      "estimatedTotalHits": 10,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -2282,7 +2301,7 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2353,7 +2372,8 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 6
+      "estimatedTotalHits": 6,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -2424,7 +2444,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2527,7 +2547,8 @@ async fn federation_limit_offset() {
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 0,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2549,7 +2570,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2564,7 +2585,8 @@ async fn federation_limit_offset() {
           "processingTimeMs": "[duration]",
           "limit": 1,
           "offset": 0,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2586,7 +2608,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2673,7 +2695,8 @@ async fn federation_limit_offset() {
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 2,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2695,13 +2718,14 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [],
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 12,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2731,7 +2755,7 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2861,7 +2885,8 @@ async fn federation_formatting() {
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 0,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2883,7 +2908,7 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2898,7 +2923,8 @@ async fn federation_formatting() {
           "processingTimeMs": "[duration]",
           "limit": 1,
           "offset": 0,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2920,7 +2946,7 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -3007,7 +3033,8 @@ async fn federation_formatting() {
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 2,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -3029,13 +3056,14 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [],
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 12,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -3098,7 +3126,7 @@ async fn federation_null_weight() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3137,7 +3165,8 @@ async fn federation_null_weight() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -3244,7 +3273,7 @@ async fn federation_federated_contains_facets() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3280,7 +3309,8 @@ async fn federation_federated_contains_facets() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -3488,7 +3518,7 @@ async fn federation_vector_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3532,7 +3562,8 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
-      "semanticHitCount": 4
+      "semanticHitCount": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -3545,7 +3576,7 @@ async fn federation_vector_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3589,7 +3620,8 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
-      "semanticHitCount": 4
+      "semanticHitCount": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -3603,7 +3635,7 @@ async fn federation_vector_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3651,7 +3683,8 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
-      "semanticHitCount": 3
+      "semanticHitCount": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -3703,7 +3736,7 @@ async fn federation_vector_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3922,9 +3955,10 @@ async fn federation_vector_two_indexes() {
           0.6
         ]
       },
-      "semanticHitCount": 6
+      "semanticHitCount": 6,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 
     // hybrid search, distinct embedder
     let (response, code) = server
@@ -3934,7 +3968,7 @@ async fn federation_vector_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r#"
     {
       "hits": [
         {
@@ -4161,7 +4195,8 @@ async fn federation_vector_two_indexes() {
           0.6
         ]
       },
-      "semanticHitCount": 8
+      "semanticHitCount": 8,
+      "requestUid": "[uuid]"
     }
     "#);
 }
@@ -4209,7 +4244,7 @@ async fn federation_facets_different_indexes_same_facet() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4380,7 +4415,8 @@ async fn federation_facets_different_indexes_same_facet() {
           },
           "stats": {}
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -4399,7 +4435,7 @@ async fn federation_facets_different_indexes_same_facet() {
     ]}))
     .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4541,7 +4577,8 @@ async fn federation_facets_different_indexes_same_facet() {
           "Shazam!": 1
         }
       },
-      "facetStats": {}
+      "facetStats": {},
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -4561,7 +4598,7 @@ async fn federation_facets_different_indexes_same_facet() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4686,7 +4723,8 @@ async fn federation_facets_different_indexes_same_facet() {
           "distribution": {},
           "stats": {}
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -4748,7 +4786,7 @@ async fn federation_facets_same_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4806,7 +4844,8 @@ async fn federation_facets_same_indexes() {
             }
           }
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -4822,7 +4861,7 @@ async fn federation_facets_same_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4908,7 +4947,8 @@ async fn federation_facets_same_indexes() {
             }
           }
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -4925,7 +4965,7 @@ async fn federation_facets_same_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4987,7 +5027,8 @@ async fn federation_facets_same_indexes() {
           "min": 2.0,
           "max": 6.0
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -5040,7 +5081,7 @@ async fn federation_inconsistent_merge_order() {
       ]}))
       .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -5217,7 +5258,8 @@ async fn federation_inconsistent_merge_order() {
           },
           "stats": {}
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -5264,7 +5306,7 @@ async fn federation_inconsistent_merge_order() {
  ]}))
  .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -5404,7 +5446,8 @@ async fn federation_inconsistent_merge_order() {
           "Batman Returns": 1
         }
       },
-      "facetStats": {}
+      "facetStats": {},
+      "requestUid": "[uuid]"
     }
     "###);
 }

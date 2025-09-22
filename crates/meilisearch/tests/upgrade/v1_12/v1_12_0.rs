@@ -294,7 +294,7 @@ async fn check_the_index_features(server: &Server) {
 
     let (results, _status) =
         kefir.search_post(json!({ "sort": ["age:asc"], "filter": "surname = kefirounet" })).await;
-    snapshot!(results, name: "search_with_sort_and_filter");
+    snapshot!(json_string!(results, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), name: "search_with_sort_and_filter");
 
     // ensuring we can get the vectors and their `regenerate` is still good.
     let (results, _status) = kefir.search_post(json!({"retrieveVectors": true})).await;
