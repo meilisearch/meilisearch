@@ -146,7 +146,7 @@ fn compute_level(
                 writer.insert(left_bound, &ser_buffer)?;
             }
 
-            writer_into_reader(writer).map_err(Into::into)
+            writer_into_reader(writer)
         })
         .collect()
 }
