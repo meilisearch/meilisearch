@@ -1,6 +1,5 @@
 ---
 source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
-snapshot_kind: text
 ---
 {
   "hits": [
@@ -21,5 +20,6 @@ snapshot_kind: text
   "processingTimeMs": "[duration]",
   "limit": 20,
   "offset": 0,
-  "estimatedTotalHits": 1
+  "estimatedTotalHits": 1,
+  "requestUid": "[uuid]"
 }

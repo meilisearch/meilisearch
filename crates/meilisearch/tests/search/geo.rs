@@ -33,7 +33,7 @@ async fn geo_bounding_box_with_string_and_number() {
             }),
             |response, code| {
                 assert_eq!(code, 200, "{response}");
-                snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -63,7 +63,8 @@ async fn geo_bounding_box_with_string_and_number() {
                   "processingTimeMs": "[time]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 2
+                  "estimatedTotalHits": 2,
+                  "requestUid": "[uuid]"
                 }
                 "###);
             },
@@ -84,7 +85,7 @@ async fn bug_4640() {
             }),
             |response, code| {
                 assert_eq!(code, 200, "{response}");
-                snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -123,7 +124,8 @@ async fn bug_4640() {
                   "processingTimeMs": "[time]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 3
+                  "estimatedTotalHits": 3,
+                  "requestUid": "[uuid]"
                 }
                 "###);
             },
@@ -147,7 +149,7 @@ async fn geo_asc_with_words() {
         &json!({"q": "jean"}),
         |response, code| {
             assert_eq!(code, 200, "{response}");
-            snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -179,7 +181,8 @@ async fn geo_asc_with_words() {
               "processingTimeMs": "[time]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 3
+              "estimatedTotalHits": 3,
+              "requestUid": "[uuid]"
             }
             "###);
         },
@@ -192,7 +195,7 @@ async fn geo_asc_with_words() {
         &json!({"q": "bob"}),
         |response, code| {
             assert_eq!(code, 200, "{response}");
-            snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -216,7 +219,8 @@ async fn geo_asc_with_words() {
               "processingTimeMs": "[time]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 2
+              "estimatedTotalHits": 2,
+              "requestUid": "[uuid]"
             }
             "###);
         },
@@ -229,7 +233,7 @@ async fn geo_asc_with_words() {
         &json!({"q": "intel"}),
         |response, code| {
             assert_eq!(code, 200, "{response}");
-            snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -245,7 +249,8 @@ async fn geo_asc_with_words() {
               "processingTimeMs": "[time]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 1
+              "estimatedTotalHits": 1,
+              "requestUid": "[uuid]"
             }
             "###);
         },
@@ -269,7 +274,7 @@ async fn geo_sort_with_words() {
       &json!({"q": "jean", "sort": ["_geoPoint(0.0, 0.0):asc"]}),
       |response, code| {
           assert_eq!(code, 200, "{response}");
-          snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+          snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
           {
             "hits": [
               {
@@ -304,7 +309,8 @@ async fn geo_sort_with_words() {
             "processingTimeMs": "[time]",
             "limit": 20,
             "offset": 0,
-            "estimatedTotalHits": 3
+            "estimatedTotalHits": 3,
+            "requestUid": "[uuid]"
           }
           "###);
       },
