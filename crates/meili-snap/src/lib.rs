@@ -271,9 +271,10 @@ macro_rules! json_string {
 
 #[cfg(test)]
 mod tests {
+    use uuid::Uuid;
+
     use crate as meili_snap;
     use crate::UUID_IN_MESSAGE_RE;
-    use uuid::Uuid;
 
     #[test]
     fn snap() {

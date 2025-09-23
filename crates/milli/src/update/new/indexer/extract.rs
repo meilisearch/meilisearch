@@ -16,9 +16,10 @@ use super::settings_changes::settings_change_extract;
 use crate::documents::{FieldIdMapper, PrimaryKey};
 use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
+use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
-use crate::update::new::merger::merge_and_send_rtree;
+use crate::update::new::merger::{merge_and_send_cellulite, merge_and_send_rtree};
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
 use crate::vector::db::{EmbedderInfo, IndexEmbeddingConfig};
@@ -314,6 +315,37 @@ where
             &rtxn,
             index,
             extractor_sender.geo(),
+            &indexing_context.must_stop_processing,
+        )?;
+    }
+
+    'cellulite: {
+        let Some(extractor) =
+            GeoJsonExtractor::new(&rtxn, index, *indexing_context.grenad_parameters)?
+        else {
+            break 'cellulite;
+        };
+        let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
+            let _entered = span.enter();
+
+            extract(
+                document_changes,
+                &extractor,
+                indexing_context,
+                extractor_allocs,
+                &datastore,
+                IndexingStep::WritingGeoJson,
+            )?;
+        }
+
+        merge_and_send_cellulite(
+            datastore,
+            &rtxn,
+            index,
+            extractor_sender.geojson(),
             &indexing_context.must_stop_processing,
         )?;
     }

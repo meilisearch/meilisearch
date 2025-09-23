@@ -5,7 +5,7 @@ use bumpalo::Bump;
 use hashbrown::HashMap;
 
 use super::DelAddRoaringBitmap;
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::update::new::channel::{DocumentsSender, ExtractorBbqueueSender};
 use crate::update::new::document::{write_to_obkv, Document, DocumentContext, DocumentIdentifiers};
 use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};
@@ -75,7 +75,11 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                         .geo_field()
                         .transpose()
                         .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
-                    for res in content.iter_top_level_fields().chain(geo_iter) {
+                    let geojson_iter = content
+                        .geojson_field()
+                        .transpose()
+                        .map(|res| res.map(|rv| (RESERVED_GEOJSON_FIELD_NAME, rv)));
+                    for res in content.iter_top_level_fields().chain(geo_iter).chain(geojson_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
@@ -94,7 +98,11 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                         .geo_field()
                         .transpose()
                         .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
-                    for res in content.iter_top_level_fields().chain(geo_iter) {
+                    let geojson_iter = content
+                        .geojson_field()
+                        .transpose()
+                        .map(|res| res.map(|rv| (RESERVED_GEOJSON_FIELD_NAME, rv)));
+                    for res in content.iter_top_level_fields().chain(geo_iter).chain(geojson_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
@@ -108,7 +116,11 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                         .geo_field()
                         .transpose()
                         .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
-                    for res in content.iter_top_level_fields().chain(geo_iter) {
+                    let geojson_iter = content
+                        .geojson_field()
+                        .transpose()
+                        .map(|res| res.map(|rv| (RESERVED_GEOJSON_FIELD_NAME, rv)));
+                    for res in content.iter_top_level_fields().chain(geo_iter).chain(geojson_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta
@@ -143,7 +155,11 @@ impl<'extractor> Extractor<'extractor> for DocumentsExtractor<'_, '_> {
                         .geo_field()
                         .transpose()
                         .map(|res| res.map(|rv| (RESERVED_GEO_FIELD_NAME, rv)));
-                    for res in content.iter_top_level_fields().chain(geo_iter) {
+                    let geojson_iter = content
+                        .geojson_field()
+                        .transpose()
+                        .map(|res| res.map(|rv| (RESERVED_GEOJSON_FIELD_NAME, rv)));
+                    for res in content.iter_top_level_fields().chain(geo_iter).chain(geojson_iter) {
                         let (f, _) = res?;
                         let entry = document_extractor_data
                             .field_distribution_delta

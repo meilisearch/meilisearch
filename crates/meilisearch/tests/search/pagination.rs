@@ -1,7 +1,8 @@
+use meili_snap::{json_string, snapshot};
+
 use super::shared_index_with_documents;
 use crate::common::Server;
 use crate::json;
-use meili_snap::{json_string, snapshot};
 
 #[actix_rt::test]
 async fn default_search_should_return_estimated_total_hit() {

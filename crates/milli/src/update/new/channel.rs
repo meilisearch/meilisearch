@@ -139,6 +139,7 @@ pub enum ReceiverAction {
     LargeEntry(LargeEntry),
     LargeVectors(LargeVectors),
     LargeVector(LargeVector),
+    LargeGeoJson(LargeGeoJson),
 }
 
 /// An entry that cannot fit in the BBQueue buffers has been
@@ -191,6 +192,14 @@ impl LargeVector {
     pub fn read_embedding(&self, dimensions: usize) -> &[f32] {
         self.embedding.chunks_exact(dimensions).map(bytemuck::cast_slice).next().unwrap()
     }
+}
+
+#[derive(Debug)]
+pub struct LargeGeoJson {
+    /// The document id associated to the large geojson.
+    pub docid: DocumentId,
+    /// The large geojson that must be written.
+    pub geojson: Mmap,
 }
 
 impl<'a> WriterBbqueueReceiver<'a> {
@@ -258,10 +267,12 @@ pub enum EntryHeader {
     DeleteVector(DeleteVector),
     SetVectors(SetVectors),
     SetVector(SetVector),
+    CelluliteItem(DocumentId),
+    CelluliteRemove(DocumentId),
 }
 
 impl EntryHeader {
-    const fn variant_size() -> usize {
+    pub const fn variant_size() -> usize {
         mem::size_of::<u8>()
     }
 
@@ -271,6 +282,8 @@ impl EntryHeader {
             EntryHeader::DeleteVector(_) => 1,
             EntryHeader::SetVectors(_) => 2,
             EntryHeader::SetVector(_) => 3,
+            EntryHeader::CelluliteItem(_) => 4,
+            EntryHeader::CelluliteRemove(_) => 5,
         }
     }
 
@@ -287,6 +300,14 @@ impl EntryHeader {
 
     const fn total_delete_vector_size() -> usize {
         Self::variant_size() + mem::size_of::<DeleteVector>()
+    }
+
+    const fn total_cellulite_item_size(value_length: usize) -> usize {
+        Self::variant_size() + mem::size_of::<DocumentId>() + value_length
+    }
+
+    const fn total_cellulite_remove_size() -> usize {
+        Self::variant_size() + mem::size_of::<DocumentId>()
     }
 
     /// The `dimensions` corresponds to the number of `f32` in the embedding.
@@ -306,6 +327,8 @@ impl EntryHeader {
             EntryHeader::DeleteVector(adv) => mem::size_of_val(adv),
             EntryHeader::SetVectors(asvs) => mem::size_of_val(asvs),
             EntryHeader::SetVector(asv) => mem::size_of_val(asv),
+            EntryHeader::CelluliteItem(docid) => mem::size_of_val(docid),
+            EntryHeader::CelluliteRemove(docid) => mem::size_of_val(docid),
         };
         Self::variant_size() + payload_size
     }
@@ -333,6 +356,16 @@ impl EntryHeader {
                 let header = checked::pod_read_unaligned(header_bytes);
                 EntryHeader::SetVector(header)
             }
+            4 => {
+                let header_bytes = &remaining[..mem::size_of::<DocumentId>()];
+                let header = checked::pod_read_unaligned(header_bytes);
+                EntryHeader::CelluliteItem(header)
+            }
+            5 => {
+                let header_bytes = &remaining[..mem::size_of::<DocumentId>()];
+                let header = checked::pod_read_unaligned(header_bytes);
+                EntryHeader::CelluliteRemove(header)
+            }
             id => panic!("invalid variant id: {id}"),
         }
     }
@@ -344,6 +377,8 @@ impl EntryHeader {
             EntryHeader::DeleteVector(adv) => bytemuck::bytes_of(adv),
             EntryHeader::SetVectors(asvs) => bytemuck::bytes_of(asvs),
             EntryHeader::SetVector(asv) => bytemuck::bytes_of(asv),
+            EntryHeader::CelluliteItem(docid) => bytemuck::bytes_of(docid),
+            EntryHeader::CelluliteRemove(docid) => bytemuck::bytes_of(docid),
         };
         *first = self.variant_id();
         remaining.copy_from_slice(payload_bytes);
@@ -546,6 +581,10 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
     pub fn geo<'a>(&'a self) -> GeoSender<'a, 'b> {
         GeoSender(self)
+    }
+
+    pub fn geojson<'a>(&'a self) -> GeoJsonSender<'a, 'b> {
+        GeoJsonSender(self)
     }
 
     fn delete_vector(&self, docid: DocumentId) -> crate::Result<()> {
@@ -1137,5 +1176,74 @@ impl GeoSender<'_, '_> {
                 Ok(())
             },
         )
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
+
+impl GeoJsonSender<'_, '_> {
+    pub fn send_geojson(&self, docid: DocumentId, value: Vec<u8>) -> crate::Result<()> {
+        let max_grant = self.0.max_grant;
+        let refcell = self.0.producers.get().unwrap();
+        let mut producer = refcell.0.borrow_mut_or_yield();
+
+        let payload_header = EntryHeader::CelluliteItem(docid);
+        let value_length = value.len();
+        let total_length = EntryHeader::total_cellulite_item_size(value_length);
+        if total_length > max_grant {
+            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+
+            let mut embedding_bytes = bytemuck::cast_slice(&value);
+            io::copy(&mut embedding_bytes, &mut value_file)?;
+
+            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+            let geojson = unsafe { Mmap::map(&value_file)? }; // Safe because the file is never modified
+
+            let large_geojson = LargeGeoJson { docid, geojson };
+            self.0.sender.send(ReceiverAction::LargeGeoJson(large_geojson)).unwrap();
+
+            return Ok(());
+        }
+
+        // Spin loop to have a frame the size we requested.
+        reserve_and_write_grant(
+            &mut producer,
+            total_length,
+            &self.0.sender,
+            &self.0.sent_messages_attempts,
+            &self.0.blocking_sent_messages_attempts,
+            |grant| {
+                let header_size = payload_header.header_size();
+                let (header_bytes, remaining) = grant.split_at_mut(header_size);
+                payload_header.serialize_into(header_bytes);
+                remaining.copy_from_slice(&value);
+                Ok(())
+            },
+        )?;
+
+        Ok(())
+    }
+
+    pub fn delete_geojson(&self, docid: DocumentId) -> crate::Result<()> {
+        let refcell = self.0.producers.get().unwrap();
+        let mut producer = refcell.0.borrow_mut_or_yield();
+
+        let payload_header = EntryHeader::CelluliteRemove(docid);
+        let total_length = EntryHeader::total_cellulite_remove_size();
+
+        reserve_and_write_grant(
+            &mut producer,
+            total_length,
+            &self.0.sender,
+            &self.0.sent_messages_attempts,
+            &self.0.blocking_sent_messages_attempts,
+            |grant| {
+                payload_header.serialize_into(grant);
+                Ok(())
+            },
+        )?;
+
+        Ok(())
     }
 }

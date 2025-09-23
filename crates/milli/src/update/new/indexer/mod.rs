@@ -187,6 +187,13 @@ where
             facet_field_ids_delta,
         )?;
 
+        indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
+        index.cellulite.build(
+            wtxn,
+            &indexing_context.must_stop_processing,
+            indexing_context.progress,
+        )?;
+
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 
         Ok(congestion) as Result<_>
@@ -316,6 +323,13 @@ where
             )
         })
         .unwrap()?;
+
+        indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
+        index.cellulite.build(
+            wtxn,
+            &indexing_context.must_stop_processing,
+            indexing_context.progress,
+        )?;
 
         indexing_context.progress.update_progress(IndexingStep::Finalizing);
 

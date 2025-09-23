@@ -1,3 +1,4 @@
+use core::convert::Infallible;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
@@ -7,7 +8,6 @@ use actix_http::header::{
 };
 use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
-use core::convert::Infallible;
 use deserr::actix_web::AwebJson;
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use index_scheduler::IndexScheduler;
@@ -24,12 +24,12 @@ use tracing::debug;
 use url::Url;
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
+use WebhooksError::*;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-use WebhooksError::*;
 
 #[derive(OpenApi)]
 #[openapi(

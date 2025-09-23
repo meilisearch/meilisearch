@@ -75,7 +75,11 @@ pub enum ExpectedValueKind {
 pub enum ErrorKind<'a> {
     ReservedGeo(&'a str),
     GeoRadius,
+    GeoRadiusArgumentCount(usize),
     GeoBoundingBox,
+    GeoPolygon,
+    GeoPolygonNotEnoughPoints(usize),
+    GeoCoordinatesNotPair(usize),
     MisusedGeoRadius,
     MisusedGeoBoundingBox,
     VectorFilterLeftover,
@@ -189,7 +193,7 @@ impl Display for Error<'_> {
             }
             ErrorKind::InvalidPrimary => {
                 let text = if input.trim().is_empty() { "but instead got nothing.".to_string() } else { format!("at `{}`.", escaped_input) };
-                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` {}", text)?
+                writeln!(f, "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` {text}")?
             }
             ErrorKind::InvalidEscapedNumber => {
                 writeln!(f, "Found an invalid escaped sequence number: `{}`.", escaped_input)?
@@ -198,10 +202,22 @@ impl Display for Error<'_> {
                 writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", escaped_input)?
             }
             ErrorKind::GeoRadius => {
-                writeln!(f, "The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.")?
+                writeln!(f, "The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.")?
+            }
+            ErrorKind::GeoRadiusArgumentCount(count) => {
+                writeln!(f, "Was expecting 3 or 4 arguments for `_geoRadius`, but instead found {count}.")?
             }
             ErrorKind::GeoBoundingBox => {
                 writeln!(f, "The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.")?
+            }
+            ErrorKind::GeoPolygon => {
+                writeln!(f, "The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.")?
+            }
+            ErrorKind::GeoPolygonNotEnoughPoints(n) => {
+                writeln!(f, "The `_geoPolygon` filter expects at least 3 points but only {n} were specified")?;
+            }
+            ErrorKind::GeoCoordinatesNotPair(number) => {
+                writeln!(f, "Was expecting 2 coordinates but instead found {number}.")?
             }
             ErrorKind::ReservedGeo(name) => {
                 writeln!(f, "`{}` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.", name.escape_debug())?

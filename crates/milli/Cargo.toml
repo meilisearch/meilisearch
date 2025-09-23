@@ -19,6 +19,7 @@ bstr = "1.12.0"
 bytemuck = { version = "1.23.1", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.9.7", default-features = false }
+cellulite = "0.3.0"
 concat-arrays = "0.1.2"
 convert_case = "0.8.0"
 crossbeam-channel = "0.5.15"
@@ -27,6 +28,7 @@ either = { version = "1.15.0", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
 fxhash = "0.2.1"
+geojson = "0.24.2"
 geoutils = "0.5.1"
 grenad = { version = "0.5.0", default-features = false, features = [
     "rayon",
@@ -96,7 +98,7 @@ url = "2.5.4"
 hashbrown = "0.15.4"
 bumpalo = "3.18.1"
 bumparaw-collections = "0.1.4"
-steppe = { version = "0.4.0", default-features = false }
+steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.9"
 allocator-api2 = "0.3.0"
 rustc-hash = "2.1.1"
@@ -116,6 +118,8 @@ twox-hash = { version = "2.1.1", default-features = false, features = [
     "xxhash3_64",
     "xxhash64",
 ] }
+geo-types = "0.7.16"
+zerometry = "0.1.0"
 
 [dev-dependencies]
 mimalloc = { version = "0.1.47", default-features = false }

@@ -642,14 +642,14 @@ async fn filter_invalid_syntax_object() {
         &json!({"filterableAttributes": ["title"]}),
         &json!({"filter": "title & Glass"}),
         |response, code| {
-            snapshot!(response, @r###"
+            snapshot!(response, @r#"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
             }
-            "###);
+            "#);
             snapshot!(code, @"400 Bad Request");
         },
     )
@@ -663,14 +663,14 @@ async fn filter_invalid_syntax_array() {
         &json!({"filterableAttributes": ["title"]}),
         &json!({"filter": ["title & Glass"]}),
         |response, code| {
-            snapshot!(response, @r###"
+            snapshot!(response, @r#"
             {
-              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `title & Glass`.\n1:14 title & Glass",
+              "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `title & Glass`.\n1:14 title & Glass",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
             }
-            "###);
+            "#);
             snapshot!(code, @"400 Bad Request");
         },
     )
