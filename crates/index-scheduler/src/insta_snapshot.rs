@@ -317,6 +317,9 @@ fn snapshot_details(d: &Details) -> String {
         Details::UpgradeDatabase { from, to } => {
             format!("{{ from: {from:?}, to: {to:?} }}")
         }
+        Details::NetworkTopologyChange { network: new_network } => {
+            format!("{{ new_network: {new_network:?} }}")
+        }
     }
 }
 

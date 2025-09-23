@@ -15,6 +15,7 @@ use utoipa::{schema, ToSchema};
 use uuid::Uuid;
 
 use crate::batches::BatchId;
+use crate::enterprise_edition::network::Network;
 use crate::error::ResponseError;
 use crate::index_uid_pattern::IndexUidPattern;
 use crate::keys::Key;
@@ -58,6 +59,7 @@ impl Task {
             | TaskDeletion { .. }
             | Export { .. }
             | UpgradeDatabase { .. }
+            | NetworkTopologyChange { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -94,7 +96,8 @@ impl Task {
             | KindWithContent::DumpCreation { .. }
             | KindWithContent::SnapshotCreation
             | KindWithContent::Export { .. }
-            | KindWithContent::UpgradeDatabase { .. } => None,
+            | KindWithContent::UpgradeDatabase { .. }
+            | KindWithContent::NetworkTopologyChange { .. } => None,
         }
     }
 }
@@ -170,6 +173,9 @@ pub enum KindWithContent {
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
+    NetworkTopologyChange {
+        network: Option<Network>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -206,6 +212,7 @@ impl KindWithContent {
             KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
             KindWithContent::Export { .. } => Kind::Export,
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
+            KindWithContent::NetworkTopologyChange { .. } => Kind::NetworkTopologyChange,
         }
     }
 
@@ -218,6 +225,7 @@ impl KindWithContent {
             | TaskCancelation { .. }
             | TaskDeletion { .. }
             | Export { .. }
+            | NetworkTopologyChange { .. }
             | UpgradeDatabase { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -325,6 +333,9 @@ impl KindWithContent {
                     versioning::VERSION_PATCH,
                 ),
             }),
+            KindWithContent::NetworkTopologyChange { network: new_network } => {
+                Some(Details::NetworkTopologyChange { network: new_network.clone() })
+            }
         }
     }
 
@@ -407,6 +418,9 @@ impl KindWithContent {
                     versioning::VERSION_PATCH,
                 ),
             }),
+            KindWithContent::NetworkTopologyChange { network: new_network } => {
+                Some(Details::NetworkTopologyChange { network: new_network.clone() })
+            }
         }
     }
 }
@@ -469,6 +483,9 @@ impl From<&KindWithContent> for Option<Details> {
                     versioning::VERSION_PATCH,
                 ),
             }),
+            KindWithContent::NetworkTopologyChange { network: new_network } => {
+                Some(Details::NetworkTopologyChange { network: new_network.clone() })
+            }
         }
     }
 }
@@ -579,6 +596,7 @@ pub enum Kind {
     SnapshotCreation,
     Export,
     UpgradeDatabase,
+    NetworkTopologyChange,
 }
 
 impl Kind {
@@ -597,7 +615,8 @@ impl Kind {
             | Kind::DumpCreation
             | Kind::Export
             | Kind::UpgradeDatabase
-            | Kind::SnapshotCreation => false,
+            | Kind::SnapshotCreation
+            | Kind::NetworkTopologyChange => false,
         }
     }
 }
@@ -618,6 +637,7 @@ impl Display for Kind {
             Kind::SnapshotCreation => write!(f, "snapshotCreation"),
             Kind::Export => write!(f, "export"),
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
+            Kind::NetworkTopologyChange => write!(f, "networkTopologyChange"),
         }
     }
 }
@@ -653,6 +673,8 @@ impl FromStr for Kind {
             Ok(Kind::Export)
         } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
             Ok(Kind::UpgradeDatabase)
+        } else if kind.eq_ignore_ascii_case("networkTopologyChange") {
+            Ok(Kind::NetworkTopologyChange)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -738,6 +760,9 @@ pub enum Details {
         from: (u32, u32, u32),
         to: (u32, u32, u32),
     },
+    NetworkTopologyChange {
+        network: Option<Network>,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
@@ -805,6 +830,7 @@ impl Details {
             | Self::Dump { .. }
             | Self::Export { .. }
             | Self::UpgradeDatabase { .. }
+            | Self::NetworkTopologyChange { .. }
             | Self::IndexSwap { .. } => (),
         }
 
