@@ -432,6 +432,13 @@ where
         unordered_field_buffer.push((fid, geo_value));
     }
 
+    if let Some(geojson_value) = document.geojson_field()? {
+        let fid = fields_ids_map
+            .id_or_insert(RESERVED_GEOJSON_FIELD_NAME)
+            .ok_or(UserError::AttributeLimitReached)?;
+        unordered_field_buffer.push((fid, geojson_value));
+    }
+
     unordered_field_buffer.sort_by_key(|(fid, _)| *fid);
     for (fid, value) in unordered_field_buffer.iter() {
         writer.insert(*fid, value.get().as_bytes()).unwrap();
