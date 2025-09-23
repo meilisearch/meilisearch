@@ -1,28 +1,21 @@
-use std::collections::BTreeMap;
-
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
-use itertools::{EitherOrBoth, Itertools};
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::enterprise_edition::network::{Network as DbNetwork, Remote as DbRemote};
-use meilisearch_types::error::deserr_codes::{
-    InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf, InvalidNetworkSharding,
-    InvalidNetworkUrl, InvalidNetworkWriteApiKey,
-};
+use meilisearch_types::enterprise_edition::network::{Network, Remote};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use serde::Serialize;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::OpenApi;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::SummarizedTaskView;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -81,73 +74,6 @@ async fn get_network(
     let network = index_scheduler.network();
     debug!(returns = ?network, "Get network");
     Ok(HttpResponse::Ok().json(network))
-}
-
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError<InvalidNetworkRemotes>, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub struct Remote {
-    #[schema(value_type = Option<String>, example = json!({
-        "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset, write_api_key: Setting::Reset },
-        "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()), write_api_key: Setting::Set("bar".into()) },
-        "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
-    }))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkUrl>)]
-    #[serde(default)]
-    pub url: Setting<String>,
-    #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkSearchApiKey>)]
-    #[serde(default)]
-    pub search_api_key: Setting<String>,
-    #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkWriteApiKey>)]
-    #[serde(default)]
-    pub write_api_key: Setting<String>,
-}
-
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub struct Network {
-    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!("http://localhost:7700"))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
-    #[serde(default)]
-    pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
-    #[schema(value_type = Option<String>, example = json!("ms-00"), rename = "self")]
-    #[serde(default, rename = "self")]
-    #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
-    pub local: Setting<String>,
-    #[schema(value_type = Option<bool>, example = json!(true))]
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkSharding>)]
-    pub sharding: Setting<bool>,
-}
-
-impl Remote {
-    pub fn try_into_db_node(self, name: &str) -> Result<DbRemote, ResponseError> {
-        Ok(DbRemote {
-            url: self
-                .url
-                .set()
-                .ok_or(ResponseError::from_msg(
-                    format!("Missing field `.remotes.{name}.url`"),
-                    meilisearch_types::error::Code::MissingNetworkUrl,
-                ))
-                .and_then(|url| {
-                    if let Err(error) = url::Url::parse(&url) {
-                        return Err(ResponseError::from_msg(
-                            format!("Invalid `.remotes.{name}.url` (`{url}`): {error}"),
-                            meilisearch_types::error::Code::InvalidNetworkUrl,
-                        ));
-                    }
-                    Ok(url)
-                })?,
-            search_api_key: self.search_api_key.set(),
-            write_api_key: self.write_api_key.set(),
-        })
-    }
 }
 
 #[derive(Serialize)]

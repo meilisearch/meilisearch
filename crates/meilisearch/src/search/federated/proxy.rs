@@ -1,6 +1,6 @@
 pub use error::ProxySearchError;
 use error::ReqwestErrorWithoutUrl;
-use meilisearch_types::enterprise_edition::network::Remote;
+use meilisearch_types::enterprise_edition::network::DbRemote;
 use rand::Rng as _;
 use reqwest::{Client, Response, StatusCode};
 use serde::de::DeserializeOwned;
@@ -94,7 +94,7 @@ pub struct ProxySearchParams {
 
 /// Performs a federated search on a remote host and returns the results
 pub async fn proxy_search(
-    node: &Remote,
+    node: &DbRemote,
     queries: Vec<SearchQueryWithIndex>,
     federation: Federation,
     params: &ProxySearchParams,

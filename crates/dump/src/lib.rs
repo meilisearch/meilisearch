@@ -253,7 +253,7 @@ pub(crate) mod test {
     use big_s::S;
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
-    use meilisearch_types::enterprise_edition::network::{Network, Remote};
+    use meilisearch_types::enterprise_edition::network::{DbNetwork, DbRemote};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
     use meilisearch_types::features::RuntimeTogglableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
@@ -544,10 +544,10 @@ pub(crate) mod test {
         RuntimeTogglableFeatures::default()
     }
 
-    fn create_test_network() -> Network {
-        Network {
+    fn create_test_network() -> DbNetwork {
+        DbNetwork {
             local: Some("myself".to_string()),
-            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
+            remotes: maplit::btreemap! {"other".to_string() => DbRemote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
             sharding: false,
         }
     }

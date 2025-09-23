@@ -54,7 +54,7 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::enterprise_edition::network::Network;
+use meilisearch_types::enterprise_edition::network::DbNetwork;
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
@@ -892,13 +892,13 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub fn put_network(&self, network: Network) -> Result<()> {
+    pub fn put_network(&self, network: DbNetwork) -> Result<()> {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.features.put_network(wtxn, network)?;
         Ok(())
     }
 
-    pub fn network(&self) -> Network {
+    pub fn network(&self) -> DbNetwork {
         self.features.network()
     }
 

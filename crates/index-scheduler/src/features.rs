@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use meilisearch_types::enterprise_edition::network::Network;
+use meilisearch_types::enterprise_edition::network::DbNetwork;
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
@@ -24,7 +24,7 @@ mod db_keys {
 pub(crate) struct FeatureData {
     persisted: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
     runtime: Arc<RwLock<RuntimeTogglableFeatures>>,
-    network: Arc<RwLock<Network>>,
+    network: Arc<RwLock<DbNetwork>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -197,8 +197,8 @@ impl FeatureData {
         }));
 
         // Once this is stabilized, network should be stored along with webhooks in index-scheduler's persisted database
-        let network_db = runtime_features_db.remap_data_type::<SerdeJson<Network>>();
-        let network: Network = network_db.get(wtxn, db_keys::NETWORK)?.unwrap_or_default();
+        let network_db = runtime_features_db.remap_data_type::<SerdeJson<DbNetwork>>();
+        let network: DbNetwork = network_db.get(wtxn, db_keys::NETWORK)?.unwrap_or_default();
 
         Ok(Self {
             persisted: runtime_features_db,
@@ -234,8 +234,8 @@ impl FeatureData {
         RoFeatures::new(self)
     }
 
-    pub fn put_network(&self, mut wtxn: RwTxn, new_network: Network) -> Result<()> {
-        self.persisted.remap_data_type::<SerdeJson<Network>>().put(
+    pub fn put_network(&self, mut wtxn: RwTxn, new_network: DbNetwork) -> Result<()> {
+        self.persisted.remap_data_type::<SerdeJson<DbNetwork>>().put(
             &mut wtxn,
             db_keys::NETWORK,
             &new_network,
@@ -247,7 +247,7 @@ impl FeatureData {
         Ok(())
     }
 
-    pub fn network(&self) -> Network {
-        Network::clone(&*self.network.read().unwrap())
+    pub fn network(&self) -> DbNetwork {
+        DbNetwork::clone(&*self.network.read().unwrap())
     }
 }
