@@ -1075,7 +1075,9 @@ dependencies = [
 
 [[package]]
 name = "cellulite"
-version = "0.2.0"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71a41aa2cd021bc3f23d97cc1e645848ca8c279fc757d1570ba7fe7ddc021290"
 dependencies = [
  "crossbeam",
  "geo",
@@ -1090,7 +1092,7 @@ dependencies = [
  "steppe",
  "thiserror 2.0.16",
  "thread_local",
- "zerometry 0.2.0",
+ "zerometry 0.3.0",
 ]
 
 [[package]]
@@ -7995,7 +7997,9 @@ dependencies = [
 
 [[package]]
 name = "zerometry"
-version = "0.2.0"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98b0a5d1e9bcbcf001a32521554bfd84af825a23805fdc0fa000a9b4eefb988e"
 dependencies = [
  "bytemuck",
  "byteorder",
