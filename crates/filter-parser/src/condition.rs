@@ -7,23 +7,14 @@
 
 use nom::branch::alt;
 use nom::bytes::complete::tag;
-use nom::character::complete::char;
-use nom::character::complete::multispace0;
-use nom::character::complete::multispace1;
-use nom::combinator::cut;
-use nom::combinator::map;
-use nom::combinator::value;
-use nom::sequence::preceded;
-use nom::sequence::{terminated, tuple};
+use nom::character::complete::{char, multispace0, multispace1};
+use nom::combinator::{cut, map, value};
+use nom::sequence::{preceded, terminated, tuple};
 use Condition::*;
 
 use crate::error::IResultExt;
-use crate::value::parse_vector_value;
-use crate::value::parse_vector_value_cut;
-use crate::Error;
-use crate::ErrorKind;
-use crate::VectorFilter;
-use crate::{parse_value, FilterCondition, IResult, Span, Token};
+use crate::value::{parse_vector_value, parse_vector_value_cut};
+use crate::{parse_value, Error, ErrorKind, FilterCondition, IResult, Span, Token, VectorFilter};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Condition<'a> {

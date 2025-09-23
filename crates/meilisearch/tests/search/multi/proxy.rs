@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use actix_http::StatusCode;
 use meili_snap::{json_string, snapshot};
-use wiremock::matchers::method;
-use wiremock::matchers::{path, AnyMatcher};
+use wiremock::matchers::{method, path, AnyMatcher};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
 use crate::common::{Server, Value, SCORE_DOCUMENTS};

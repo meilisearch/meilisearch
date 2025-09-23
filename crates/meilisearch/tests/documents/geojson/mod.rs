@@ -1,8 +1,7 @@
-use crate::{
-    common::{shared_index_geojson_documents, Server},
-    json,
-};
 use meili_snap::{json_string, snapshot};
+
+use crate::common::{shared_index_geojson_documents, Server};
+use crate::json;
 
 const LILLE: &str = include_str!("assets/lille.geojson");
 
