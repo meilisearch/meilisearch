@@ -3256,6 +3256,7 @@ dependencies = [
  "flate2",
  "indexmap",
  "insta",
+ "itertools 0.14.0",
  "maplit",
  "meili-snap",
  "meilisearch-auth",
