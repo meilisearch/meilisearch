@@ -135,6 +135,9 @@ impl IndexScheduler {
             Batch::Dump(task) => self
                 .process_dump_creation(progress, task)
                 .map(|tasks| (tasks, ProcessBatchInfo::default())),
+            Batch::NetworkTopologyChanges { tasks } => self
+                .process_network_changes(progress, tasks)
+                .map(|tasks| (tasks, ProcessBatchInfo::default())),
             Batch::IndexOperation { op, must_create_index } => {
                 let index_uid = op.index_uid().to_string();
                 let index = if must_create_index {

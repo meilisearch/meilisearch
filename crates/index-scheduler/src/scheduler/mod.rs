@@ -2,6 +2,7 @@ mod autobatcher;
 #[cfg(test)]
 mod autobatcher_test;
 mod create_batch;
+mod enterprise_edition;
 mod process_batch;
 mod process_dump_creation;
 mod process_export;
