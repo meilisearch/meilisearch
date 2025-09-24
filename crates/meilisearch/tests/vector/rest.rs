@@ -7,13 +7,14 @@ use reqwest::IntoUrl;
 use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+use crate::common::mock_server::SafeMockServer;
 
 use crate::common::Value;
 use crate::json;
 use crate::vector::{get_server_vector, GetAllDocumentsOptions};
 
-pub async fn create_mock() -> (&'static MockServer, Value) {
-    let mock_server = Box::leak(Box::new(MockServer::start().await));
+pub async fn create_mock() -> (&'static SafeMockServer, Value) {
+    let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
 
     let text_to_embedding: BTreeMap<_, _> = vec![
         // text -> embedding
@@ -32,7 +33,7 @@ pub async fn create_mock() -> (&'static MockServer, Value) {
                 json!({ "data": text_to_embedding.get(text.as_str()).unwrap_or(&[99., 99., 99.]) }),
             )
         })
-        .mount(mock_server)
+        .mount(&**mock_server)
         .await;
     let url = mock_server.uri();
 
@@ -50,8 +51,8 @@ pub async fn create_mock() -> (&'static MockServer, Value) {
     (mock_server, embedder_settings)
 }
 
-async fn create_mock_default_template() -> (&'static MockServer, Value) {
-    let mock_server = Box::leak(Box::new(MockServer::start().await));
+async fn create_mock_default_template() -> (&'static SafeMockServer, Value) {
+    let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
 
     let text_to_embedding: BTreeMap<_, _> = vec![
         // text -> embedding
@@ -73,7 +74,7 @@ async fn create_mock_default_template() -> (&'static MockServer, Value) {
                     .set_body_json(json!({"error": "text not found", "text": text})),
             }
         })
-        .mount(mock_server)
+        .mount(&**mock_server)
         .await;
     let url = mock_server.uri();
 
@@ -106,8 +107,8 @@ struct SingleResponse {
     embedding: Vec<f32>,
 }
 
-async fn create_mock_multiple() -> (&'static MockServer, Value) {
-    let mock_server = Box::leak(Box::new(MockServer::start().await));
+async fn create_mock_multiple() -> (&'static SafeMockServer, Value) {
+    let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
 
     let text_to_embedding: BTreeMap<_, _> = vec![
         // text -> embedding
@@ -146,7 +147,7 @@ async fn create_mock_multiple() -> (&'static MockServer, Value) {
 
             ResponseTemplate::new(200).set_body_json(response)
         })
-        .mount(mock_server)
+        .mount(&**mock_server)
         .await;
     let url = mock_server.uri();
 
@@ -176,8 +177,8 @@ struct SingleRequest {
     input: String,
 }
 
-async fn create_mock_single_response_in_array() -> (&'static MockServer, Value) {
-    let mock_server = Box::leak(Box::new(MockServer::start().await));
+async fn create_mock_single_response_in_array() -> (&'static SafeMockServer, Value) {
+    let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
 
     let text_to_embedding: BTreeMap<_, _> = vec![
         // text -> embedding
@@ -212,7 +213,7 @@ async fn create_mock_single_response_in_array() -> (&'static MockServer, Value) 
 
             ResponseTemplate::new(200).set_body_json(response)
         })
-        .mount(mock_server)
+        .mount(&**mock_server)
         .await;
     let url = mock_server.uri();
 
@@ -236,8 +237,8 @@ async fn create_mock_single_response_in_array() -> (&'static MockServer, Value) 
     (mock_server, embedder_settings)
 }
 
-async fn create_mock_raw_with_custom_header() -> (&'static MockServer, Value) {
-    let mock_server = Box::leak(Box::new(MockServer::start().await));
+async fn create_mock_raw_with_custom_header() -> (&'static SafeMockServer, Value) {
+    let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
 
     let text_to_embedding: BTreeMap<_, _> = vec![
         // text -> embedding
@@ -277,7 +278,7 @@ async fn create_mock_raw_with_custom_header() -> (&'static MockServer, Value) {
 
             ResponseTemplate::new(200).set_body_json(output)
         })
-        .mount(mock_server)
+        .mount(&**mock_server)
         .await;
     let url = mock_server.uri();
 
@@ -293,8 +294,8 @@ async fn create_mock_raw_with_custom_header() -> (&'static MockServer, Value) {
     (mock_server, embedder_settings)
 }
 
-async fn create_mock_raw() -> (&'static MockServer, Value) {
-    let mock_server = Box::leak(Box::new(MockServer::start().await));
+async fn create_mock_raw() -> (&'static SafeMockServer, Value) {
+    let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
 
     let text_to_embedding: BTreeMap<_, _> = vec![
         // text -> embedding
@@ -321,7 +322,7 @@ async fn create_mock_raw() -> (&'static MockServer, Value) {
 
             ResponseTemplate::new(200).set_body_json(output)
         })
-        .mount(mock_server)
+        .mount(&**mock_server)
         .await;
     let url = mock_server.uri();
 
@@ -337,8 +338,8 @@ async fn create_mock_raw() -> (&'static MockServer, Value) {
     (mock_server, embedder_settings)
 }
 
-async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (&'static MockServer, Value) {
-    let mock_server = Box::leak(Box::new(MockServer::start().await));
+async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (&'static SafeMockServer, Value) {
+    let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
     let count = AtomicUsize::new(0);
 
     Mock::given(method("POST"))
@@ -355,7 +356,7 @@ async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (&'static MockServe
                 ResponseTemplate::new(500).set_body_string("Service Unavailable")
             }
         })
-        .mount(mock_server)
+        .mount(&**mock_server)
         .await;
 
     let url = mock_server.uri();
