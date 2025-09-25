@@ -418,3 +418,36 @@ async fn geo_radius() {
     }
     "#);
 }
+
+#[actix_rt::test]
+async fn bug_5904() {
+    // https://github.com/meilisearch/meilisearch/issues/5904
+
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (response, _code) =
+        index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let geojson = json!({
+      "id": 1,
+      "_geojson": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                4.23914,
+                48.382893
+              ]
+            },
+            "properties": {}
+          }
+        ]
+      }
+    });
+    let (response, _code) = index.add_documents(geojson, Some("id")).await;
+    server.wait_task(response.uid()).await.succeeded();
+}
