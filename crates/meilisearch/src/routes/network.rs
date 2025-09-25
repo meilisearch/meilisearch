@@ -1,28 +1,21 @@
-use std::collections::BTreeMap;
-
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
-use deserr::Deserr;
 use index_scheduler::IndexScheduler;
-use itertools::{EitherOrBoth, Itertools};
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::enterprise_edition::network::{Network as DbNetwork, Remote as DbRemote};
-use meilisearch_types::error::deserr_codes::{
-    InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf, InvalidNetworkSharding,
-    InvalidNetworkUrl, InvalidNetworkWriteApiKey,
-};
+use meilisearch_types::enterprise_edition::network::{Network, Remote};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use serde::Serialize;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::OpenApi;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::SummarizedTaskView;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -31,7 +24,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
         name = "Network",
         description = "The `/network` route allows you to describe the topology of a network of Meilisearch instances.
 
-This route is **synchronous**. This means that no task object will be returned, and any change to the network will be made available immediately.",
+This route is **asynchronous**. A task uid will be returned, and any change to the network will be effective after the corresponding task has been processed.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/network"),
     )),
 )]
@@ -81,73 +74,6 @@ async fn get_network(
     let network = index_scheduler.network();
     debug!(returns = ?network, "Get network");
     Ok(HttpResponse::Ok().json(network))
-}
-
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError<InvalidNetworkRemotes>, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub struct Remote {
-    #[schema(value_type = Option<String>, example = json!({
-        "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset, write_api_key: Setting::Reset },
-        "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()), write_api_key: Setting::Set("bar".into()) },
-        "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
-    }))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkUrl>)]
-    #[serde(default)]
-    pub url: Setting<String>,
-    #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkSearchApiKey>)]
-    #[serde(default)]
-    pub search_api_key: Setting<String>,
-    #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkWriteApiKey>)]
-    #[serde(default)]
-    pub write_api_key: Setting<String>,
-}
-
-#[derive(Debug, Deserr, ToSchema, Serialize)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub struct Network {
-    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!("http://localhost:7700"))]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
-    #[serde(default)]
-    pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
-    #[schema(value_type = Option<String>, example = json!("ms-00"), rename = "self")]
-    #[serde(default, rename = "self")]
-    #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
-    pub local: Setting<String>,
-    #[schema(value_type = Option<bool>, example = json!(true))]
-    #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkSharding>)]
-    pub sharding: Setting<bool>,
-}
-
-impl Remote {
-    pub fn try_into_db_node(self, name: &str) -> Result<DbRemote, ResponseError> {
-        Ok(DbRemote {
-            url: self
-                .url
-                .set()
-                .ok_or(ResponseError::from_msg(
-                    format!("Missing field `.remotes.{name}.url`"),
-                    meilisearch_types::error::Code::MissingNetworkUrl,
-                ))
-                .and_then(|url| {
-                    if let Err(error) = url::Url::parse(&url) {
-                        return Err(ResponseError::from_msg(
-                            format!("Invalid `.remotes.{name}.url` (`{url}`): {error}"),
-                            meilisearch_types::error::Code::InvalidNetworkUrl,
-                        ));
-                    }
-                    Ok(url)
-                })?,
-            search_api_key: self.search_api_key.set(),
-            write_api_key: self.write_api_key.set(),
-        })
-    }
 }
 
 #[derive(Serialize)]
@@ -208,111 +134,57 @@ async fn patch_network(
     index_scheduler.features().check_network("Using the /network route")?;
 
     let new_network = new_network.0;
-    let old_network = index_scheduler.network();
     debug!(parameters = ?new_network, "Patch network");
 
-    let merged_self = match new_network.local {
-        Setting::Set(new_self) => Some(new_self),
-        Setting::Reset => None,
-        Setting::NotSet => old_network.local,
-    };
-
-    let merged_sharding = match new_network.sharding {
-        Setting::Set(new_sharding) => new_sharding,
-        Setting::Reset => false,
-        Setting::NotSet => old_network.sharding,
-    };
-
-    if merged_sharding && merged_self.is_none() {
-        return Err(ResponseError::from_msg(
-            "`.sharding`: enabling the sharding requires `.self` to be set\n  - Hint: Disable `sharding` or set `self` to a value.".into(),
-            meilisearch_types::error::Code::InvalidNetworkSharding,
-        ));
-    }
-
-    let merged_remotes = match new_network.remotes {
-        Setting::Set(new_remotes) => {
-            let mut merged_remotes = BTreeMap::new();
-            for either_or_both in old_network
-                .remotes
-                .into_iter()
-                .merge_join_by(new_remotes.into_iter(), |left, right| left.0.cmp(&right.0))
-            {
-                match either_or_both {
-                    EitherOrBoth::Both((key, old), (_, Some(new))) => {
-                        let DbRemote {
-                            url: old_url,
-                            search_api_key: old_search_api_key,
-                            write_api_key: old_write_api_key,
-                        } = old;
-
-                        let Remote {
-                            url: new_url,
-                            search_api_key: new_search_api_key,
-                            write_api_key: new_write_api_key,
-                        } = new;
-
-                        let merged = DbRemote {
-                            url: match new_url {
-                                Setting::Set(new_url) => {
-                                    if let Err(error) = url::Url::parse(&new_url) {
-                                        return Err(ResponseError::from_msg(
-                                            format!("Invalid `.remotes.{key}.url` (`{new_url}`): {error}"),
-                                            meilisearch_types::error::Code::InvalidNetworkUrl,
-                                        ));
-                                    }
-                                    new_url
-                                }
-                                Setting::Reset => {
-                                    return Err(ResponseError::from_msg(
-                                        format!(
-                                            "Field `.remotes.{key}.url` cannot be set to `null`"
-                                        ),
-                                        meilisearch_types::error::Code::InvalidNetworkUrl,
-                                    ))
-                                }
-                                Setting::NotSet => old_url,
-                            },
-                            search_api_key: match new_search_api_key {
-                                Setting::Set(new_search_api_key) => Some(new_search_api_key),
-                                Setting::Reset => None,
-                                Setting::NotSet => old_search_api_key,
-                            },
-                            write_api_key: match new_write_api_key {
-                                Setting::Set(new_write_api_key) => Some(new_write_api_key),
-                                Setting::Reset => None,
-                                Setting::NotSet => old_write_api_key,
-                            },
-                        };
-                        merged_remotes.insert(key, merged);
-                    }
-                    EitherOrBoth::Both((_, _), (_, None)) | EitherOrBoth::Right((_, None)) => {}
-                    EitherOrBoth::Left((key, node)) => {
-                        merged_remotes.insert(key, node);
-                    }
-                    EitherOrBoth::Right((key, Some(node))) => {
-                        let node = node.try_into_db_node(&key)?;
-                        merged_remotes.insert(key, node);
+    // check the URLs of all remotes
+    if let Setting::Set(remotes) = &new_network.remotes {
+        for (remote_name, remote) in remotes.iter() {
+            let Some(remote) = remote else {
+                continue;
+            };
+            match &remote.url {
+                Setting::Set(new_url) => {
+                    if let Err(error) = url::Url::parse(&new_url) {
+                        return Err(ResponseError::from_msg(
+                            format!("Invalid `.remotes.{remote_name}.url` (`{new_url}`): {error}"),
+                            meilisearch_types::error::Code::InvalidNetworkUrl,
+                        ));
                     }
                 }
+                Setting::Reset => {
+                    return Err(ResponseError::from_msg(
+                        format!("Field `.remotes.{remote_name}.url` cannot be set to `null`"),
+                        meilisearch_types::error::Code::InvalidNetworkUrl,
+                    ))
+                }
+                Setting::NotSet => (),
             }
-            merged_remotes
         }
-        Setting::Reset => BTreeMap::new(),
-        Setting::NotSet => old_network.remotes,
-    };
+    }
 
     analytics.publish(
         PatchNetworkAnalytics {
-            network_size: merged_remotes.len(),
-            network_has_self: merged_self.is_some(),
+            network_size: new_network
+                .remotes
+                .as_ref()
+                .set()
+                .map(|remotes| remotes.len())
+                .unwrap_or_default(),
+            network_has_self: new_network.local.as_ref().set().is_some(),
         },
         &req,
     );
 
-    let merged_network =
-        DbNetwork { local: merged_self, remotes: merged_remotes, sharding: merged_sharding };
-    index_scheduler.put_network(merged_network.clone())?;
-    debug!(returns = ?merged_network, "Patch network");
-    Ok(HttpResponse::Ok().json(merged_network))
+    let task = index_scheduler.register(
+        meilisearch_types::tasks::KindWithContent::NetworkTopologyChange {
+            network: Some(new_network),
+        },
+        None,
+        false,
+    )?;
+    debug!(returns = ?task, "Patch network");
+
+    let task: SummarizedTaskView = task.into();
+
+    return Ok(HttpResponse::Accepted().json(task));
 }

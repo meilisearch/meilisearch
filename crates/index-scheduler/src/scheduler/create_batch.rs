@@ -55,6 +55,9 @@ pub(crate) enum Batch {
     UpgradeDatabase {
         tasks: Vec<Task>,
     },
+    NetworkTopologyChanges {
+        tasks: Vec<Task>,
+    },
 }
 
 #[derive(Debug)]
@@ -116,7 +119,8 @@ impl Batch {
             Batch::SnapshotCreation(tasks)
             | Batch::TaskDeletions(tasks)
             | Batch::UpgradeDatabase { tasks }
-            | Batch::IndexDeletion { tasks, .. } => {
+            | Batch::IndexDeletion { tasks, .. }
+            | Batch::NetworkTopologyChanges { tasks } => {
                 RoaringBitmap::from_iter(tasks.iter().map(|task| task.uid))
             }
             Batch::IndexOperation { op, .. } => match op {
@@ -151,6 +155,7 @@ impl Batch {
             | Dump(_)
             | Export { .. }
             | UpgradeDatabase { .. }
+            | NetworkTopologyChanges { .. }
             | IndexSwap { .. } => None,
             IndexOperation { op, .. } => Some(op.index_uid()),
             IndexCreation { index_uid, .. }
@@ -176,6 +181,7 @@ impl fmt::Display for Batch {
             Batch::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
             Batch::IndexSwap { .. } => f.write_str("IndexSwap")?,
             Batch::Export { .. } => f.write_str("Export")?,
+            Batch::NetworkTopologyChanges { .. } => f.write_str("NetworkTopologyChange")?,
             Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
         };
         match index_uid {
@@ -545,7 +551,18 @@ impl IndexScheduler {
             return Ok(Some((Batch::Dump(task), current_batch)));
         }
 
-        // 6. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
+        // 6. We batch the network changes.
+        let to_network = self.queue.tasks.get_kind(rtxn, Kind::NetworkTopologyChange)? & enqueued;
+        if !to_network.is_empty() {
+            let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_network)?;
+            current_batch.processing(&mut tasks);
+            current_batch.reason(BatchStopReason::TaskKindCannotBeBatched {
+                kind: Kind::NetworkTopologyChange,
+            });
+            return Ok(Some((Batch::NetworkTopologyChanges { tasks }, current_batch)));
+        }
+
+        // 7. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
         let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
         let mut task =
             self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;

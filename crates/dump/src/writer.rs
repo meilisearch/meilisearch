@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::enterprise_edition::network::Network;
+use meilisearch_types::enterprise_edition::network::DbNetwork;
 use meilisearch_types::features::{ChatCompletionSettings, RuntimeTogglableFeatures};
 use meilisearch_types::keys::Key;
 use meilisearch_types::settings::{Checked, Settings};
@@ -72,7 +72,7 @@ impl DumpWriter {
         )?)
     }
 
-    pub fn create_network(&self, network: Network) -> Result<()> {
+    pub fn create_network(&self, network: DbNetwork) -> Result<()> {
         Ok(std::fs::write(self.dir.path().join("network.json"), serde_json::to_string(&network)?)?)
     }
 

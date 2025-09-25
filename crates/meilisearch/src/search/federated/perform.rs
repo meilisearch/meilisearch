@@ -9,7 +9,7 @@ use std::vec::{IntoIter, Vec};
 use actix_http::StatusCode;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
-use meilisearch_types::enterprise_edition::network::{Network, Remote};
+use meilisearch_types::enterprise_edition::network::{DbNetwork, DbRemote};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
@@ -456,7 +456,7 @@ fn merge_metadata(
 }
 
 type LocalQueriesByIndex = BTreeMap<String, Vec<QueryByIndex>>;
-type RemoteQueriesByHost = BTreeMap<String, (Remote, Vec<SearchQueryWithIndex>)>;
+type RemoteQueriesByHost = BTreeMap<String, (DbRemote, Vec<SearchQueryWithIndex>)>;
 
 struct PartitionedQueries {
     local_queries_by_index: LocalQueriesByIndex,
@@ -477,7 +477,7 @@ impl PartitionedQueries {
         &mut self,
         federated_query: SearchQueryWithIndex,
         query_index: usize,
-        network: &Network,
+        network: &DbNetwork,
         features: RoFeatures,
     ) -> Result<(), ResponseError> {
         if let Some(pagination_field) = federated_query.has_pagination() {
@@ -672,7 +672,7 @@ struct SearchByIndexParams<'a> {
     features: RoFeatures,
     is_proxy: bool,
     has_remote: bool,
-    network: &'a Network,
+    network: &'a DbNetwork,
 }
 
 struct SearchByIndex {

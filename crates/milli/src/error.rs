@@ -432,6 +432,10 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidChatSettingsDocumentTemplateMaxBytes,
     #[error("{0}")]
     DocumentEmbeddingError(String),
+    #[error("enabling the sharding requires `.self` to be set\n  - Hint: Disable `sharding` or set `self` to a value.")]
+    NetworkShardingWithoutSelf,
+    #[error("Field `.remotes.{0}.url` cannot be set to `null`")]
+    NetworkMissingUrl(String),
 }
 
 impl From<crate::vector::Error> for Error {
