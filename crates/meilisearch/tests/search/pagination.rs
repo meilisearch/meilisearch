@@ -175,7 +175,8 @@ async fn test_issue_5274() {
 
     snapshot!(json_string!(rep, {
         ".processingTimeMs" => "[ignored]",
-    }), @r#"
+        ".requestUid" => "[uuid]"
+    }), @r###"
     {
       "hits": [
         {
@@ -189,7 +190,8 @@ async fn test_issue_5274() {
       "hitsPerPage": 1,
       "page": 1,
       "totalPages": 1,
-      "totalHits": 1
+      "totalHits": 1,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }

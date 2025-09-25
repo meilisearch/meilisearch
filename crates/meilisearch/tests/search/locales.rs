@@ -104,7 +104,7 @@ async fn simple_search() {
     // english
     index
         .search(json!({"q": "Atta", "attributesToRetrieve": ["id"]}), |response, code| {
-            snapshot!(response, @r###"
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -115,7 +115,8 @@ async fn simple_search() {
               "processingTimeMs": "[duration]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 1
+              "estimatedTotalHits": 1,
+              "requestUid": "[uuid]"
             }
             "###);
             snapshot!(code, @"200 OK");
@@ -125,7 +126,7 @@ async fn simple_search() {
     // japanese
     index
         .search(json!({"q": "進撃", "attributesToRetrieve": ["id"]}), |response, code| {
-            snapshot!(response, @r###"
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -136,7 +137,8 @@ async fn simple_search() {
               "processingTimeMs": "[duration]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 1
+              "estimatedTotalHits": 1,
+              "requestUid": "[uuid]"
             }
             "###);
             snapshot!(code, @"200 OK");
@@ -147,7 +149,7 @@ async fn simple_search() {
         .search(
             json!({"q": "進撃", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r#"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -158,9 +160,10 @@ async fn simple_search() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
-                "#);
+                "###);
                 snapshot!(code, @"200 OK");
             },
         )
@@ -169,7 +172,7 @@ async fn simple_search() {
     // chinese
     index
         .search(json!({"q": "进击", "attributesToRetrieve": ["id"]}), |response, code| {
-            snapshot!(response, @r#"
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -180,9 +183,10 @@ async fn simple_search() {
               "processingTimeMs": "[duration]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 1
+              "estimatedTotalHits": 1,
+              "requestUid": "[uuid]"
             }
-            "#);
+            "###);
             snapshot!(code, @"200 OK");
         })
         .await;
@@ -222,7 +226,7 @@ async fn force_locales() {
         .search(
             json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -233,7 +237,8 @@ async fn force_locales() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -246,7 +251,7 @@ async fn force_locales() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -257,7 +262,8 @@ async fn force_locales() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -300,7 +306,7 @@ async fn force_locales_with_pattern() {
         .search(
             json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -311,7 +317,8 @@ async fn force_locales_with_pattern() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -324,7 +331,7 @@ async fn force_locales_with_pattern() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -335,7 +342,8 @@ async fn force_locales_with_pattern() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -376,14 +384,15 @@ async fn force_locales_with_pattern_nested() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 0,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -396,7 +405,7 @@ async fn force_locales_with_pattern_nested() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -407,7 +416,8 @@ async fn force_locales_with_pattern_nested() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -451,14 +461,15 @@ async fn force_different_locales_with_pattern() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 0,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -471,7 +482,7 @@ async fn force_different_locales_with_pattern() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -482,7 +493,8 @@ async fn force_different_locales_with_pattern() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -529,14 +541,15 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
         .search(
             json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 0,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -549,7 +562,7 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
             .search(
                 json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"], "attributesToSearchOn": ["name_zh", "description_zh"]}),
                 |response, code| {
-                    snapshot!(response, @r###"
+                    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                     {
                       "hits": [
                         {
@@ -560,7 +573,8 @@ async fn auto_infer_locales_at_search_with_attributes_to_search_on() {
                       "processingTimeMs": "[duration]",
                       "limit": 20,
                       "offset": 0,
-                      "estimatedTotalHits": 1
+                      "estimatedTotalHits": 1,
+                      "requestUid": "[uuid]"
                     }
                     "###);
                     snapshot!(code, @"200 OK");
@@ -602,7 +616,7 @@ async fn auto_infer_locales_at_search() {
         .search(
             json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -613,7 +627,8 @@ async fn auto_infer_locales_at_search() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -625,30 +640,7 @@ async fn auto_infer_locales_at_search() {
         .search(
             json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
-                    {
-                      "hits": [
-                        {
-                          "id": 853
-                        }
-                      ],
-                      "query": "\"进击的巨人\"",
-                      "processingTimeMs": "[duration]",
-                      "limit": 20,
-                      "offset": 0,
-                      "estimatedTotalHits": 1
-                    }
-                    "###);
-                snapshot!(code, @"200 OK");
-            },
-        )
-        .await;
-
-    index
-        .search(
-            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
-            |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -659,7 +651,32 @@ async fn auto_infer_locales_at_search() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "attributesToRetrieve": ["id"]}),
+            |response, code| {
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+                {
+                  "hits": [
+                    {
+                      "id": 853
+                    }
+                  ],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -702,14 +719,15 @@ async fn force_different_locales_with_pattern_nested() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 0,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -722,31 +740,7 @@ async fn force_different_locales_with_pattern_nested() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
-                    {
-                      "hits": [
-                        {
-                          "id": 852
-                        }
-                      ],
-                      "query": "\"进击的巨人\"",
-                      "processingTimeMs": "[duration]",
-                      "limit": 20,
-                      "offset": 0,
-                      "estimatedTotalHits": 1
-                    }
-                    "###);
-                snapshot!(code, @"200 OK");
-            },
-        )
-        .await;
-
-    // force japanese
-    index
-        .search(
-            json!({"q": "\"进击的巨人\"", "locales": ["ja"], "attributesToRetrieve": ["id"]}),
-            |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -757,7 +751,33 @@ async fn force_different_locales_with_pattern_nested() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 1
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
+                }
+                "###);
+                snapshot!(code, @"200 OK");
+            },
+        )
+        .await;
+
+    // force japanese
+    index
+        .search(
+            json!({"q": "\"进击的巨人\"", "locales": ["ja"], "attributesToRetrieve": ["id"]}),
+            |response, code| {
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+                {
+                  "hits": [
+                    {
+                      "id": 852
+                    }
+                  ],
+                  "query": "\"进击的巨人\"",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -799,14 +819,15 @@ async fn settings_change() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 0,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -819,14 +840,15 @@ async fn settings_change() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 0,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -862,14 +884,15 @@ async fn settings_change() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["cmn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 0,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -882,14 +905,15 @@ async fn settings_change() {
         .search(
             json!({"q": "\"进击的巨人\"", "locales": ["jpn"], "attributesToRetrieve": ["id"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [],
                   "query": "\"进击的巨人\"",
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 0
+                  "estimatedTotalHits": 0,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -1164,7 +1188,7 @@ async fn swedish_search() {
     // infer swedish
     index
         .search(json!({"q": "trä", "attributesToRetrieve": ["product"]}), |response, code| {
-            snapshot!(response, @r###"
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -1178,7 +1202,8 @@ async fn swedish_search() {
               "processingTimeMs": "[duration]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 2
+              "estimatedTotalHits": 2,
+              "requestUid": "[uuid]"
             }
             "###);
             snapshot!(code, @"200 OK");
@@ -1187,7 +1212,7 @@ async fn swedish_search() {
 
     index
         .search(json!({"q": "tra", "attributesToRetrieve": ["product"]}), |response, code| {
-            snapshot!(response, @r###"
+            snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -1201,7 +1226,8 @@ async fn swedish_search() {
               "processingTimeMs": "[duration]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 2
+              "estimatedTotalHits": 2,
+              "requestUid": "[uuid]"
             }
             "###);
             snapshot!(code, @"200 OK");
@@ -1213,7 +1239,7 @@ async fn swedish_search() {
         .search(
             json!({"q": "trä", "locales": ["swe"], "attributesToRetrieve": ["product"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -1227,7 +1253,8 @@ async fn swedish_search() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 2
+                  "estimatedTotalHits": 2,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -1238,7 +1265,7 @@ async fn swedish_search() {
         .search(
             json!({"q": "tra", "locales": ["swe"], "attributesToRetrieve": ["product"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -1252,7 +1279,8 @@ async fn swedish_search() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 2
+                  "estimatedTotalHits": 2,
+                  "requestUid": "[uuid]"
                 }
                 "###);
                 snapshot!(code, @"200 OK");
@@ -1287,20 +1315,21 @@ async fn german_search() {
         .search(
             json!({"q": "kulturalität", "attributesToRetrieve": ["product"]}),
             |response, code| {
-                snapshot!(response, @r###"
-            {
-              "hits": [
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
-                  "product": "Interkulturalität"
+                  "hits": [
+                    {
+                      "product": "Interkulturalität"
+                    }
+                  ],
+                  "query": "kulturalität",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 1,
+                  "requestUid": "[uuid]"
                 }
-              ],
-              "query": "kulturalität",
-              "processingTimeMs": "[duration]",
-              "limit": 20,
-              "offset": 0,
-              "estimatedTotalHits": 1
-            }
-            "###);
+                "###);
                 snapshot!(code, @"200 OK");
             },
         )
@@ -1310,7 +1339,7 @@ async fn german_search() {
         .search(
             json!({"q": "organisation", "attributesToRetrieve": ["product"]}),
             |response, code| {
-                snapshot!(response, @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
             {
               "hits": [
                 {
@@ -1321,7 +1350,8 @@ async fn german_search() {
               "processingTimeMs": "[duration]",
               "limit": 20,
               "offset": 0,
-              "estimatedTotalHits": 1
+              "estimatedTotalHits": 1,
+              "requestUid": "[uuid]"
             }
             "###);
                 snapshot!(code, @"200 OK");

@@ -1,4 +1,4 @@
-use meili_snap::snapshot;
+use meili_snap::{json_string, snapshot};
 use once_cell::sync::Lazy;
 
 use crate::common::index::Index;
@@ -148,7 +148,7 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -209,9 +209,10 @@ async fn simple_search() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
       "semanticHitCount": 0
     }
-    "#);
+    "###);
     snapshot!(response["semanticHitCount"], @"0");
 
     let (response, code) = index
@@ -220,7 +221,7 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -284,9 +285,10 @@ async fn simple_search() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
       "semanticHitCount": 2
     }
-    "#);
+    "###);
     snapshot!(response["semanticHitCount"], @"2");
 
     let (response, code) = index
@@ -295,7 +297,7 @@ async fn simple_search() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -359,9 +361,10 @@ async fn simple_search() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
       "semanticHitCount": 3
     }
-    "#);
+    "###);
     snapshot!(response["semanticHitCount"], @"3");
 }
 

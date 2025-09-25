@@ -1044,7 +1044,7 @@ async fn test_degraded_score_details() {
             }),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+                snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
                 {
                   "hits": [
                     {
@@ -1103,7 +1103,8 @@ async fn test_degraded_score_details() {
                   "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
-                  "estimatedTotalHits": 3
+                  "estimatedTotalHits": 3,
+                  "requestUid": "[uuid]"
                 }
                 "###);
             },
