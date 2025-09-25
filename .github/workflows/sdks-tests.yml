@@ -100,7 +100,7 @@ jobs:
           - '7700:7700'
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: stable
       - uses: actions/checkout@v5
