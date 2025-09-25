@@ -1092,7 +1092,7 @@ dependencies = [
  "steppe",
  "thiserror 2.0.16",
  "thread_local",
- "zerometry 0.3.0",
+ "zerometry",
 ]
 
 [[package]]
@@ -2577,7 +2577,6 @@ dependencies = [
  "num-traits",
  "robust",
  "rstar",
- "spade",
 ]
 
 [[package]]
@@ -2588,7 +2587,6 @@ checksum = "75a4dcd69d35b2c87a7c83bce9af69fd65c9d68d3833a0ded568983928f3fc99"
 dependencies = [
  "approx",
  "num-traits",
- "rayon",
  "rstar",
  "serde",
 ]
@@ -3060,7 +3058,6 @@ dependencies = [
  "i_key_sort",
  "i_shape",
  "i_tree",
- "rayon",
 ]
 
 [[package]]
@@ -4275,7 +4272,7 @@ dependencies = [
  "url",
  "utoipa",
  "uuid",
- "zerometry 0.1.0",
+ "zerometry",
 ]
 
 [[package]]
@@ -6146,18 +6143,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "spade"
-version = "2.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb313e1c8afee5b5647e00ee0fe6855e3d529eb863a0fdae1d60006c4d1e9990"
-dependencies = [
- "hashbrown 0.15.5",
- "num-traits",
- "robust",
- "smallvec",
-]
-
-[[package]]
 name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7981,18 +7966,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.106",
-]
-
-[[package]]
-name = "zerometry"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "681f08f3f4ef27d3021a128eb6d8df1cd781e4c9c797c3971c1f85316374f977"
-dependencies = [
- "bytemuck",
- "byteorder",
- "geo",
- "geo-types",
 ]
 
 [[package]]
