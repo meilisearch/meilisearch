@@ -310,7 +310,7 @@ impl Queue {
             | self.tasks.status.get(wtxn, &Status::Failed)?.unwrap_or_default()
             | self.tasks.status.get(wtxn, &Status::Canceled)?.unwrap_or_default();
 
-        let to_delete = RoaringBitmap::from_iter(finished.into_iter().rev().take(100_000));
+        let to_delete = RoaringBitmap::from_iter(finished.into_iter().take(100_000));
 
         // /!\ the len must be at least 2 or else we might enter an infinite loop where we only delete
         //     the deletion tasks we enqueued ourselves.
