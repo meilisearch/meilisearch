@@ -224,7 +224,7 @@ jobs:
         with:
           repository: meilisearch/meilisearch-python
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
       - name: Install pipenv
         uses: dschep/install-pipenv-action@v1
       - name: Install dependencies
