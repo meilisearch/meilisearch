@@ -7,6 +7,5 @@ updates:
     schedule:
       interval: "monthly"
     labels:
-      - 'skip changelog'
       - 'dependencies'
     rebase-strategy: disabled
