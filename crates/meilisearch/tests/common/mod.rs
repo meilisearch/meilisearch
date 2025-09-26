@@ -1,5 +1,6 @@
 pub mod encoder;
 pub mod index;
+pub mod mock_server;
 pub mod server;
 pub mod service;
 
@@ -554,6 +555,8 @@ pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
 }
 
 async fn fragment_mock_server() -> String {
+    use crate::common::mock_server::SafeMockServer;
+    
     let text_to_embedding: BTreeMap<_, _> = vec![
         ("kefir", [0.5, -0.5, 0.0]),
         ("intel", [1.0, 1.0, 0.0]),
@@ -565,7 +568,7 @@ async fn fragment_mock_server() -> String {
     .into_iter()
     .collect();
 
-    let mock_server = Box::leak(Box::new(MockServer::start().await));
+    let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
 
     Mock::given(method("POST"))
         .and(path("/"))
@@ -582,7 +585,7 @@ async fn fragment_mock_server() -> String {
             }
             ResponseTemplate::new(200).set_body_json(json!({ "data": data }))
         })
-        .mount(mock_server)
+        .mount(&**mock_server)
         .await;
 
     mock_server.uri()

@@ -4,6 +4,7 @@ use actix_http::StatusCode;
 use meili_snap::{json_string, snapshot};
 use wiremock::matchers::{method, path, AnyMatcher};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
+use crate::common::mock_server::SafeMockServer;
 
 use crate::common::{Server, Value, SCORE_DOCUMENTS};
 use crate::json;
@@ -3025,9 +3026,9 @@ pub struct LocalMeiliParams {
     pub gobble_headers: bool,
 }
 
-/// A server that exploits [`MockServer`] to provide an URL for testing network and the network.
+/// A server that exploits [`SafeMockServer`] to provide an URL for testing network and the network.
 pub struct LocalMeili {
-    mock_server: &'static MockServer,
+    mock_server: &'static SafeMockServer,
 }
 
 impl LocalMeili {
@@ -3036,7 +3037,7 @@ impl LocalMeili {
     }
 
     pub async fn with_params(server: Arc<Server>, params: LocalMeiliParams) -> Self {
-        let mock_server = Box::leak(Box::new(MockServer::start().await));
+        let mock_server = Box::leak(Box::new(SafeMockServer::start().await));
 
         // tokio won't let us execute asynchronous code from a sync function inside of an async test,
         // so instead we spawn another thread that will call the service on a brand new tokio runtime
@@ -3100,7 +3101,7 @@ impl LocalMeili {
                     response.set_body_json(value)
                 }
             })
-            .mount(mock_server)
+            .mount(&**mock_server)
             .await;
         Self { mock_server }
     }
