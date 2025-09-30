@@ -105,7 +105,7 @@ pub async fn proxy_search(
 
     let search_api_key = node.search_api_key.as_deref();
 
-    let max_deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let max_deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
 
     let deadline = if let Some(deadline) = params.deadline {
         std::time::Instant::min(deadline, max_deadline)
