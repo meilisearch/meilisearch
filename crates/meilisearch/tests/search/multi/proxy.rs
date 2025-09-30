@@ -2845,7 +2845,8 @@ async fn error_remote_timeout() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
@@ -2853,7 +2854,8 @@ async fn error_remote_timeout() {
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
-      "remotes": {}
+      "remotes": {},
+      "sharding": false
     }
     "###);
 
@@ -2874,7 +2876,7 @@ async fn error_remote_timeout() {
     let rms0 = LocalMeili::new(ms0.clone()).await;
     let rms1 = LocalMeili::with_params(
         ms1.clone(),
-        LocalMeiliParams { delay: Some(std::time::Duration::from_secs(6)), ..Default::default() },
+        LocalMeiliParams { delay: Some(std::time::Duration::from_secs(31)), ..Default::default() },
     )
     .await;
 
