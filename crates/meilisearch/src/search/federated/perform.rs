@@ -44,7 +44,7 @@ pub async fn perform_federated_search(
         features.check_network("Performing a remote federated search")?;
     }
     let before_search = std::time::Instant::now();
-    let deadline = before_search + std::time::Duration::from_secs(9);
+    let deadline = before_search + std::time::Duration::from_secs(30);
 
     let required_hit_count = federation.limit + federation.offset;
     let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
