@@ -836,6 +836,13 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct SearchMetadata {
+    pub query_uid: Uuid,
+}
+
 #[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -854,6 +861,8 @@ pub struct SearchResult {
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_uid: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<SearchMetadata>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
@@ -876,6 +885,7 @@ impl fmt::Debug for SearchResult {
             facet_distribution,
             facet_stats,
             request_uid,
+            metadata,
             semantic_hit_count,
             degraded,
             used_negative_operator,
@@ -907,6 +917,9 @@ impl fmt::Debug for SearchResult {
         }
         if let Some(request_uid) = request_uid {
             debug.field("request_uid", &request_uid);
+        }
+        if let Some(metadata) = metadata {
+            debug.field("metadata", &metadata);
         }
 
         debug.finish()
@@ -1234,6 +1247,7 @@ pub fn perform_search(
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
         .unzip();
 
+    let query_uid = Uuid::now_v7();
     let result = SearchResult {
         hits: documents,
         hits_info,
@@ -1246,6 +1260,7 @@ pub fn perform_search(
         used_negative_operator,
         semantic_hit_count,
         request_uid: Some(request_uid),
+        metadata: Some(SearchMetadata { query_uid }),
     };
     Ok(result)
 }
