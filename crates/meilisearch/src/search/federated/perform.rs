@@ -20,6 +20,7 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use super::super::ranking_rules::{self, RankingRules};
+use super::super::SearchMetadata;
 use super::super::{
     compute_facet_distribution_stats, prepare_search, AttributesFormat, ComputedFacets, HitMaker,
     HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchQuery, SearchQueryWithIndex,
@@ -65,7 +66,10 @@ pub async fn perform_federated_search(
 
     // 1. partition queries by host and index
     let mut partitioned_queries = PartitionedQueries::new();
+    let mut query_metadata = Vec::new();
     for (query_index, federated_query) in queries.into_iter().enumerate() {
+        let query_uid = Uuid::now_v7();
+        query_metadata.push(SearchMetadata { query_uid });
         partitioned_queries.partition(federated_query, query_index, &network, features)?
     }
 
@@ -179,6 +183,7 @@ pub async fn perform_federated_search(
         facets_by_index,
         remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
         request_uid: Some(request_uid),
+        metadata: Some(query_metadata),
     })
 }
 
@@ -448,6 +453,7 @@ fn merge_metadata(
         degraded: degraded_for_host,
         used_negative_operator: host_used_negative_operator,
         remote_errors: _,
+        metadata: _,
         request_uid: _,
     } in remote_results
     {
