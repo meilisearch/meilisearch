@@ -841,6 +841,7 @@ pub struct SearchHit {
 #[schema(rename_all = "camelCase")]
 pub struct SearchMetadata {
     pub query_uid: Uuid,
+    pub index_uid: String,
 }
 
 #[derive(Serialize, Clone, PartialEq, ToSchema)]
@@ -1143,6 +1144,7 @@ pub fn perform_search(
     request_uid: Uuid,
 ) -> Result<SearchResult, ResponseError> {
     let before_search = Instant::now();
+    let index_uid_for_metadata = index_uid.clone();
     let rtxn = index.read_txn()?;
     let time_budget = match index.search_cutoff(&rtxn)? {
         Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
@@ -1163,7 +1165,7 @@ pub fn perform_search(
             query_vector,
         },
         semantic_hit_count,
-    ) = search_from_kind(index_uid, search_kind, search)?;
+    ) = search_from_kind(index_uid.clone(), search_kind, search)?;
 
     let SearchQuery {
         q,
@@ -1260,7 +1262,7 @@ pub fn perform_search(
         used_negative_operator,
         semantic_hit_count,
         request_uid: Some(request_uid),
-        metadata: Some(SearchMetadata { query_uid }),
+        metadata: Some(SearchMetadata { query_uid, index_uid: index_uid_for_metadata }),
     };
     Ok(result)
 }

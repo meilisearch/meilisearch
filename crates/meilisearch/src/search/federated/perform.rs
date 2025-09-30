@@ -69,7 +69,8 @@ pub async fn perform_federated_search(
     let mut query_metadata = Vec::new();
     for (query_index, federated_query) in queries.into_iter().enumerate() {
         let query_uid = Uuid::now_v7();
-        query_metadata.push(SearchMetadata { query_uid });
+        query_metadata
+            .push(SearchMetadata { query_uid, index_uid: federated_query.index_uid.to_string() });
         partitioned_queries.partition(federated_query, query_index, &network, features)?
     }
 
