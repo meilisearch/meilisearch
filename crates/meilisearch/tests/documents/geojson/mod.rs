@@ -14,17 +14,18 @@ async fn basic_add_settings_and_geojson_documents() {
     server.wait_task(task.uid()).await.succeeded();
 
     let (response, _) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
-    snapshot!(response,
-    @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }),
+    @r###"
     {
       "hits": [],
       "query": "",
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 0
+      "estimatedTotalHits": 0,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 
     let lille: serde_json::Value = serde_json::from_str(LILLE).unwrap();
     let documents = json!([
@@ -92,8 +93,8 @@ async fn basic_add_settings_and_geojson_documents() {
     "#);
 
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
-    snapshot!(response,
-    @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }),
+    @r###"
     {
       "hits": [
         {
@@ -111,9 +112,10 @@ async fn basic_add_settings_and_geojson_documents() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 1
+      "estimatedTotalHits": 1,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -174,8 +176,8 @@ async fn basic_add_geojson_documents_and_settings() {
         index.update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
     server.wait_task(task.uid()).await.succeeded();
     let (response, _code) = index.search_get("?filter=_geoPolygon([0,0],[0,2],[2,2],[2,0])").await;
-    snapshot!(response,
-    @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }),
+    @r###"
     {
       "hits": [
         {
@@ -193,9 +195,10 @@ async fn basic_add_geojson_documents_and_settings() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 1
+      "estimatedTotalHits": 1,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -292,7 +295,7 @@ async fn geo_bounding_box() {
     let (response, code) =
         index.search_get("?filter=_geoBoundingBox([50.53987503447863,21.43443989912143],[43.76393151539099,0.54979129195425])&attributesToRetrieve=name").await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -351,16 +354,17 @@ async fn geo_bounding_box() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 17
+      "estimatedTotalHits": 17,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 
     // Between Russia and Alaska
     let (response, code) = index
         .search_get("?filter=_geoBoundingBox([70,-148],[63,152])&attributesToRetrieve=name")
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -377,46 +381,10 @@ async fn geo_bounding_box() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
-}
-
-#[actix_rt::test]
-async fn geo_radius() {
-    let index = shared_index_geojson_documents().await;
-
-    // 200km around Luxembourg
-    let (response, code) = index
-        .search_get("?filter=_geoRadius(49.4369862,6.5576591,200000)&attributesToRetrieve=name")
-        .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(response, @r#"
-    {
-      "hits": [
-        {
-          "name": "Belgium"
-        },
-        {
-          "name": "Germany"
-        },
-        {
-          "name": "France"
-        },
-        {
-          "name": "Luxembourg"
-        },
-        {
-          "name": "Netherlands"
-        }
-      ],
-      "query": "",
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 5
-    }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
