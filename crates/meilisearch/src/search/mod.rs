@@ -842,6 +842,10 @@ pub struct SearchHit {
 pub struct SearchMetadata {
     pub query_uid: Uuid,
     pub index_uid: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
 }
 
 #[derive(Serialize, Clone, PartialEq, ToSchema)]
@@ -1167,6 +1171,9 @@ pub fn perform_search(
         semantic_hit_count,
     ) = search_from_kind(index_uid.clone(), search_kind, search)?;
 
+    let query_uid = Uuid::now_v7();
+    let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
+
     let SearchQuery {
         q,
         limit,
@@ -1248,8 +1255,6 @@ pub fn perform_search(
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
         .unzip();
-
-    let query_uid = Uuid::now_v7();
     let result = SearchResult {
         hits: documents,
         hits_info,
@@ -1262,7 +1267,12 @@ pub fn perform_search(
         used_negative_operator,
         semantic_hit_count,
         request_uid: Some(request_uid),
-        metadata: Some(SearchMetadata { query_uid, index_uid: index_uid_for_metadata }),
+        metadata: Some(SearchMetadata {
+            query_uid,
+            index_uid: index_uid_for_metadata,
+            primary_key,
+            remote: None, // Local searches don't have a remote
+        }),
     };
     Ok(result)
 }
