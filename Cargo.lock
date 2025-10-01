@@ -459,7 +459,7 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "enum-iterator",
- "heed 0.22.1-nested-rtxns (registry+https://github.com/rust-lang/crates.io-index)",
+ "heed",
  "memmap2",
  "nohash",
  "ordered-float 4.6.0",
@@ -1075,13 +1075,14 @@ dependencies = [
 [[package]]
 name = "cellulite"
 version = "0.3.1-nested-rtxns"
+source = "git+https://github.com/meilisearch/cellulite?branch=use-heed-nested-rtxns#9fb1866cc49277d26f606769112fa704944ccc61"
 dependencies = [
  "crossbeam",
  "geo",
  "geo-types",
  "geojson",
  "h3o",
- "heed 0.22.1-nested-rtxns",
+ "heed",
  "intmap",
  "ordered-float 5.0.0",
  "rayon",
@@ -2761,7 +2762,7 @@ dependencies = [
  "bytemuck",
  "byteorder",
  "hashbrown 0.15.5",
- "heed 0.22.1-nested-rtxns (registry+https://github.com/rust-lang/crates.io-index)",
+ "heed",
  "madvise",
  "min-max-heap",
  "page_size",
@@ -2835,41 +2836,20 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "heed"
 version = "0.22.1-nested-rtxns"
-dependencies = [
- "bitflags 2.9.4",
- "byteorder",
- "heed-traits 0.20.0",
- "heed-types 0.21.0",
- "libc",
- "lmdb-master-sys 0.2.6-nested-rtxns",
- "once_cell",
- "page_size",
- "serde",
- "synchronoise",
- "url",
-]
-
-[[package]]
-name = "heed"
-version = "0.22.1-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ff115ba5712b1f1fc7617b195f5c2f139e29c397ff79da040cd19db75ccc240"
 dependencies = [
  "bitflags 2.9.4",
  "byteorder",
- "heed-traits 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "heed-types 0.21.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heed-traits",
+ "heed-types",
  "libc",
- "lmdb-master-sys 0.2.6-nested-rtxns (registry+https://github.com/rust-lang/crates.io-index)",
+ "lmdb-master-sys",
  "once_cell",
  "page_size",
  "synchronoise",
  "url",
 ]
-
-[[package]]
-name = "heed-traits"
-version = "0.20.0"
 
 [[package]]
 name = "heed-traits"
@@ -2880,23 +2860,12 @@ checksum = "eb3130048d404c57ce5a1ac61a903696e8fcde7e8c2991e9fcfc1f27c3ef74ff"
 [[package]]
 name = "heed-types"
 version = "0.21.0"
-dependencies = [
- "bincode 1.3.3",
- "byteorder",
- "heed-traits 0.20.0",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "heed-types"
-version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c255bdf46e07fb840d120a36dcc81f385140d7191c76a7391672675c01a55d"
 dependencies = [
  "bincode 1.3.3",
  "byteorder",
- "heed-traits 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "heed-traits",
  "serde",
  "serde_json",
 ]
@@ -3917,15 +3886,6 @@ checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
 [[package]]
 name = "lmdb-master-sys"
 version = "0.2.6-nested-rtxns"
-dependencies = [
- "cc",
- "doxygen-rs",
- "libc",
-]
-
-[[package]]
-name = "lmdb-master-sys"
-version = "0.2.6-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4ff85130e3c994b36877045fbbb138d521dea7197bfc19dc3d5d95101a8e20a"
 dependencies = [
@@ -4265,7 +4225,7 @@ dependencies = [
  "grenad",
  "hannoy",
  "hashbrown 0.15.5",
- "heed 0.22.1-nested-rtxns (registry+https://github.com/rust-lang/crates.io-index)",
+ "heed",
  "hf-hub",
  "indexmap",
  "insta",
