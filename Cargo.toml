@@ -50,6 +50,3 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.roaring]
 opt-level = 3
-
-[patch.crates-io]
-heed = { git = "https://github.com/meilisearch/heed", branch = "allow-nested-rtxn-from-wtxn" }
