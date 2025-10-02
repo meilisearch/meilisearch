@@ -109,6 +109,7 @@ impl HeedAuthStore {
                             Action::IndexesGet,
                             Action::IndexesUpdate,
                             Action::IndexesSwap,
+                            Action::IndexesCompact,
                         ]
                         .iter(),
                     );
