@@ -11,6 +11,7 @@ use crate::search::SearchQueryWithIndex;
 
 pub const PROXY_SEARCH_HEADER: &str = "Meili-Proxy-Search";
 pub const PROXY_SEARCH_HEADER_VALUE: &str = "true";
+pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 
 mod error {
     use meilisearch_types::error::ResponseError;
@@ -98,6 +99,7 @@ pub async fn proxy_search(
     queries: Vec<SearchQueryWithIndex>,
     federation: Federation,
     params: &ProxySearchParams,
+    include_metadata: bool,
 ) -> Result<FederatedSearchResult, ProxySearchError> {
     let url = format!("{}/multi-search", node.url);
 
@@ -119,7 +121,16 @@ pub async fn proxy_search(
     };
 
     for i in 0..params.try_count {
-        match try_proxy_search(&url, search_api_key, &federated, &params.client, deadline).await {
+        match try_proxy_search(
+            &url,
+            search_api_key,
+            &federated,
+            &params.client,
+            deadline,
+            include_metadata,
+        )
+        .await
+        {
             Ok(response) => return Ok(response),
             Err(retry) => {
                 let duration = retry.into_duration(i)?;
@@ -127,7 +138,7 @@ pub async fn proxy_search(
             }
         }
     }
-    try_proxy_search(&url, search_api_key, &federated, &params.client, deadline)
+    try_proxy_search(&url, search_api_key, &federated, &params.client, deadline, include_metadata)
         .await
         .map_err(Retry::into_error)
 }
@@ -138,6 +149,7 @@ async fn try_proxy_search(
     federated: &FederatedSearch,
     client: &Client,
     deadline: std::time::Instant,
+    include_metadata: bool,
 ) -> Result<FederatedSearchResult, Retry> {
     let timeout = deadline.saturating_duration_since(std::time::Instant::now());
 
@@ -148,6 +160,8 @@ async fn try_proxy_search(
         request
     };
     let request = request.header(PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE);
+    let request =
+        if include_metadata { request.header(INCLUDE_METADATA_HEADER, "true") } else { request };
 
     let response = request.send().await;
     let response = match response {

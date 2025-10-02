@@ -21,7 +21,7 @@ use crate::routes::indexes::search::search_kind;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, FederatedSearch,
     FederatedSearchResult, RetrieveVectors, SearchQueryWithIndex, SearchResultWithIndex,
-    PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE, INCLUDE_METADATA_HEADER,
 };
 use crate::search_queue::SearchQueue;
 
@@ -202,6 +202,10 @@ pub async fn multi_search_with_post(
                 .headers()
                 .get(PROXY_SEARCH_HEADER)
                 .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
+            let include_metadata = req
+                .headers()
+                .get(INCLUDE_METADATA_HEADER)
+                .is_some();
             let search_result = perform_federated_search(
                 &index_scheduler,
                 queries,
@@ -209,6 +213,7 @@ pub async fn multi_search_with_post(
                 features,
                 is_proxy,
                 request_uid,
+                include_metadata,
             )
             .await;
             permit.drop().await;
@@ -228,6 +233,11 @@ pub async fn multi_search_with_post(
             HttpResponse::Ok().json(search_result?)
         }
         None => {
+            let include_metadata = req
+                .headers()
+                .get(INCLUDE_METADATA_HEADER)
+                .is_some();
+
             // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
             // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
             // changes.
@@ -286,6 +296,7 @@ pub async fn multi_search_with_post(
                             retrieve_vector,
                             features,
                             request_uid,
+                            include_metadata,
                         )
                     })
                     .await

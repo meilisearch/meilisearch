@@ -42,6 +42,7 @@ pub async fn perform_federated_search(
     features: RoFeatures,
     is_proxy: bool,
     request_uid: Uuid,
+    include_metadata: bool,
 ) -> Result<FederatedSearchResult, ResponseError> {
     if is_proxy {
         features.check_network("Performing a remote federated search")?;
@@ -80,6 +81,7 @@ pub async fn perform_federated_search(
         partitioned_queries.remote_queries_by_host.clone(),
         &federation,
         deadline,
+        include_metadata,
     );
 
     // 2.2. concurrently execute local queries
@@ -127,48 +129,54 @@ pub async fn perform_federated_search(
         merge_metadata(&mut results_by_index, &remote_results);
 
     // 3.1.1. Build metadata in the same order as the original queries
-    let mut query_metadata = Vec::new();
+    let query_metadata = if include_metadata {
+        let mut query_metadata = Vec::new();
 
-    // Create a map of remote results by index_uid for quick lookup
-    let mut remote_results_by_index = std::collections::BTreeMap::new();
-    for remote_result in &remote_results {
-        if let Some(remote_metadata) = &remote_result.metadata {
-            for remote_meta in remote_metadata {
-                remote_results_by_index.insert(remote_meta.index_uid.clone(), remote_meta.clone());
+        // Create a map of remote results by index_uid for quick lookup
+        let mut remote_results_by_index = std::collections::BTreeMap::new();
+        for remote_result in &remote_results {
+            if let Some(remote_metadata) = &remote_result.metadata {
+                for remote_meta in remote_metadata {
+                    remote_results_by_index
+                        .insert(remote_meta.index_uid.clone(), remote_meta.clone());
+                }
             }
         }
-    }
 
-    // Build metadata in the same order as the original queries
-    for original_query in original_queries {
-        let query_uid = Uuid::now_v7();
-        let index_uid = original_query.index_uid.to_string();
+        // Build metadata in the same order as the original queries
+        for original_query in original_queries {
+            let query_uid = Uuid::now_v7();
+            let index_uid = original_query.index_uid.to_string();
 
-        // Determine if this is a remote query
-        let (_, _, federation_options) = original_query.into_index_query_federation();
-        let remote = federation_options.and_then(|options| options.remote);
+            // Determine if this is a remote query
+            let (_, _, federation_options) = original_query.into_index_query_federation();
+            let remote = federation_options.and_then(|options| options.remote);
 
-        // Get primary key for this index
-        let mut primary_key = None;
+            // Get primary key for this index
+            let mut primary_key = None;
 
-        if remote.is_some() {
-            // For remote queries, try to get primary key from remote results
-            if let Some(remote_meta) = remote_results_by_index.get(&index_uid) {
-                primary_key = remote_meta.primary_key.clone();
+            if remote.is_some() {
+                // For remote queries, try to get primary key from remote results
+                if let Some(remote_meta) = remote_results_by_index.get(&index_uid) {
+                    primary_key = remote_meta.primary_key.clone();
+                }
+            } else {
+                // For local queries, get primary key from local index
+                primary_key = index_scheduler.index(&index_uid).ok().and_then(|index| {
+                    index.read_txn().ok().and_then(|rtxn| {
+                        let pk = index.primary_key(&rtxn).ok().flatten().map(|pk| pk.to_string());
+                        drop(rtxn);
+                        pk
+                    })
+                });
             }
-        } else {
-            // For local queries, get primary key from local index
-            primary_key = index_scheduler.index(&index_uid).ok().and_then(|index| {
-                index.read_txn().ok().and_then(|rtxn| {
-                    let pk = index.primary_key(&rtxn).ok().flatten().map(|pk| pk.to_string());
-                    drop(rtxn);
-                    pk
-                })
-            });
-        }
 
-        query_metadata.push(SearchMetadata { query_uid, index_uid, primary_key, remote });
-    }
+            query_metadata.push(SearchMetadata { query_uid, index_uid, primary_key, remote });
+        }
+        Some(query_metadata)
+    } else {
+        None
+    };
 
     // 3.2. merge hits
     let merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
@@ -231,7 +239,7 @@ pub async fn perform_federated_search(
         facets_by_index,
         remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
         request_uid: Some(request_uid),
-        metadata: Some(query_metadata),
+        metadata: query_metadata,
     })
 }
 
@@ -630,7 +638,12 @@ struct RemoteSearch {
 }
 
 impl RemoteSearch {
-    fn start(queries: RemoteQueriesByHost, federation: &Federation, deadline: Instant) -> Self {
+    fn start(
+        queries: RemoteQueriesByHost,
+        federation: &Federation,
+        deadline: Instant,
+        include_metadata: bool,
+    ) -> Self {
         let mut in_flight_remote_queries = BTreeMap::new();
         let client = reqwest::ClientBuilder::new()
             .connect_timeout(std::time::Duration::from_millis(200))
@@ -650,7 +663,10 @@ impl RemoteSearch {
                     // never merge distant facets
                     proxy_federation.merge_facets = None;
                     let params = params.clone();
-                    async move { proxy_search(&node, queries, proxy_federation, &params).await }
+                    async move {
+                        proxy_search(&node, queries, proxy_federation, &params, include_metadata)
+                            .await
+                    }
                 }),
             );
         }

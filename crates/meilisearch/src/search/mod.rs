@@ -43,7 +43,7 @@ use crate::error::MeilisearchHttpError;
 mod federated;
 pub use federated::{
     perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE, INCLUDE_METADATA_HEADER,
 };
 
 mod ranking_rules;
@@ -1146,6 +1146,7 @@ pub fn perform_search(
     retrieve_vectors: RetrieveVectors,
     features: RoFeatures,
     request_uid: Uuid,
+    include_metadata: bool,
 ) -> Result<SearchResult, ResponseError> {
     let before_search = Instant::now();
     let index_uid_for_metadata = index_uid.clone();
@@ -1171,8 +1172,18 @@ pub fn perform_search(
         semantic_hit_count,
     ) = search_from_kind(index_uid.clone(), search_kind, search)?;
 
-    let query_uid = Uuid::now_v7();
-    let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
+    let metadata = if include_metadata {
+        let query_uid = Uuid::now_v7();
+        let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
+        Some(SearchMetadata {
+            query_uid,
+            index_uid: index_uid_for_metadata,
+            primary_key,
+            remote: None, // Local searches don't have a remote
+        })
+    } else {
+        None
+    };
 
     let SearchQuery {
         q,
@@ -1267,12 +1278,7 @@ pub fn perform_search(
         used_negative_operator,
         semantic_hit_count,
         request_uid: Some(request_uid),
-        metadata: Some(SearchMetadata {
-            query_uid,
-            index_uid: index_uid_for_metadata,
-            primary_key,
-            remote: None, // Local searches don't have a remote
-        }),
+        metadata,
     };
     Ok(result)
 }

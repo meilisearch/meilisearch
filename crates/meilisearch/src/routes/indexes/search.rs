@@ -26,7 +26,7 @@ use crate::search::{
     add_search_rules, perform_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
     RetrieveVectors, SearchKind, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
     DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO, INCLUDE_METADATA_HEADER,
 };
 use crate::search_queue::SearchQueue;
 
@@ -345,6 +345,11 @@ pub async fn search_with_url_query(
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
     let permit = search_queue.try_get_search_permit().await?;
+    let include_metadata = req
+        .headers()
+        .get(INCLUDE_METADATA_HEADER)
+        .is_some();
+
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
             index_uid.to_string(),
@@ -354,6 +359,7 @@ pub async fn search_with_url_query(
             retrieve_vector,
             index_scheduler.features(),
             request_uid,
+            include_metadata,
         )
     })
     .await;
@@ -453,6 +459,11 @@ pub async fn search_with_post(
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
+    let include_metadata = req
+        .headers()
+        .get(INCLUDE_METADATA_HEADER)
+        .is_some();
+
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
@@ -463,6 +474,7 @@ pub async fn search_with_post(
             retrieve_vectors,
             index_scheduler.features(),
             request_uid,
+            include_metadata,
         )
     })
     .await;
