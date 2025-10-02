@@ -50,6 +50,11 @@ impl MustStopProcessing {
     pub fn reset(&self) {
         self.0.store(false, Ordering::Relaxed);
     }
+
+    pub fn as_lambda(&self) -> impl Fn() -> bool + Send + Sync + 'static {
+        let clone = self.clone();
+        move || clone.get()
+    }
 }
 
 pub struct Scheduler {
