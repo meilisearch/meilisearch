@@ -454,7 +454,8 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 [[package]]
 name = "arroy"
 version = "0.6.4-nested-rtxns"
-source = "git+https://github.com/meilisearch/arroy?branch=use-heed-nested-rtxns#61c8f4f0addeff968e80438018d0aee2c1eb8d67"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb8b6b34d9d83e3b837cb7f72a439dbd2293b102393c084af5e5b097212e1532"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -1075,7 +1076,8 @@ dependencies = [
 [[package]]
 name = "cellulite"
 version = "0.3.1-nested-rtxns"
-source = "git+https://github.com/meilisearch/cellulite?branch=use-heed-nested-rtxns#9fb1866cc49277d26f606769112fa704944ccc61"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db298d57a80b9284327800b394ee3921307c2fdda87c6d37202f5cf400478981"
 dependencies = [
  "crossbeam",
  "geo",
@@ -2757,7 +2759,8 @@ dependencies = [
 [[package]]
 name = "hannoy"
 version = "0.0.9-nested-rtxns"
-source = "git+https://github.com/nnethercott/hannoy?branch=use-heed-nested-rtxns#d4ca5454eff6539e9fc2119f07113abebbda0a39"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc5a945b92b063e677d658cfcc7cb6dec2502fe44631f017084938f14d6ce30e"
 dependencies = [
  "bytemuck",
  "byteorder",

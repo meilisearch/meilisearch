@@ -19,7 +19,7 @@ bstr = "1.12.0"
 bytemuck = { version = "1.23.1", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.9.7", default-features = false }
-cellulite = { version = "0.3.1-nested-rtxns", git = "https://github.com/meilisearch/cellulite", "branch" = "use-heed-nested-rtxns" }
+cellulite = "0.3.1-nested-rtxns"
 concat-arrays = "0.1.2"
 convert_case = "0.8.0"
 crossbeam-channel = "0.5.15"
@@ -89,8 +89,8 @@ rhai = { version = "1.22.2", features = [
     "no_time",
     "sync",
 ] }
-arroy = { version = "0.6.4-nested-rtxns", git = "https://github.com/meilisearch/arroy", "branch" = "use-heed-nested-rtxns" }
-hannoy = { version = "0.0.9-nested-rtxns", git = "https://github.com/nnethercott/hannoy", "branch" = "use-heed-nested-rtxns", features = ["arroy"] }
+arroy = "0.6.4-nested-rtxns"
+hannoy = { version = "0.0.9-nested-rtxns", features = ["arroy"] }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
