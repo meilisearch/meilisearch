@@ -40,15 +40,15 @@ pub fn generate_facet_levels(
 
     clear_levels(db, wtxn, field_id)?;
 
-    let mut base_level = 0;
+    let mut base_level: u8 = 0;
     // That's a do-while loop
     while {
         let mut level_size = 0;
+        let level = base_level.checked_add(1).unwrap();
         for reader in compute_level(index, wtxn, db, field_id, base_level)? {
             let mut cursor = reader.into_cursor()?;
             while let Some((left_bound, facet_group_value)) = cursor.move_on_next()? {
                 level_size += 1;
-                let level = base_level.checked_add(1).unwrap();
                 let key = FacetGroupKey { field_id, level, left_bound };
                 debug_assert!(
                     db.get(wtxn, &key).transpose().is_none(),
@@ -58,7 +58,7 @@ pub fn generate_facet_levels(
             }
         }
 
-        base_level += 1;
+        base_level = level;
 
         // If the next level will have the minimum required groups, continue.
         (level_size / FACET_GROUP_SIZE as usize) >= FACET_MIN_LEVEL_SIZE as usize
