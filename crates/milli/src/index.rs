@@ -1983,6 +1983,11 @@ impl Index {
 
         Ok(sizes)
     }
+
+    /// The underlying env for raw access
+    pub fn raw_env(&self) -> &heed::Env<WithoutTls> {
+        &self.env
+    }
 }
 
 pub struct EmbeddingsWithMetadata {
