@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::{fs, thread};
@@ -590,5 +590,9 @@ impl IndexMapper {
 
     pub fn set_currently_updating_index(&self, index: Option<(String, Index)>) {
         *self.currently_updating_index.write().unwrap() = index;
+    }
+
+    pub fn base_path(&self) -> &Path {
+        &self.base_path
     }
 }
