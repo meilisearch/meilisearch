@@ -234,6 +234,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             facet_stats: _,
             degraded,
             used_negative_operator,
+            request_uid: _,
         } = result;
 
         self.total_succeeded = self.total_succeeded.saturating_add(1);

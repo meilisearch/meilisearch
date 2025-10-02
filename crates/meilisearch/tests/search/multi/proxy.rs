@@ -229,7 +229,7 @@ async fn remote_sharding() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -287,12 +287,13 @@ async fn remote_sharding() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "###);
     let (response, _status_code) = ms1.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -350,12 +351,13 @@ async fn remote_sharding() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "###);
     let (response, _status_code) = ms2.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -413,6 +415,7 @@ async fn remote_sharding() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "###);
@@ -594,7 +597,7 @@ async fn remote_sharding_retrieve_vectors() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "processingTimeMs": "[time]",
@@ -619,9 +622,10 @@ async fn remote_sharding_retrieve_vectors() {
         ]
       },
       "semanticHitCount": 0,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
-    "#);
+    "###);
 
     // multi vector search: two local queries, one remote
 
@@ -669,7 +673,7 @@ async fn remote_sharding_retrieve_vectors() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r#"
     {
       "hits": [],
       "processingTimeMs": "[time]",
@@ -694,6 +698,7 @@ async fn remote_sharding_retrieve_vectors() {
         ]
       },
       "semanticHitCount": 0,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "#);
@@ -744,7 +749,7 @@ async fn remote_sharding_retrieve_vectors() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r#"
     {
       "hits": [],
       "processingTimeMs": "[time]",
@@ -769,6 +774,7 @@ async fn remote_sharding_retrieve_vectors() {
         ]
       },
       "semanticHitCount": 0,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "#);
@@ -819,7 +825,7 @@ async fn remote_sharding_retrieve_vectors() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "processingTimeMs": "[time]",
@@ -839,9 +845,10 @@ async fn remote_sharding_retrieve_vectors() {
         ]
       },
       "semanticHitCount": 0,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
-    "#);
+    "###);
 
     // multi vector search: no local queries, all remote
 
@@ -889,7 +896,7 @@ async fn remote_sharding_retrieve_vectors() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "processingTimeMs": "[time]",
@@ -913,9 +920,10 @@ async fn remote_sharding_retrieve_vectors() {
           0.2
         ]
       },
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1133,7 +1141,7 @@ async fn error_no_weighted_score() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1161,6 +1169,7 @@ async fn error_no_weighted_score() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
           "message": "remote hit does not contain `._federation.weightedScoreValues`\n  - hint: check that the remote instance is a Meilisearch instance running the same version",
@@ -1272,7 +1281,7 @@ async fn error_bad_response() {
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
 
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1300,6 +1309,7 @@ async fn error_bad_response() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
           "message": "could not parse response from the remote host as a federated search response:\n  - response from remote: <html>Returning an HTML page</html>\n  - hint: check that the remote instance is a Meilisearch instance running the same version",
@@ -1404,7 +1414,7 @@ async fn error_bad_request() {
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
 
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1432,6 +1442,7 @@ async fn error_bad_request() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
           "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.queries[1]`: Index `nottest` not found.\",\"code\":\"index_not_found\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#index_not_found\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
@@ -1541,7 +1552,7 @@ async fn error_bad_request_facets_by_index() {
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
 
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1575,6 +1586,7 @@ async fn error_bad_request_facets_by_index() {
           "stats": {}
         }
       },
+      "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
           "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.federation.facetsByIndex.test0`: Index `test0` not found.\\n - Note: index `test0` is not used in queries\",\"code\":\"index_not_found\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#index_not_found\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
@@ -1687,7 +1699,7 @@ async fn error_bad_request_facets_by_index_facet() {
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
 
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1726,6 +1738,7 @@ async fn error_bad_request_facets_by_index_facet() {
           "stats": {}
         }
       },
+      "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
           "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\\n - Note: index `test` used in `.queries[1]`\",\"code\":\"invalid_multi_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_multi_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
@@ -2035,7 +2048,7 @@ async fn error_remote_404() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2063,6 +2076,7 @@ async fn error_remote_404() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
           "message": "remote host responded with code 404:\n  - response from remote: null\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
@@ -2075,7 +2089,7 @@ async fn error_remote_404() {
     "###);
     let (response, _status_code) = ms1.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2113,6 +2127,7 @@ async fn error_remote_404() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "###);
@@ -2244,7 +2259,7 @@ async fn error_remote_sharding_auth() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2272,6 +2287,7 @@ async fn error_remote_sharding_auth() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1-notsearch": {
           "message": "could not authenticate against the remote host\n  - hint: check that the remote instance was registered with a valid API key having the `search` action",
@@ -2405,7 +2421,7 @@ async fn remote_sharding_auth() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2453,6 +2469,7 @@ async fn remote_sharding_auth() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "###);
@@ -2555,7 +2572,7 @@ async fn error_remote_500() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2583,6 +2600,7 @@ async fn error_remote_500() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
           "message": "remote host responded with code 500:\n  - response from remote: {\"error\":\"provoked error\",\"code\":\"test_error\",\"link\":\"https://docs.meilisearch.com/errors#test_error\"}",
@@ -2596,7 +2614,7 @@ async fn error_remote_500() {
     let (response, _status_code) = ms1.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
     // the response if full because we queried the instance that works
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2634,6 +2652,7 @@ async fn error_remote_500() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "###);
@@ -2737,7 +2756,7 @@ async fn error_remote_500_once() {
     // Meilisearch is tolerant to a single failure
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2775,12 +2794,13 @@ async fn error_remote_500_once() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "###);
     let (response, _status_code) = ms1.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2818,6 +2838,7 @@ async fn error_remote_500_once() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 3,
+      "requestUid": "[uuid]",
       "remoteErrors": {}
     }
     "###);

@@ -689,7 +689,7 @@ async fn clear_documents() {
     // Make sure the vector DB has been cleared
     let (documents, _code) =
         index.search_post(json!({ "vector": [1, 1, 1], "hybrid": {"embedder": "manual"} })).await;
-    snapshot!(documents, @r#"
+    snapshot!(json_string!(documents, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "query": "",
@@ -697,9 +697,10 @@ async fn clear_documents() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 0,
+      "requestUid": "[uuid]",
       "semanticHitCount": 0
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -743,7 +744,7 @@ async fn add_remove_one_vector_4588() {
             json!({"vector": [1, 1, 1], "hybrid": {"semanticRatio": 1.0, "embedder": "manual"} }),
         )
         .await;
-    snapshot!(documents, @r#"
+    snapshot!(json_string!(documents, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -756,9 +757,10 @@ async fn add_remove_one_vector_4588() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 1,
+      "requestUid": "[uuid]",
       "semanticHitCount": 1
     }
-    "#);
+    "###);
 
     let (documents, _code) = index
         .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })

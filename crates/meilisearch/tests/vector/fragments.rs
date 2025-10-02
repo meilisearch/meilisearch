@@ -257,7 +257,7 @@ async fn search_with_vector() {
         json!({"vector": [1.0, 1.0, 1.0], "hybrid": {"semanticRatio": 1.0, "embedder": "rest"}, "limit": 1}
     )).await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
     {
       "hits": [
         {
@@ -270,9 +270,10 @@ async fn search_with_vector() {
       "limit": 1,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "semanticHitCount": 1
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -288,7 +289,7 @@ async fn search_with_media() {
         ))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
     {
       "hits": [
         {
@@ -302,9 +303,10 @@ async fn search_with_media() {
       "limit": 1,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "semanticHitCount": 1
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -390,7 +392,7 @@ async fn search_with_query() {
         ))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
     {
       "hits": [
         {
@@ -404,9 +406,10 @@ async fn search_with_query() {
       "limit": 1,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "semanticHitCount": 1
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -2076,7 +2079,7 @@ async fn composite() {
         json!({"vector": [1.0, 1.0, 1.0], "hybrid": {"semanticRatio": 1.0, "embedder": "rest"}, "limit": 1}
     )).await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r###"
     {
       "hits": [
         {
@@ -2089,9 +2092,10 @@ async fn composite() {
       "limit": 1,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "semanticHitCount": 1
     }
-    "#);
+    "###);
 
     let (value, code) = index
         .search_post(
@@ -2100,7 +2104,7 @@ async fn composite() {
         )
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r#"
     {
       "hits": [
         {
@@ -2114,6 +2118,7 @@ async fn composite() {
       "limit": 1,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "semanticHitCount": 1
     }
     "#);

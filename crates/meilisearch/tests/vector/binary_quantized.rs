@@ -323,7 +323,7 @@ async fn binary_quantize_clear_documents() {
     // Make sure the vector DB has been cleared
     let (documents, _code) =
         index.search_post(json!({ "hybrid": { "embedder": "manual" }, "vector": [1, 1, 1] })).await;
-    snapshot!(documents, @r#"
+    snapshot!(json_string!(documents, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "query": "",
@@ -331,9 +331,10 @@ async fn binary_quantize_clear_documents() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 0,
+      "requestUid": "[uuid]",
       "semanticHitCount": 0
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]

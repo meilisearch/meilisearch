@@ -13,6 +13,7 @@ use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
 use utoipa::{IntoParams, OpenApi};
+use uuid::Uuid;
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
@@ -325,7 +326,8 @@ pub async fn search_with_url_query(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!(parameters = ?params, "Search get");
+    let request_uid = Uuid::now_v7();
+    debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let mut query: SearchQuery = params.into_inner().try_into()?;
@@ -351,6 +353,7 @@ pub async fn search_with_url_query(
             search_kind,
             retrieve_vector,
             index_scheduler.features(),
+            request_uid,
         )
     })
     .await;
@@ -363,7 +366,7 @@ pub async fn search_with_url_query(
 
     let search_result = search_result?;
 
-    debug!(returns = ?search_result, "Search get");
+    debug!(request_uid = ?request_uid, returns = ?search_result, "Search get");
     Ok(HttpResponse::Ok().json(search_result))
 }
 
@@ -432,9 +435,10 @@ pub async fn search_with_post(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+    let request_uid = Uuid::now_v7();
 
     let mut query = params.into_inner();
-    debug!(parameters = ?query, "Search post");
+    debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
 
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
@@ -458,6 +462,7 @@ pub async fn search_with_post(
             search_kind,
             retrieve_vectors,
             index_scheduler.features(),
+            request_uid,
         )
     })
     .await;
@@ -473,7 +478,7 @@ pub async fn search_with_post(
 
     let search_result = search_result?;
 
-    debug!(returns = ?search_result, "Search post");
+    debug!(request_uid = ?request_uid, returns = ?search_result, "Search post");
     Ok(HttpResponse::Ok().json(search_result))
 }
 
