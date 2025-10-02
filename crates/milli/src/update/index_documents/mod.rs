@@ -254,6 +254,12 @@ where
             chunk_compression_level: self.indexer_config.chunk_compression_level,
             max_memory: self.indexer_config.max_memory,
             max_nb_chunks: self.indexer_config.max_nb_chunks, // default value, may be chosen.
+            experimental_no_edition_2024_for_prefix_post_processing: self
+                .indexer_config
+                .experimental_no_edition_2024_for_prefix_post_processing,
+            experimental_no_edition_2024_for_facet_post_processing: self
+                .indexer_config
+                .experimental_no_edition_2024_for_facet_post_processing,
         };
         let documents_chunk_size = match self.indexer_config.documents_chunk_size {
             Some(chunk_size) => chunk_size,

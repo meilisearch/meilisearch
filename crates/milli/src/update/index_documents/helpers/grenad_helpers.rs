@@ -101,6 +101,8 @@ pub struct GrenadParameters {
     pub chunk_compression_level: Option<u32>,
     pub max_memory: Option<usize>,
     pub max_nb_chunks: Option<usize>,
+    pub experimental_no_edition_2024_for_prefix_post_processing: bool,
+    pub experimental_no_edition_2024_for_facet_post_processing: bool,
 }
 
 impl Default for GrenadParameters {
@@ -110,6 +112,8 @@ impl Default for GrenadParameters {
             chunk_compression_level: None,
             max_memory: None,
             max_nb_chunks: None,
+            experimental_no_edition_2024_for_prefix_post_processing: false,
+            experimental_no_edition_2024_for_facet_post_processing: false,
         }
     }
 }
