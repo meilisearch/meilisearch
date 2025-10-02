@@ -742,7 +742,7 @@ async fn vector_filter_all_embedders() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -762,9 +762,10 @@ async fn vector_filter_all_embedders() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -839,7 +840,7 @@ async fn vector_filter_specific_embedder() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -859,9 +860,10 @@ async fn vector_filter_specific_embedder() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -874,7 +876,7 @@ async fn vector_filter_user_provided() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -885,9 +887,10 @@ async fn vector_filter_user_provided() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 1
+      "estimatedTotalHits": 1,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -900,7 +903,7 @@ async fn vector_filter_specific_fragment() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -914,9 +917,10 @@ async fn vector_filter_specific_fragment() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 2
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 
     let (value, _code) = index
         .search_post(json!({
@@ -924,7 +928,7 @@ async fn vector_filter_specific_fragment() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -941,9 +945,10 @@ async fn vector_filter_specific_fragment() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -976,16 +981,17 @@ async fn vector_filter_document_template_but_fragments_used() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "query": "",
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 0
+      "estimatedTotalHits": 0,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1023,7 +1029,7 @@ async fn vector_filter_document_template() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1040,9 +1046,10 @@ async fn vector_filter_document_template() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1075,7 +1082,7 @@ async fn vector_filter_negation() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1092,9 +1099,10 @@ async fn vector_filter_negation() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1107,7 +1115,7 @@ async fn vector_filter_or_combination() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1124,9 +1132,10 @@ async fn vector_filter_or_combination() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1139,7 +1148,7 @@ async fn vector_filter_regenerate() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1156,7 +1165,8 @@ async fn vector_filter_regenerate() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }

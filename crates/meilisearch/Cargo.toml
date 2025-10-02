@@ -91,7 +91,7 @@ time = { version = "0.3.41", features = [
 ] }
 tokio = { version = "1.45.1", features = ["full"] }
 toml = "0.8.23"
-uuid = { version = "1.17.0", features = ["serde", "v4"] }
+uuid = { version = "1.18.0", features = ["serde", "v4", "v7"] }
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
 url = { version = "2.5.4", features = ["serde"] }
