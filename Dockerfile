@@ -1,5 +1,5 @@
 # Compile
-FROM    rust:1.89-alpine3.20 AS compiler
+FROM    rust:1.89-alpine3.22 AS compiler
 
 RUN     apk add -q --no-cache build-base openssl-dev
 
@@ -20,7 +20,7 @@ RUN     set -eux; \
         cargo build --release -p meilisearch -p meilitool
 
 # Run
-FROM    alpine:3.20
+FROM    alpine:3.22
 LABEL   org.opencontainers.image.source="https://github.com/meilisearch/meilisearch"
 
 ENV     MEILI_HTTP_ADDR 0.0.0.0:7700
