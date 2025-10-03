@@ -55,6 +55,10 @@ const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LO
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS";
+const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_FACET_POST_PROCESSING: &str =
+    "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_FACET_POST_PROCESSING";
+const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_PREFIX_POST_PROCESSING: &str =
+    "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_PREFIX_POST_PROCESSING";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
 const MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER: &str = "MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER";
@@ -772,6 +776,22 @@ pub struct IndexerOpts {
     #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS)]
     #[serde(default)]
     pub experimental_no_edition_2024_for_dumps: bool,
+
+    /// Experimental no edition 2024 to compute prefixes. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/862>
+    ///
+    /// Enables the experimental no edition 2024 to compute prefixes.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_PREFIX_POST_PROCESSING)]
+    #[serde(default)]
+    pub experimental_no_edition_2024_for_prefix_post_processing: bool,
+
+    /// Experimental no edition 2024 to compute facets. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/862>
+    ///
+    /// Enables the experimental no edition 2024 to compute facets.
+    #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_FACET_POST_PROCESSING)]
+    #[serde(default)]
+    pub experimental_no_edition_2024_for_facet_post_processing: bool,
 }
 
 impl IndexerOpts {
@@ -783,6 +803,8 @@ impl IndexerOpts {
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
             experimental_no_edition_2024_for_dumps,
+            experimental_no_edition_2024_for_prefix_post_processing,
+            experimental_no_edition_2024_for_facet_post_processing,
         } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
@@ -806,6 +828,18 @@ impl IndexerOpts {
             export_to_env_if_not_present(
                 MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS,
                 experimental_no_edition_2024_for_dumps.to_string(),
+            );
+        }
+        if experimental_no_edition_2024_for_prefix_post_processing {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_PREFIX_POST_PROCESSING,
+                experimental_no_edition_2024_for_prefix_post_processing.to_string(),
+            );
+        }
+        if experimental_no_edition_2024_for_facet_post_processing {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_FACET_POST_PROCESSING,
+                experimental_no_edition_2024_for_facet_post_processing.to_string(),
             );
         }
     }
@@ -833,6 +867,10 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             chunk_compression_level: Default::default(),
             documents_chunk_size: Default::default(),
             max_nb_chunks: Default::default(),
+            experimental_no_edition_2024_for_prefix_post_processing: other
+                .experimental_no_edition_2024_for_prefix_post_processing,
+            experimental_no_edition_2024_for_facet_post_processing: other
+                .experimental_no_edition_2024_for_facet_post_processing,
         })
     }
 }

@@ -180,12 +180,15 @@ where
         })
         .unwrap()?;
 
-        post_processing::post_process(
-            indexing_context,
-            wtxn,
-            global_fields_ids_map,
-            facet_field_ids_delta,
-        )?;
+        pool.install(|| {
+            post_processing::post_process(
+                indexing_context,
+                wtxn,
+                global_fields_ids_map,
+                facet_field_ids_delta,
+            )
+        })
+        .unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
         index.cellulite.build(
