@@ -226,6 +226,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                     }
 
                     let mut bitmaps_bytes_at_positions = HashMap::new();
+                    let mut prev_pos = None;
                     for result in self
                         .database
                         .remap_data_type::<Bytes>()
@@ -234,13 +235,24 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                         let (key, bitmap_bytes) = result?;
                         let (_word, pos) =
                             StrBEU16Codec::bytes_decode(key).map_err(Error::Decoding)?;
-                        // TODO track position with no corresponding bitmap bytes
-                        //      these means that the prefix no longer exists in the database
-                        //      and must, therefore, be removed from the index
+
+                        // Track positions with no corresponding bitmap bytes,
+                        // these means that the prefix no longer exists in the database
+                        // and must, therefore, be removed from the index.
+                        if let Some(prev_pos) = prev_pos {
+                            // A range with the left bigger than the right bound results in an empty range.
+                            for pos in prev_pos..pos {
+                                // They are represented by an empty set of bitmaps.
+                                bitmaps_bytes_at_positions.entry(pos).or_insert_with(Vec::new);
+                            }
+                        }
+
                         bitmaps_bytes_at_positions
                             .entry(pos)
                             .or_insert_with(Vec::new)
                             .push(bitmap_bytes);
+
+                        prev_pos = Some(pos);
                     }
 
                     for (pos, bitmaps_bytes) in bitmaps_bytes_at_positions {
