@@ -4,7 +4,7 @@ use std::io::{BufReader, BufWriter, Read, Seek, Write};
 use std::iter;
 
 use hashbrown::HashMap;
-use heed::types::Bytes;
+use heed::types::{Bytes, DecodeIgnore};
 use heed::{BytesDecode, Database, Error, RoTxn, RwTxn};
 use rayon::iter::{IndexedParallelIterator as _, IntoParallelIterator, ParallelIterator as _};
 use roaring::MultiOps;
@@ -225,37 +225,33 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                         continue;
                     }
 
-                    let mut bitmaps_bytes_at_positions = HashMap::new();
-                    let mut prev_pos = None;
+                    let mut bitmap_bytes_at_positions = HashMap::new();
                     for result in self
                         .database
-                        .remap_data_type::<Bytes>()
                         .prefix_iter(&rtxn, prefix.as_bytes())?
+                        .remap_types::<StrBEU16Codec, Bytes>()
                     {
-                        let (key, bitmap_bytes) = result?;
-                        let (_word, pos) =
-                            StrBEU16Codec::bytes_decode(key).map_err(Error::Decoding)?;
-
-                        // Track positions with no corresponding bitmap bytes,
-                        // these means that the prefix no longer exists in the database
-                        // and must, therefore, be removed from the index.
-                        if let Some(prev_pos) = prev_pos {
-                            // A range with the left bigger than the right bound results in an empty range.
-                            for pos in prev_pos..pos {
-                                // They are represented by an empty set of bitmaps.
-                                bitmaps_bytes_at_positions.entry(pos).or_insert_with(Vec::new);
-                            }
-                        }
-
-                        bitmaps_bytes_at_positions
+                        let ((_word, pos), bitmap_bytes) = result?;
+                        bitmap_bytes_at_positions
                             .entry(pos)
                             .or_insert_with(Vec::new)
                             .push(bitmap_bytes);
-
-                        prev_pos = Some(pos);
                     }
 
-                    for (pos, bitmaps_bytes) in bitmaps_bytes_at_positions {
+                    // We track positions with no corresponding bitmap bytes,
+                    // these means that the prefix no longer exists in the database
+                    // and must, therefore, be removed from the index.
+                    for result in self
+                        .prefix_database
+                        .prefix_iter(&rtxn, prefix.as_bytes())?
+                        .remap_types::<StrBEU16Codec, DecodeIgnore>()
+                    {
+                        let ((_word, pos), ()) = result?;
+                        // They are represented by an empty set of bitmaps.
+                        bitmap_bytes_at_positions.entry(pos).or_insert_with(Vec::new);
+                    }
+
+                    for (pos, bitmaps_bytes) in bitmap_bytes_at_positions {
                         if bitmaps_bytes.is_empty() {
                             indexes.push(PrefixIntegerEntry {
                                 prefix,
