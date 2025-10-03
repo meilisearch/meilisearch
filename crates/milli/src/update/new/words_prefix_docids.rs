@@ -225,46 +225,25 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                         continue;
                     }
 
-                    let mut bitmaps_bytes = Vec::<&[u8]>::new();
-                    let mut prev_pos = None;
+                    let mut bitmaps_bytes_at_positions = HashMap::new();
                     for result in self
                         .database
                         .remap_data_type::<Bytes>()
                         .prefix_iter(&rtxn, prefix.as_bytes())?
                     {
-                        let (key, current_bitmap_bytes) = result?;
+                        let (key, bitmap_bytes) = result?;
                         let (_word, pos) =
                             StrBEU16Codec::bytes_decode(key).map_err(Error::Decoding)?;
-
-                        if prev_pos.is_some_and(|p| p != pos) {
-                            if bitmaps_bytes.is_empty() {
-                                indexes.push(PrefixIntegerEntry {
-                                    prefix,
-                                    pos,
-                                    serialized_length: None,
-                                });
-                            } else {
-                                let output = bitmaps_bytes
-                                    .iter()
-                                    .map(|bytes| CboRoaringBitmapCodec::deserialize_from(bytes))
-                                    .union()?;
-                                buffer.clear();
-                                CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
-                                indexes.push(PrefixIntegerEntry {
-                                    prefix,
-                                    pos,
-                                    serialized_length: Some(buffer.len()),
-                                });
-                                file.write_all(&buffer)?;
-                                bitmaps_bytes.clear();
-                            }
-                        }
-
-                        bitmaps_bytes.push(current_bitmap_bytes);
-                        prev_pos = Some(pos);
+                        // TODO track position with no corresponding bitmap bytes
+                        //      these means that the prefix no longer exists in the database
+                        //      and must, therefore, be removed from the index
+                        bitmaps_bytes_at_positions
+                            .entry(pos)
+                            .or_insert_with(Vec::new)
+                            .push(bitmap_bytes);
                     }
 
-                    if let Some(pos) = prev_pos {
+                    for (pos, bitmaps_bytes) in bitmaps_bytes_at_positions {
                         if bitmaps_bytes.is_empty() {
                             indexes.push(PrefixIntegerEntry {
                                 prefix,
@@ -273,8 +252,8 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                             });
                         } else {
                             let output = bitmaps_bytes
-                                .iter()
-                                .map(|bytes| CboRoaringBitmapCodec::deserialize_from(bytes))
+                                .into_iter()
+                                .map(CboRoaringBitmapCodec::deserialize_from)
                                 .union()?;
                             buffer.clear();
                             CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
