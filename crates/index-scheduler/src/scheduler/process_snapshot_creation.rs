@@ -243,8 +243,7 @@ impl IndexScheduler {
 
         let mut builder = compression::PipedArchiveBuilder::new(
             self.scheduler.snapshots_path.clone(),
-            format!("{db_name}.snapshot"),
-            base_path,
+            base_path.clone(),
             must_stop_processing.as_lambda(),
         );
 
@@ -333,7 +332,8 @@ impl IndexScheduler {
 
         // 7. Finalize the tarball
         progress.update_progress(SnapshotCreationProgress::CreateTheTarball);
-        let file = builder.finish()?;
+        let file =
+            builder.finish(&self.scheduler.snapshots_path.join(format!("{db_name}.snapshot")))?;
 
         // 8. Change the permission to make the snapshot readonly
         let mut permissions = file.metadata()?.permissions();
