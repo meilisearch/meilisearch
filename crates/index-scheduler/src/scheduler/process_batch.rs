@@ -418,8 +418,8 @@ impl IndexScheduler {
                 task.status = Status::Succeeded;
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
-            Batch::CompactIndex { index_uid, mut task } => {
-                todo!("Implement compact index")
+            Batch::IndexCompaction { index_uid, mut task } => {
+                todo!("Implement index compaction")
             }
             Batch::Export { mut task } => {
                 let KindWithContent::Export { url, api_key, payload_size, indexes } = &task.kind
