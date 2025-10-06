@@ -244,8 +244,7 @@ impl IndexScheduler {
         let mut builder = compression::PipedArchiveBuilder::new(
             self.scheduler.snapshots_path.clone(),
             base_path.clone(),
-            must_stop_processing.as_lambda(),
-        );
+        )?;
 
         // 3. Snapshot the VERSION file
         builder.add_file_to_archive(self.scheduler.version_file_path.clone())?;
