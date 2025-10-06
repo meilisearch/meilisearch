@@ -68,7 +68,7 @@ impl Task {
             | IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid }
-            | CompactIndex { index_uid } => Some(index_uid),
+            | IndexCompaction { index_uid } => Some(index_uid),
         }
     }
 
@@ -96,7 +96,7 @@ impl Task {
             | KindWithContent::SnapshotCreation
             | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. }
-            | KindWithContent::CompactIndex { .. } => None,
+            | KindWithContent::IndexCompaction { .. } => None,
         }
     }
 }
@@ -172,7 +172,7 @@ pub enum KindWithContent {
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
-    CompactIndex {
+    IndexCompaction {
         index_uid: String,
     },
 }
@@ -211,7 +211,7 @@ impl KindWithContent {
             KindWithContent::SnapshotCreation => Kind::SnapshotCreation,
             KindWithContent::Export { .. } => Kind::Export,
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
-            KindWithContent::CompactIndex { .. } => Kind::CompactIndex,
+            KindWithContent::IndexCompaction { .. } => Kind::IndexCompaction,
         }
     }
 
@@ -233,7 +233,7 @@ impl KindWithContent {
             | SettingsUpdate { index_uid, .. }
             | IndexCreation { index_uid, .. }
             | IndexDeletion { index_uid }
-            | CompactIndex { index_uid } => vec![index_uid],
+            | IndexCompaction { index_uid } => vec![index_uid],
             IndexUpdate { index_uid, new_index_uid, .. } => {
                 let mut indexes = vec![index_uid.as_str()];
                 if let Some(new_uid) = new_index_uid {
@@ -332,7 +332,7 @@ impl KindWithContent {
                     versioning::VERSION_PATCH,
                 ),
             }),
-            KindWithContent::CompactIndex { index_uid } => Some(Details::CompactIndex {
+            KindWithContent::IndexCompaction { index_uid } => Some(Details::IndexCompaction {
                 index_uid: index_uid.clone(),
                 pre_compaction_size: None,
                 post_compaction_size: None,
@@ -419,7 +419,7 @@ impl KindWithContent {
                     versioning::VERSION_PATCH,
                 ),
             }),
-            KindWithContent::CompactIndex { index_uid } => Some(Details::CompactIndex {
+            KindWithContent::IndexCompaction { index_uid } => Some(Details::IndexCompaction {
                 index_uid: index_uid.clone(),
                 pre_compaction_size: None,
                 post_compaction_size: None,
@@ -486,7 +486,7 @@ impl From<&KindWithContent> for Option<Details> {
                     versioning::VERSION_PATCH,
                 ),
             }),
-            KindWithContent::CompactIndex { index_uid } => Some(Details::CompactIndex {
+            KindWithContent::IndexCompaction { index_uid } => Some(Details::IndexCompaction {
                 index_uid: index_uid.clone(),
                 pre_compaction_size: None,
                 post_compaction_size: None,
@@ -601,7 +601,7 @@ pub enum Kind {
     SnapshotCreation,
     Export,
     UpgradeDatabase,
-    CompactIndex,
+    IndexCompaction,
 }
 
 impl Kind {
@@ -614,7 +614,7 @@ impl Kind {
             | Kind::IndexCreation
             | Kind::IndexDeletion
             | Kind::IndexUpdate
-            | Kind::CompactIndex => true,
+            | Kind::IndexCompaction => true,
             Kind::IndexSwap
             | Kind::TaskCancelation
             | Kind::TaskDeletion
@@ -642,7 +642,7 @@ impl Display for Kind {
             Kind::SnapshotCreation => write!(f, "snapshotCreation"),
             Kind::Export => write!(f, "export"),
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
-            Kind::CompactIndex => write!(f, "compactIndex"),
+            Kind::IndexCompaction => write!(f, "IndexCompaction"),
         }
     }
 }
@@ -678,8 +678,8 @@ impl FromStr for Kind {
             Ok(Kind::Export)
         } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
             Ok(Kind::UpgradeDatabase)
-        } else if kind.eq_ignore_ascii_case("compactIndex") {
-            Ok(Kind::CompactIndex)
+        } else if kind.eq_ignore_ascii_case("IndexCompaction") {
+            Ok(Kind::IndexCompaction)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -765,7 +765,7 @@ pub enum Details {
         from: (u32, u32, u32),
         to: (u32, u32, u32),
     },
-    CompactIndex {
+    IndexCompaction {
         index_uid: String,
         pre_compaction_size: Option<Byte>,
         post_compaction_size: Option<Byte>,
@@ -832,7 +832,7 @@ impl Details {
             Self::ClearAll { deleted_documents } => *deleted_documents = Some(0),
             Self::TaskCancelation { canceled_tasks, .. } => *canceled_tasks = Some(0),
             Self::TaskDeletion { deleted_tasks, .. } => *deleted_tasks = Some(0),
-            Self::CompactIndex { pre_compaction_size, post_compaction_size, .. } => {
+            Self::IndexCompaction { pre_compaction_size, post_compaction_size, .. } => {
                 *pre_compaction_size = None;
                 *post_compaction_size = None;
             }

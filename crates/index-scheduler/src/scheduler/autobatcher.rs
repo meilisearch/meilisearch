@@ -25,7 +25,7 @@ enum AutobatchKind {
     IndexDeletion,
     IndexUpdate,
     IndexSwap,
-    CompactIndex,
+    IndexCompaction,
 }
 
 impl AutobatchKind {
@@ -69,7 +69,7 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
-            KindWithContent::CompactIndex { .. } => AutobatchKind::CompactIndex,
+            KindWithContent::IndexCompaction { .. } => AutobatchKind::IndexCompaction,
             KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
@@ -120,7 +120,7 @@ pub enum BatchKind {
     IndexSwap {
         id: TaskId,
     },
-    CompactIndex {
+    IndexCompaction {
         id: TaskId,
     },
 }
@@ -188,9 +188,9 @@ impl BatchKind {
                 )),
                 false,
             ),
-            K::CompactIndex => (
+            K::IndexCompaction => (
                 Break((
-                    BatchKind::CompactIndex { id: task_id },
+                    BatchKind::IndexCompaction { id: task_id },
                     BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
                 )),
                 false,
@@ -300,7 +300,7 @@ impl BatchKind {
 
         match (self, autobatch_kind) {
             // We don't batch any of these operations
-            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition | K::CompactIndex) => {
+            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition | K::IndexCompaction) => {
                 Break((this, BatchStopReason::TaskCannotBeBatched { kind, id }))
             },
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
@@ -497,7 +497,7 @@ impl BatchKind {
                 | BatchKind::IndexDeletion { .. }
                 | BatchKind::IndexUpdate { .. }
                 | BatchKind::IndexSwap { .. }
-                | BatchKind::CompactIndex { .. }
+                | BatchKind::IndexCompaction { .. }
                 | BatchKind::DocumentEdition { .. },
                 _,
             ) => {

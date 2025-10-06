@@ -126,7 +126,7 @@ enum Command {
     /// before running the copy and compaction. This way the current indexation must finish before
     /// the compaction operation can start. Once the compaction is done, the big index is replaced
     /// by the compacted one and the mutable transaction is released.
-    CompactIndex { index_name: String },
+    IndexCompaction { index_name: String },
 
     /// Uses the hair dryer the dedicate pages hot in cache
     ///
@@ -165,7 +165,7 @@ fn main() -> anyhow::Result<()> {
             let target_version = parse_version(&target_version).context("While parsing `--target-version`. Make sure `--target-version` is in the format MAJOR.MINOR.PATCH")?;
             OfflineUpgrade { db_path, current_version: detected_version, target_version }.upgrade()
         }
-        Command::CompactIndex { index_name } => compact_index(db_path, &index_name),
+        Command::IndexCompaction { index_name } => compact_index(db_path, &index_name),
         Command::HairDryer { index_name, index_part } => {
             hair_dryer(db_path, &index_name, &index_part)
         }

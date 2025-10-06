@@ -69,7 +69,7 @@ pub async fn compact(
 
     analytics.publish(IndexesCompactAggregator, &req);
 
-    let task = KindWithContent::CompactIndex { index_uid: index_uid.to_string() };
+    let task = KindWithContent::IndexCompaction { index_uid: index_uid.to_string() };
     let task =
         match tokio::task::spawn_blocking(move || index_scheduler.register(task, None, false))
             .await?
