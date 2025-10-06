@@ -132,13 +132,14 @@ pub async fn perform_federated_search(
     let query_metadata = if include_metadata {
         let mut query_metadata = Vec::new();
 
-        // Create a map of remote results by index_uid for quick lookup
-        let mut remote_results_by_index = std::collections::BTreeMap::new();
+        // Create a map of remote results by (index_uid, remote) for quick lookup
+        // This prevents collisions when multiple remotes have the same index_uid but different primary keys
+        let mut remote_results_by_index_and_remote = std::collections::BTreeMap::new();
         for remote_result in &remote_results {
             if let Some(remote_metadata) = &remote_result.metadata {
                 for remote_meta in remote_metadata {
-                    remote_results_by_index
-                        .insert(remote_meta.index_uid.clone(), remote_meta.clone());
+                    let key = (remote_meta.index_uid.clone(), remote_meta.remote.clone());
+                    remote_results_by_index_and_remote.insert(key, remote_meta.clone());
                 }
             }
         }
@@ -157,7 +158,9 @@ pub async fn perform_federated_search(
 
             if remote.is_some() {
                 // For remote queries, try to get primary key from remote results
-                if let Some(remote_meta) = remote_results_by_index.get(&index_uid) {
+                // Use composite key (index_uid, remote) to avoid collisions
+                let lookup_key = (index_uid.clone(), remote.clone());
+                if let Some(remote_meta) = remote_results_by_index_and_remote.get(&lookup_key) {
                     primary_key = remote_meta.primary_key.clone();
                 }
             } else {
