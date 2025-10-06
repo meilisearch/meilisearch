@@ -124,11 +124,11 @@ pub async fn perform_federated_search(
     let after_waiting_remote_results = std::time::Instant::now();
 
     // 3. merge hits and metadata across indexes and hosts
-    // 3.1. merge metadata
+    // 3.1. merge federation metadata
     let (estimated_total_hits, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
 
-    // 3.1.1. Build metadata in the same order as the original queries
+    // 3.2. Build metadata in the same order as the original queries
     let query_metadata = if include_metadata {
         let mut query_metadata = Vec::new();
 
@@ -138,11 +138,15 @@ pub async fn perform_federated_search(
         for remote_result in &remote_results {
             if let Some(remote_metadata) = &remote_result.metadata {
                 for remote_meta in remote_metadata {
-                    if let Some(remote_name) = &remote_meta.remote {
-                        let key = (remote_name.clone(), remote_meta.index_uid.clone());
-                        if let Some(primary_key) = &remote_meta.primary_key {
-                            remote_primary_keys.insert(key, primary_key.clone());
-                        }
+                    if let SearchMetadata {
+                        remote: Some(remote_name),
+                        primary_key: Some(primary_key),
+                        index_uid,
+                        ..
+                    } = &remote_meta
+                    {
+                        let key = (remote_name, index_uid);
+                        remote_primary_keys.insert(key, primary_key);
                     }
                 }
             }
@@ -162,8 +166,8 @@ pub async fn perform_federated_search(
                 Some(remote_name) => {
                     // For remote queries, try to get primary key from remote results
                     // Use composite key (remote, index_uid) to avoid collisions
-                    let lookup_key = (remote_name.clone(), index_uid.clone());
-                    remote_primary_keys.get(&lookup_key).cloned()
+                    let lookup_key = (remote_name, &index_uid);
+                    remote_primary_keys.get(&lookup_key).map(|pk| pk.to_string())
                 }
                 None => {
                     // For local queries, get primary key from local index

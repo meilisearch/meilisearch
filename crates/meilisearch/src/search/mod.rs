@@ -43,7 +43,8 @@ use crate::error::MeilisearchHttpError;
 mod federated;
 pub use federated::{
     perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE, INCLUDE_METADATA_HEADER,
+    FederationOptions, MergeFacets, INCLUDE_METADATA_HEADER, PROXY_SEARCH_HEADER,
+    PROXY_SEARCH_HEADER_VALUE,
 };
 
 mod ranking_rules;
@@ -1138,16 +1139,26 @@ pub fn prepare_search<'t>(
     Ok((search, is_finite_pagination, max_total_hits, offset))
 }
 
-pub fn perform_search(
-    index_uid: String,
-    index: &Index,
-    query: SearchQuery,
-    search_kind: SearchKind,
-    retrieve_vectors: RetrieveVectors,
-    features: RoFeatures,
-    request_uid: Uuid,
-    include_metadata: bool,
-) -> Result<SearchResult, ResponseError> {
+pub struct SearchParams {
+    pub index_uid: String,
+    pub query: SearchQuery,
+    pub search_kind: SearchKind,
+    pub retrieve_vectors: RetrieveVectors,
+    pub features: RoFeatures,
+    pub request_uid: Uuid,
+    pub include_metadata: bool,
+}
+
+pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResult, ResponseError> {
+    let SearchParams {
+        index_uid,
+        query,
+        search_kind,
+        retrieve_vectors,
+        features,
+        request_uid,
+        include_metadata,
+    } = params;
     let before_search = Instant::now();
     let index_uid_for_metadata = index_uid.clone();
     let rtxn = index.read_txn()?;
