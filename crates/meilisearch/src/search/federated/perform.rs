@@ -132,14 +132,18 @@ pub async fn perform_federated_search(
     let query_metadata = if include_metadata {
         let mut query_metadata = Vec::new();
 
-        // Create a map of remote results by (index_uid, remote) for quick lookup
+        // Create a map of (remote, index_uid) -> primary_key for quick lookup
         // This prevents collisions when multiple remotes have the same index_uid but different primary keys
-        let mut remote_results_by_index_and_remote = std::collections::BTreeMap::new();
+        let mut remote_primary_keys = std::collections::HashMap::new();
         for remote_result in &remote_results {
             if let Some(remote_metadata) = &remote_result.metadata {
                 for remote_meta in remote_metadata {
-                    let key = (remote_meta.index_uid.clone(), remote_meta.remote.clone());
-                    remote_results_by_index_and_remote.insert(key, remote_meta.clone());
+                    if let Some(remote_name) = &remote_meta.remote {
+                        let key = (remote_name.clone(), remote_meta.index_uid.clone());
+                        if let Some(primary_key) = &remote_meta.primary_key {
+                            remote_primary_keys.insert(key, primary_key.clone());
+                        }
+                    }
                 }
             }
         }
@@ -154,25 +158,22 @@ pub async fn perform_federated_search(
             let remote = federation_options.and_then(|options| options.remote);
 
             // Get primary key for this index
-            let mut primary_key = None;
-
-            if remote.is_some() {
-                // For remote queries, try to get primary key from remote results
-                // Use composite key (index_uid, remote) to avoid collisions
-                let lookup_key = (index_uid.clone(), remote.clone());
-                if let Some(remote_meta) = remote_results_by_index_and_remote.get(&lookup_key) {
-                    primary_key = remote_meta.primary_key.clone();
+            let primary_key = match &remote {
+                Some(remote_name) => {
+                    // For remote queries, try to get primary key from remote results
+                    // Use composite key (remote, index_uid) to avoid collisions
+                    let lookup_key = (remote_name.clone(), index_uid.clone());
+                    remote_primary_keys.get(&lookup_key).cloned()
                 }
-            } else {
-                // For local queries, get primary key from local index
-                primary_key = index_scheduler.index(&index_uid).ok().and_then(|index| {
-                    index.read_txn().ok().and_then(|rtxn| {
-                        let pk = index.primary_key(&rtxn).ok().flatten().map(|pk| pk.to_string());
-                        drop(rtxn);
-                        pk
+                None => {
+                    // For local queries, get primary key from local index
+                    index_scheduler.index(&index_uid).ok().and_then(|index| {
+                        index.read_txn().ok().and_then(|rtxn| {
+                            index.primary_key(&rtxn).ok().flatten().map(|pk| pk.to_string())
+                        })
                     })
-                });
-            }
+                }
+            };
 
             query_metadata.push(SearchMetadata { query_uid, index_uid, primary_key, remote });
         }
@@ -711,6 +712,13 @@ impl RemoteSearch {
                             );
                             remote_errors.insert(node_name, error.as_response_error());
                             continue 'remote_queries;
+                        }
+
+                        // Add remote name to metadata
+                        if let Some(metadata) = res.metadata.as_mut() {
+                            for meta in metadata {
+                                meta.remote = Some(node_name.clone());
+                            }
                         }
 
                         federation.insert(
