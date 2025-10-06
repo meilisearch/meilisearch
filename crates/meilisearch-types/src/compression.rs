@@ -99,6 +99,7 @@ impl PipedArchiveBuilder {
 
         let mdb_path = env.path().join("data.mdb");
         let mut file = std::fs::File::open(&mdb_path)?;
+        let mut file = std::io::BufReader::with_capacity(16 * 4096, &mut file);
         std::io::copy(&mut file, cloned_writer.deref_mut())?;
 
         self.send_cancellation.send(CancellationMessage::ClosingPipe);
