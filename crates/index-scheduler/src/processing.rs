@@ -139,6 +139,16 @@ make_enum_progress! {
 }
 
 make_enum_progress! {
+    pub enum IndexCompaction {
+        RetrieveTheIndex,
+        CreateTemporaryFile,
+        CopyAndCompactTheIndex,
+        PersistTheCompactedIndex,
+        CloseTheIndex,
+    }
+}
+
+make_enum_progress! {
     pub enum InnerSwappingTwoIndexes {
         RetrieveTheTasks,
         UpdateTheTasks,
