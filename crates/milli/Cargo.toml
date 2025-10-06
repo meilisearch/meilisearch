@@ -19,7 +19,7 @@ bstr = "1.12.0"
 bytemuck = { version = "1.23.1", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.9.7", default-features = false }
-cellulite = "0.3.0"
+cellulite = "0.3.1-nested-rtxns"
 concat-arrays = "0.1.2"
 convert_case = "0.8.0"
 crossbeam-channel = "0.5.15"
@@ -34,7 +34,7 @@ grenad = { version = "0.5.0", default-features = false, features = [
     "rayon",
     "tempfile",
 ] }
-heed = { version = "0.22.0", default-features = false, features = [
+heed = { version = "0.22.1-nested-rtxns", default-features = false, features = [
     "serde-json",
     "serde-bincode",
 ] }
@@ -89,8 +89,8 @@ rhai = { version = "1.22.2", features = [
     "no_time",
     "sync",
 ] }
-arroy = "0.6.3"
-hannoy = { version = "0.0.8", features = ["arroy"] }
+arroy = "0.6.4-nested-rtxns"
+hannoy = { version = "0.0.9-nested-rtxns", features = ["arroy"] }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }

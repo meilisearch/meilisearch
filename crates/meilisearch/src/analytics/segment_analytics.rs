@@ -205,6 +205,8 @@ struct Infos {
     experimental_no_snapshot_compaction: bool,
     experimental_no_edition_2024_for_dumps: bool,
     experimental_no_edition_2024_for_settings: bool,
+    experimental_no_edition_2024_for_prefix_post_processing: bool,
+    experimental_no_edition_2024_for_facet_post_processing: bool,
     experimental_vector_store_setting: bool,
     gpu_enabled: bool,
     db_path: bool,
@@ -296,6 +298,8 @@ impl Infos {
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
             experimental_no_edition_2024_for_dumps,
+            experimental_no_edition_2024_for_prefix_post_processing,
+            experimental_no_edition_2024_for_facet_post_processing,
         } = indexer_options;
 
         let RuntimeTogglableFeatures {
@@ -365,6 +369,8 @@ impl Infos {
             ssl_resumption,
             ssl_tickets,
             experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_prefix_post_processing,
+            experimental_no_edition_2024_for_facet_post_processing,
         }
     }
 }

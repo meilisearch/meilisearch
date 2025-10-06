@@ -983,6 +983,12 @@ impl<'a, 'i> Transform<'a, 'i> {
             chunk_compression_level: self.indexer_settings.chunk_compression_level,
             max_memory: self.indexer_settings.max_memory,
             max_nb_chunks: self.indexer_settings.max_nb_chunks, // default value, may be chosen.
+            experimental_no_edition_2024_for_prefix_post_processing: self
+                .indexer_settings
+                .experimental_no_edition_2024_for_prefix_post_processing,
+            experimental_no_edition_2024_for_facet_post_processing: self
+                .indexer_settings
+                .experimental_no_edition_2024_for_facet_post_processing,
         };
 
         // Once we have written all the documents, we merge everything into a Reader.

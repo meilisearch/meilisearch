@@ -453,9 +453,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "arroy"
-version = "0.6.3"
+version = "0.6.4-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8578a72223dfa13dfd9fc144d15260d134361789ebdea9b16e85a511edc73c7d"
+checksum = "fb8b6b34d9d83e3b837cb7f72a439dbd2293b102393c084af5e5b097212e1532"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -1075,9 +1075,9 @@ dependencies = [
 
 [[package]]
 name = "cellulite"
-version = "0.3.0"
+version = "0.3.1-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71a41aa2cd021bc3f23d97cc1e645848ca8c279fc757d1570ba7fe7ddc021290"
+checksum = "db298d57a80b9284327800b394ee3921307c2fdda87c6d37202f5cf400478981"
 dependencies = [
  "crossbeam",
  "geo",
@@ -2758,9 +2758,9 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.0.8"
+version = "0.0.9-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dba13a271c49a119a97862ebf0a74131d879832868400d9fcd937b790058fdd"
+checksum = "cc5a945b92b063e677d658cfcc7cb6dec2502fe44631f017084938f14d6ce30e"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -2838,9 +2838,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heed"
-version = "0.22.0"
+version = "0.22.1-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a56c94661ddfb51aa9cdfbf102cfcc340aa69267f95ebccc4af08d7c530d393"
+checksum = "0ff115ba5712b1f1fc7617b195f5c2f139e29c397ff79da040cd19db75ccc240"
 dependencies = [
  "bitflags 2.9.4",
  "byteorder",
@@ -2850,7 +2850,6 @@ dependencies = [
  "lmdb-master-sys",
  "once_cell",
  "page_size",
- "serde",
  "synchronoise",
  "url",
 ]
@@ -3889,9 +3888,9 @@ checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
 
 [[package]]
 name = "lmdb-master-sys"
-version = "0.2.5"
+version = "0.2.6-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "864808e0b19fb6dd3b70ba94ee671b82fce17554cf80aeb0a155c65bb08027df"
+checksum = "f4ff85130e3c994b36877045fbbb138d521dea7197bfc19dc3d5d95101a8e20a"
 dependencies = [
  "cc",
  "doxygen-rs",
