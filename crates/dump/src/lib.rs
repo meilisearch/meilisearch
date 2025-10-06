@@ -158,7 +158,7 @@ pub enum KindDump {
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
-    CompactIndex {
+    IndexCompaction {
         index_uid: String,
     },
 }
@@ -243,7 +243,9 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::UpgradeDatabase { from: version } => {
                 KindDump::UpgradeDatabase { from: version }
             }
-            KindWithContent::CompactIndex { index_uid } => KindDump::CompactIndex { index_uid },
+            KindWithContent::IndexCompaction { index_uid } => {
+                KindDump::IndexCompaction { index_uid }
+            }
         }
     }
 }

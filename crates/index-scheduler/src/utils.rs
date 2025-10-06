@@ -264,7 +264,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         | K::SettingsUpdate { index_uid, .. }
         | K::IndexDeletion { index_uid }
         | K::IndexCreation { index_uid, .. }
-        | K::CompactIndex { index_uid, .. } => index_uids.push(index_uid),
+        | K::IndexCompaction { index_uid, .. } => index_uids.push(index_uid),
         K::IndexUpdate { index_uid, new_index_uid, .. } => {
             index_uids.push(index_uid);
             if let Some(new_uid) = new_index_uid {
@@ -619,12 +619,12 @@ impl crate::IndexScheduler {
                     Details::UpgradeDatabase { from: _, to: _ } => {
                         assert_eq!(kind.as_kind(), Kind::UpgradeDatabase);
                     }
-                    Details::CompactIndex {
+                    Details::IndexCompaction {
                         index_uid: _,
                         pre_compaction_size: _,
                         post_compaction_size: _,
                     } => {
-                        assert_eq!(kind.as_kind(), Kind::CompactIndex);
+                        assert_eq!(kind.as_kind(), Kind::IndexCompaction);
                     }
                 }
             }

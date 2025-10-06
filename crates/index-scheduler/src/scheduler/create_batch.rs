@@ -55,7 +55,7 @@ pub(crate) enum Batch {
     UpgradeDatabase {
         tasks: Vec<Task>,
     },
-    CompactIndex {
+    IndexCompaction {
         index_uid: String,
         task: Task,
     },
@@ -115,7 +115,7 @@ impl Batch {
             | Batch::IndexCreation { task, .. }
             | Batch::Export { task }
             | Batch::IndexUpdate { task, .. }
-            | Batch::CompactIndex { task, .. } => {
+            | Batch::IndexCompaction { task, .. } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
             }
             Batch::SnapshotCreation(tasks)
@@ -161,7 +161,7 @@ impl Batch {
             IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid, .. }
-            | CompactIndex { index_uid, .. } => Some(index_uid),
+            | IndexCompaction { index_uid, .. } => Some(index_uid),
         }
     }
 }
@@ -181,7 +181,7 @@ impl fmt::Display for Batch {
             Batch::IndexUpdate { .. } => f.write_str("IndexUpdate")?,
             Batch::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
             Batch::IndexSwap { .. } => f.write_str("IndexSwap")?,
-            Batch::CompactIndex { .. } => f.write_str("CompactIndex")?,
+            Batch::IndexCompaction { .. } => f.write_str("IndexCompaction")?,
             Batch::Export { .. } => f.write_str("Export")?,
             Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
         };
@@ -437,11 +437,11 @@ impl IndexScheduler {
                 current_batch.processing(Some(&mut task));
                 Ok(Some(Batch::IndexSwap { task }))
             }
-            BatchKind::CompactIndex { id } => {
+            BatchKind::IndexCompaction { id } => {
                 let mut task =
                     self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
                 current_batch.processing(Some(&mut task));
-                Ok(Some(Batch::CompactIndex { index_uid, task }))
+                Ok(Some(Batch::IndexCompaction { index_uid, task }))
             }
         }
     }

@@ -438,7 +438,7 @@ impl From<Details> for DetailsView {
                 upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),
                 ..Default::default()
             },
-            Details::CompactIndex { pre_compaction_size, post_compaction_size, .. } => {
+            Details::IndexCompaction { pre_compaction_size, post_compaction_size, .. } => {
                 DetailsView {
                     pre_compaction_size: pre_compaction_size
                         .map(|size| size.get_appropriate_unit(UnitType::Both).to_string()),
