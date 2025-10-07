@@ -123,11 +123,13 @@ impl<'ctx> SearchContext<'ctx> {
 
     /// Get synonyms with caching to avoid repeated database access
     pub fn get_synonyms(&mut self) -> Result<&HashMap<Vec<String>, Vec<Vec<String>>>> {
-        if self.synonym_cache.cache.is_none() {
-            let synonyms = self.index.synonyms(self.txn)?;
-            self.synonym_cache.cache = Some(synonyms);
+        match self.synonym_cache.cache {
+            Some(ref synonyms) => Ok(synonyms),
+            None => {
+                let synonyms = self.index.synonyms(self.txn)?;
+                Ok(self.synonym_cache.cache.insert(synonyms))
+            }
         }
-        Ok(self.synonym_cache.cache.as_ref().unwrap())
     }
 
     pub fn attributes_to_search_on(
