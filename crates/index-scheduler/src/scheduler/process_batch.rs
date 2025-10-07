@@ -551,8 +551,8 @@ impl IndexScheduler {
         // 2. We retrieve the index and create a temporary file in the index directory
         progress.update_progress(IndexCompaction::RetrieveTheIndex);
         let index = self.index_mapper.index(rtxn, index_uid)?;
-        let pre_size = index.map_size() as u64;
         progress.update_progress(IndexCompaction::CreateTemporaryFile);
+        let pre_size = std::fs::metadata(index.path().join("data.mdb"))?.len();
         let mut file = tempfile::Builder::new()
             .suffix("data.")
             .prefix(".mdb.cpy")
