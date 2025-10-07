@@ -220,11 +220,11 @@ impl IndexMap {
         uuid: &Uuid,
         enable_mdb_writemap: bool,
         map_size_growth: usize,
-    ) {
+    ) -> Option<EnvClosingEvent> {
         let Some(index) = self.available.remove(uuid) else {
-            return;
+            return None;
         };
-        self.close(*uuid, index, enable_mdb_writemap, map_size_growth);
+        Some(self.close(*uuid, index, enable_mdb_writemap, map_size_growth))
     }
 
     fn close(
@@ -233,14 +233,21 @@ impl IndexMap {
         index: Index,
         enable_mdb_writemap: bool,
         map_size_growth: usize,
-    ) {
+    ) -> EnvClosingEvent {
         let map_size = index.map_size() + map_size_growth;
         let closing_event = index.prepare_for_closing();
         let generation = self.next_generation();
         self.unavailable.insert(
             uuid,
-            Some(ClosingIndex { uuid, closing_event, enable_mdb_writemap, map_size, generation }),
+            Some(ClosingIndex {
+                uuid,
+                closing_event: closing_event.clone(),
+                enable_mdb_writemap,
+                map_size,
+                generation,
+            }),
         );
+        closing_event
     }
 
     /// Attempts to delete and index.
