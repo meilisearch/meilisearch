@@ -722,7 +722,7 @@ fn basic_get_stats() {
     let kind = index_creation_task("whalo", "fish");
     let _task = index_scheduler.register(kind, None, false).unwrap();
 
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -742,6 +742,7 @@ fn basic_get_stats() {
         "documentEdition": 0,
         "dumpCreation": 0,
         "export": 0,
+        "indexCompaction": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -753,10 +754,10 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 
     handle.advance_till([Start, BatchCreated]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -776,6 +777,7 @@ fn basic_get_stats() {
         "documentEdition": 0,
         "dumpCreation": 0,
         "export": 0,
+        "indexCompaction": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -787,7 +789,7 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 
     handle.advance_till([
         InsideProcessBatch,
@@ -797,7 +799,7 @@ fn basic_get_stats() {
         Start,
         BatchCreated,
     ]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -817,6 +819,7 @@ fn basic_get_stats() {
         "documentEdition": 0,
         "dumpCreation": 0,
         "export": 0,
+        "indexCompaction": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -828,7 +831,7 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 
     // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
     handle.advance_till([
@@ -839,7 +842,7 @@ fn basic_get_stats() {
         Start,
         BatchCreated,
     ]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -859,6 +862,7 @@ fn basic_get_stats() {
         "documentEdition": 0,
         "dumpCreation": 0,
         "export": 0,
+        "indexCompaction": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
@@ -870,7 +874,7 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 }
 
 #[test]
