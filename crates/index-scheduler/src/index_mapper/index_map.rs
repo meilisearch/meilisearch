@@ -221,9 +221,7 @@ impl IndexMap {
         enable_mdb_writemap: bool,
         map_size_growth: usize,
     ) -> Option<EnvClosingEvent> {
-        let Some(index) = self.available.remove(uuid) else {
-            return None;
-        };
+        let index = self.available.remove(uuid)?;
         Some(self.close(*uuid, index, enable_mdb_writemap, map_size_growth))
     }
 
