@@ -642,7 +642,7 @@ impl Display for Kind {
             Kind::SnapshotCreation => write!(f, "snapshotCreation"),
             Kind::Export => write!(f, "export"),
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
-            Kind::IndexCompaction => write!(f, "IndexCompaction"),
+            Kind::IndexCompaction => write!(f, "indexCompaction"),
         }
     }
 }
@@ -678,7 +678,7 @@ impl FromStr for Kind {
             Ok(Kind::Export)
         } else if kind.eq_ignore_ascii_case("upgradeDatabase") {
             Ok(Kind::UpgradeDatabase)
-        } else if kind.eq_ignore_ascii_case("IndexCompaction") {
+        } else if kind.eq_ignore_ascii_case("indexCompaction") {
             Ok(Kind::IndexCompaction)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
