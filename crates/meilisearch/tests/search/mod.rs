@@ -11,6 +11,7 @@ mod hybrid;
 #[cfg(not(feature = "chinese-pinyin"))]
 mod locales;
 mod matching_strategy;
+mod metadata;
 mod multi;
 mod pagination;
 mod restrict_searchable;

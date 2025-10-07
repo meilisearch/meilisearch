@@ -346,7 +346,12 @@ pub async fn search_with_url_query(
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
     let permit = search_queue.try_get_search_permit().await?;
-    let include_metadata = req.headers().get(INCLUDE_METADATA_HEADER).is_some();
+    let include_metadata = req
+        .headers()
+        .get(INCLUDE_METADATA_HEADER)
+        .and_then(|h| h.to_str().ok())
+        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1"))
+        .unwrap_or(false);
 
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
@@ -459,7 +464,12 @@ pub async fn search_with_post(
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
-    let include_metadata = req.headers().get(INCLUDE_METADATA_HEADER).is_some();
+    let include_metadata = req
+        .headers()
+        .get(INCLUDE_METADATA_HEADER)
+        .and_then(|h| h.to_str().ok())
+        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1"))
+        .unwrap_or(false);
 
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {

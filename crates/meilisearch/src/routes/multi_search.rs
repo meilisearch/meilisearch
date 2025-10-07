@@ -202,7 +202,12 @@ pub async fn multi_search_with_post(
                 .headers()
                 .get(PROXY_SEARCH_HEADER)
                 .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
-            let include_metadata = req.headers().get(INCLUDE_METADATA_HEADER).is_some();
+            let include_metadata = req
+                .headers()
+                .get(INCLUDE_METADATA_HEADER)
+                .and_then(|h| h.to_str().ok())
+                .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1"))
+                .unwrap_or(false);
             let search_result = perform_federated_search(
                 &index_scheduler,
                 queries,
@@ -230,7 +235,12 @@ pub async fn multi_search_with_post(
             HttpResponse::Ok().json(search_result?)
         }
         None => {
-            let include_metadata = req.headers().get(INCLUDE_METADATA_HEADER).is_some();
+            let include_metadata = req
+                .headers()
+                .get(INCLUDE_METADATA_HEADER)
+                .and_then(|h| h.to_str().ok())
+                .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1"))
+                .unwrap_or(false);
 
             // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
             // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
