@@ -21,7 +21,7 @@ mod vector_sort;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::AddAssign;
 use std::time::Duration;
 
@@ -64,6 +64,12 @@ use crate::{
     UserError, Weight,
 };
 
+/// Cache for synonyms to avoid repeated database access
+#[derive(Default)]
+pub struct SynonymCache {
+    pub cache: Option<HashMap<Vec<String>, Vec<Vec<String>>>>,
+}
+
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
     pub index: &'ctx Index,
@@ -73,6 +79,7 @@ pub struct SearchContext<'ctx> {
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
+    pub synonym_cache: SynonymCache,
     pub restricted_fids: Option<RestrictedFids>,
     pub prefix_search: PrefixSearch,
     pub vector_store_stats: Option<VectorStoreStats>,
@@ -103,6 +110,7 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
+            synonym_cache: <_>::default(),
             restricted_fids: None,
             prefix_search,
             vector_store_stats: None,
@@ -111,6 +119,17 @@ impl<'ctx> SearchContext<'ctx> {
 
     pub fn is_prefix_search_allowed(&self) -> bool {
         self.prefix_search != PrefixSearch::Disabled
+    }
+
+    /// Get synonyms with caching to avoid repeated database access
+    pub fn get_synonyms(&mut self) -> Result<&HashMap<Vec<String>, Vec<Vec<String>>>> {
+        match self.synonym_cache.cache {
+            Some(ref synonyms) => Ok(synonyms),
+            None => {
+                let synonyms = self.index.synonyms(self.txn)?;
+                Ok(self.synonym_cache.cache.insert(synonyms))
+            }
+        }
     }
 
     pub fn attributes_to_search_on(
