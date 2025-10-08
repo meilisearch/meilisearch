@@ -552,6 +552,11 @@ impl IndexScheduler {
         // 2. We retrieve the index and create a temporary file in the index directory
         progress.update_progress(IndexCompaction::RetrieveTheIndex);
         let index = self.index_mapper.index(rtxn, index_uid)?;
+
+        // the index operation can take a long time, so save this handle to make it available to the search for the duration of the tick
+        self.index_mapper
+            .set_currently_updating_index(Some((index_uid.to_string(), index.clone())));
+
         progress.update_progress(IndexCompaction::CreateTemporaryFile);
         let pre_size = std::fs::metadata(index.path().join("data.mdb"))?.len();
         let mut file = tempfile::Builder::new()
@@ -578,6 +583,10 @@ impl IndexScheduler {
 
         // 5. Prepare to close the index
         progress.update_progress(IndexCompaction::CloseTheIndex);
+
+        // unmark that the index is the processing one so we don't keep a handle to it, preventing its closing
+        self.index_mapper.set_currently_updating_index(None);
+
         self.index_mapper.close_index(rtxn, index_uid)?;
         drop(index);
 
