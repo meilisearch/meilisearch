@@ -66,15 +66,29 @@ impl ScoreDetails {
         }
     }
 
+    /// Calculate the global score of the details.
+    ///
+    /// It is computed from the ranks of the ranking rules, excluding the sort/geo sort rules.
+    /// If the details contain a semantic score (ScoreDetails::Vector), it is used instead of the ranking score.
+    ///
+    /// note: this function expects a maximum of one semantic score, otherwise only the last one will be used.
     pub fn global_score<'a>(details: impl Iterator<Item = &'a Self> + 'a) -> f64 {
-        Self::score_values(details)
-            .find_map(|x| {
-                let ScoreValue::Score(score) = x else {
-                    return None;
-                };
-                Some(score)
-            })
-            .unwrap_or(1.0f64)
+        // Filter out only the ranking scores (Rank values) and exclude sort/geo sort
+        let mut semantic_score = None;
+        let ranking_ranks = details.filter_map(|detail| match detail.rank_or_value() {
+            RankOrValue::Rank(rank) => Some(rank),
+            RankOrValue::Score(score) => {
+                semantic_score = Some(score);
+                None
+            }
+            RankOrValue::Sort(_) => None,
+            RankOrValue::GeoSort(_) => None,
+        });
+
+        let ranking_score = Rank::global_score(ranking_ranks);
+
+        // If we have semantic score, use it, otherwise use ranking score
+        semantic_score.unwrap_or(ranking_score)
     }
 
     pub fn score_values<'a>(

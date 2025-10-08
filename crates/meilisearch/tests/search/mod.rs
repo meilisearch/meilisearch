@@ -2128,3 +2128,102 @@ async fn simple_search_changing_unrelated_settings() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn ranking_score_bug_with_sort() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // Create documents with a "created" field for sorting
+    let documents = json!([
+        {
+            "id": "1",
+            "title": "Coffee Mug",
+            "created": "2023-01-01T00:00:00Z"
+        },
+        {
+            "id": "2",
+            "title": "Water Bottle",
+            "created": "2023-01-02T00:00:00Z"
+        },
+        {
+            "id": "3",
+            "title": "Tumbler Cup",
+            "created": "2023-01-03T00:00:00Z"
+        },
+        {
+            "id": "4",
+            "title": "Stainless Steel Tumbler",
+            "created": "2023-01-04T00:00:00Z"
+        }
+    ]);
+
+    // Add documents
+    let (task, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Configure sortable attributes
+    let (task, code) = index
+        .update_settings(json!({
+            "sortableAttributes": ["created"]
+        }))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Test 1: Search without sort - should have proper ranking scores
+    index
+        .search(
+            json!({
+                "q": "tumbler",
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.0,
+                "attributesToRetrieve": ["title"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{response}");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Tumbler Cup",
+                    "_rankingScore": 0.9848484848484848
+                  },
+                  {
+                    "title": "Stainless Steel Tumbler",
+                    "_rankingScore": 0.8787878787878788
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+
+    // Test 2: Search with sort - this is where the bug occurs
+    index
+        .search(
+            json!({
+                "q": "tumbler",
+                "showRankingScore": true,
+                "rankingScoreThreshold": 0.0,
+                "sort": ["created:desc"],
+                "attributesToRetrieve": ["title"]
+            }),
+            |response, code| {
+                assert_eq!(code, 200, "{response}");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "Tumbler Cup",
+                    "_rankingScore": 0.9848484848484848
+                  },
+                  {
+                    "title": "Stainless Steel Tumbler",
+                    "_rankingScore": 0.8787878787878788
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+}
