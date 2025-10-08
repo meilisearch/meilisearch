@@ -66,6 +66,12 @@ impl ScoreDetails {
         }
     }
 
+    /// Calculate the global score of the details.
+    ///
+    /// It is computed from the ranks of the ranking rules, excluding the sort/geo sort rules.
+    /// If the details contain a semantic score (ScoreDetails::Vector), it is used instead of the ranking score.
+    ///
+    /// note: this function expects a maximum of one semantic score, otherwise only the last one will be used.
     pub fn global_score<'a>(details: impl Iterator<Item = &'a Self> + 'a) -> f64 {
         // Filter out only the ranking scores (Rank values) and exclude sort/geo sort
         let mut semantic_score = None;
