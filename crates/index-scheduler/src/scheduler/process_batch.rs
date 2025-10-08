@@ -578,7 +578,7 @@ impl IndexScheduler {
 
         // 5. Prepare to close the index
         progress.update_progress(IndexCompaction::CloseTheIndex);
-        let _closing_event = self.index_mapper.close_index(rtxn, index_uid)?;
+        self.index_mapper.close_index(rtxn, index_uid)?;
         drop(index);
 
         progress.update_progress(IndexCompaction::ReopenTheIndex);

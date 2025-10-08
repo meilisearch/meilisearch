@@ -4,7 +4,7 @@ use std::time::Duration;
 use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, EnvClosingEvent, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli;
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
@@ -349,14 +349,16 @@ impl IndexMapper {
     ///
     /// - If the Index corresponding to the passed name is concurrently being deleted/resized or cannot be found in the
     ///   in memory hash map.
-    pub fn close_index(&self, rtxn: &RoTxn, name: &str) -> Result<Option<EnvClosingEvent>> {
+    pub fn close_index(&self, rtxn: &RoTxn, name: &str) -> Result<()> {
         let uuid = self
             .index_mapping
             .get(rtxn, name)?
             .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
 
         // We remove the index from the in-memory index map.
-        Ok(self.index_map.write().unwrap().close_for_resize(&uuid, self.enable_mdb_writemap, 0))
+        self.index_map.write().unwrap().close_for_resize(&uuid, self.enable_mdb_writemap, 0);
+
+        Ok(())
     }
 
     /// Return an index, may open it if it wasn't already opened.
