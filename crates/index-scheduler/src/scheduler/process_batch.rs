@@ -460,6 +460,7 @@ impl IndexScheduler {
                     *pre_compaction_size = Some(Byte::from_u64(pre_size));
                     *post_compaction_size = Some(Byte::from_u64(post_size));
                 }
+
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::Export { mut task } => {
@@ -568,7 +569,6 @@ impl IndexScheduler {
 
         // 4. We replace the index data file with the temporary file
         progress.update_progress(IndexCompaction::PersistTheCompactedIndex);
-        let post_size = file.as_file().metadata()?.len();
         match file.persist(index.path().join("data.mdb")) {
             Ok(file) => file.sync_all()?,
             // TODO see if we have a _resource busy_ error and probably handle this by:
@@ -576,15 +576,40 @@ impl IndexScheduler {
             Err(PersistError { error, file: _ }) => return Err(Error::IoError(error)),
         };
 
-        // 5. prepare to close the index and wait for it
-        // The next time the index is opened, it will use the new compacted data
-        let closing_event = self.index_mapper.close_index(rtxn, index_uid)?;
+        // 5. Prepare to close the index
+        progress.update_progress(IndexCompaction::CloseTheIndex);
+        let _closing_event = self.index_mapper.close_index(rtxn, index_uid)?;
+        drop(index);
 
-        if let Some(closing_event) = closing_event {
-            progress.update_progress(IndexCompaction::CloseTheIndex);
-            drop(index);
-            closing_event.wait();
-        }
+        progress.update_progress(IndexCompaction::ReopenTheIndex);
+        // 6. Reopen the index
+        // The index will use the compacted data file when being reopened
+        let index = self.index_mapper.index(rtxn, index_uid)?;
+
+        // if the update processed successfully, we're going to store the new
+        // stats of the index. Since the tasks have already been processed and
+        // this is a non-critical operation. If it fails, we should not fail
+        // the entire batch.
+        let res = || -> Result<_> {
+            let mut wtxn = self.env.write_txn()?;
+            let index_rtxn = index.read_txn()?;
+            let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
+                .map_err(|e| Error::from_milli(e, Some(index_uid.to_string())))?;
+            self.index_mapper.store_stats_of(&mut wtxn, index_uid, &stats)?;
+            wtxn.commit()?;
+            Ok(stats.database_size)
+        }();
+
+        let post_size = match res {
+            Ok(post_size) => post_size,
+            Err(e) => {
+                tracing::error!(
+                    error = &e as &dyn std::error::Error,
+                    "Could not write the stats of the index"
+                );
+                0
+            }
+        };
 
         Ok((pre_size, post_size))
     }

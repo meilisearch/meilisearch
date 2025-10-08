@@ -145,6 +145,7 @@ make_enum_progress! {
         CopyAndCompactTheIndex,
         PersistTheCompactedIndex,
         CloseTheIndex,
+        ReopenTheIndex,
     }
 }
 
