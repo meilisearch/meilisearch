@@ -58,6 +58,12 @@ Why? GitHub Merge Queue does not work with branch patterns yet, so we have to ad
 5. Go to the GitHub interface, in the [`Release` section](https://github.com/meilisearch/meilisearch/releases) and click on `Draft a new release`
    ⚠️⚠️⚠️ Publish on `release-vX.Y.Z+1` branch, not on `main`!
 
+📝 <ins>About the changelogs</s>
+- Use the "Generate release notes" button in the GitHub interface to get the exhaustive list of PRs.
+- Separate the PRs into different categories: Enhancement/Features, Bug fixes, Maintenance.
+- Ensure each line makes sense for external people reading the changelogs. Add more details of usage if needed.
+- Thank the external contributors at the end of the changelogs.
+
 ⚠️ <ins>If doing a patch release that should NOT be the `latest` release</s>:
 
 - Do NOT check `Set as the latest release` when creating the GitHub release. If you did, quickly interrupt all CIs and delete the GitHub release!
