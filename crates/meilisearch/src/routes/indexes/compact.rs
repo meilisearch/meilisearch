@@ -20,7 +20,7 @@ use crate::routes::SummarizedTaskView;
     tags(
         (
             name = "Compact an index",
-            description = "The /compact route uses compacts the database to reoganize and make it smaller and more efficient.",
+            description = "The /compact route uses compacts the database to reorganize and make it smaller and more efficient.",
             external_docs(url = "https://www.meilisearch.com/docs/reference/api/compact"),
         ),
     ),

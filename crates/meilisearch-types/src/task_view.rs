@@ -325,7 +325,7 @@ impl DetailsView {
             ) {
                 (None, None) => None,
                 (None, Some(size)) | (Some(size), None) => Some(size),
-                // We should never be able to batch multiple renames at the same time.
+                // We should never be able to batch multiple compactions at the same time.
                 (Some(left), Some(_right)) => Some(left),
             },
             post_compaction_size: match (
@@ -334,7 +334,7 @@ impl DetailsView {
             ) {
                 (None, None) => None,
                 (None, Some(size)) | (Some(size), None) => Some(size),
-                // We should never be able to batch multiple renames at the same time.
+                // We should never be able to batch multiple compactions at the same time.
                 (Some(left), Some(_right)) => Some(left),
             },
         }
