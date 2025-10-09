@@ -18,13 +18,13 @@ use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::search::search_kind;
+use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, FederatedSearch,
     FederatedSearchResult, RetrieveVectors, SearchParams, SearchQueryWithIndex,
     SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
-use crate::routes::parse_include_metadata_header;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -189,6 +189,7 @@ pub async fn multi_search_with_post(
         err
     })?;
 
+    let include_metadata = parse_include_metadata_header(&req);
     let response = match federation {
         Some(federation) => {
             debug!(
@@ -203,7 +204,6 @@ pub async fn multi_search_with_post(
                 .headers()
                 .get(PROXY_SEARCH_HEADER)
                 .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
-            let include_metadata = parse_include_metadata_header(&req);
             let search_result = perform_federated_search(
                 &index_scheduler,
                 queries,
@@ -231,8 +231,6 @@ pub async fn multi_search_with_post(
             HttpResponse::Ok().json(search_result?)
         }
         None => {
-            let include_metadata = parse_include_metadata_header(&req);
-
             // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
             // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
             // changes.
