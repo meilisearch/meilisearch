@@ -162,12 +162,18 @@ pub async fn perform_federated_search(
             }
         }
 
+        // if there are remote results, set the local remote name
+        let local_remote_name =
+            (!remote_results.is_empty()).then_some(network.local.clone()).flatten();
+
         // 3.1.2 Build metadata in the same order as the original queries
         let mut query_metadata = Vec::new();
         for (index_uid, remote) in precomputed_query_metadata {
             let primary_key =
                 primary_key_per_index.get(&(remote.as_ref(), &index_uid)).map(|pk| pk.to_string());
             let query_uid = Uuid::now_v7();
+            // if the remote is not set, use the local remote name
+            let remote = remote.or_else(|| local_remote_name.clone());
             query_metadata.push(SearchMetadata { query_uid, primary_key, index_uid, remote });
         }
         Some(query_metadata)
