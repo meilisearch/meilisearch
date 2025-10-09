@@ -2838,9 +2838,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heed"
-version = "0.22.1-nested-rtxns"
+version = "0.22.1-nested-rtxns-2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ff115ba5712b1f1fc7617b195f5c2f139e29c397ff79da040cd19db75ccc240"
+checksum = "a644ab0b1e8234a7c82e83e26b24af1e4a4b8317629fa6ccd9ea2608c1595c73"
 dependencies = [
  "bitflags 2.9.4",
  "byteorder",
