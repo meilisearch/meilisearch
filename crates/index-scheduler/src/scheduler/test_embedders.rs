@@ -121,7 +121,7 @@ fn import_vectors() {
         insta::assert_json_snapshot!(simple_hf_config.embedder_options);
         let simple_hf_name = name.clone();
 
-        let configs = index_scheduler.embedders("doggos".to_string(), configs).unwrap();
+        let configs = index_scheduler.embedders("doggos", configs).unwrap();
         let hf_runtime = configs.get(&simple_hf_name).unwrap();
         let hf_embedder = &hf_runtime.embedder;
         let beagle_embed = hf_embedder

@@ -755,8 +755,7 @@ impl SearchByIndex {
             // use an immediately invoked lambda to capture the result without returning from the function
 
             let res: Result<(), ResponseError> = (|| {
-                let search_kind =
-                    search_kind(&query, params.index_scheduler, index_uid.to_string(), &index)?;
+                let search_kind = search_kind(&query, params.index_scheduler, &index_uid, &index)?;
 
                 let canonicalization_kind = match (&search_kind, &query.q) {
                     (SearchKind::SemanticOnly { .. }, _) => {
@@ -806,11 +805,11 @@ impl SearchByIndex {
                     {
                         Some((previous_ranking_rules, previous_query_index, previous_index_uid))
                     } else {
-                        Some((ranking_rules, query_index, index_uid.clone()))
+                        Some((ranking_rules, query_index, index_uid.to_string()))
                     };
                 } else {
                     self.previous_query_data =
-                        Some((ranking_rules, query_index, index_uid.clone()));
+                        Some((ranking_rules, query_index, index_uid.to_string()));
                 }
 
                 match search_kind {
@@ -839,7 +838,7 @@ impl SearchByIndex {
                 search.limit(params.required_hit_count);
 
                 let (result, _semantic_hit_count) =
-                    super::super::search_from_kind(index_uid.to_string(), search_kind, search)?;
+                    super::super::search_from_kind(&index_uid, search_kind, search)?;
                 let format = AttributesFormat {
                     attributes_to_retrieve: query.attributes_to_retrieve,
                     retrieve_vectors,

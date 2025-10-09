@@ -227,7 +227,7 @@ async fn similar(
 
     let (embedder_name, embedder, quantized) = SearchKind::embedder(
         &index_scheduler,
-        index_uid.to_string(),
+        index_uid.as_str(),
         &index,
         &query.embedder,
         None,

@@ -339,13 +339,12 @@ pub async fn search_with_url_query(
 
     let index = index_scheduler.index(&index_uid)?;
 
-    let search_kind =
-        search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index_uid, &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
-            index_uid.to_string(),
+            &index_uid,
             &index,
             query,
             search_kind,
@@ -445,14 +444,13 @@ pub async fn search_with_post(
 
     let index = index_scheduler.index(&index_uid)?;
 
-    let search_kind =
-        search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index_uid, &index)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
-            index_uid.to_string(),
+            &index_uid,
             &index,
             query,
             search_kind,
@@ -480,7 +478,7 @@ pub async fn search_with_post(
 pub fn search_kind(
     query: &SearchQuery,
     index_scheduler: &IndexScheduler,
-    index_uid: String,
+    index_uid: &str,
     index: &milli::Index,
 ) -> Result<SearchKind, ResponseError> {
     let is_placeholder_query =

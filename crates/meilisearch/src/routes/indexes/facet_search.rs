@@ -260,7 +260,7 @@ pub async fn search(
     }
 
     let index = index_scheduler.index(&index_uid)?;
-    let search_kind = search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
+    let search_kind = search_kind(&search_query, &index_scheduler, &index_uid, &index)?;
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_facet_search(

@@ -362,7 +362,7 @@ pub enum SearchKind {
 impl SearchKind {
     pub(crate) fn semantic(
         index_scheduler: &index_scheduler::IndexScheduler,
-        index_uid: String,
+        index_uid: &str,
         index: &Index,
         embedder_name: &str,
         vector_len: Option<usize>,
@@ -380,7 +380,7 @@ impl SearchKind {
 
     pub(crate) fn hybrid(
         index_scheduler: &index_scheduler::IndexScheduler,
-        index_uid: String,
+        index_uid: &str,
         index: &Index,
         embedder_name: &str,
         semantic_ratio: f32,
@@ -399,7 +399,7 @@ impl SearchKind {
 
     pub(crate) fn embedder(
         index_scheduler: &index_scheduler::IndexScheduler,
-        index_uid: String,
+        index_uid: &str,
         index: &Index,
         embedder_name: &str,
         vector_len: Option<usize>,
@@ -1114,7 +1114,7 @@ pub fn prepare_search<'t>(
 }
 
 pub fn perform_search(
-    index_uid: String,
+    index_uid: &str,
     index: &Index,
     query: SearchQuery,
     search_kind: SearchKind,
@@ -1299,27 +1299,24 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
 }
 
 pub fn search_from_kind(
-    index_uid: String,
+    index_uid: &str,
     search_kind: SearchKind,
     search: milli::Search<'_>,
 ) -> Result<(milli::SearchResult, Option<u32>), MeilisearchHttpError> {
+    let err = |e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string()));
     let (milli_result, semantic_hit_count) = match &search_kind {
         SearchKind::KeywordOnly => {
-            let results = search
-                .execute()
-                .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
+            let results = search.execute().map_err(err)?;
             (results, None)
         }
         SearchKind::SemanticOnly { .. } => {
-            let results = search
-                .execute()
-                .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.to_string())))?;
+            let results = search.execute().map_err(err)?;
             let semantic_hit_count = results.document_scores.len() as u32;
             (results, Some(semantic_hit_count))
         }
-        SearchKind::Hybrid { semantic_ratio, .. } => search
-            .execute_hybrid(*semantic_ratio)
-            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid)))?,
+        SearchKind::Hybrid { semantic_ratio, .. } => {
+            search.execute_hybrid(*semantic_ratio).map_err(err)?
+        }
     };
     Ok((milli_result, semantic_hit_count))
 }

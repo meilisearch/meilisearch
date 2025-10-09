@@ -97,7 +97,7 @@ impl IndexScheduler {
                     .embedding_configs()
                     .embedding_configs(index_wtxn)
                     .map_err(|e| Error::from_milli(e.into(), Some(index_uid.clone())))?;
-                let embedders = self.embedders(index_uid.clone(), embedders)?;
+                let embedders = self.embedders(&index_uid, embedders)?;
                 for operation in operations {
                     match operation {
                         DocumentOperation::Replace(_content_uuid) => {
@@ -284,7 +284,7 @@ impl IndexScheduler {
                         .embedding_configs()
                         .embedding_configs(index_wtxn)
                         .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
-                    let embedders = self.embedders(index_uid.clone(), embedders)?;
+                    let embedders = self.embedders(&index_uid, embedders)?;
 
                     progress.update_progress(DocumentEditionProgress::Indexing);
                     congestion = Some(
@@ -434,7 +434,7 @@ impl IndexScheduler {
                         .embedding_configs()
                         .embedding_configs(index_wtxn)
                         .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
-                    let embedders = self.embedders(index_uid.clone(), embedders)?;
+                    let embedders = self.embedders(&index_uid, embedders)?;
 
                     progress.update_progress(DocumentDeletionProgress::Indexing);
                     congestion = Some(

@@ -282,8 +282,7 @@ async fn process_search_request(
     if let Some(search_rules) = auth_filter.get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
-    let search_kind =
-        search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
+    let search_kind = search_kind(&query, index_scheduler.get_ref(), &index_uid, &index)?;
 
     let permit = search_queue.try_get_search_permit().await?;
     let features = index_scheduler.features();
@@ -300,7 +299,7 @@ async fn process_search_request(
         let (search, _is_finite_pagination, _max_total_hits, _offset) =
             prepare_search(&index_cloned, &rtxn, &query, &search_kind, time_budget, features)?;
 
-        match search_from_kind(index_uid, search_kind, search) {
+        match search_from_kind(&index_uid, search_kind, search) {
             Ok((search_results, _)) => Ok((rtxn, Ok(search_results))),
             Err(MeilisearchHttpError::Milli {
                 error: meilisearch_types::milli::Error::UserError(user_error),

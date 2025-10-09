@@ -932,9 +932,10 @@ impl IndexScheduler {
 
     pub fn embedders(
         &self,
-        index_uid: String,
+        index_uid: &str,
         embedding_configs: Vec<IndexEmbeddingConfig>,
     ) -> Result<RuntimeEmbedders> {
+        let err = |err| Error::from_milli(err, Some(index_uid.to_owned()));
         let res: Result<_> = embedding_configs
             .into_iter()
             .map(
@@ -947,7 +948,7 @@ impl IndexScheduler {
                     let document_template = prompt
                         .try_into()
                         .map_err(meilisearch_types::milli::Error::from)
-                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
+                        .map_err(err)?;
 
                     let fragments = fragments
                         .into_inner()
@@ -977,9 +978,8 @@ impl IndexScheduler {
                     let embedder = Arc::new(
                         Embedder::new(embedder_options.clone(), self.scheduler.embedding_cache_cap)
                             .map_err(meilisearch_types::milli::vector::Error::from)
-                            .map_err(|err| {
-                                Error::from_milli(err.into(), Some(index_uid.clone()))
-                            })?,
+                            .map_err(milli::Error::from)
+                            .map_err(err)?,
                     );
                     {
                         let mut embedders = self.embedders.write().unwrap();

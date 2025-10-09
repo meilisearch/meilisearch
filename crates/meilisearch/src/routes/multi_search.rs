@@ -239,26 +239,23 @@ pub async fn multi_search_with_post(
                         })
                         .with_index(query_index)?;
 
-                    let index_uid_str = index_uid.to_string();
-
-                    let search_kind = search_kind(
-                        &query,
-                        index_scheduler.get_ref(),
-                        index_uid_str.clone(),
-                        &index,
-                    )
-                    .with_index(query_index)?;
+                    let search_kind =
+                        search_kind(&query, index_scheduler.get_ref(), &index_uid, &index)
+                            .with_index(query_index)?;
                     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
-                    let search_result = tokio::task::spawn_blocking(move || {
-                        perform_search(
-                            index_uid_str.clone(),
-                            &index,
-                            query,
-                            search_kind,
-                            retrieve_vector,
-                            features,
-                        )
+                    let search_result = tokio::task::spawn_blocking({
+                        let index_uid = index_uid.clone();
+                        move || {
+                            perform_search(
+                                &index_uid,
+                                &index,
+                                query,
+                                search_kind,
+                                retrieve_vector,
+                                features,
+                            )
+                        }
                     })
                     .await
                     .with_index(query_index)?;
