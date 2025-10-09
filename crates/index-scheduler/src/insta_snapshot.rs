@@ -317,6 +317,9 @@ fn snapshot_details(d: &Details) -> String {
         Details::UpgradeDatabase { from, to } => {
             format!("{{ from: {from:?}, to: {to:?} }}")
         }
+        Details::IndexCompaction { index_uid, pre_compaction_size, post_compaction_size } => {
+            format!("{{ index_uid: {index_uid:?}, pre_compaction_size: {pre_compaction_size:?}, post_compaction_size: {post_compaction_size:?} }}")
+        }
     }
 }
 

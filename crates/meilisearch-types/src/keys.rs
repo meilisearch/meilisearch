@@ -380,6 +380,9 @@ pub enum Action {
     #[serde(rename = "webhooks.*")]
     #[deserr(rename = "webhooks.*")]
     WebhooksAll,
+    #[serde(rename = "indexes.compact")]
+    #[deserr(rename = "indexes.compact")]
+    IndexesCompact,
 }
 
 impl Action {
@@ -398,6 +401,7 @@ impl Action {
             INDEXES_UPDATE => Some(Self::IndexesUpdate),
             INDEXES_DELETE => Some(Self::IndexesDelete),
             INDEXES_SWAP => Some(Self::IndexesSwap),
+            INDEXES_COMPACT => Some(Self::IndexesCompact),
             TASKS_ALL => Some(Self::TasksAll),
             TASKS_CANCEL => Some(Self::TasksCancel),
             TASKS_DELETE => Some(Self::TasksDelete),
@@ -462,6 +466,7 @@ impl Action {
             IndexesUpdate => false,
             IndexesDelete => false,
             IndexesSwap => false,
+            IndexesCompact => false,
             TasksCancel => false,
             TasksDelete => false,
             TasksGet => true,
@@ -513,6 +518,7 @@ pub mod actions {
     pub const INDEXES_UPDATE: u8 = IndexesUpdate.repr();
     pub const INDEXES_DELETE: u8 = IndexesDelete.repr();
     pub const INDEXES_SWAP: u8 = IndexesSwap.repr();
+    pub const INDEXES_COMPACT: u8 = IndexesCompact.repr();
     pub const TASKS_ALL: u8 = TasksAll.repr();
     pub const TASKS_CANCEL: u8 = TasksCancel.repr();
     pub const TASKS_DELETE: u8 = TasksDelete.repr();
@@ -614,6 +620,7 @@ pub(crate) mod test {
         assert!(WebhooksDelete.repr() == 47 && WEBHOOKS_DELETE == 47);
         assert!(WebhooksCreate.repr() == 48 && WEBHOOKS_CREATE == 48);
         assert!(WebhooksAll.repr() == 49 && WEBHOOKS_ALL == 49);
+        assert!(IndexesCompact.repr() == 50 && INDEXES_COMPACT == 50);
     }
 
     #[test]

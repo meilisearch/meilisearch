@@ -28,6 +28,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::is_dry_run;
 use crate::Opt;
 
+pub mod compact;
 pub mod documents;
 mod enterprise_edition;
 pub mod facet_search;
@@ -49,8 +50,9 @@ pub use enterprise_edition::proxy::{PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TAS
         (path = "/", api = facet_search::FacetSearchApi),
         (path = "/", api = similar::SimilarApi),
         (path = "/", api = settings::SettingsApi),
+        (path = "/", api = compact::CompactApi),
     ),
-    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats),
+    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats, compact::compact),
     tags(
         (
             name = "Indexes",
@@ -80,7 +82,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
             .service(web::scope("/similar").configure(similar::configure))
-            .service(web::scope("/settings").configure(settings::configure)),
+            .service(web::scope("/settings").configure(settings::configure))
+            .service(web::scope("/compact").configure(compact::configure)),
     );
 }
 

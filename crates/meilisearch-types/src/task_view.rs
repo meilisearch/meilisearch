@@ -142,6 +142,11 @@ pub struct DetailsView {
     pub old_index_uid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_index_uid: Option<String>,
+    // index compaction
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pre_compaction_size: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub post_compaction_size: Option<String>,
 }
 
 impl DetailsView {
@@ -314,6 +319,24 @@ impl DetailsView {
                 // We should never be able to batch multiple renames at the same time.
                 (Some(left), Some(_right)) => Some(left),
             },
+            pre_compaction_size: match (
+                self.pre_compaction_size.clone(),
+                other.pre_compaction_size.clone(),
+            ) {
+                (None, None) => None,
+                (None, Some(size)) | (Some(size), None) => Some(size),
+                // We should never be able to batch multiple compactions at the same time.
+                (Some(left), Some(_right)) => Some(left),
+            },
+            post_compaction_size: match (
+                self.post_compaction_size.clone(),
+                other.post_compaction_size.clone(),
+            ) {
+                (None, None) => None,
+                (None, Some(size)) | (Some(size), None) => Some(size),
+                // We should never be able to batch multiple compactions at the same time.
+                (Some(left), Some(_right)) => Some(left),
+            },
         }
     }
 }
@@ -415,6 +438,15 @@ impl From<Details> for DetailsView {
                 upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),
                 ..Default::default()
             },
+            Details::IndexCompaction { pre_compaction_size, post_compaction_size, .. } => {
+                DetailsView {
+                    pre_compaction_size: pre_compaction_size
+                        .map(|size| size.get_appropriate_unit(UnitType::Both).to_string()),
+                    post_compaction_size: post_compaction_size
+                        .map(|size| size.get_appropriate_unit(UnitType::Both).to_string()),
+                    ..Default::default()
+                }
+            }
         }
     }
 }

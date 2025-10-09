@@ -158,6 +158,9 @@ pub enum KindDump {
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
+    IndexCompaction {
+        index_uid: String,
+    },
 }
 
 impl From<Task> for TaskDump {
@@ -239,6 +242,9 @@ impl From<KindWithContent> for KindDump {
             },
             KindWithContent::UpgradeDatabase { from: version } => {
                 KindDump::UpgradeDatabase { from: version }
+            }
+            KindWithContent::IndexCompaction { index_uid } => {
+                KindDump::IndexCompaction { index_uid }
             }
         }
     }

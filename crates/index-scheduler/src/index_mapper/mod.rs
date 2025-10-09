@@ -341,6 +341,26 @@ impl IndexMapper {
         Ok(())
     }
 
+    /// Closes the specified index.
+    ///
+    /// This operation involves closing the underlying environment and so can take a long time to complete.
+    ///
+    /// # Panics
+    ///
+    /// - If the Index corresponding to the passed name is concurrently being deleted/resized or cannot be found in the
+    ///   in memory hash map.
+    pub fn close_index(&self, rtxn: &RoTxn, name: &str) -> Result<()> {
+        let uuid = self
+            .index_mapping
+            .get(rtxn, name)?
+            .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
+
+        // We remove the index from the in-memory index map.
+        self.index_map.write().unwrap().close_for_resize(&uuid, self.enable_mdb_writemap, 0);
+
+        Ok(())
+    }
+
     /// Return an index, may open it if it wasn't already opened.
     pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
         if let Some((current_name, current_index)) =

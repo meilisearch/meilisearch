@@ -256,14 +256,15 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
     use KindWithContent as K;
     let mut index_uids = vec![];
     match &mut task.kind {
-        K::DocumentAdditionOrUpdate { index_uid, .. } => index_uids.push(index_uid),
-        K::DocumentEdition { index_uid, .. } => index_uids.push(index_uid),
-        K::DocumentDeletion { index_uid, .. } => index_uids.push(index_uid),
-        K::DocumentDeletionByFilter { index_uid, .. } => index_uids.push(index_uid),
-        K::DocumentClear { index_uid } => index_uids.push(index_uid),
-        K::SettingsUpdate { index_uid, .. } => index_uids.push(index_uid),
-        K::IndexDeletion { index_uid } => index_uids.push(index_uid),
-        K::IndexCreation { index_uid, .. } => index_uids.push(index_uid),
+        K::DocumentAdditionOrUpdate { index_uid, .. }
+        | K::DocumentEdition { index_uid, .. }
+        | K::DocumentDeletion { index_uid, .. }
+        | K::DocumentDeletionByFilter { index_uid, .. }
+        | K::DocumentClear { index_uid }
+        | K::SettingsUpdate { index_uid, .. }
+        | K::IndexDeletion { index_uid }
+        | K::IndexCreation { index_uid, .. }
+        | K::IndexCompaction { index_uid, .. } => index_uids.push(index_uid),
         K::IndexUpdate { index_uid, new_index_uid, .. } => {
             index_uids.push(index_uid);
             if let Some(new_uid) = new_index_uid {
@@ -617,6 +618,13 @@ impl crate::IndexScheduler {
                     }
                     Details::UpgradeDatabase { from: _, to: _ } => {
                         assert_eq!(kind.as_kind(), Kind::UpgradeDatabase);
+                    }
+                    Details::IndexCompaction {
+                        index_uid: _,
+                        pre_compaction_size: _,
+                        post_compaction_size: _,
+                    } => {
+                        assert_eq!(kind.as_kind(), Kind::IndexCompaction);
                     }
                 }
             }

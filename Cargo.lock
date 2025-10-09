@@ -1075,9 +1075,9 @@ dependencies = [
 
 [[package]]
 name = "cellulite"
-version = "0.3.1-nested-rtxns"
+version = "0.3.1-nested-rtxns-2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db298d57a80b9284327800b394ee3921307c2fdda87c6d37202f5cf400478981"
+checksum = "f22d721963ead1a144f10cb8b53dc9469e760723b069123c7c7bc675c7354270"
 dependencies = [
  "crossbeam",
  "geo",

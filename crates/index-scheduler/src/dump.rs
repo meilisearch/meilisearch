@@ -234,6 +234,9 @@ impl<'a> Dump<'a> {
                     }
                 }
                 KindDump::UpgradeDatabase { from } => KindWithContent::UpgradeDatabase { from },
+                KindDump::IndexCompaction { index_uid } => {
+                    KindWithContent::IndexCompaction { index_uid }
+                }
             },
         };
 

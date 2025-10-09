@@ -25,6 +25,7 @@ enum AutobatchKind {
     IndexDeletion,
     IndexUpdate,
     IndexSwap,
+    IndexCompaction,
 }
 
 impl AutobatchKind {
@@ -68,6 +69,7 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
+            KindWithContent::IndexCompaction { .. } => AutobatchKind::IndexCompaction,
             KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
@@ -116,6 +118,9 @@ pub enum BatchKind {
         id: TaskId,
     },
     IndexSwap {
+        id: TaskId,
+    },
+    IndexCompaction {
         id: TaskId,
     },
 }
@@ -179,6 +184,13 @@ impl BatchKind {
             K::IndexSwap => (
                 Break((
                     BatchKind::IndexSwap { id: task_id },
+                    BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
+                )),
+                false,
+            ),
+            K::IndexCompaction => (
+                Break((
+                    BatchKind::IndexCompaction { id: task_id },
                     BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
                 )),
                 false,
@@ -287,8 +299,10 @@ impl BatchKind {
         };
 
         match (self, autobatch_kind) {
-            // We don't batch any of these operations  
-            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition) => Break((this, BatchStopReason::TaskCannotBeBatched { kind, id })),
+            // We don't batch any of these operations
+            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition | K::IndexCompaction) => {
+                Break((this, BatchStopReason::TaskCannotBeBatched { kind, id }))
+            },
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
             (this, kind) if !index_already_exists && this.allow_index_creation() == Some(false) && kind.allow_index_creation() == Some(true) => {
                 Break((this, BatchStopReason::IndexCreationMismatch { id }))
@@ -483,6 +497,7 @@ impl BatchKind {
                 | BatchKind::IndexDeletion { .. }
                 | BatchKind::IndexUpdate { .. }
                 | BatchKind::IndexSwap { .. }
+                | BatchKind::IndexCompaction { .. }
                 | BatchKind::DocumentEdition { .. },
                 _,
             ) => {
