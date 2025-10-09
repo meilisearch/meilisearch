@@ -3266,6 +3266,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.16",
  "time",
+ "tokio",
  "tracing",
  "ureq",
  "uuid",
