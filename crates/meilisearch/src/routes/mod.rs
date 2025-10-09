@@ -42,6 +42,7 @@ use crate::routes::multi_search::SearchResults;
 use crate::routes::network::{Network, Remote};
 use crate::routes::swap_indexes::SwapIndexesPayload;
 use crate::routes::webhooks::{WebhookResults, WebhookSettings, WebhookWithMetadata};
+use crate::search::INCLUDE_METADATA_HEADER;
 use crate::search::{
     FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
     SearchQueryWithIndex, SearchResultWithIndex, SimilarQuery, SimilarResult,
@@ -182,6 +183,18 @@ pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
         })
         .transpose()?
         .is_some_and(|s| s.to_lowercase() == "true"))
+}
+
+/// Parse the `Meili-Include-Metadata` header from an HTTP request.
+///
+/// Returns `true` if the header is present and set to "true" or "1" (case-insensitive).
+/// Returns `false` if the header is not present or has any other value.
+pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
+    req.headers()
+        .get(INCLUDE_METADATA_HEADER)
+        .and_then(|h| h.to_str().ok())
+        .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1"))
+        .unwrap_or(false)
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]

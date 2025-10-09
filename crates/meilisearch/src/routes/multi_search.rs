@@ -21,9 +21,10 @@ use crate::routes::indexes::search::search_kind;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, FederatedSearch,
     FederatedSearchResult, RetrieveVectors, SearchParams, SearchQueryWithIndex,
-    SearchResultWithIndex, INCLUDE_METADATA_HEADER, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
+use crate::routes::parse_include_metadata_header;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -202,12 +203,7 @@ pub async fn multi_search_with_post(
                 .headers()
                 .get(PROXY_SEARCH_HEADER)
                 .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
-            let include_metadata = req
-                .headers()
-                .get(INCLUDE_METADATA_HEADER)
-                .and_then(|h| h.to_str().ok())
-                .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1"))
-                .unwrap_or(false);
+            let include_metadata = parse_include_metadata_header(&req);
             let search_result = perform_federated_search(
                 &index_scheduler,
                 queries,
@@ -235,12 +231,7 @@ pub async fn multi_search_with_post(
             HttpResponse::Ok().json(search_result?)
         }
         None => {
-            let include_metadata = req
-                .headers()
-                .get(INCLUDE_METADATA_HEADER)
-                .and_then(|h| h.to_str().ok())
-                .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1"))
-                .unwrap_or(false);
+            let include_metadata = parse_include_metadata_header(&req);
 
             // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
             // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
