@@ -7,6 +7,7 @@ use time::{Duration, OffsetDateTime};
 use utoipa::ToSchema;
 
 use crate::batches::BatchId;
+use crate::enterprise_edition::network::Network;
 use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
 use crate::tasks::{
@@ -142,6 +143,9 @@ pub struct DetailsView {
     pub old_index_uid: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_index_uid: Option<String>,
+    // network
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network: Option<Network>,
 }
 
 impl DetailsView {
@@ -314,6 +318,10 @@ impl DetailsView {
                 // We should never be able to batch multiple renames at the same time.
                 (Some(left), Some(_right)) => Some(left),
             },
+            network: match (&self.network, &other.network) {
+                (None, None) => None,
+                (_, Some(network)) | (Some(network), None) => Some(network.clone()),
+            },
         }
     }
 }
@@ -415,6 +423,9 @@ impl From<Details> for DetailsView {
                 upgrade_to: Some(format!("v{}.{}.{}", to.0, to.1, to.2)),
                 ..Default::default()
             },
+            Details::NetworkTopologyChange { network: new_network } => {
+                DetailsView { network: new_network, ..Default::default() }
+            }
         }
     }
 }

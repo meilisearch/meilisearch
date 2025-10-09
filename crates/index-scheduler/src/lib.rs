@@ -54,7 +54,7 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::enterprise_edition::network::Network;
+use meilisearch_types::enterprise_edition::network::DbNetwork;
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
@@ -216,6 +216,8 @@ pub struct IndexScheduler {
     /// A counter that is incremented before every call to [`tick`](IndexScheduler::tick)
     #[cfg(test)]
     run_loop_iteration: Arc<RwLock<usize>>,
+
+    runtime: Option<tokio::runtime::Handle>,
 }
 
 impl IndexScheduler {
@@ -242,6 +244,7 @@ impl IndexScheduler {
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
             chat_settings: self.chat_settings,
+            runtime: self.runtime.clone(),
         }
     }
 
@@ -260,6 +263,7 @@ impl IndexScheduler {
         options: IndexSchedulerOptions,
         auth_env: Env<WithoutTls>,
         from_db_version: (u32, u32, u32),
+        runtime: Option<tokio::runtime::Handle>,
         #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
         #[cfg(test)] planned_failures: Vec<(usize, test_utils::FailureLocation)>,
     ) -> Result<Self> {
@@ -341,6 +345,7 @@ impl IndexScheduler {
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
             chat_settings,
+            runtime,
         };
 
         this.run();
@@ -892,13 +897,13 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub fn put_network(&self, network: Network) -> Result<()> {
+    pub fn put_network(&self, network: DbNetwork) -> Result<()> {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.features.put_network(wtxn, network)?;
         Ok(())
     }
 
-    pub fn network(&self) -> Network {
+    pub fn network(&self) -> DbNetwork {
         self.features.network()
     }
 

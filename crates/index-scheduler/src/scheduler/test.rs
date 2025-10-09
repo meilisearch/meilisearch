@@ -722,7 +722,7 @@ fn basic_get_stats() {
     let kind = index_creation_task("whalo", "fish");
     let _task = index_scheduler.register(kind, None, false).unwrap();
 
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -746,6 +746,7 @@ fn basic_get_stats() {
         "indexDeletion": 0,
         "indexSwap": 0,
         "indexUpdate": 0,
+        "networkTopologyChange": 0,
         "settingsUpdate": 0,
         "snapshotCreation": 0,
         "taskCancelation": 0,
@@ -753,7 +754,7 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 
     handle.advance_till([Start, BatchCreated]);
     snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"

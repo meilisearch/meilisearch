@@ -529,6 +529,8 @@ impl ErrorCode for milli::Error {
                     | UserError::DocumentEditionCompilationError(_) => {
                         Code::EditDocumentsByFunctionError
                     }
+                    UserError::NetworkShardingWithoutSelf => Code::InvalidNetworkSharding,
+                    UserError::NetworkMissingUrl(_) => Code::MissingNetworkUrl,
                     UserError::CelluliteError(err) => match err {
                         cellulite::Error::BuildCanceled
                         | cellulite::Error::VersionMismatchOnBuild(_)
