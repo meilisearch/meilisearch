@@ -42,10 +42,10 @@ use crate::routes::multi_search::SearchResults;
 use crate::routes::network::{Network, Remote};
 use crate::routes::swap_indexes::SwapIndexesPayload;
 use crate::routes::webhooks::{WebhookResults, WebhookSettings, WebhookWithMetadata};
-use crate::search::INCLUDE_METADATA_HEADER;
 use crate::search::{
     FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
     SearchQueryWithIndex, SearchResultWithIndex, SimilarQuery, SimilarResult,
+    INCLUDE_METADATA_HEADER,
 };
 use crate::search_queue::SearchQueue;
 use crate::Opt;

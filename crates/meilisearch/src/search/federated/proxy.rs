@@ -7,11 +7,10 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use super::types::{FederatedSearch, FederatedSearchResult, Federation};
-use crate::search::SearchQueryWithIndex;
+use crate::search::{SearchQueryWithIndex, INCLUDE_METADATA_HEADER};
 
 pub const PROXY_SEARCH_HEADER: &str = "Meili-Proxy-Search";
 pub const PROXY_SEARCH_HEADER_VALUE: &str = "true";
-pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 
 mod error {
     use meilisearch_types::error::ResponseError;

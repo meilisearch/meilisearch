@@ -43,8 +43,7 @@ use crate::error::MeilisearchHttpError;
 mod federated;
 pub use federated::{
     perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets, INCLUDE_METADATA_HEADER, PROXY_SEARCH_HEADER,
-    PROXY_SEARCH_HEADER_VALUE,
+    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
 mod ranking_rules;
@@ -58,6 +57,7 @@ pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
+pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
