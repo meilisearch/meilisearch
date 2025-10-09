@@ -216,7 +216,10 @@ enum OnFailure {
     KeepDb,
 }
 
-pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
+pub fn setup_meilisearch(
+    opt: &Opt,
+    handle: tokio::runtime::Handle,
+) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
     let index_scheduler_opt = IndexSchedulerOptions {
         version_file_path: opt.db_path.join(VERSION_FILE_NAME),
         auth_path: opt.db_path.join("auth"),
@@ -256,6 +259,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
                     index_scheduler_opt,
                     OnFailure::RemoveDb,
                     binary_version, // the db is empty
+                    handle,
                 )?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
@@ -273,7 +277,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version, handle)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
@@ -284,6 +288,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
                 index_scheduler_opt,
                 OnFailure::RemoveDb,
                 binary_version, // the db is empty
+                handle,
             )?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
@@ -304,10 +309,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version, handle)?
         }
     } else {
-        open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
+        open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version, handle)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -338,6 +343,7 @@ fn open_or_create_database_unchecked(
     index_scheduler_opt: IndexSchedulerOptions,
     on_failure: OnFailure,
     version: (u32, u32, u32),
+    handle: tokio::runtime::Handle,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
@@ -345,7 +351,7 @@ fn open_or_create_database_unchecked(
     let auth_env = open_auth_store_env(&index_scheduler_opt.auth_path).unwrap();
     let auth_controller = AuthController::new(auth_env.clone(), &opt.master_key);
     let index_scheduler_builder = || -> anyhow::Result<_> {
-        Ok(IndexScheduler::new(index_scheduler_opt, auth_env, version)?)
+        Ok(IndexScheduler::new(index_scheduler_opt, auth_env, version, Some(handle))?)
     };
 
     match (
@@ -452,6 +458,7 @@ fn open_or_create_database(
     index_scheduler_opt: IndexSchedulerOptions,
     empty_db: bool,
     binary_version: (u32, u32, u32),
+    handle: tokio::runtime::Handle,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     let version = if !empty_db {
         check_version(opt, &index_scheduler_opt, binary_version)?
@@ -459,7 +466,7 @@ fn open_or_create_database(
         binary_version
     };
 
-    open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb, version)
+    open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb, version, handle)
 }
 
 fn import_dump(

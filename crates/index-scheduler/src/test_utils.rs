@@ -126,7 +126,7 @@ impl IndexScheduler {
         std::fs::create_dir_all(&options.auth_path).unwrap();
         let auth_env = open_auth_store_env(&options.auth_path).unwrap();
         let index_scheduler =
-            Self::new(options, auth_env, version, sender, planned_failures).unwrap();
+            Self::new(options, auth_env, version, None, sender, planned_failures).unwrap();
 
         // To be 100% consistent between all test we're going to start the scheduler right now
         // and ensure it's in the expected starting state.
