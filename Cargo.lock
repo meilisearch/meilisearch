@@ -3242,6 +3242,7 @@ dependencies = [
  "bumpalo",
  "bumparaw-collections",
  "byte-unit",
+ "bytes",
  "convert_case 0.8.0",
  "crossbeam-channel",
  "csv",
