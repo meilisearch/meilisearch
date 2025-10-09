@@ -45,6 +45,7 @@ tracing = "0.1.41"
 ureq = "2.12.1"
 uuid = { version = "1.17.0", features = ["serde", "v4"] }
 backoff = "0.4.0"
+tokio = { version = "1.47.1", features = ["full"] }
 
 [dev-dependencies]
 big_s = "1.0.2"
