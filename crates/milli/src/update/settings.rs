@@ -1641,6 +1641,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             disable_on_numbers: Setting::NotSet,
             chat: Setting::NotSet,
             vector_store: Setting::NotSet,
+            execute_after_update: Setting::NotSet,
             wtxn: _,
             index: _,
             indexer_config: _,
