@@ -675,10 +675,9 @@ impl<'pl> PayloadOperations<'pl> {
                             Some(Some(versions)) => Some(versions),
                             Some(None) if self.is_new => return Ok(None),
                             Some(None) => {
-                                return Ok(Some(DocumentChange::Deletion(Deletion::create(
-                                    self.docid,
-                                    external_doc,
-                                ))));
+                                return Ok(Some(DocumentChange::Deletion(
+                                    DocumentIdentifiers::create(self.docid, external_doc),
+                                )));
                             }
                             None => None,
                         }
