@@ -30,11 +30,11 @@ RUN     apk add -q --no-cache libgcc tini curl
 
 # add meilisearch and meilitool to the `/bin` so you can run it from anywhere
 # and it's easy to find.
-COPY    --from=compiler /target/release/meilisearch /bin/meilisearch
-COPY    --from=compiler /target/release/meilitool /bin/meilitool
+COPY    --from=compiler /target/release/meilisearch /usr/bin/meilisearch
+COPY    --from=compiler /target/release/meilitool /usr/bin/meilitool
 # To stay compatible with the older version of the container (pre v0.27.0) we're
 # going to symlink the meilisearch binary in the path to `/meilisearch`
-RUN     ln -s /bin/meilisearch /meilisearch
+RUN     ln -s /usr/bin/meilisearch /meilisearch
 
 # This directory should hold all the data related to meilisearch so we're going
 # to move our PWD in there.
@@ -45,4 +45,4 @@ WORKDIR /meili_data
 EXPOSE  7700/tcp
 
 ENTRYPOINT ["tini", "--"]
-CMD     /bin/meilisearch
+CMD     /usr/bin/meilisearch
