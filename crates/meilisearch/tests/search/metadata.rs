@@ -129,8 +129,8 @@ async fn multi_search_without_metadata_header() {
     server.wait_task(task.uid()).await.succeeded();
 
     // Test multi-search without metadata header
-    let (response, code) = index
-        .multi_search_post(json!({
+    let (response, code) = server
+        .multi_search(json!({
             "queries": [
                 {"indexUid": index.uid, "q": "glass"},
                 {"indexUid": index.uid, "q": "dragon"}
@@ -195,8 +195,8 @@ async fn multi_search_with_metadata_header() {
     server.wait_task(task.uid()).await.succeeded();
 
     // Test multi-search with metadata header
-    let (response, code) = index
-        .multi_search_post_with_headers(
+    let (response, code) = server
+        .multi_search_with_headers(
             json!({
                 "queries": [
                     {"indexUid": index.uid, "q": "glass"},

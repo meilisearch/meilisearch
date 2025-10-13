@@ -528,21 +528,6 @@ impl<State> Index<'_, State> {
         self.service.post_str(url, body, all_headers).await
     }
 
-    pub async fn multi_search_post(&self, queries: Value) -> (Value, StatusCode) {
-        self.service.post("/multi-search", queries).await
-    }
-
-    pub async fn multi_search_post_with_headers(
-        &self,
-        queries: Value,
-        headers: Vec<(&str, &str)>,
-    ) -> (Value, StatusCode) {
-        let body = serde_json::to_string(&queries).unwrap();
-        let mut all_headers = vec![("content-type", "application/json")];
-        all_headers.extend(headers);
-        self.service.post_str("/multi-search", body, all_headers).await
-    }
-
     pub async fn search_get(&self, query: &str) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/search{}", urlencode(self.uid.as_ref()), query);
         self.service.get(url).await
