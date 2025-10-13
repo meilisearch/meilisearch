@@ -6,7 +6,7 @@ source: crates/index-scheduler/src/scheduler/test_failure.rs
 []
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: enqueued, details: { from: (1, 12, 0), to: (1, 22, 1) }, kind: UpgradeDatabase { from: (1, 12, 0) }}
+0 {uid: 0, status: enqueued, details: { from: (1, 12, 0), to: (1, 23, 0) }, kind: UpgradeDatabase { from: (1, 12, 0) }}
 ----------------------------------------------------------------------
 ### Status:
 enqueued [0,]
