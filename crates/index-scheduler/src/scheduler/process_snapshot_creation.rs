@@ -277,13 +277,6 @@ impl IndexScheduler {
         secret_key: String,
         mut tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {
-        const ONE_HOUR: Duration = Duration::from_secs(3600);
-        // default part size is 250MiB
-        const MIN_PART_SIZE: usize = 250 * 1024 * 1024;
-        // 10MiB
-        const TEN_MIB: usize = 10 * 1024 * 1024;
-        // The maximum number of parts that can be uploaded to a single multipart upload.
-        const MAX_NUMBER_PARTS: usize = 10_000;
         // The maximum number of parts that can be uploaded in parallel.
         const S3_MAX_IN_FLIGHT_PARTS: &str = "MEILI_S3_MAX_IN_FLIGHT_PARTS";
         let max_in_flight_parts: usize = match std::env::var(S3_MAX_IN_FLIGHT_PARTS) {
@@ -294,7 +287,6 @@ impl IndexScheduler {
         let client = Client::new();
         // TODO Remove this unwrap
         let url = bucket_url.parse().unwrap();
-        eprintln!("{url:?}");
         let bucket = Bucket::new(url, UrlStyle::Path, bucket_name, bucket_region).unwrap();
         let credential = Credentials::new(access_key, secret_key);
 
@@ -323,83 +315,16 @@ impl IndexScheduler {
             mmap.advise(memmap2::Advice::Sequential)?;
             let mmap = bytes::Bytes::from_owner(mmap);
 
-            let object = uuid.to_string();
-            let action = bucket.create_multipart_upload(Some(&credential), &object);
-            let url = action.sign(ONE_HOUR);
-            let resp = client.post(url).send().await.unwrap().error_for_status().unwrap();
-            let body = resp.text().await.unwrap();
-
-            let multipart = CreateMultipartUpload::parse_response(&body).unwrap();
-            let mut etags = Vec::<String>::new();
-
-            let part_size = mmap.len() / MAX_NUMBER_PARTS;
-            let part_size = if part_size < TEN_MIB { MIN_PART_SIZE } else { part_size };
-
-            let mut in_flight_parts = VecDeque::with_capacity(max_in_flight_parts);
-            let number_of_parts = mmap.len().div_ceil(part_size);
-            for i in 0..number_of_parts {
-                let part_number = u16::try_from(i).unwrap().checked_add(1).unwrap();
-                let part_upload = bucket.upload_part(
-                    Some(&credential),
-                    &object,
-                    part_number,
-                    multipart.upload_id(),
-                );
-                let url = part_upload.sign(ONE_HOUR);
-
-                // Make sure we do not read out of bound
-                let body = if mmap.len() < part_size * (i + 1) {
-                    mmap.slice(part_size * i..)
-                } else {
-                    mmap.slice(part_size * i..part_size * (i + 1))
-                };
-
-                let task = tokio::spawn(client.put(url).body(body).send());
-                in_flight_parts.push_back(task);
-
-                if in_flight_parts.len() == max_in_flight_parts {
-                    let resp = in_flight_parts
-                        .pop_front()
-                        .unwrap()
-                        .await
-                        .unwrap()
-                        .unwrap()
-                        .error_for_status()
-                        .unwrap();
-                    let etag =
-                        resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
-                    // TODO use bumpalo to reduce the number of allocations
-                    etags.push(etag.to_str().unwrap().to_owned());
-                }
-            }
-
-            for join_handle in in_flight_parts {
-                let resp = join_handle.await.unwrap().unwrap().error_for_status().unwrap();
-                let etag =
-                    resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
-                // TODO use bumpalo to reduce the number of allocations
-                etags.push(etag.to_str().unwrap().to_owned());
-            }
-
-            let action = bucket.complete_multipart_upload(
+            let object = format!("indexes/{uuid}");
+            multipart_upload(
+                &bucket,
+                &client,
                 Some(&credential),
+                max_in_flight_parts,
+                mmap,
                 &object,
-                multipart.upload_id(),
-                etags.iter().map(AsRef::as_ref),
-            );
-            let url = action.sign(ONE_HOUR);
-            let resp = client
-                .post(url)
-                .body(action.body())
-                .send()
-                .await
-                .unwrap()
-                .error_for_status()
-                .unwrap();
-
-            let body = resp.text().await.unwrap();
-            // TODO remove this
-            println!("it worked! {body}");
+            )
+            .await?;
         }
 
         for task in &mut tasks {
@@ -408,4 +333,92 @@ impl IndexScheduler {
 
         Ok(tasks)
     }
+}
+
+// TODO implement exponential backoff on upload requests: https://docs.rs/backoff
+// TODO return a result with actual errors
+// TODO sign for longer than an hour?
+// TODO Use a better thing than a String for the object path
+async fn multipart_upload(
+    bucket: &Bucket,
+    client: &Client,
+    credential: Option<&Credentials>,
+    max_in_flight_parts: usize,
+    bytes: bytes::Bytes,
+    object: &str,
+) -> Result<()> {
+    const ONE_HOUR: Duration = Duration::from_secs(3600);
+    // default part size is 250MiB
+    const MIN_PART_SIZE: usize = 250 * 1024 * 1024;
+    // 10MiB
+    const TEN_MIB: usize = 10 * 1024 * 1024;
+    // The maximum number of parts that can be uploaded to a single multipart upload.
+    const MAX_NUMBER_PARTS: usize = 10_000;
+
+    let action = bucket.create_multipart_upload(credential, object);
+    // TODO Question: If it is only signed for an hour and a snapshot takes longer than an hour, what happens?
+    //                If the part is deleted (like a TTL) we should sign it for at least 24 hours.
+    let url = action.sign(ONE_HOUR);
+    let resp = client.post(url).send().await.unwrap().error_for_status().unwrap();
+    let body = resp.text().await.unwrap();
+
+    let multipart = CreateMultipartUpload::parse_response(&body).unwrap();
+    let mut etags = Vec::<String>::new();
+
+    let part_size = bytes.len() / MAX_NUMBER_PARTS;
+    let part_size = if part_size < TEN_MIB { MIN_PART_SIZE } else { part_size };
+
+    let mut in_flight_parts = VecDeque::with_capacity(max_in_flight_parts);
+    let number_of_parts = bytes.len().div_ceil(part_size);
+    for i in 0..number_of_parts {
+        let part_number = u16::try_from(i).unwrap().checked_add(1).unwrap();
+        let part_upload =
+            bucket.upload_part(credential, object, part_number, multipart.upload_id());
+        let url = part_upload.sign(ONE_HOUR);
+
+        // Make sure we do not read out of bound
+        let body = if bytes.len() < part_size * (i + 1) {
+            bytes.slice(part_size * i..)
+        } else {
+            bytes.slice(part_size * i..part_size * (i + 1))
+        };
+
+        let task = tokio::spawn(client.put(url).body(body).send());
+        in_flight_parts.push_back(task);
+
+        if in_flight_parts.len() == max_in_flight_parts {
+            let resp = in_flight_parts
+                .pop_front()
+                .unwrap()
+                .await
+                .unwrap()
+                .unwrap()
+                .error_for_status()
+                .unwrap();
+            let etag = resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
+            // TODO use bumpalo to reduce the number of allocations
+            etags.push(etag.to_str().unwrap().to_owned());
+        }
+    }
+
+    for join_handle in in_flight_parts {
+        let resp = join_handle.await.unwrap().unwrap().error_for_status().unwrap();
+        let etag = resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
+        // TODO use bumpalo to reduce the number of allocations
+        etags.push(etag.to_str().unwrap().to_owned());
+    }
+
+    let action = bucket.complete_multipart_upload(
+        credential,
+        object,
+        multipart.upload_id(),
+        etags.iter().map(AsRef::as_ref),
+    );
+    let url = action.sign(ONE_HOUR);
+    let resp =
+        client.post(url).body(action.body()).send().await.unwrap().error_for_status().unwrap();
+
+    assert!(resp.status().is_success());
+
+    Ok(())
 }
