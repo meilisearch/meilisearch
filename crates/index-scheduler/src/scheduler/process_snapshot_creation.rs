@@ -85,7 +85,7 @@ impl IndexScheduler {
     pub(super) fn process_snapshot(
         &self,
         progress: Progress,
-        mut tasks: Vec<Task>,
+        tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {
         progress.update_progress(SnapshotCreationProgress::StartTheSnapshotCreation);
 
@@ -109,7 +109,7 @@ impl IndexScheduler {
                 Ok(secret_key),
             ) => {
                 let runtime = self.runtime.as_ref().expect("Runtime not initialized");
-                return runtime.block_on(self.process_snapshot_to_s3(
+                runtime.block_on(self.process_snapshot_to_s3(
                     progress,
                     bucket_url,
                     bucket_region,
@@ -117,7 +117,7 @@ impl IndexScheduler {
                     access_key,
                     secret_key,
                     tasks,
-                ));
+                ))
             }
             (
                 Err(VarError::NotPresent),
@@ -125,7 +125,7 @@ impl IndexScheduler {
                 Err(VarError::NotPresent),
                 Err(VarError::NotPresent),
                 Err(VarError::NotPresent),
-            ) => (),
+            ) => self.process_snapshots_to_disk(progress, tasks),
             (Err(e), _, _, _, _)
             | (_, Err(e), _, _, _)
             | (_, _, Err(e), _, _)
@@ -135,8 +135,13 @@ impl IndexScheduler {
                 panic!("Error while reading environment variables: {}", e);
             }
         }
+    }
 
-        // TODO move this code into a separate function
+    fn process_snapshots_to_disk(
+        &self,
+        progress: Progress,
+        mut tasks: Vec<Task>,
+    ) -> Result<Vec<Task>, Error> {
         fs::create_dir_all(&self.scheduler.snapshots_path)?;
         let temp_snapshot_dir = tempfile::tempdir()?;
 
