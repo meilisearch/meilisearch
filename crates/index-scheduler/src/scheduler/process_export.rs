@@ -72,19 +72,22 @@ impl IndexScheduler {
             let whole_universe =
                 index.documents_ids(&index_rtxn).map_err(milli::Error::from).map_err(err)?;
             let universe = filter_universe.unwrap_or(whole_universe);
-            let total_documents = self.export_one_index(
-                base_url,
-                api_key,
-                &index,
-                &index_rtxn,
-                uid,
-                &universe,
+            let target = TargetInstance { base_url, api_key };
+            let ctx = ExportContext {
+                index: &index,
+                index_rtxn: &index_rtxn,
+                universe: &universe,
+                progress: &progress,
+                agent: &agent,
+                must_stop_processing: &must_stop_processing,
+            };
+            let options = ExportOptions {
+                index_uid: uid,
                 payload_size,
-                &progress,
-                &agent,
-                &must_stop_processing,
-                *override_settings,
-            )?;
+                override_settings: *override_settings,
+                extra_headers: &Default::default(),
+            };
+            let total_documents = self.export_one_index(target, options, ctx)?;
 
             output.insert(
                 IndexUidPattern::new_unchecked(uid.clone()),
@@ -100,24 +103,20 @@ impl IndexScheduler {
 
     pub(super) fn export_one_index(
         &self,
-        base_url: &str,
-        api_key: Option<&str>,
-        index: &meilisearch_types::milli::Index,
-        index_rtxn: &milli::heed::RoTxn,
-        index_uid: &str,
-        universe: &RoaringBitmap,
-        payload_size: Option<&Byte>,
-        progress: &Progress,
-        agent: &ureq::Agent,
-        must_stop_processing: &MustStopProcessing,
-        override_settings: bool,
+        target: TargetInstance<'_>,
+        options: ExportOptions<'_>,
+        ctx: ExportContext<'_>,
     ) -> Result<u64, Error> {
-        let err = |err| Error::from_milli(err, Some(index_uid.to_string()));
+        let err = |err| Error::from_milli(err, Some(options.index_uid.to_string()));
 
-        let bearer = api_key.map(|api_key| format!("Bearer {api_key}"));
-        let url = format!("{base_url}/indexes/{index_uid}");
-        let response = retry(must_stop_processing, || {
-            let mut request = agent.get(&url);
+        let bearer = target.api_key.map(|api_key| format!("Bearer {api_key}"));
+        let url = format!(
+            "{base_url}/indexes/{index_uid}",
+            base_url = target.base_url,
+            index_uid = options.index_uid
+        );
+        let response = retry(ctx.must_stop_processing, || {
+            let mut request = ctx.agent.get(&url);
             if let Some(bearer) = &bearer {
                 request = request.set("Authorization", bearer);
             }
@@ -130,22 +129,21 @@ impl IndexScheduler {
             Err(e) => return Err(e),
         };
         let primary_key =
-            index.primary_key(&index_rtxn).map_err(milli::Error::from).map_err(err)?;
+            ctx.index.primary_key(&ctx.index_rtxn).map_err(milli::Error::from).map_err(err)?;
         if !index_exists {
-            let url = format!("{base_url}/indexes");
-            retry(must_stop_processing, || {
-                let mut request = agent.post(&url);
+            let url = format!("{base_url}/indexes", base_url = target.base_url);
+            retry(ctx.must_stop_processing, || {
+                let mut request = ctx.agent.post(&url);
                 if let Some(bearer) = &bearer {
                     request = request.set("Authorization", bearer);
                 }
-                let index_param = json!({ "uid": index_uid, "primaryKey": primary_key });
+                let index_param = json!({ "uid": options.index_uid, "primaryKey": primary_key });
                 request.send_json(&index_param).map_err(into_backoff_error)
             })?;
         }
-        if index_exists && override_settings {
-            let url = format!("{base_url}/indexes/{index_uid}");
-            retry(must_stop_processing, || {
-                let mut request = agent.patch(&url);
+        if index_exists && options.override_settings {
+            retry(ctx.must_stop_processing, || {
+                let mut request = ctx.agent.patch(&url);
                 if let Some(bearer) = &bearer {
                     request = request.set("Authorization", bearer);
                 }
@@ -153,17 +151,22 @@ impl IndexScheduler {
                 request.send_json(&index_param).map_err(into_backoff_error)
             })?;
         }
-        if !index_exists || override_settings {
-            let mut settings = settings::settings(&index, &index_rtxn, SecretPolicy::RevealSecrets)
-                .map_err(err)?;
+        if !index_exists || options.override_settings {
+            let mut settings =
+                settings::settings(&ctx.index, &ctx.index_rtxn, SecretPolicy::RevealSecrets)
+                    .map_err(err)?;
             // Remove the experimental chat setting if not enabled
             if self.features().check_chat_completions("exporting chat settings").is_err() {
                 settings.chat = Setting::NotSet;
             }
             // Retry logic for sending settings
-            let url = format!("{base_url}/indexes/{index_uid}/settings");
-            retry(must_stop_processing, || {
-                let mut request = agent.patch(&url);
+            let url = format!(
+                "{base_url}/indexes/{index_uid}/settings",
+                base_url = target.base_url,
+                index_uid = options.index_uid
+            );
+            retry(ctx.must_stop_processing, || {
+                let mut request = ctx.agent.patch(&url);
                 if let Some(bearer) = bearer.as_ref() {
                     request = request.set("Authorization", bearer);
                 }
@@ -171,34 +174,38 @@ impl IndexScheduler {
             })?;
         }
 
-        let fields_ids_map = index.fields_ids_map(&index_rtxn)?;
+        let fields_ids_map = ctx.index.fields_ids_map(&ctx.index_rtxn)?;
         let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
-        let total_documents = universe.len() as u32;
+        let total_documents = ctx.universe.len() as u32;
         let (step, progress_step) = AtomicDocumentStep::new(total_documents);
-        progress.update_progress(progress_step);
+        ctx.progress.update_progress(progress_step);
 
-        let limit = payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(20 * 1024 * 1024);
-        let documents_url = format!("{base_url}/indexes/{index_uid}/documents");
+        let limit = options.payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(20 * 1024 * 1024);
+        let documents_url = format!(
+            "{base_url}/indexes/{index_uid}/documents",
+            base_url = target.base_url,
+            index_uid = options.index_uid
+        );
         let results = request_threads()
-            .broadcast(|ctx| {
-                let index_rtxn = index.read_txn().map_err(milli::Error::from).map_err(err)?;
+            .broadcast(|broadcast| {
+                let index_rtxn = ctx.index.read_txn().map_err(milli::Error::from).map_err(err)?;
 
                 let mut buffer = Vec::new();
                 let mut tmp_buffer = Vec::new();
                 let mut compressed_buffer = Vec::new();
-                for (i, docid) in universe.iter().enumerate() {
-                    if i % ctx.num_threads() != ctx.index() {
+                for (i, docid) in ctx.universe.iter().enumerate() {
+                    if i % broadcast.num_threads() != broadcast.index() {
                         continue;
                     }
 
-                    let document = index.document(&index_rtxn, docid).map_err(err)?;
+                    let document = ctx.index.document(&index_rtxn, docid).map_err(err)?;
 
                     let mut document =
                         obkv_to_json(&all_fields, &fields_ids_map, document).map_err(err)?;
 
                     // TODO definitely factorize this code
                     'inject_vectors: {
-                        let embeddings = index.embeddings(&index_rtxn, docid).map_err(err)?;
+                        let embeddings = ctx.index.embeddings(&index_rtxn, docid).map_err(err)?;
 
                         if embeddings.is_empty() {
                             break 'inject_vectors;
@@ -212,7 +219,8 @@ impl IndexScheduler {
                             return Err(err(milli::Error::UserError(
                                 milli::UserError::InvalidVectorsMapType {
                                     document_id: {
-                                        if let Ok(Some(Ok(index))) = index
+                                        if let Ok(Some(Ok(index))) = ctx
+                                            .index
                                             .external_id_of(&index_rtxn, std::iter::once(docid))
                                             .map(|it| it.into_iter().next())
                                         {
@@ -262,8 +270,8 @@ impl IndexScheduler {
                         encoder.write_all(&buffer).map_err(milli::Error::from).map_err(err)?;
                         encoder.finish().map_err(milli::Error::from).map_err(err)?;
 
-                        retry(must_stop_processing, || {
-                            let mut request = agent.post(&documents_url);
+                        retry(ctx.must_stop_processing, || {
+                            let mut request = ctx.agent.post(&documents_url);
                             request = request.set("Content-Type", "application/x-ndjson");
                             request = request.set("Content-Encoding", "gzip");
                             if let Some(bearer) = &bearer {
@@ -281,8 +289,8 @@ impl IndexScheduler {
                     }
                 }
 
-                retry(must_stop_processing, || {
-                    let mut request = agent.post(&documents_url);
+                retry(ctx.must_stop_processing, || {
+                    let mut request = ctx.agent.post(&documents_url);
                     request = request.set("Content-Type", "application/x-ndjson");
                     if let Some(bearer) = &bearer {
                         request = request.set("Authorization", bearer);
@@ -357,4 +365,27 @@ fn ureq_error_into_error(error: ureq::Error) -> Error {
     }
 }
 
+// export_one_index arguments
+pub(super) struct TargetInstance<'a> {
+    pub(super) base_url: &'a str,
+    pub(super) api_key: Option<&'a str>,
+}
+
+pub(super) struct ExportOptions<'a> {
+    pub(super) index_uid: &'a str,
+    pub(super) payload_size: Option<&'a Byte>,
+    pub(super) override_settings: bool,
+    pub(super) extra_headers: &'a hashbrown::HashMap<String, String>,
+}
+
+pub(super) struct ExportContext<'a> {
+    pub(super) index: &'a meilisearch_types::milli::Index,
+    pub(super) index_rtxn: &'a milli::heed::RoTxn<'a>,
+    pub(super) universe: &'a RoaringBitmap,
+    pub(super) progress: &'a Progress,
+    pub(super) agent: &'a ureq::Agent,
+    pub(super) must_stop_processing: &'a MustStopProcessing,
+}
+
+// progress related
 enum ExportIndex {}
