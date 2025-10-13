@@ -316,6 +316,7 @@ impl IndexScheduler {
                 .try_clone_inner_file()
                 .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
             let mmap = unsafe { memmap2::Mmap::map(&file)? };
+            mmap.advise(memmap2::Advice::Sequential)?;
             let mmap = bytes::Bytes::from_owner(mmap);
 
             let object = uuid.to_string();
