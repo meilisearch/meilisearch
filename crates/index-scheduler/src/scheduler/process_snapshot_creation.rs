@@ -285,7 +285,11 @@ impl IndexScheduler {
         // The maximum number of parts that can be uploaded to a single multipart upload.
         const MAX_NUMBER_PARTS: usize = 10_000;
         // The maximum number of parts that can be uploaded in parallel.
-        const MAX_IN_FLIGHT_PARTS: usize = 10;
+        const S3_MAX_IN_FLIGHT_PARTS: &str = "MEILI_S3_MAX_IN_FLIGHT_PARTS";
+        let max_in_flight_parts: usize = match std::env::var(S3_MAX_IN_FLIGHT_PARTS) {
+            Ok(val) => val.parse().expect("Failed to parse MEILI_S3_MAX_IN_FLIGHT_PARTS"),
+            Err(_) => 10,
+        };
 
         let client = Client::new();
         // TODO Remove this unwrap
@@ -331,7 +335,7 @@ impl IndexScheduler {
             let part_size = mmap.len() / MAX_NUMBER_PARTS;
             let part_size = if part_size < TEN_MIB { MIN_PART_SIZE } else { part_size };
 
-            let mut in_flight_parts = VecDeque::with_capacity(MAX_IN_FLIGHT_PARTS);
+            let mut in_flight_parts = VecDeque::with_capacity(max_in_flight_parts);
             let number_of_parts = mmap.len().div_ceil(part_size);
             for i in 0..number_of_parts {
                 let part_number = u16::try_from(i).unwrap().checked_add(1).unwrap();
@@ -353,7 +357,7 @@ impl IndexScheduler {
                 let task = tokio::spawn(client.put(url).body(body).send());
                 in_flight_parts.push_back(task);
 
-                if in_flight_parts.len() == MAX_IN_FLIGHT_PARTS {
+                if in_flight_parts.len() == max_in_flight_parts {
                     let resp = in_flight_parts
                         .pop_front()
                         .unwrap()
