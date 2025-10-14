@@ -45,7 +45,7 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::enterprise_edition::proxy::{proxy, Body};
+use crate::routes::indexes::enterprise_edition::proxy::{check_leader, proxy, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
@@ -340,6 +340,7 @@ pub async fn delete_document(
     let DocumentParam { index_uid, document_id } = path.into_inner();
     let index_uid = IndexUid::try_from(index_uid)?;
     let network = index_scheduler.network();
+    let origin = check_leader(&req, &network)?;
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -363,7 +364,7 @@ pub async fn delete_document(
     };
 
     if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::none(), &task).await?;
+        proxy(&index_scheduler, &index_uid, &req, origin, network, Body::none(), &task).await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -946,6 +947,7 @@ async fn document_addition(
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
     let mime_type = extract_mime_type(req)?;
     let network = index_scheduler.network();
+    let origin = check_leader(&req, &network)?;
 
     let format = match (
         mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())),
@@ -1081,6 +1083,7 @@ async fn document_addition(
                 &index_scheduler,
                 &index_uid,
                 req,
+                origin,
                 network,
                 Body::with_ndjson_payload(file),
                 &task,
@@ -1168,6 +1171,7 @@ pub async fn delete_documents_batch(
     debug!(parameters = ?body, "Delete documents by batch");
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let network = index_scheduler.network();
+    let origin = check_leader(&req, &network)?;
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -1194,7 +1198,8 @@ pub async fn delete_documents_batch(
     };
 
     if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(body), &task).await?;
+        proxy(&index_scheduler, &index_uid, &req, origin, network, Body::Inline(body), &task)
+            .await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -1254,6 +1259,7 @@ pub async fn delete_documents_by_filter(
     let index_uid = index_uid.into_inner();
     let filter = body.into_inner();
     let network = index_scheduler.network();
+    let origin = check_leader(&req, &network)?;
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -1286,7 +1292,8 @@ pub async fn delete_documents_by_filter(
     };
 
     if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(filter), &task).await?;
+        proxy(&index_scheduler, &index_uid, &req, origin, network, Body::Inline(filter), &task)
+            .await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -1384,6 +1391,7 @@ pub async fn edit_documents_by_function(
         .check_edit_documents_by_function("Using the documents edit route")?;
 
     let network = index_scheduler.network();
+    let origin = check_leader(&req, &network)?;
 
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
@@ -1436,7 +1444,8 @@ pub async fn edit_documents_by_function(
     };
 
     if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(params), &task).await?;
+        proxy(&index_scheduler, &index_uid, &req, origin, network, Body::Inline(params), &task)
+            .await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -1483,6 +1492,7 @@ pub async fn clear_all_documents(
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let network = index_scheduler.network();
+    let origin = check_leader(&req, &network)?;
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -1505,7 +1515,7 @@ pub async fn clear_all_documents(
     };
 
     if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::none(), &task).await?;
+        proxy(&index_scheduler, &index_uid, &req, origin, network, Body::none(), &task).await?;
     }
 
     let task: SummarizedTaskView = task.into();

@@ -127,7 +127,7 @@ async fn remote_sharding() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -136,7 +136,7 @@ async fn remote_sharding() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -145,7 +145,7 @@ async fn remote_sharding() {
     }
     "###);
     let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms2",
@@ -192,11 +192,11 @@ async fn remote_sharding() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms1.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms2.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -442,7 +442,7 @@ async fn remote_sharding_retrieve_vectors() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -451,7 +451,7 @@ async fn remote_sharding_retrieve_vectors() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -460,7 +460,7 @@ async fn remote_sharding_retrieve_vectors() {
     }
     "###);
     let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms2",
@@ -542,11 +542,11 @@ async fn remote_sharding_retrieve_vectors() {
     }});
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms1.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms2.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // multi vector search: one query per remote
 
@@ -935,7 +935,7 @@ async fn error_unregistered_remote() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -944,7 +944,7 @@ async fn error_unregistered_remote() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -983,9 +983,9 @@ async fn error_unregistered_remote() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms1.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -1055,7 +1055,7 @@ async fn error_no_weighted_score() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -1064,7 +1064,7 @@ async fn error_no_weighted_score() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -1107,7 +1107,7 @@ async fn error_no_weighted_score() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -1190,7 +1190,7 @@ async fn error_bad_response() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -1199,7 +1199,7 @@ async fn error_bad_response() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -1245,7 +1245,7 @@ async fn error_bad_response() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -1329,7 +1329,7 @@ async fn error_bad_request() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -1338,7 +1338,7 @@ async fn error_bad_request() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -1377,7 +1377,7 @@ async fn error_bad_request() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -1461,7 +1461,7 @@ async fn error_bad_request_facets_by_index() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -1470,7 +1470,7 @@ async fn error_bad_request_facets_by_index() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -1510,7 +1510,7 @@ async fn error_bad_request_facets_by_index() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -1604,7 +1604,7 @@ async fn error_bad_request_facets_by_index_facet() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -1613,7 +1613,7 @@ async fn error_bad_request_facets_by_index_facet() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -1656,7 +1656,7 @@ async fn error_bad_request_facets_by_index_facet() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -1756,7 +1756,7 @@ async fn error_remote_does_not_answer() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -1765,7 +1765,7 @@ async fn error_remote_does_not_answer() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -1807,9 +1807,9 @@ async fn error_remote_does_not_answer() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms1.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -1959,7 +1959,7 @@ async fn error_remote_404() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -1968,7 +1968,7 @@ async fn error_remote_404() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -2007,9 +2007,9 @@ async fn error_remote_404() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms1.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -2156,7 +2156,7 @@ async fn error_remote_sharding_auth() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -2165,7 +2165,7 @@ async fn error_remote_sharding_auth() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -2211,7 +2211,7 @@ async fn error_remote_sharding_auth() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -2318,7 +2318,7 @@ async fn remote_sharding_auth() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -2327,7 +2327,7 @@ async fn remote_sharding_auth() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -2372,7 +2372,7 @@ async fn remote_sharding_auth() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -2475,7 +2475,7 @@ async fn error_remote_500() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -2484,7 +2484,7 @@ async fn error_remote_500() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -2527,9 +2527,9 @@ async fn error_remote_500() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms1.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -2656,7 +2656,7 @@ async fn error_remote_500_once() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -2665,7 +2665,7 @@ async fn error_remote_500_once() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -2708,9 +2708,9 @@ async fn error_remote_500_once() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms1.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";
@@ -2841,7 +2841,7 @@ async fn error_remote_timeout() {
     // set self
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms0",
@@ -2849,7 +2849,7 @@ async fn error_remote_timeout() {
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
-    snapshot!(code, @"200 OK");
+    snapshot!(code, @"202 Accepted");
     snapshot!(json_string!(response), @r###"
     {
       "self": "ms1",
@@ -2891,9 +2891,9 @@ async fn error_remote_timeout() {
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
     let (_response, status_code) = ms1.set_network(network.clone()).await;
-    snapshot!(status_code, @"200 OK");
+    snapshot!(status_code, @"202 Accepted");
 
     // perform multi-search
     let query = "badman returns";

@@ -178,6 +178,7 @@ async fn patch_network(
     let task = index_scheduler.register(
         meilisearch_types::tasks::KindWithContent::NetworkTopologyChange {
             network: Some(new_network),
+            origin: None,
         },
         None,
         false,

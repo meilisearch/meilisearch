@@ -175,6 +175,7 @@ pub enum KindWithContent {
     },
     NetworkTopologyChange {
         network: Option<Network>,
+        origin: Option<Origin>,
     },
 }
 
@@ -333,7 +334,7 @@ impl KindWithContent {
                     versioning::VERSION_PATCH,
                 ),
             }),
-            KindWithContent::NetworkTopologyChange { network: new_network } => {
+            KindWithContent::NetworkTopologyChange { network: new_network, origin: _ } => {
                 Some(Details::NetworkTopologyChange { network: new_network.clone() })
             }
         }
@@ -418,7 +419,7 @@ impl KindWithContent {
                     versioning::VERSION_PATCH,
                 ),
             }),
-            KindWithContent::NetworkTopologyChange { network: new_network } => {
+            KindWithContent::NetworkTopologyChange { network: new_network, origin: _s } => {
                 Some(Details::NetworkTopologyChange { network: new_network.clone() })
             }
         }
@@ -483,7 +484,7 @@ impl From<&KindWithContent> for Option<Details> {
                     versioning::VERSION_PATCH,
                 ),
             }),
-            KindWithContent::NetworkTopologyChange { network: new_network } => {
+            KindWithContent::NetworkTopologyChange { network: new_network, origin: _ } => {
                 Some(Details::NetworkTopologyChange { network: new_network.clone() })
             }
         }

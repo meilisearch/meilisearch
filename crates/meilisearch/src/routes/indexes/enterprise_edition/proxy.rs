@@ -38,6 +38,27 @@ impl Body<()> {
     }
 }
 
+pub fn check_leader(
+    req: &HttpRequest,
+    network: &meilisearch_types::enterprise_edition::network::DbNetwork,
+) -> Result<Option<Origin>, MeilisearchHttpError> {
+    match origin_from_req(req)? {
+        Some(origin) => Ok(Some(origin)),
+        None => {
+            let this = network
+                .local
+                .as_deref()
+                .expect("inconsistent `network.sharding` and `network.self`");
+
+            let is_leader = this == todo!();
+            if !is_leader {
+                return Err(MeilisearchHttpError::NotLeader { leader: todo!() });
+            }
+            Ok(None)
+        }
+    }
+}
+
 /// If necessary, proxies the passed request to the network and update the task description.
 ///
 /// This function reads the custom headers from the request to determine if must proxy the request or if the request
@@ -52,11 +73,12 @@ pub async fn proxy<T: serde::Serialize>(
     index_scheduler: &IndexScheduler,
     index_uid: &str,
     req: &HttpRequest,
+    origin: Option<Origin>,
     network: meilisearch_types::enterprise_edition::network::DbNetwork,
     body: Body<T>,
     task: &meilisearch_types::tasks::Task,
 ) -> Result<(), MeilisearchHttpError> {
-    match origin_from_req(req)? {
+    match origin {
         Some(origin) => {
             index_scheduler.set_task_network(task.uid, TaskNetwork::Origin { origin })?
         }

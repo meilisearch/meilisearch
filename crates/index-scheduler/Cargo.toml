@@ -23,6 +23,7 @@ dump = { path = "../dump" }
 enum-iterator = "2.1.0"
 file-store = { path = "../file-store" }
 flate2 = "1.1.2"
+hashbrown = "0.15.4"
 indexmap = "2.9.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }

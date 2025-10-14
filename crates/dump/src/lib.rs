@@ -160,6 +160,7 @@ pub enum KindDump {
     },
     NetworkTopologyChange {
         network: Option<meilisearch_types::enterprise_edition::network::Network>,
+        origin: Option<meilisearch_types::tasks::Origin>,
     },
 }
 
@@ -243,8 +244,8 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::UpgradeDatabase { from: version } => {
                 KindDump::UpgradeDatabase { from: version }
             }
-            KindWithContent::NetworkTopologyChange { network } => {
-                KindDump::NetworkTopologyChange { network }
+            KindWithContent::NetworkTopologyChange { network, origin } => {
+                KindDump::NetworkTopologyChange { network, origin }
             }
         }
     }

@@ -234,8 +234,8 @@ impl<'a> Dump<'a> {
                     }
                 }
                 KindDump::UpgradeDatabase { from } => KindWithContent::UpgradeDatabase { from },
-                KindDump::NetworkTopologyChange { network: new_network } => {
-                    KindWithContent::NetworkTopologyChange { network: new_network }
+                KindDump::NetworkTopologyChange { network: new_network, origin } => {
+                    KindWithContent::NetworkTopologyChange { network: new_network, origin }
                 }
             },
         };

@@ -6,7 +6,7 @@
 use std::collections::BTreeMap;
 
 use deserr::Deserr;
-use milli::update::new::indexer::enterprise_edition::sharding::Shards;
+use milli::update::new::indexer::enterprise_edition::sharding::{Shard, Shards};
 use milli::update::Setting;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -73,14 +73,17 @@ pub struct DbNetwork {
 impl DbNetwork {
     pub fn shards(&self) -> Option<Shards> {
         if self.sharding {
-            let this = self.local.as_deref().expect("Inconsistent `sharding` and `self`");
-            let others = self
-                .remotes
-                .keys()
-                .filter(|name| name.as_str() != this)
-                .map(|name| name.to_owned())
-                .collect();
-            Some(Shards { own: vec![this.to_owned()], others })
+            let this = self.local.as_deref();
+
+            Some(Shards(
+                self.remotes
+                    .keys()
+                    .map(|name| Shard {
+                        is_own: Some(name.as_str()) == this,
+                        name: name.to_owned(),
+                    })
+                    .collect(),
+            ))
         } else {
             None
         }

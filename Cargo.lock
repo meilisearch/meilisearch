@@ -3254,6 +3254,7 @@ dependencies = [
  "enum-iterator",
  "file-store",
  "flate2",
+ "hashbrown 0.15.5",
  "indexmap",
  "insta",
  "itertools 0.14.0",
