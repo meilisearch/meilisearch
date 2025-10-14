@@ -39,6 +39,42 @@ impl Body<()> {
     }
 }
 
+/// Parses the header to determine if this task is a duplicate and originates with a remote.
+///
+/// If not, checks whether this remote is the leader and return `MeilisearchHttpError::NotLeader` if not.
+///
+/// # Errors
+///
+/// - `MeiliearchHttpError::NotLeader`: if the following are true simultaneously:
+///     1. The task originates with the current node
+///     2. There's a declared `leader`
+///     3. The declared leader is **not** the current node
+/// - `MeilisearchHttpError::InvalidHeaderValue`: if only parts of the headers are present, or if they cannot be parsed as an origin.
+pub fn origin_or_check_leader(
+    req: &HttpRequest,
+    network: &meilisearch_types::enterprise_edition::network::Network,
+) -> Result<Option<Origin>, MeilisearchHttpError> {
+    match origin_from_req(req)? {
+        Some(origin) => Ok(Some(origin)),
+        None => {
+            match (network.leader.as_deref(), network.local.as_deref()) {
+                // 1. Always allowed if there is no leader
+                (None, _) => (),
+                // 2. Allowed if the leader is self
+                (Some(leader), Some(this)) if leader == this => (),
+                // 3. Any other change is disallowed
+                (Some(leader), _) => {
+                    return Err(
+                        MeilisearchHttpError::NotLeader { leader: leader.to_string() }.into()
+                    )
+                }
+            }
+
+            Ok(None)
+        }
+    }
+}
+
 /// If necessary, proxies the passed request to the network and update the task description.
 ///
 /// This function reads the custom headers from the request to determine if must proxy the request or if the request
@@ -53,11 +89,12 @@ pub async fn proxy<T: serde::Serialize>(
     index_scheduler: &IndexScheduler,
     index_uid: &str,
     req: &HttpRequest,
+    origin: Option<Origin>,
     network: meilisearch_types::enterprise_edition::network::Network,
     body: Body<T>,
     task: &meilisearch_types::tasks::Task,
 ) -> Result<(), MeilisearchHttpError> {
-    match origin_from_req(req)? {
+    match origin {
         Some(origin) => {
             index_scheduler.set_task_network(task.uid, TaskNetwork::Origin { origin })?
         }
@@ -190,7 +227,10 @@ pub async fn proxy<T: serde::Serialize>(
             }
 
             // edit details to contain the return values from the remotes
-            index_scheduler.set_task_network(task.uid, TaskNetwork::Remotes { remote_tasks })?;
+            index_scheduler.set_task_network(
+                task.uid,
+                TaskNetwork::Remotes { remote_tasks, network_version: network.version },
+            )?;
         }
     }
 

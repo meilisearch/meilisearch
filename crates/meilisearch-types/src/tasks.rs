@@ -775,9 +775,25 @@ pub enum Details {
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(untagged, rename_all = "camelCase")]
 pub enum TaskNetwork {
-    Origin { origin: Origin },
-    Remotes { remote_tasks: BTreeMap<String, RemoteTask> },
+    Origin {
+        origin: Origin,
+    },
+    Remotes {
+        remote_tasks: BTreeMap<String, RemoteTask>,
+        #[serde(default)]
+        network_version: Uuid,
+    },
 }
+
+impl TaskNetwork {
+    pub fn network_version(&self) -> Uuid {
+        match self {
+            TaskNetwork::Origin { origin } => origin.network_version,
+            TaskNetwork::Remotes { remote_tasks: _, network_version } => *network_version,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Origin {
