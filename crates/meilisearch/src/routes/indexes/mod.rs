@@ -30,7 +30,7 @@ use crate::Opt;
 
 pub mod compact;
 pub mod documents;
-mod enterprise_edition;
+pub mod enterprise_edition;
 pub mod facet_search;
 pub mod search;
 mod search_analytics;

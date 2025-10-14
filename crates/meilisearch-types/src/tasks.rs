@@ -783,6 +783,7 @@ pub enum TaskNetwork {
 pub struct Origin {
     pub remote_name: String,
     pub task_uid: usize,
+    pub network_version: Uuid,
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]

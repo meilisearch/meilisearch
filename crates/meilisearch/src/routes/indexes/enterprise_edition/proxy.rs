@@ -3,6 +3,7 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::fs::File;
 
@@ -377,23 +378,25 @@ mod error {
 
 pub const PROXY_ORIGIN_REMOTE_HEADER: &str = "Meili-Proxy-Origin-Remote";
 pub const PROXY_ORIGIN_TASK_UID_HEADER: &str = "Meili-Proxy-Origin-TaskUid";
+pub const PROXY_ORIGIN_NETWORK_VERSION: &str = "Meili-Proxy-Origin-Network-Version";
 
 pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchHttpError> {
-    let (remote_name, task_uid) = match (
+    let (remote_name, task_uid, network_version) = match (
         req.headers().get(PROXY_ORIGIN_REMOTE_HEADER),
         req.headers().get(PROXY_ORIGIN_TASK_UID_HEADER),
+        req.headers().get(PROXY_ORIGIN_NETWORK_VERSION),
     ) {
-        (None, None) => return Ok(None),
-        (None, Some(_)) => {
+        (None, None, _) => return Ok(None),
+        (None, Some(_), _) => {
             return Err(MeilisearchHttpError::InconsistentOriginHeaders { is_remote_missing: true })
         }
-        (Some(_), None) => {
+        (Some(_), None, _) => {
             return Err(MeilisearchHttpError::InconsistentOriginHeaders {
                 is_remote_missing: false,
             })
         }
-        (Some(remote_name), Some(task_uid)) => (
-            urlencoding::decode(remote_name.to_str().map_err(|err| {
+        (Some(remote_name), Some(task_uid), network_version) => {
+            let remote_name = urlencoding::decode(remote_name.to_str().map_err(|err| {
                 MeilisearchHttpError::InvalidHeaderValue {
                     header_name: PROXY_ORIGIN_REMOTE_HEADER,
                     msg: format!("while parsing remote name as UTF-8: {err}"),
@@ -402,8 +405,8 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
             .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
                 header_name: PROXY_ORIGIN_REMOTE_HEADER,
                 msg: format!("while URL-decoding remote name: {err}"),
-            })?,
-            urlencoding::decode(task_uid.to_str().map_err(|err| {
+            })?;
+            let task_uid = urlencoding::decode(task_uid.to_str().map_err(|err| {
                 MeilisearchHttpError::InvalidHeaderValue {
                     header_name: PROXY_ORIGIN_TASK_UID_HEADER,
                     msg: format!("while parsing task UID as UTF-8: {err}"),
@@ -412,8 +415,26 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
             .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
                 header_name: PROXY_ORIGIN_TASK_UID_HEADER,
                 msg: format!("while URL-decoding task UID: {err}"),
-            })?,
-        ),
+            })?;
+            let network_version = match network_version {
+                Some(network_version) => {
+                    urlencoding::decode(network_version.to_str().map_err(|err| {
+                        MeilisearchHttpError::InvalidHeaderValue {
+                            header_name: PROXY_ORIGIN_NETWORK_VERSION,
+                            msg: format!("while parsing network version as UTF-8: {err}"),
+                        }
+                    })?)
+                    .map_err(|err| {
+                        MeilisearchHttpError::InvalidHeaderValue {
+                            header_name: PROXY_ORIGIN_NETWORK_VERSION,
+                            msg: format!("while URL-decoding network version: {err}"),
+                        }
+                    })?
+                }
+                None => Cow::Borrowed("0"),
+            };
+            (remote_name, task_uid, network_version)
+        }
     };
 
     let task_uid: usize =
@@ -422,5 +443,13 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
             msg: format!("while parsing the task UID as an integer: {err}"),
         })?;
 
-    Ok(Some(Origin { remote_name: remote_name.into_owned(), task_uid }))
+    let network_version: u128 =
+        network_version.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+            header_name: PROXY_ORIGIN_NETWORK_VERSION,
+            msg: format!("while parsing the network version as a u128: {err}"),
+        })?;
+
+    let network_version = uuid::Uuid::from_u128(network_version);
+
+    Ok(Some(Origin { remote_name: remote_name.into_owned(), task_uid, network_version }))
 }
