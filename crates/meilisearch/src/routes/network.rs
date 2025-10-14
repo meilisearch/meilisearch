@@ -9,7 +9,7 @@ use itertools::{EitherOrBoth, Itertools};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::enterprise_edition::network::{Network as DbNetwork, Remote as DbRemote};
 use meilisearch_types::error::deserr_codes::{
-    InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf, InvalidNetworkSharding,
+    InvalidNetworkLeader, InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf,
     InvalidNetworkUrl, InvalidNetworkWriteApiKey,
 };
 use meilisearch_types::error::ResponseError;
@@ -119,10 +119,10 @@ pub struct Network {
     #[serde(default, rename = "self")]
     #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
     pub local: Setting<String>,
-    #[schema(value_type = Option<bool>, example = json!(true))]
+    #[schema(value_type = Option<String>, example = json!("ms-00"))]
     #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkSharding>)]
-    pub sharding: Setting<bool>,
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkLeader>)]
+    pub leader: Setting<String>,
 }
 
 impl Remote {
@@ -205,6 +205,7 @@ async fn patch_network(
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let new_version = uuid::Uuid::now_v7();
     index_scheduler.features().check_network("Using the /network route")?;
 
     let new_network = new_network.0;
@@ -217,16 +218,16 @@ async fn patch_network(
         Setting::NotSet => old_network.local,
     };
 
-    let merged_sharding = match new_network.sharding {
-        Setting::Set(new_sharding) => new_sharding,
-        Setting::Reset => false,
-        Setting::NotSet => old_network.sharding,
+    let merged_leader = match new_network.leader {
+        Setting::Set(new_leader) => Some(new_leader),
+        Setting::Reset => None,
+        Setting::NotSet => old_network.leader,
     };
 
-    if merged_sharding && merged_self.is_none() {
+    if merged_leader.is_some() && merged_self.is_none() {
         return Err(ResponseError::from_msg(
-            "`.sharding`: enabling the sharding requires `.self` to be set\n  - Hint: Disable `sharding` or set `self` to a value.".into(),
-            meilisearch_types::error::Code::InvalidNetworkSharding,
+            "`.sharding`: setting a leader requires `.self` to be set\n  - Hint: Disable `sharding` or set `self` to a value.".into(),
+            meilisearch_types::error::Code::InvalidNetworkLeader,
         ));
     }
 
@@ -310,8 +311,12 @@ async fn patch_network(
         &req,
     );
 
-    let merged_network =
-        DbNetwork { local: merged_self, remotes: merged_remotes, sharding: merged_sharding };
+    let merged_network = DbNetwork {
+        local: merged_self,
+        remotes: merged_remotes,
+        leader: merged_leader,
+        version: new_version,
+    };
     index_scheduler.put_network(merged_network.clone())?;
     debug!(returns = ?merged_network, "Patch network");
     Ok(HttpResponse::Ok().json(merged_network))

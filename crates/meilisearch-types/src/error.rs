@@ -268,9 +268,9 @@ InvalidMultiSearchQueryRankingRules            , InvalidRequest       , BAD_REQU
 InvalidMultiSearchQueryPosition                , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchRemote                       , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchWeight                       , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkLeader                           , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkRemotes                          , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSelf                             , InvalidRequest       , BAD_REQUEST ;
-InvalidNetworkSharding                         , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSearchApiKey                     , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkWriteApiKey                      , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkUrl                              , InvalidRequest       , BAD_REQUEST ;

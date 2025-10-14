@@ -554,7 +554,8 @@ pub(crate) mod test {
         Network {
             local: Some("myself".to_string()),
             remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
-            sharding: false,
+            leader: None,
+            version: Default::default(),
         }
     }
 
