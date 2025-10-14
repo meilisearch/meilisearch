@@ -15,11 +15,13 @@ use meilisearch_types::error::deserr_codes::{
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::tasks::Origin;
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
 
 use crate::analytics::{Aggregate, Analytics};
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
@@ -111,7 +113,14 @@ pub struct Remote {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct Network {
-    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!("http://localhost:7700"))]
+    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
+        "ms-00": {
+            "url": "http://localhost:7700"
+        },
+        "ms-01": {
+            "url": "http://localhost:7701"
+        }
+    }))]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     #[serde(default)]
     pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
@@ -123,6 +132,17 @@ pub struct Network {
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkLeader>)]
     pub leader: Setting<String>,
+    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
+        "ms-00": {
+            "url": "http://localhost:7700"
+        },
+        "ms-01": {
+            "url": "http://localhost:7701"
+        }
+    }))]
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
+    #[serde(default)]
+    pub previous_remotes: Setting<BTreeMap<String, Option<Remote>>>,
 }
 
 impl Remote {
@@ -205,12 +225,29 @@ async fn patch_network(
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let new_version = uuid::Uuid::now_v7();
     index_scheduler.features().check_network("Using the /network route")?;
 
+    match crate::routes::indexes::enterprise_edition::proxy::origin_from_req(&req)? {
+        Some(origin) => {
+            patch_network_with_origin(index_scheduler, new_network, req, origin, analytics).await
+        }
+        None => patch_network_without_origin(index_scheduler, new_network, req, analytics).await,
+    }
+}
+
+async fn patch_network_without_origin(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
+    new_network: AwebJson<Network, DeserrJsonError>,
+    req: HttpRequest,
+    analytics: Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
     let new_network = new_network.0;
     let old_network = index_scheduler.network();
     debug!(parameters = ?new_network, "Patch network");
+
+    if new_network.previous_remotes.set().is_some() {
+        return Err(MeilisearchHttpError::UnexpectedNetworkPreviousRemotes.into());
+    }
 
     let merged_self = match new_network.local {
         Setting::Set(new_self) => Some(new_self),
@@ -224,12 +261,19 @@ async fn patch_network(
         Setting::NotSet => old_network.leader,
     };
 
-    if merged_leader.is_some() && merged_self.is_none() {
-        return Err(ResponseError::from_msg(
-            "`.sharding`: setting a leader requires `.self` to be set\n  - Hint: Disable `sharding` or set `self` to a value.".into(),
-            meilisearch_types::error::Code::InvalidNetworkLeader,
-        ));
+    // check that making the changes is allowed
+    match (merged_leader.as_deref(), merged_self.as_deref()) {
+        // 1. Always allowed if there is no leader
+        (None, _) => (),
+        // 2. Allowed if the leader is self
+        (Some(leader), Some(this)) if leader == this => (),
+        // 3. Any other change is disallowed
+        (Some(leader), _) => {
+            return Err(MeilisearchHttpError::NotLeader { leader: leader.to_string() }.into())
+        }
     }
+
+    let new_version = uuid::Uuid::now_v7();
 
     let merged_remotes = match new_network.remotes {
         Setting::Set(new_remotes) => {
@@ -318,6 +362,48 @@ async fn patch_network(
         version: new_version,
     };
     index_scheduler.put_network(merged_network.clone())?;
+
+    // register a "rebalancing" task with the old and new network
+
+    // proxy that task and network to the other remotes.
+
     debug!(returns = ?merged_network, "Patch network");
     Ok(HttpResponse::Ok().json(merged_network))
+}
+
+async fn patch_network_with_origin(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
+    merged_network: AwebJson<Network, DeserrJsonError>,
+    req: HttpRequest,
+    origin: Origin,
+    analytics: Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let merged_network = merged_network.into_inner();
+    debug!(parameters = ?merged_network, ?origin, "Patch network");
+    let mut remotes = BTreeMap::new();
+
+    for (name, remote) in merged_network.remotes.set().into_iter().flat_map(|x| x.into_iter()) {
+        let Some(remote) = remote else { continue };
+        let remote = remote.try_into_db_node(&name)?;
+        remotes.insert(name, remote);
+    }
+    let new_network = DbNetwork {
+        local: merged_network.local.set(),
+        remotes,
+        leader: merged_network.leader.set(),
+        version: origin.network_version,
+    };
+    index_scheduler.put_network(new_network.clone())?;
+
+    // register a "rebalancing" task with the old and new network
+
+    analytics.publish(
+        PatchNetworkAnalytics {
+            network_size: new_network.remotes.len(),
+            network_has_self: new_network.local.is_some(),
+        },
+        &req,
+    );
+    debug!(returns = ?new_network, "Patch network");
+    Ok(HttpResponse::Ok().json(new_network))
 }
