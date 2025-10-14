@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 
 use milli::update::new::indexer::enterprise_edition::sharding::Shards;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -16,20 +17,18 @@ pub struct Network {
     #[serde(default)]
     pub remotes: BTreeMap<String, Remote>,
     #[serde(default)]
-    pub sharding: bool,
+    pub leader: Option<String>,
+    #[serde(default)]
+    pub version: Uuid,
 }
 
 impl Network {
     pub fn shards(&self) -> Option<Shards> {
-        if self.sharding {
-            let this = self.local.as_deref().expect("Inconsistent `sharding` and `self`");
-            let others = self
-                .remotes
-                .keys()
-                .filter(|name| name.as_str() != this)
-                .map(|name| name.to_owned())
-                .collect();
-            Some(Shards { own: vec![this.to_owned()], others })
+        if self.leader.is_some() {
+            Some(Shards::from_remotes_local(
+                self.remotes.keys().map(String::as_str),
+                self.local.as_deref(),
+            ))
         } else {
             None
         }

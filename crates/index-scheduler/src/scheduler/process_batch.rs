@@ -539,6 +539,10 @@ impl IndexScheduler {
 
                 Ok((tasks, ProcessBatchInfo::default()))
             }
+            Batch::NetworkIndexBatch { network_task, inner_batch } => {
+                self.process_network_index_batch(network_task, inner_batch, current_batch, progress)
+            }
+            Batch::NetworkReady { task } => self.process_network_ready(task, progress),
         }
     }
 

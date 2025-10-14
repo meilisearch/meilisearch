@@ -46,7 +46,7 @@ async fn errors_on_param() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `selfie`: expected one of `remotes`, `self`, `sharding`",
+      "message": "Unknown field `selfie`: expected one of `remotes`, `self`, `leader`, `previousRemotes`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -186,7 +186,7 @@ async fn errors_on_param() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": null,
       "remotes": {
@@ -196,7 +196,8 @@ async fn errors_on_param() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = server
@@ -265,22 +266,24 @@ async fn auth() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "master",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
     let (response, code) = server.get_network().await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "master",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -289,11 +292,12 @@ async fn auth() {
     let (response, code) = server.get_network().await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "master",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -307,11 +311,12 @@ async fn auth() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "api_key",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -390,18 +395,20 @@ async fn get_and_set_network() {
     {
       "self": null,
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "00000000-0000-0000-0000-000000000000"
     }
     "###);
 
     // adding self
     let (response, code) = server.set_network(json!({"self": "myself"})).await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -419,7 +426,7 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {
@@ -434,7 +441,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -448,7 +456,7 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {
@@ -463,7 +471,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -478,7 +487,7 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {
@@ -498,7 +507,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -510,7 +520,7 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {
@@ -525,7 +535,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -533,7 +544,7 @@ async fn get_and_set_network() {
     let (response, code) = server.set_network(json!({"self": Null})).await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": null,
       "remotes": {
@@ -548,7 +559,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -556,7 +568,7 @@ async fn get_and_set_network() {
     let (response, code) = server.set_network(json!({"self": "thy"})).await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "thy",
       "remotes": {
@@ -571,7 +583,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -579,7 +592,7 @@ async fn get_and_set_network() {
     let (response, code) = server.set_network(json!({})).await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "thy",
       "remotes": {
@@ -594,7 +607,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -602,7 +616,7 @@ async fn get_and_set_network() {
     let (response, code) = server.set_network(json!({"remotes": {}})).await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "thy",
       "remotes": {
@@ -617,7 +631,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -625,7 +640,7 @@ async fn get_and_set_network() {
     let (response, code) = server.get_network().await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "thy",
       "remotes": {
@@ -640,7 +655,8 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -652,11 +668,12 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "thy",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 }
