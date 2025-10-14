@@ -18,10 +18,11 @@ use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::search::search_kind;
+use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, FederatedSearch,
-    FederatedSearchResult, RetrieveVectors, SearchQueryWithIndex, SearchResultWithIndex,
-    PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    FederatedSearchResult, RetrieveVectors, SearchParams, SearchQueryWithIndex,
+    SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
 
@@ -188,6 +189,7 @@ pub async fn multi_search_with_post(
         err
     })?;
 
+    let include_metadata = parse_include_metadata_header(&req);
     let response = match federation {
         Some(federation) => {
             debug!(
@@ -209,6 +211,7 @@ pub async fn multi_search_with_post(
                 features,
                 is_proxy,
                 request_uid,
+                include_metadata,
             )
             .await;
             permit.drop().await;
@@ -279,13 +282,16 @@ pub async fn multi_search_with_post(
 
                     let search_result = tokio::task::spawn_blocking(move || {
                         perform_search(
-                            index_uid_str.clone(),
+                            SearchParams {
+                                index_uid: index_uid_str.clone(),
+                                query,
+                                search_kind,
+                                retrieve_vectors: retrieve_vector,
+                                features,
+                                request_uid,
+                                include_metadata,
+                            },
                             &index,
-                            query,
-                            search_kind,
-                            retrieve_vector,
-                            features,
-                            request_uid,
                         )
                     })
                     .await

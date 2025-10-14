@@ -22,11 +22,12 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
+use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -345,15 +346,20 @@ pub async fn search_with_url_query(
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
     let permit = search_queue.try_get_search_permit().await?;
+    let include_metadata = parse_include_metadata_header(&req);
+
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
-            index_uid.to_string(),
+            SearchParams {
+                index_uid: index_uid.to_string(),
+                query,
+                search_kind,
+                retrieve_vectors: retrieve_vector,
+                features: index_scheduler.features(),
+                request_uid,
+                include_metadata,
+            },
             &index,
-            query,
-            search_kind,
-            retrieve_vector,
-            index_scheduler.features(),
-            request_uid,
         )
     })
     .await;
@@ -453,16 +459,21 @@ pub async fn search_with_post(
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
+    let include_metadata = parse_include_metadata_header(&req);
+
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
-            index_uid.to_string(),
+            SearchParams {
+                index_uid: index_uid.to_string(),
+                query,
+                search_kind,
+                retrieve_vectors,
+                features: index_scheduler.features(),
+                request_uid,
+                include_metadata,
+            },
             &index,
-            query,
-            search_kind,
-            retrieve_vectors,
-            index_scheduler.features(),
-            request_uid,
         )
     })
     .await;

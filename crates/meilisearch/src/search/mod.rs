@@ -57,6 +57,7 @@ pub const DEFAULT_CROP_MARKER: fn() -> String = || "…".to_string();
 pub const DEFAULT_HIGHLIGHT_PRE_TAG: fn() -> String = || "<em>".to_string();
 pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
+pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
@@ -836,6 +837,18 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct SearchMetadata {
+    pub query_uid: Uuid,
+    pub index_uid: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub primary_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+}
+
 #[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -854,6 +867,8 @@ pub struct SearchResult {
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_uid: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<SearchMetadata>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
@@ -876,6 +891,7 @@ impl fmt::Debug for SearchResult {
             facet_distribution,
             facet_stats,
             request_uid,
+            metadata,
             semantic_hit_count,
             degraded,
             used_negative_operator,
@@ -907,6 +923,9 @@ impl fmt::Debug for SearchResult {
         }
         if let Some(request_uid) = request_uid {
             debug.field("request_uid", &request_uid);
+        }
+        if let Some(metadata) = metadata {
+            debug.field("metadata", &metadata);
         }
 
         debug.finish()
@@ -1120,16 +1139,28 @@ pub fn prepare_search<'t>(
     Ok((search, is_finite_pagination, max_total_hits, offset))
 }
 
-pub fn perform_search(
-    index_uid: String,
-    index: &Index,
-    query: SearchQuery,
-    search_kind: SearchKind,
-    retrieve_vectors: RetrieveVectors,
-    features: RoFeatures,
-    request_uid: Uuid,
-) -> Result<SearchResult, ResponseError> {
+pub struct SearchParams {
+    pub index_uid: String,
+    pub query: SearchQuery,
+    pub search_kind: SearchKind,
+    pub retrieve_vectors: RetrieveVectors,
+    pub features: RoFeatures,
+    pub request_uid: Uuid,
+    pub include_metadata: bool,
+}
+
+pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResult, ResponseError> {
+    let SearchParams {
+        index_uid,
+        query,
+        search_kind,
+        retrieve_vectors,
+        features,
+        request_uid,
+        include_metadata,
+    } = params;
     let before_search = Instant::now();
+    let index_uid_for_metadata = index_uid.clone();
     let rtxn = index.read_txn()?;
     let time_budget = match index.search_cutoff(&rtxn)? {
         Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
@@ -1150,7 +1181,20 @@ pub fn perform_search(
             query_vector,
         },
         semantic_hit_count,
-    ) = search_from_kind(index_uid, search_kind, search)?;
+    ) = search_from_kind(index_uid.clone(), search_kind, search)?;
+
+    let metadata = if include_metadata {
+        let query_uid = Uuid::now_v7();
+        let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
+        Some(SearchMetadata {
+            query_uid,
+            index_uid: index_uid_for_metadata,
+            primary_key,
+            remote: None, // Local searches don't have a remote
+        })
+    } else {
+        None
+    };
 
     let SearchQuery {
         q,
@@ -1233,7 +1277,6 @@ pub fn perform_search(
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
         .unzip();
-
     let result = SearchResult {
         hits: documents,
         hits_info,
@@ -1246,6 +1289,7 @@ pub fn perform_search(
         used_negative_operator,
         semantic_hit_count,
         request_uid: Some(request_uid),
+        metadata,
     };
     Ok(result)
 }

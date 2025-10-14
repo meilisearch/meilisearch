@@ -20,6 +20,7 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use super::super::ranking_rules::{self, RankingRules};
+use super::super::SearchMetadata;
 use super::super::{
     compute_facet_distribution_stats, prepare_search, AttributesFormat, ComputedFacets, HitMaker,
     HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchQuery, SearchQueryWithIndex,
@@ -41,6 +42,7 @@ pub async fn perform_federated_search(
     features: RoFeatures,
     is_proxy: bool,
     request_uid: Uuid,
+    include_metadata: bool,
 ) -> Result<FederatedSearchResult, ResponseError> {
     if is_proxy {
         features.check_network("Performing a remote federated search")?;
@@ -59,20 +61,38 @@ pub async fn perform_federated_search(
 
     let network = index_scheduler.network();
 
+    // Preconstruct metadata keeping the original queries order for later metadata building
+    let precomputed_query_metadata: Option<Vec<_>> = include_metadata.then(|| {
+        queries
+            .iter()
+            .map(|q| {
+                (
+                    q.index_uid.to_string(),
+                    q.federation_options.as_ref().and_then(|o| o.remote.clone()),
+                )
+            })
+            .collect()
+    });
+
     // this implementation partition the queries by index to guarantee an important property:
     // - all the queries to a particular index use the same read transaction.
     // This is an important property, otherwise we cannot guarantee the self-consistency of the results.
 
     // 1. partition queries by host and index
     let mut partitioned_queries = PartitionedQueries::new();
+
     for (query_index, federated_query) in queries.into_iter().enumerate() {
         partitioned_queries.partition(federated_query, query_index, &network, features)?
     }
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
-    let remote_search =
-        RemoteSearch::start(partitioned_queries.remote_queries_by_host, &federation, deadline);
+    let remote_search = RemoteSearch::start(
+        partitioned_queries.remote_queries_by_host,
+        &federation,
+        deadline,
+        include_metadata,
+    );
 
     // 2.2. concurrently execute local queries
     let params = SearchByIndexParams {
@@ -114,11 +134,25 @@ pub async fn perform_federated_search(
     let after_waiting_remote_results = std::time::Instant::now();
 
     // 3. merge hits and metadata across indexes and hosts
-    // 3.1. merge metadata
+
+    // 3.1. Build metadata in the same order as the original queries
+    let query_metadata = precomputed_query_metadata.map(|precomputed_query_metadata| {
+        // If a remote is present, set the local remote name
+        let local_remote_name = network.local.clone().filter(|_| partitioned_queries.has_remote);
+
+        build_query_metadata(
+            precomputed_query_metadata,
+            local_remote_name,
+            &remote_results,
+            &results_by_index,
+        )
+    });
+
+    // 3.2. merge federation metadata
     let (estimated_total_hits, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
 
-    // 3.2. merge hits
+    // 3.3. merge hits
     let merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
         .skip(federation.offset)
         .take(federation.limit)
@@ -133,7 +167,7 @@ pub async fn perform_federated_search(
         .map(|hit| hit.hit())
         .collect();
 
-    // 3.3. merge query vectors
+    // 3.4. merge query vectors
     let query_vectors = if retrieve_vectors {
         for remote_results in remote_results.iter_mut() {
             if let Some(remote_vectors) = remote_results.query_vectors.take() {
@@ -152,7 +186,7 @@ pub async fn perform_federated_search(
         None
     };
 
-    // 3.4. merge facets
+    // 3.5. merge facets
     let (facet_distribution, facet_stats, facets_by_index) =
         facet_order.merge(federation.merge_facets, remote_results, facets);
 
@@ -179,6 +213,7 @@ pub async fn perform_federated_search(
         facets_by_index,
         remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
         request_uid: Some(request_uid),
+        metadata: query_metadata,
     })
 }
 
@@ -402,11 +437,67 @@ struct SearchHitByIndex {
 
 struct SearchResultByIndex {
     index: String,
+    primary_key: Option<String>,
     hits: Vec<SearchHitByIndex>,
     estimated_total_hits: usize,
     degraded: bool,
     used_negative_operator: bool,
     facets: Option<ComputedFacets>,
+}
+
+/// Builds query metadata for federated search results.
+///
+/// This function creates metadata for each query in the same order as the original queries,
+/// combining information from both local and remote search results. It handles the mapping
+/// of primary keys to their respective indexes and remotes to prevent collisions when
+/// multiple remotes have the same index_uid but different primary keys.
+fn build_query_metadata(
+    precomputed_query_metadata: Vec<(String, Option<String>)>,
+    local_remote_name: Option<String>,
+    remote_results: &[FederatedSearchResult],
+    results_by_index: &[SearchResultByIndex],
+) -> Vec<SearchMetadata> {
+    // Create a map of (remote, index_uid) -> primary_key for quick lookup
+    // This prevents collisions when multiple remotes have the same index_uid but different primary keys
+    let mut primary_key_per_index = std::collections::HashMap::new();
+
+    // Build metadata for remote results
+    for remote_result in remote_results {
+        if let Some(remote_metadata) = &remote_result.metadata {
+            for remote_meta in remote_metadata {
+                if let SearchMetadata {
+                    remote: Some(remote_name),
+                    index_uid,
+                    primary_key: Some(primary_key),
+                    ..
+                } = remote_meta
+                {
+                    let key = (Some(remote_name), index_uid);
+                    primary_key_per_index.insert(key, primary_key);
+                }
+            }
+        }
+    }
+
+    // Build metadata for local results
+    for local_meta in results_by_index {
+        if let SearchResultByIndex { index, primary_key: Some(primary_key), .. } = local_meta {
+            let key = (None, index);
+            primary_key_per_index.insert(key, primary_key);
+        }
+    }
+
+    // Build metadata in the same order as the original queries
+    let mut query_metadata = Vec::new();
+    for (index_uid, remote) in precomputed_query_metadata {
+        let primary_key =
+            primary_key_per_index.get(&(remote.as_ref(), &index_uid)).map(|pk| pk.to_string());
+        let query_uid = Uuid::now_v7();
+        // if the remote is not set, use the local remote name
+        let remote = remote.or_else(|| local_remote_name.clone());
+        query_metadata.push(SearchMetadata { query_uid, primary_key, index_uid, remote });
+    }
+    query_metadata
 }
 
 fn merge_metadata(
@@ -420,6 +511,7 @@ fn merge_metadata(
     let mut max_remote_duration = Duration::ZERO;
     for SearchResultByIndex {
         index,
+        primary_key: _,
         hits: _,
         estimated_total_hits: estimated_total_hits_by_index,
         facets: facets_by_index,
@@ -448,6 +540,7 @@ fn merge_metadata(
         degraded: degraded_for_host,
         used_negative_operator: host_used_negative_operator,
         remote_errors: _,
+        metadata: _,
         request_uid: _,
     } in remote_results
     {
@@ -576,7 +669,12 @@ struct RemoteSearch {
 }
 
 impl RemoteSearch {
-    fn start(queries: RemoteQueriesByHost, federation: &Federation, deadline: Instant) -> Self {
+    fn start(
+        queries: RemoteQueriesByHost,
+        federation: &Federation,
+        deadline: Instant,
+        include_metadata: bool,
+    ) -> Self {
         let mut in_flight_remote_queries = BTreeMap::new();
         let client = reqwest::ClientBuilder::new()
             .connect_timeout(std::time::Duration::from_millis(200))
@@ -596,7 +694,10 @@ impl RemoteSearch {
                     // never merge distant facets
                     proxy_federation.merge_facets = None;
                     let params = params.clone();
-                    async move { proxy_search(&node, queries, proxy_federation, &params).await }
+                    async move {
+                        proxy_search(&node, queries, proxy_federation, &params, include_metadata)
+                            .await
+                    }
                 }),
             );
         }
@@ -638,6 +739,13 @@ impl RemoteSearch {
                             );
                             remote_errors.insert(node_name, error.as_response_error());
                             continue 'remote_queries;
+                        }
+
+                        // Add remote name to metadata
+                        if let Some(metadata) = res.metadata.as_mut() {
+                            for meta in metadata {
+                                meta.remote = Some(node_name.clone());
+                            }
                         }
 
                         federation.insert(
@@ -735,6 +843,7 @@ impl SearchByIndex {
             }
         };
         let rtxn = index.read_txn()?;
+        let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
         let criteria = index.criteria(&rtxn)?;
         let dictionary = index.dictionary(&rtxn)?;
         let dictionary: Option<Vec<_>> =
@@ -987,6 +1096,7 @@ impl SearchByIndex {
             })?;
         self.results_by_index.push(SearchResultByIndex {
             index: index_uid,
+            primary_key,
             hits: merged_result,
             estimated_total_hits,
             degraded,

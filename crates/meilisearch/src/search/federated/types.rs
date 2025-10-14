@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::search::SearchMetadata;
+
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
 
@@ -134,6 +136,8 @@ pub struct FederatedSearchResult {
     pub facets_by_index: FederatedFacets,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_uid: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Vec<SearchMetadata>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_errors: Option<BTreeMap<String, ResponseError>>,
@@ -160,6 +164,7 @@ impl fmt::Debug for FederatedSearchResult {
             facets_by_index,
             remote_errors,
             request_uid,
+            metadata,
         } = self;
 
         let mut debug = f.debug_struct("SearchResult");
@@ -194,6 +199,9 @@ impl fmt::Debug for FederatedSearchResult {
         }
         if let Some(request_uid) = request_uid {
             debug.field("request_uid", &request_uid);
+        }
+        if let Some(metadata) = metadata {
+            debug.field("metadata", &metadata);
         }
 
         debug.finish()

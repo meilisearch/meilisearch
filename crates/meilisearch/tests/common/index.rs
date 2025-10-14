@@ -516,6 +516,18 @@ impl<State> Index<'_, State> {
         self.service.post_encoded(url, query, self.encoder).await
     }
 
+    pub async fn search_with_headers(
+        &self,
+        query: Value,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/search", urlencode(self.uid.as_ref()));
+        let body = serde_json::to_string(&query).unwrap();
+        let mut all_headers = vec![("content-type", "application/json")];
+        all_headers.extend(headers);
+        self.service.post_str(url, body, all_headers).await
+    }
+
     pub async fn search_get(&self, query: &str) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/search{}", urlencode(self.uid.as_ref()), query);
         self.service.get(url).await
