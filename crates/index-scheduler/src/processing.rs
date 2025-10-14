@@ -42,12 +42,10 @@ impl ProcessingTasks {
 
     /// Set the processing tasks to an empty list
     pub fn stop_processing(&mut self) -> Self {
-        self.progress = None;
-
         Self {
             batch: std::mem::take(&mut self.batch),
             processing: std::mem::take(&mut self.processing),
-            progress: None,
+            progress: std::mem::take(&mut self.progress),
         }
     }
 

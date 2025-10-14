@@ -1,0 +1,663 @@
+// Copyright © 2025 Meilisearch Some Rights Reserved
+// This file is part of Meilisearch Enterprise Edition (EE).
+// Use of this source code is governed by the Business Source License 1.1,
+// as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use itertools::{EitherOrBoth, Itertools as _};
+use milli::DocumentId;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use uuid::Uuid;
+
+use crate::enterprise_edition::network::{Network, Remote};
+use crate::error::ResponseError;
+use crate::tasks::{Details, TaskId};
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(untagged, rename_all = "camelCase")]
+// This type is used in the database, care should be taken when modifying it.
+pub enum DbTaskNetwork {
+    /// Tasks that were duplicated from `origin`
+    Origin { origin: Origin },
+    /// Tasks that were duplicated as `remote_tasks`
+    Remotes {
+        remote_tasks: BTreeMap<String, RemoteTask>,
+        #[serde(default)]
+        network_version: Uuid,
+    },
+    /// Document import tasks sent in the context of `network_change`
+    Import { import_from: ImportData, network_change: Origin },
+}
+
+impl DbTaskNetwork {
+    pub fn network_version(&self) -> Uuid {
+        match self {
+            DbTaskNetwork::Origin { origin } => origin.network_version,
+            DbTaskNetwork::Remotes { remote_tasks: _, network_version } => *network_version,
+            DbTaskNetwork::Import { import_from: _, network_change } => {
+                network_change.network_version
+            }
+        }
+    }
+
+    pub fn import_data(&self) -> Option<&ImportData> {
+        match self {
+            DbTaskNetwork::Origin { .. } | DbTaskNetwork::Remotes { .. } => None,
+            DbTaskNetwork::Import { import_from, .. } => Some(import_from),
+        }
+    }
+
+    pub fn origin(&self) -> Option<&Origin> {
+        match self {
+            DbTaskNetwork::Origin { origin } => Some(origin),
+            DbTaskNetwork::Remotes { .. } => None,
+            DbTaskNetwork::Import { network_change, .. } => Some(network_change),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum TaskNetwork {
+    /// Tasks that were duplicated from `origin`
+    Origin { origin: Origin },
+    /// Tasks that were duplicated as `remote_tasks`
+    Remotes { remote_tasks: BTreeMap<String, RemoteTask>, network_version: Uuid },
+    /// Document import tasks sent in the context of `network_change`
+    Import { import_from: ImportData, network_change: Origin, metadata: ImportMetadata },
+}
+
+impl TaskNetwork {
+    pub fn network_version(&self) -> Uuid {
+        match self {
+            TaskNetwork::Origin { origin } => origin.network_version,
+            TaskNetwork::Remotes { remote_tasks: _, network_version } => *network_version,
+            TaskNetwork::Import { import_from: _, network_change, metadata: _ } => {
+                network_change.network_version
+            }
+        }
+    }
+}
+
+impl From<TaskNetwork> for DbTaskNetwork {
+    fn from(value: TaskNetwork) -> Self {
+        match value {
+            TaskNetwork::Origin { origin } => DbTaskNetwork::Origin { origin },
+            TaskNetwork::Remotes { remote_tasks, network_version } => {
+                DbTaskNetwork::Remotes { remote_tasks, network_version }
+            }
+            TaskNetwork::Import { import_from, network_change, metadata: _ } => {
+                DbTaskNetwork::Import { import_from, network_change }
+            }
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Origin {
+    pub remote_name: String,
+    pub task_uid: u32,
+    pub network_version: Uuid,
+}
+
+/// Import data stored in a task
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportData {
+    /// Remote that this task is imported from
+    pub remote_name: String,
+    /// Index relevant to this task
+    pub index_name: String,
+    /// Number of documents in this task
+    pub document_count: u64,
+}
+
+/// Import metadata associated with a task but not stored in the task
+#[derive(Debug, PartialEq, Clone)]
+pub struct ImportMetadata {
+    /// Total number of indexes to import from this host
+    pub index_count: u64,
+    /// Key unique to this (network_change, index, host, key).
+    ///
+    /// In practice, an internal document id of one of the documents to import.
+    pub task_key: DocumentId,
+    /// Total number of documents to import for this index from this host.
+    pub total_index_documents: u64,
+}
+
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteTask {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    task_uid: Option<TaskId>,
+    error: Option<ResponseError>,
+}
+
+impl From<Result<TaskId, ResponseError>> for RemoteTask {
+    fn from(res: Result<TaskId, ResponseError>) -> RemoteTask {
+        match res {
+            Ok(task_uid) => RemoteTask { task_uid: Some(task_uid), error: None },
+            Err(err) => RemoteTask { task_uid: None, error: Some(err) },
+        }
+    }
+}
+
+/// Contains the full state of a network topology change.
+///
+/// A network topology change task is unique in that it can be processed in multiple different batches, as its resolution
+/// depends on various document additions tasks being processed.
+///
+/// A network topology task has 4 states:
+///
+/// 1. Processing any task that was meant for an earlier version of the network. This is necessary to know that we have the right version of
+/// documents.
+/// 2. Sending all documents that must be moved to other remotes.
+/// 3. Processing any task coming from the remotes.
+/// 4. Finished.
+///
+/// Furthermore, it maintains some stats
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkTopologyChange {
+    state: NetworkTopologyState,
+    // in name, `None` if the node is no longer part of the network
+    #[serde(skip_serializing_if = "Option::is_none")]
+    in_name: Option<String>,
+    // out name, `None` if the node is new to the network
+    #[serde(skip_serializing_if = "Option::is_none")]
+    out_name: Option<String>,
+    out_remotes: BTreeMap<String, Remote>,
+    in_remotes: BTreeMap<String, InRemote>,
+    stats: NetworkTopologyStats,
+}
+
+impl NetworkTopologyChange {
+    pub fn new(old_network: Network, new_network: Network) -> Self {
+        // we use our old name as export name
+        let out_name = old_network.local;
+        // we use our new name as import name
+        let in_name = new_network.local;
+        // we export to the new network
+        let mut out_remotes = new_network.remotes;
+        // don't export to ourselves
+        if let Some(in_name) = &in_name {
+            out_remotes.remove(in_name);
+        }
+        let in_remotes = old_network
+            .remotes
+            .into_keys()
+            // don't await imports from ourselves
+            .filter(|name| Some(name.as_str()) != out_name.as_deref())
+            .map(|name| (name, InRemote::new()))
+            .collect();
+        Self {
+            state: NetworkTopologyState::WaitingForOlderTasks,
+            in_name,
+            out_name,
+            out_remotes,
+            in_remotes,
+            stats: NetworkTopologyStats { received_documents: 0, moved_documents: 0 },
+        }
+    }
+
+    pub fn state(&self) -> NetworkTopologyState {
+        self.state
+    }
+
+    pub fn out_name(&self) -> Option<&str> {
+        // unwrap: one of out name or in_name must be defined
+        self.out_name.as_deref()
+    }
+
+    pub fn in_name(&self) -> Option<&str> {
+        self.in_name.as_deref()
+    }
+
+    pub fn export_to_process(&self) -> Option<(&BTreeMap<String, Remote>, &str)> {
+        if self.state != NetworkTopologyState::ExportingDocuments {
+            return None;
+        }
+
+        if self.out_remotes.is_empty() {
+            return None;
+        }
+
+        let out_name = self.out_name()?;
+        Some((&self.out_remotes, out_name))
+    }
+
+    /// Compute the next state from the current state of the task.
+    pub fn update_state(&mut self) {
+        self.state = match self.state {
+            NetworkTopologyState::WaitingForOlderTasks => {
+                // no more older tasks, so finished waiting
+                NetworkTopologyState::ExportingDocuments
+            }
+            NetworkTopologyState::ExportingDocuments => {
+                // processed all exported documents
+                if self.is_import_finished() {
+                    NetworkTopologyState::Finished
+                } else {
+                    NetworkTopologyState::ImportingDocuments
+                }
+            }
+            NetworkTopologyState::ImportingDocuments => {
+                if self.is_import_finished() {
+                    NetworkTopologyState::Finished
+                } else {
+                    NetworkTopologyState::ImportingDocuments
+                }
+            }
+            NetworkTopologyState::Finished => NetworkTopologyState::Finished,
+        };
+    }
+
+    pub fn receive_remote_task(
+        &mut self,
+        remote_name: &str,
+        index_name: &str,
+        task_key: DocumentId,
+        document_count: u64,
+        total_indexes: u64,
+        total_index_documents: u64,
+    ) -> Result<(), ReceiveTaskError> {
+        let remote = self
+            .in_remotes
+            .get_mut(remote_name)
+            .ok_or_else(|| ReceiveTaskError::UnknownRemote(remote_name.to_string()))?;
+        remote.import_state = match std::mem::take(&mut remote.import_state) {
+            ImportState::WaitingForInitialTask => {
+                if total_indexes == 0 {
+                    ImportState::Finished { total_indexes, total_documents: 0 }
+                } else {
+                    let mut task_keys = BTreeSet::new();
+                    task_keys.insert(task_key);
+                    let mut import_index_state = BTreeMap::new();
+                    import_index_state.insert(
+                        index_name.to_owned(),
+                        ImportIndexState::Ongoing {
+                            total_documents: total_index_documents,
+                            received_documents: document_count,
+                            task_keys,
+                            processed_documents: 0,
+                        },
+                    );
+                    ImportState::Ongoing { import_index_state, total_indexes }
+                }
+            }
+            ImportState::Ongoing { mut import_index_state, total_indexes } => {
+                if let Some((index_name, mut index_state)) =
+                    import_index_state.remove_entry(index_name)
+                {
+                    index_state = match index_state {
+                        ImportIndexState::Ongoing {
+                            total_documents,
+                            received_documents: previously_received,
+                            processed_documents,
+                            mut task_keys,
+                        } => {
+                            if !task_keys.insert(task_key) {
+                                return Err(ReceiveTaskError::DuplicateTask(task_key));
+                            }
+
+                            ImportIndexState::Ongoing {
+                                total_documents,
+                                received_documents: previously_received + document_count,
+                                processed_documents,
+                                task_keys,
+                            }
+                        }
+                        ImportIndexState::Finished { total_documents } => {
+                            ImportIndexState::Finished { total_documents }
+                        }
+                    };
+                    import_index_state.insert(index_name, index_state);
+                } else {
+                    let mut task_keys = BTreeSet::new();
+                    task_keys.insert(task_key);
+                    let state = ImportIndexState::Ongoing {
+                        total_documents: total_index_documents,
+                        received_documents: document_count,
+                        processed_documents: 0,
+                        task_keys,
+                    };
+                    import_index_state.insert(index_name.to_string(), state);
+                }
+                ImportState::Ongoing { import_index_state, total_indexes: total_indexes }
+            }
+            ImportState::Finished { total_indexes, total_documents } => {
+                ImportState::Finished { total_indexes, total_documents }
+            }
+        };
+        Ok(())
+    }
+
+    pub fn process_remote_tasks(
+        &mut self,
+        remote_name: &str,
+        index_name: &str,
+        document_count: u64,
+    ) {
+        /// FIXME: unwraps and panics
+        let remote = self.in_remotes.get_mut(remote_name).unwrap();
+        remote.import_state = match std::mem::take(&mut remote.import_state) {
+            ImportState::WaitingForInitialTask => panic!("no task received yet one processed"),
+            ImportState::Ongoing { mut import_index_state, total_indexes } => {
+                let (index_name, mut index_state) =
+                    import_index_state.remove_entry(index_name).unwrap();
+                index_state = match index_state {
+                    ImportIndexState::Ongoing {
+                        total_documents,
+                        received_documents,
+                        processed_documents: previously_processed,
+                        task_keys,
+                    } => {
+                        let newly_processed_documents = previously_processed + document_count;
+                        if newly_processed_documents >= total_documents {
+                            ImportIndexState::Finished { total_documents }
+                        } else {
+                            ImportIndexState::Ongoing {
+                                total_documents,
+                                received_documents,
+                                processed_documents: newly_processed_documents,
+                                task_keys,
+                            }
+                        }
+                    }
+                    ImportIndexState::Finished { total_documents } => {
+                        ImportIndexState::Finished { total_documents }
+                    }
+                };
+                import_index_state.insert(index_name, index_state);
+                if import_index_state.len() as u64 == total_indexes
+                    && import_index_state.values().all(|index| index.is_finished())
+                {
+                    let total_documents =
+                        import_index_state.values().map(|index| index.total_documents()).sum();
+                    ImportState::Finished { total_indexes, total_documents }
+                } else {
+                    ImportState::Ongoing { import_index_state, total_indexes }
+                }
+            }
+            ImportState::Finished { total_indexes, total_documents } => {
+                ImportState::Finished { total_indexes, total_documents }
+            }
+        }
+    }
+
+    pub fn to_details(&self) -> Details {
+        let message = match self.state {
+            NetworkTopologyState::WaitingForOlderTasks => {
+                "Waiting for tasks enqueued before the network change to finish processing".into()
+            }
+            NetworkTopologyState::ExportingDocuments => "Exporting documents".into(),
+            NetworkTopologyState::ImportingDocuments => {
+                let mut finished_count = 0;
+                let mut first_ongoing = None;
+                let mut ongoing_total_indexes = 0;
+                let mut ongoing_processed_documents = 0;
+                let mut ongoing_missing_documents = 0;
+                let mut ongoing_total_documents = 0;
+                let mut other_ongoing_count = 0;
+                let mut first_waiting = None;
+                let mut other_waiting_count = 0;
+                for (remote_name, in_remote) in &self.in_remotes {
+                    match &in_remote.import_state {
+                        ImportState::WaitingForInitialTask => {
+                            first_waiting = match first_waiting {
+                                None => Some(remote_name),
+                                first_waiting => {
+                                    other_waiting_count += 1;
+                                    first_waiting
+                                }
+                            };
+                        }
+                        ImportState::Ongoing { import_index_state, total_indexes } => {
+                            first_ongoing = match first_ongoing {
+                                None => {
+                                    ongoing_total_indexes = *total_indexes;
+                                    Some(remote_name)
+                                }
+                                first_ongoing => {
+                                    other_ongoing_count += 1;
+                                    first_ongoing
+                                }
+                            };
+                            for import_state in import_index_state.values() {
+                                match import_state {
+                                    ImportIndexState::Ongoing {
+                                        total_documents,
+                                        processed_documents,
+                                        received_documents,
+                                        task_keys: _,
+                                    } => {
+                                        ongoing_total_documents += total_documents;
+                                        ongoing_processed_documents += processed_documents;
+                                        ongoing_missing_documents +=
+                                            total_documents.saturating_sub(*received_documents);
+                                    }
+                                    ImportIndexState::Finished { total_documents } => {
+                                        ongoing_total_documents += total_documents;
+                                        ongoing_processed_documents += total_documents;
+                                    }
+                                }
+                            }
+                        }
+                        ImportState::Finished { total_indexes, total_documents } => {
+                            finished_count += 1;
+                            ongoing_total_indexes = *total_indexes;
+                            ongoing_total_documents += *total_documents;
+                            ongoing_processed_documents += *total_documents;
+                        }
+                    }
+                }
+                format!(
+                    "Importing documents from {total} remotes{waiting}{ongoing}{finished}",
+                    total = self.in_remotes.len(),
+                    waiting = if let Some(first_waiting) = first_waiting {
+                        &format!(
+                            ", waiting on first task from `{}`{others}",
+                            first_waiting,
+                            others = if other_waiting_count > 0 {
+                                &format!(" and {other_waiting_count} other remotes")
+                            } else {
+                                ""
+                            }
+                        )
+                    } else {
+                        ""
+                    },
+                    ongoing = if let Some(first_ongoing) = first_ongoing {
+                        &format!(", awaiting {ongoing_missing_documents} and processed {ongoing_processed_documents} out of {ongoing_total_documents} documents in {ongoing_total_indexes} indexes from `{first_ongoing}`{others}",
+                others=if other_ongoing_count > 0 {&format!(" and {other_ongoing_count} other remotes")} else {""})
+                    } else {
+                        ""
+                    },
+                    finished = if finished_count >= 0 {
+                        &format!(", {finished_count} remotes finished processing")
+                    } else {
+                        ""
+                    }
+                )
+            }
+            NetworkTopologyState::Finished => "Finished".into(),
+        };
+        Details::NetworkTopologyChange {
+            moved_documents: self.stats.moved_documents,
+            received_documents: self.stats.received_documents,
+            message,
+        }
+    }
+
+    pub fn is_import_finished(&self) -> bool {
+        self.in_remotes.values().all(|remote| remote.is_finished())
+    }
+
+    pub fn merge(&mut self, other: NetworkTopologyChange) {
+        // The topology change has a guarantee of forward progress, so for each field we're going to keep the "most advanced" values.
+        let Self { state, in_name: _, out_name: _, out_remotes: _, in_remotes, stats } = self;
+
+        *state = Ord::max(*state, other.state);
+        *stats = Ord::max(*stats, other.stats);
+
+        for (old_value, new_value) in other.in_remotes.into_values().zip(in_remotes.values_mut()) {
+            new_value.import_state = match (old_value.import_state, std::mem::take(&mut new_value.import_state)) {
+                    // waiting for initial task is always older
+                    (ImportState::WaitingForInitialTask, newer)
+                    | (newer, ImportState::WaitingForInitialTask)
+
+                    // finished is always newer
+                    | (_, newer @ ImportState::Finished { .. })
+                    | (newer @ ImportState::Finished { .. }, _) => newer,
+                    (
+                        ImportState::Ongoing { import_index_state: left_import, total_indexes: left_total_indexes },
+                        ImportState::Ongoing { import_index_state: right_import, total_indexes: right_total_indexes },
+                    ) => {
+                        let import_index_state = left_import.into_iter().merge_join_by(right_import.into_iter(), |(k,_), (x, _)|k.cmp(x)).map(|eob|
+                            match eob {
+                                EitherOrBoth::Both((name, left), (_, right)) => {
+                                    let newer = merge_import_index_state(left, right);
+                                    (name, newer)
+                                },
+                                EitherOrBoth::Left(import) |
+                                EitherOrBoth::Right(import) => import,
+                            }
+                        ).collect();
+
+                        ImportState::Ongoing{ import_index_state, total_indexes : u64::max(left_total_indexes, right_total_indexes) }
+                    },
+                }
+        }
+    }
+}
+
+fn merge_import_index_state(left: ImportIndexState, right: ImportIndexState) -> ImportIndexState {
+    let newer = match (left, right) {
+        (_, newer @ ImportIndexState::Finished { .. }) => newer,
+        (newer @ ImportIndexState::Finished { .. }, _) => newer,
+        (
+            ImportIndexState::Ongoing {
+                total_documents: left_total_documents,
+                received_documents: left_received_documents,
+                processed_documents: left_processed_documents,
+                task_keys: mut left_task_keys,
+            },
+            ImportIndexState::Ongoing {
+                total_documents: right_total_documents,
+                received_documents: right_received_documents,
+                processed_documents: right_processed_documents,
+                task_keys: mut right_task_keys,
+            },
+        ) => {
+            let total_documents = u64::max(left_total_documents, right_total_documents);
+            let received_documents = u64::max(left_received_documents, right_received_documents);
+            let processed_documents = u64::max(left_processed_documents, right_processed_documents);
+            left_task_keys.append(&mut right_task_keys);
+            let task_keys = left_task_keys;
+
+            ImportIndexState::Ongoing {
+                total_documents,
+                received_documents,
+                processed_documents,
+                task_keys,
+            }
+        }
+    };
+    newer
+}
+
+pub enum ReceiveTaskError {
+    UnknownRemote(String),
+    DuplicateTask(DocumentId),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub enum NetworkTopologyState {
+    WaitingForOlderTasks,
+    ExportingDocuments,
+    ImportingDocuments,
+    Finished,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkTopologyStats {
+    pub received_documents: u64,
+    pub moved_documents: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InRemote {
+    import_state: ImportState,
+}
+
+impl InRemote {
+    pub fn new() -> Self {
+        Self { import_state: ImportState::WaitingForInitialTask }
+    }
+
+    pub fn is_finished(&self) -> bool {
+        matches!(self.import_state, ImportState::Finished { .. })
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ImportState {
+    /// Initially Meilisearch doesn't know how many documents it should expect from a remote.
+    /// The first task for each remote contains the information of how many indexes will be imported,
+    /// and the first task for each index contains the number of documents to import for that index.
+    #[default]
+    WaitingForInitialTask,
+    Ongoing {
+        import_index_state: BTreeMap<String, ImportIndexState>,
+        total_indexes: u64,
+    },
+    Finished {
+        total_indexes: u64,
+        total_documents: u64,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ImportIndexState {
+    Ongoing {
+        total_documents: u64,
+        received_documents: u64,
+        processed_documents: u64,
+        task_keys: BTreeSet<DocumentId>,
+    },
+    Finished {
+        total_documents: u64,
+    },
+}
+
+impl ImportIndexState {
+    pub fn is_finished(&self) -> bool {
+        matches!(self, ImportIndexState::Finished { .. })
+    }
+
+    fn total_documents(&self) -> u64 {
+        match *self {
+            ImportIndexState::Ongoing { total_documents, .. }
+            | ImportIndexState::Finished { total_documents } => total_documents,
+        }
+    }
+}
+
+pub mod headers {
+    pub const PROXY_ORIGIN_REMOTE_HEADER: &str = "Meili-Proxy-Origin-Remote";
+    pub const PROXY_ORIGIN_TASK_UID_HEADER: &str = "Meili-Proxy-Origin-TaskUid";
+    pub const PROXY_ORIGIN_NETWORK_VERSION_HEADER: &str = "Meili-Proxy-Origin-Network-Version";
+    pub const PROXY_IMPORT_REMOTE_HEADER: &str = "Meili-Proxy-Import-Remote";
+    pub const PROXY_IMPORT_INDEX_COUNT_HEADER: &str = "Meili-Proxy-Import-Index-Count";
+    pub const PROXY_IMPORT_INDEX_HEADER: &str = "Meili-Proxy-Import-Index";
+    pub const PROXY_IMPORT_TASK_KEY_HEADER: &str = "Meili-Proxy-Import-Task-Key";
+    pub const PROXY_IMPORT_DOCS_HEADER: &str = "Meili-Proxy-Import-Docs";
+    pub const PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER: &str = "Meili-Proxy-Import-Total-Index-Docs";
+}
