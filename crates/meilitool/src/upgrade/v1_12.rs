@@ -68,7 +68,7 @@ fn convert_update_files(db_path: &Path) -> anyhow::Result<()> {
 
     for uuid in file_store.all_uuids().context("while retrieving uuids from file store")? {
         let uuid = uuid.context("while retrieving uuid from file store")?;
-        let update_file_path = file_store.get_update_path(uuid);
+        let update_file_path = file_store.update_path(uuid);
         let update_file = file_store
             .get_update(uuid)
             .with_context(|| format!("while getting update file for uuid {uuid:?}"))?;
