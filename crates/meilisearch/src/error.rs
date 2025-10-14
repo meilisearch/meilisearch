@@ -93,6 +93,10 @@ pub enum MeilisearchHttpError {
     InconsistentOriginHeaders { is_remote_missing: bool },
     #[error("Invalid value for header {header_name}: {msg}")]
     InvalidHeaderValue { header_name: &'static str, msg: String },
+    #[error("This remote is not the leader of the network.\n  - Note: only the leader `{leader}` can receive new tasks.")]
+    NotLeader { leader: String },
+    #[error("Unexpected `previousRemotes` in network call.\n  - Note: `previousRemote` is reserved for internal use.")]
+    UnexpectedNetworkPreviousRemotes,
 }
 
 impl MeilisearchHttpError {
@@ -141,6 +145,10 @@ impl ErrorCode for MeilisearchHttpError {
                 Code::InconsistentDocumentChangeHeaders
             }
             MeilisearchHttpError::InvalidHeaderValue { .. } => Code::InvalidHeaderValue,
+            MeilisearchHttpError::NotLeader { .. } => Code::NotLeader,
+            MeilisearchHttpError::UnexpectedNetworkPreviousRemotes => {
+                Code::UnexpectedNetworkPreviousRemotes
+            }
         }
     }
 }

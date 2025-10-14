@@ -374,6 +374,7 @@ MissingSearchHybrid                            , InvalidRequest       , BAD_REQU
 MissingSwapIndexes                             , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                             , InvalidRequest       , BAD_REQUEST ;
 NoSpaceLeftOnDevice                            , System               , UNPROCESSABLE_ENTITY;
+NotLeader                                      , InvalidRequest       , BAD_REQUEST ;
 PayloadTooLarge                                , InvalidRequest       , PAYLOAD_TOO_LARGE ;
 RemoteBadResponse                              , System               , BAD_GATEWAY ;
 RemoteBadRequest                               , InvalidRequest       , BAD_REQUEST ;
@@ -387,6 +388,7 @@ TaskFileNotFound                               , InvalidRequest       , NOT_FOUN
 BatchNotFound                                  , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                               , System               , UNPROCESSABLE_ENTITY ;
 TooManyVectors                                 , InvalidRequest       , BAD_REQUEST ;
+UnexpectedNetworkPreviousRemotes               , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                          , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                         , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                           , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
