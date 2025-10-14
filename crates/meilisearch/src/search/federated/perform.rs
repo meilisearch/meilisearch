@@ -61,20 +61,25 @@ pub async fn perform_federated_search(
 
     let network = index_scheduler.network();
 
+    // Preconstruct metadata keeping the original queries order for later metadata building
+    let precomputed_query_metadata: Option<Vec<_>> = include_metadata.then(|| {
+        queries
+            .iter()
+            .map(|q| {
+                (
+                    q.index_uid.to_string(),
+                    q.federation_options.as_ref().and_then(|o| o.remote.clone()),
+                )
+            })
+            .collect()
+    });
+
     // this implementation partition the queries by index to guarantee an important property:
     // - all the queries to a particular index use the same read transaction.
     // This is an important property, otherwise we cannot guarantee the self-consistency of the results.
 
     // 1. partition queries by host and index
     let mut partitioned_queries = PartitionedQueries::new();
-
-    // Preconstruct metadata keeping the original queries order for later metadata building
-    let precomputed_query_metadata: Vec<_> = queries
-        .iter()
-        .map(|q| {
-            (q.index_uid.to_string(), q.federation_options.as_ref().and_then(|o| o.remote.clone()))
-        })
-        .collect();
 
     for (query_index, federated_query) in queries.into_iter().enumerate() {
         partitioned_queries.partition(federated_query, query_index, &network, features)?
@@ -131,55 +136,17 @@ pub async fn perform_federated_search(
     // 3. merge hits and metadata across indexes and hosts
 
     // 3.1. Build metadata in the same order as the original queries
-    let query_metadata = if include_metadata {
-        // 3.1.1. Create a map of (remote, index_uid) -> primary_key for quick lookup
-        // This prevents collisions when multiple remotes have the same index_uid but different primary keys
-        let mut primary_key_per_index = std::collections::HashMap::new();
+    let query_metadata = precomputed_query_metadata.map(|precomputed_query_metadata| {
+        // If a remote is present, set the local remote name
+        let local_remote_name = network.local.clone().filter(|_| partitioned_queries.has_remote);
 
-        // 3.1.1.1 Build metadata for remote results
-        for remote_result in &remote_results {
-            if let Some(remote_metadata) = &remote_result.metadata {
-                for remote_meta in remote_metadata {
-                    if let SearchMetadata {
-                        remote: Some(remote_name),
-                        index_uid,
-                        primary_key: Some(primary_key),
-                        ..
-                    } = &remote_meta
-                    {
-                        let key = (Some(remote_name), index_uid);
-                        primary_key_per_index.insert(key, primary_key);
-                    }
-                }
-            }
-        }
-
-        // 3.1.1.2 Build metadata for local results
-        for local_meta in &results_by_index {
-            if let SearchResultByIndex { index, primary_key: Some(primary_key), .. } = &local_meta {
-                let key = (None, index);
-                primary_key_per_index.insert(key, primary_key);
-            }
-        }
-
-        // if there are remote results, set the local remote name
-        let local_remote_name =
-            (!remote_results.is_empty()).then_some(network.local.clone()).flatten();
-
-        // 3.1.2 Build metadata in the same order as the original queries
-        let mut query_metadata = Vec::new();
-        for (index_uid, remote) in precomputed_query_metadata {
-            let primary_key =
-                primary_key_per_index.get(&(remote.as_ref(), &index_uid)).map(|pk| pk.to_string());
-            let query_uid = Uuid::now_v7();
-            // if the remote is not set, use the local remote name
-            let remote = remote.or_else(|| local_remote_name.clone());
-            query_metadata.push(SearchMetadata { query_uid, primary_key, index_uid, remote });
-        }
-        Some(query_metadata)
-    } else {
-        None
-    };
+        build_query_metadata(
+            precomputed_query_metadata,
+            local_remote_name,
+            &remote_results,
+            &results_by_index,
+        )
+    });
 
     // 3.2. merge federation metadata
     let (estimated_total_hits, degraded, used_negative_operator, facets, max_remote_duration) =
@@ -476,6 +443,61 @@ struct SearchResultByIndex {
     degraded: bool,
     used_negative_operator: bool,
     facets: Option<ComputedFacets>,
+}
+
+/// Builds query metadata for federated search results.
+///
+/// This function creates metadata for each query in the same order as the original queries,
+/// combining information from both local and remote search results. It handles the mapping
+/// of primary keys to their respective indexes and remotes to prevent collisions when
+/// multiple remotes have the same index_uid but different primary keys.
+fn build_query_metadata(
+    precomputed_query_metadata: Vec<(String, Option<String>)>,
+    local_remote_name: Option<String>,
+    remote_results: &[FederatedSearchResult],
+    results_by_index: &[SearchResultByIndex],
+) -> Vec<SearchMetadata> {
+    // Create a map of (remote, index_uid) -> primary_key for quick lookup
+    // This prevents collisions when multiple remotes have the same index_uid but different primary keys
+    let mut primary_key_per_index = std::collections::HashMap::new();
+
+    // Build metadata for remote results
+    for remote_result in remote_results {
+        if let Some(remote_metadata) = &remote_result.metadata {
+            for remote_meta in remote_metadata {
+                if let SearchMetadata {
+                    remote: Some(remote_name),
+                    index_uid,
+                    primary_key: Some(primary_key),
+                    ..
+                } = remote_meta
+                {
+                    let key = (Some(remote_name), index_uid);
+                    primary_key_per_index.insert(key, primary_key);
+                }
+            }
+        }
+    }
+
+    // Build metadata for local results
+    for local_meta in results_by_index {
+        if let SearchResultByIndex { index, primary_key: Some(primary_key), .. } = local_meta {
+            let key = (None, index);
+            primary_key_per_index.insert(key, primary_key);
+        }
+    }
+
+    // Build metadata in the same order as the original queries
+    let mut query_metadata = Vec::new();
+    for (index_uid, remote) in precomputed_query_metadata {
+        let primary_key =
+            primary_key_per_index.get(&(remote.as_ref(), &index_uid)).map(|pk| pk.to_string());
+        let query_uid = Uuid::now_v7();
+        // if the remote is not set, use the local remote name
+        let remote = remote.or_else(|| local_remote_name.clone());
+        query_metadata.push(SearchMetadata { query_uid, primary_key, index_uid, remote });
+    }
+    query_metadata
 }
 
 fn merge_metadata(
