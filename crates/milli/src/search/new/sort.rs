@@ -7,7 +7,7 @@ use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
-use crate::{FieldId, Index, Result};
+use crate::{FieldId, Index, Result, TimeBudget};
 
 pub trait RankingRuleOutputIter<'ctx, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
@@ -96,6 +96,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         _logger: &mut dyn SearchLogger<Query>,
         parent_candidates: &RoaringBitmap,
         parent_query: &Query,
+        _time_budget: &TimeBudget,
     ) -> Result<()> {
         let iter: RankingRuleOutputIterWrapper<'ctx, Query> = match self.field_id {
             Some(field_id) => {
@@ -194,6 +195,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
+        _time_budget: &TimeBudget,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
         let iter = self.iter.as_mut().unwrap();
         if let Some(mut bucket) = iter.next_bucket()? {
