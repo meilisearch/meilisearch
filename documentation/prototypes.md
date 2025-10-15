@@ -20,14 +20,16 @@ These make us iterate fast before stabilizing it for the current release.
 
 ### Release steps
 
-The prototype name must follow this convention: `prototype-X-Y` where
-- `X` is the feature name formatted in `kebab-case`. It should not end with a single number.
+The prototype name must follow this convention: `prototype-v<version>.<name>-<number>` where
+- `version` is the version of Meilisearch on which the prototype is based.
+- `name` is the feature name formatted in `kebab-case`. It should not end with a single number.
 - `Y` is the version of the prototype, starting from `0`.
 
-✅ Example: `prototype-auto-resize-0`. </br>
-❌ Bad example: `auto-resize-0`: lacks the `prototype` prefix. </br>
-❌ Bad example: `prototype-auto-resize`: lacks the version suffix. </br>
-❌ Bad example: `prototype-auto-resize-0-0`: feature name ends with a single number.
+✅ Example: `prototype-v1.23.0.search-personalization-0`. </br>
+❌ Bad example: `prototype-search-personalization-0`: version is missing.</br>
+❌ Bad example: `v1.23.0.auto-resize-0`: lacks the `prototype` prefix. </br>
+❌ Bad example: `prototype-v1.23.0.auto-resize`: lacks the version suffix. </br>
+❌ Bad example: `prototype-v1.23.0.auto-resize-0-0`: feature name ends with a single number.
 
 Steps to create a prototype:
 
