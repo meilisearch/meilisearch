@@ -1,4 +1,5 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::fs::File;
 use std::io::{Seek, SeekFrom};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
@@ -13,7 +14,7 @@ use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use milli::update::Settings as MilliSettings;
 use roaring::RoaringBitmap;
-use tempfile::PersistError;
+use tempfile::{PersistError, TempPath};
 use time::OffsetDateTime;
 
 use super::create_batch::Batch;
@@ -558,11 +559,12 @@ impl IndexScheduler {
             .set_currently_updating_index(Some((index_uid.to_string(), index.clone())));
 
         progress.update_progress(IndexCompaction::CreateTemporaryFile);
-        let pre_size = std::fs::metadata(index.path().join("data.mdb"))?.len();
-        let mut file = tempfile::Builder::new()
-            .suffix("data.")
-            .prefix(".mdb.cpy")
-            .tempfile_in(index.path())?;
+        let src_path = index.path().join("data.mdb");
+        let pre_size = std::fs::metadata(&src_path)?.len();
+
+        let dst_path = TempPath::from_path(index.path().join("data.mdb.cpy"));
+        let file = File::create(&dst_path)?;
+        let mut file = tempfile::NamedTempFile::from_parts(file, dst_path);
 
         // 3. We copy the index data to the temporary file
         progress.update_progress(IndexCompaction::CopyAndCompactTheIndex);
@@ -574,7 +576,7 @@ impl IndexScheduler {
 
         // 4. We replace the index data file with the temporary file
         progress.update_progress(IndexCompaction::PersistTheCompactedIndex);
-        match file.persist(index.path().join("data.mdb")) {
+        match file.persist(src_path) {
             Ok(file) => file.sync_all()?,
             // TODO see if we have a _resource busy_ error and probably handle this by:
             //      1. closing the index, 2. replacing and 3. reopening it
