@@ -361,9 +361,8 @@ fn degraded_search_and_score_details() {
     ]
     "###);
 
-    // After SIX loop iteration. The words ranking rule gave us a new bucket.
-    // Since we reached the limit we were able to early exit without checking the typo ranking rule.
-    search.time_budget(TimeBudget::max().with_stop_after(6));
+    // After FIVE loop iterations. The words ranking rule gave us a new bucket.
+    search.time_budget(TimeBudget::max().with_stop_after(5));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -421,6 +420,75 @@ fn degraded_search_and_score_details() {
                 },
             ),
             Skipped,
+        ],
+    ]
+    "###);
+
+    // After SIX loop iterations.
+    // we finished
+    search.time_budget(TimeBudget::max().with_stop_after(6));
+
+    let result = search.execute().unwrap();
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [4, 1, 0, 3]
+    Scores: 1.0000 0.9167 0.8333 0.6667 
+    Score Details:
+    [
+        [
+            Words(
+                Words {
+                    matching_words: 3,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 3,
+                },
+            ),
+        ],
+        [
+            Words(
+                Words {
+                    matching_words: 3,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 1,
+                    max_typo_count: 3,
+                },
+            ),
+        ],
+        [
+            Words(
+                Words {
+                    matching_words: 3,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 2,
+                    max_typo_count: 3,
+                },
+            ),
+        ],
+        [
+            Words(
+                Words {
+                    matching_words: 2,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 2,
+                },
+            ),
         ],
     ]
     "###);
