@@ -998,7 +998,7 @@ impl IndexScheduler {
 
             let index_path = match self.index_mapper.index_mapping.get(rtxn, &index_uid)? {
                 Some(index_uuid) => self.index_mapper.index_path(index_uuid),
-                None => return Err(Error::IndexNotFound(index_uid)),
+                None => continue,
             };
 
             if let Err(e) = remove_file(index_path.join(DATA_MDB_COPY_NAME)) {
