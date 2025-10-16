@@ -25,7 +25,6 @@ enum AutobatchKind {
     IndexDeletion,
     IndexUpdate,
     IndexSwap,
-    IndexCompaction,
 }
 
 impl AutobatchKind {
@@ -69,14 +68,14 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexCreation { .. } => AutobatchKind::IndexCreation,
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
-            KindWithContent::IndexCompaction { .. } => AutobatchKind::IndexCompaction,
-            KindWithContent::TaskCancelation { .. }
+            KindWithContent::IndexCompaction { .. }
+            | KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }
             | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. }
             | KindWithContent::SnapshotCreation => {
-                panic!("The autobatcher should never be called with tasks that don't apply to an index.")
+                panic!("The autobatcher should never be called with tasks with special priority or that don't apply to an index.")
             }
         }
     }
@@ -118,9 +117,6 @@ pub enum BatchKind {
         id: TaskId,
     },
     IndexSwap {
-        id: TaskId,
-    },
-    IndexCompaction {
         id: TaskId,
     },
 }
@@ -184,13 +180,6 @@ impl BatchKind {
             K::IndexSwap => (
                 Break((
                     BatchKind::IndexSwap { id: task_id },
-                    BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
-                )),
-                false,
-            ),
-            K::IndexCompaction => (
-                Break((
-                    BatchKind::IndexCompaction { id: task_id },
                     BatchStopReason::TaskCannotBeBatched { kind, id: task_id },
                 )),
                 false,
@@ -300,7 +289,7 @@ impl BatchKind {
 
         match (self, autobatch_kind) {
             // We don't batch any of these operations
-            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition | K::IndexCompaction) => {
+            (this, K::IndexCreation | K::IndexUpdate | K::IndexSwap | K::DocumentEdition) => {
                 Break((this, BatchStopReason::TaskCannotBeBatched { kind, id }))
             },
             // We must not batch tasks that don't have the same index creation rights if the index doesn't already exists.
@@ -497,7 +486,6 @@ impl BatchKind {
                 | BatchKind::IndexDeletion { .. }
                 | BatchKind::IndexUpdate { .. }
                 | BatchKind::IndexSwap { .. }
-                | BatchKind::IndexCompaction { .. }
                 | BatchKind::DocumentEdition { .. },
                 _,
             ) => {

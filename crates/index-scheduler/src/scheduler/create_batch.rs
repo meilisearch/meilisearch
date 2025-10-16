@@ -437,12 +437,6 @@ impl IndexScheduler {
                 current_batch.processing(Some(&mut task));
                 Ok(Some(Batch::IndexSwap { task }))
             }
-            BatchKind::IndexCompaction { id } => {
-                let mut task =
-                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
-                current_batch.processing(Some(&mut task));
-                Ok(Some(Batch::IndexCompaction { index_uid, task }))
-            }
         }
     }
 
