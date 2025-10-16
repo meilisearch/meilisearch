@@ -362,7 +362,7 @@ pub async fn delete_document(
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
     };
 
-    if network.sharding && !dry_run {
+    if network.remotes.len() > 0 && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::none(), &task).await?;
     }
 
@@ -1075,7 +1075,7 @@ async fn document_addition(
         }
     };
 
-    if network.sharding {
+    if network.remotes.len() > 0 {
         if let Some(file) = file {
             proxy(
                 &index_scheduler,
@@ -1193,7 +1193,7 @@ pub async fn delete_documents_batch(
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
     };
 
-    if network.sharding && !dry_run {
+    if network.remotes.len() > 0 && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(body), &task).await?;
     }
 
@@ -1285,7 +1285,7 @@ pub async fn delete_documents_by_filter(
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
     };
 
-    if network.sharding && !dry_run {
+    if network.remotes.len() > 0 && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(filter), &task).await?;
     }
 
@@ -1435,7 +1435,7 @@ pub async fn edit_documents_by_function(
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
     };
 
-    if network.sharding && !dry_run {
+    if network.remotes.len() > 0 && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(params), &task).await?;
     }
 
@@ -1504,7 +1504,7 @@ pub async fn clear_all_documents(
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
     };
 
-    if network.sharding && !dry_run {
+    if network.remotes.len() > 0 && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::none(), &task).await?;
     }
 
