@@ -199,7 +199,7 @@ impl IndexMapper {
                 let uuid = Uuid::new_v4();
                 self.index_mapping.put(&mut wtxn, name, &uuid)?;
 
-                let index_path = self.base_path.join(uuid.to_string());
+                let index_path = self.index_path(uuid);
                 fs::create_dir_all(&index_path)?;
 
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
@@ -286,7 +286,7 @@ impl IndexMapper {
         };
 
         let index_map = self.index_map.clone();
-        let index_path = self.base_path.join(uuid.to_string());
+        let index_path = self.index_path(uuid);
         let index_name = name.to_string();
         thread::Builder::new()
             .name(String::from("index_deleter"))
@@ -408,7 +408,7 @@ impl IndexMapper {
                     } else {
                         continue;
                     };
-                    let index_path = self.base_path.join(uuid.to_string());
+                    let index_path = self.index_path(uuid);
                     // take the lock to reopen the environment.
                     reopen
                         .reopen(&mut self.index_map.write().unwrap(), &index_path)
@@ -425,7 +425,7 @@ impl IndexMapper {
                     // if it's not already there.
                     match index_map.get(&uuid) {
                         Missing => {
-                            let index_path = self.base_path.join(uuid.to_string());
+                            let index_path = self.index_path(uuid);
 
                             break index_map
                                 .create(
@@ -450,6 +450,14 @@ impl IndexMapper {
         };
 
         Ok(index)
+    }
+
+    /// Returns the path of the index.
+    ///
+    /// The folder located at this path is containing the data.mdb,
+    /// the lock.mdb and an optional data.mdb.cpy file.
+    pub fn index_path(&self, uuid: Uuid) -> PathBuf {
+        self.base_path.join(uuid.to_string())
     }
 
     pub fn rollback_index(
@@ -492,7 +500,7 @@ impl IndexMapper {
             };
         }
 
-        let index_path = self.base_path.join(uuid.to_string());
+        let index_path = self.index_path(uuid);
         Index::rollback(milli::heed::EnvOpenOptions::new().read_txn_without_tls(), index_path, to)
             .map_err(|err| crate::Error::from_milli(err, Some(name.to_string())))
     }

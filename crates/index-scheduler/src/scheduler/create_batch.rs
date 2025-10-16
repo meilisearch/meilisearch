@@ -437,12 +437,6 @@ impl IndexScheduler {
                 current_batch.processing(Some(&mut task));
                 Ok(Some(Batch::IndexSwap { task }))
             }
-            BatchKind::IndexCompaction { id } => {
-                let mut task =
-                    self.queue.tasks.get_task(rtxn, id)?.ok_or(Error::CorruptedTaskQueue)?;
-                current_batch.processing(Some(&mut task));
-                Ok(Some(Batch::IndexCompaction { index_uid, task }))
-            }
         }
     }
 
@@ -525,17 +519,33 @@ impl IndexScheduler {
             return Ok(Some((Batch::TaskDeletions(tasks), current_batch)));
         }
 
-        // 3. we batch the export.
+        // 3. we get the next task to compact
+        let to_compact = self.queue.tasks.get_kind(rtxn, Kind::IndexCompaction)? & enqueued;
+        if let Some(task_id) = to_compact.min() {
+            let mut task =
+                self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            current_batch.processing(Some(&mut task));
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::IndexCompaction,
+                id: task_id,
+            });
+            let index_uid =
+                task.index_uid().expect("Compaction task must have an index uid").to_owned();
+            return Ok(Some((Batch::IndexCompaction { index_uid, task }, current_batch)));
+        }
+
+        // 4. we batch the export.
         let to_export = self.queue.tasks.get_kind(rtxn, Kind::Export)? & enqueued;
         if !to_export.is_empty() {
             let task_id = to_export.iter().next().expect("There must be at least one export task");
             let mut task = self.queue.tasks.get_task(rtxn, task_id)?.unwrap();
             current_batch.processing([&mut task]);
-            current_batch.reason(BatchStopReason::TaskKindCannotBeBatched { kind: Kind::Export });
+            current_batch
+                .reason(BatchStopReason::TaskCannotBeBatched { kind: Kind::Export, id: task_id });
             return Ok(Some((Batch::Export { task }, current_batch)));
         }
 
-        // 4. we batch the snapshot.
+        // 5. we batch the snapshot.
         let to_snapshot = self.queue.tasks.get_kind(rtxn, Kind::SnapshotCreation)? & enqueued;
         if !to_snapshot.is_empty() {
             let mut tasks = self.queue.tasks.get_existing_tasks(rtxn, to_snapshot)?;
@@ -545,7 +555,7 @@ impl IndexScheduler {
             return Ok(Some((Batch::SnapshotCreation(tasks), current_batch)));
         }
 
-        // 5. we batch the dumps.
+        // 6. we batch the dumps.
         let to_dump = self.queue.tasks.get_kind(rtxn, Kind::DumpCreation)? & enqueued;
         if let Some(to_dump) = to_dump.min() {
             let mut task =
@@ -558,7 +568,7 @@ impl IndexScheduler {
             return Ok(Some((Batch::Dump(task), current_batch)));
         }
 
-        // 6. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
+        // 7. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
         let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
         let mut task =
             self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;

@@ -1,5 +1,6 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::io::{Seek, SeekFrom};
+use std::fs::{remove_file, File};
+use std::io::{ErrorKind, Seek, SeekFrom};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
@@ -13,7 +14,7 @@ use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use milli::update::Settings as MilliSettings;
 use roaring::RoaringBitmap;
-use tempfile::PersistError;
+use tempfile::{PersistError, TempPath};
 use time::OffsetDateTime;
 
 use super::create_batch::Batch;
@@ -27,6 +28,9 @@ use crate::utils::{
     ProcessingBatch,
 };
 use crate::{Error, IndexScheduler, Result, TaskId};
+
+/// The name of the copy of the data.mdb file used during compaction.
+const DATA_MDB_COPY_NAME: &str = "data.mdb.cpy";
 
 #[derive(Debug, Default)]
 pub struct ProcessBatchInfo {
@@ -558,11 +562,12 @@ impl IndexScheduler {
             .set_currently_updating_index(Some((index_uid.to_string(), index.clone())));
 
         progress.update_progress(IndexCompaction::CreateTemporaryFile);
-        let pre_size = std::fs::metadata(index.path().join("data.mdb"))?.len();
-        let mut file = tempfile::Builder::new()
-            .suffix("data.")
-            .prefix(".mdb.cpy")
-            .tempfile_in(index.path())?;
+        let src_path = index.path().join("data.mdb");
+        let pre_size = std::fs::metadata(&src_path)?.len();
+
+        let dst_path = TempPath::from_path(index.path().join(DATA_MDB_COPY_NAME));
+        let file = File::create(&dst_path)?;
+        let mut file = tempfile::NamedTempFile::from_parts(file, dst_path);
 
         // 3. We copy the index data to the temporary file
         progress.update_progress(IndexCompaction::CopyAndCompactTheIndex);
@@ -574,7 +579,7 @@ impl IndexScheduler {
 
         // 4. We replace the index data file with the temporary file
         progress.update_progress(IndexCompaction::PersistTheCompactedIndex);
-        match file.persist(index.path().join("data.mdb")) {
+        match file.persist(src_path) {
             Ok(file) => file.sync_all()?,
             // TODO see if we have a _resource busy_ error and probably handle this by:
             //      1. closing the index, 2. replacing and 3. reopening it
@@ -910,9 +915,10 @@ impl IndexScheduler {
 
         let enqueued_tasks = &self.queue.tasks.get_status(rtxn, Status::Enqueued)?;
 
-        // 0. Check if any upgrade task was matched.
+        // 0. Check if any upgrade or compaction tasks were matched.
         //    If so, we cancel all the failed or enqueued upgrade tasks.
         let upgrade_tasks = &self.queue.tasks.get_kind(rtxn, Kind::UpgradeDatabase)?;
+        let compaction_tasks = &self.queue.tasks.get_kind(rtxn, Kind::IndexCompaction)?;
         let is_canceling_upgrade = !matched_tasks.is_disjoint(upgrade_tasks);
         if is_canceling_upgrade {
             let failed_tasks = self.queue.tasks.get_status(rtxn, Status::Failed)?;
@@ -977,7 +983,33 @@ impl IndexScheduler {
             }
         }
 
-        // 3. We now have a list of tasks to cancel, cancel them
+        // 3. If we are cancelling a compaction task, remove the tempfiles after incomplete compactions
+        for compaction_task in &tasks_to_cancel & compaction_tasks {
+            progress.update_progress(TaskCancelationProgress::CleaningCompactionLeftover);
+            let task = self.queue.tasks.get_task(rtxn, compaction_task)?.unwrap();
+            let Some(Details::IndexCompaction {
+                index_uid,
+                pre_compaction_size: _,
+                post_compaction_size: _,
+            }) = task.details
+            else {
+                unreachable!("wrong details for compaction task {compaction_task}")
+            };
+
+            let index_path = match self.index_mapper.index_mapping.get(rtxn, &index_uid)? {
+                Some(index_uuid) => self.index_mapper.index_path(index_uuid),
+                None => continue,
+            };
+
+            if let Err(e) = remove_file(index_path.join(DATA_MDB_COPY_NAME)) {
+                match e.kind() {
+                    ErrorKind::NotFound => (),
+                    _ => return Err(Error::IoError(e)),
+                }
+            }
+        }
+
+        // 4. We now have a list of tasks to cancel, cancel them
         let (task_progress, progress_obj) = AtomicTaskStep::new(tasks_to_cancel.len() as u32);
         progress.update_progress(progress_obj);
 
