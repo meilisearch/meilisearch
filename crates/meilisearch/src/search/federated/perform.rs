@@ -20,10 +20,10 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use super::super::ranking_rules::{self, RankingRules};
-use super::super::SearchMetadata;
 use super::super::{
     compute_facet_distribution_stats, prepare_search, AttributesFormat, ComputedFacets, HitMaker,
-    HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchQuery, SearchQueryWithIndex,
+    HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata, SearchQuery,
+    SearchQueryWithIndex,
 };
 use super::proxy::{proxy_search, ProxySearchError, ProxySearchParams};
 use super::types::{
@@ -870,6 +870,12 @@ impl SearchByIndex {
             return Err(error);
         }
         let mut results_by_query = Vec::with_capacity(queries.len());
+
+        // all queries for an index share the same budget
+        let time_budget = match cutoff {
+            Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
+            None => TimeBudget::default(),
+        };
         for QueryByIndex { query, weight, query_index } in queries {
             // use an immediately invoked lambda to capture the result without returning from the function
 
@@ -939,17 +945,13 @@ impl SearchByIndex {
 
                 let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
-                let time_budget = match cutoff {
-                    Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-                    None => TimeBudget::default(),
-                };
-
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,
                     &rtxn,
                     &query,
                     &search_kind,
-                    time_budget,
+                    // clones of `TimeBudget` share the budget rather than restart it
+                    time_budget.clone(),
                     params.features,
                 )?;
 

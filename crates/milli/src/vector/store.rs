@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::progress::Progress;
 use crate::vector::Embeddings;
+use crate::TimeBudget;
 
 const HANNOY_EF_CONSTRUCTION: usize = 125;
 const HANNOY_M: usize = 16;
@@ -591,6 +592,7 @@ impl VectorStore {
         vector: &[f32],
         limit: usize,
         filter: Option<&RoaringBitmap>,
+        time_budget: &TimeBudget,
     ) -> crate::Result<Vec<(ItemId, f32)>> {
         if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
@@ -601,11 +603,25 @@ impl VectorStore {
                     .map_err(Into::into)
             }
         } else if self.quantized {
-            self._hannoy_nns_by_vector(rtxn, self._hannoy_quantized_db(), vector, limit, filter)
-                .map_err(Into::into)
+            self._hannoy_nns_by_vector(
+                rtxn,
+                self._hannoy_quantized_db(),
+                vector,
+                limit,
+                filter,
+                time_budget,
+            )
+            .map_err(Into::into)
         } else {
-            self._hannoy_nns_by_vector(rtxn, self._hannoy_angular_db(), vector, limit, filter)
-                .map_err(Into::into)
+            self._hannoy_nns_by_vector(
+                rtxn,
+                self._hannoy_angular_db(),
+                vector,
+                limit,
+                filter,
+                time_budget,
+            )
+            .map_err(Into::into)
         }
     }
     pub fn item_vectors(&self, rtxn: &RoTxn, item_id: u32) -> crate::Result<Vec<Vec<f32>>> {
@@ -1000,6 +1016,7 @@ impl VectorStore {
         vector: &[f32],
         limit: usize,
         filter: Option<&RoaringBitmap>,
+        time_budget: &TimeBudget,
     ) -> Result<Vec<(ItemId, f32)>, hannoy::Error> {
         let mut results = Vec::new();
 
@@ -1011,7 +1028,10 @@ impl VectorStore {
                 searcher.candidates(filter);
             }
 
-            results.append(&mut searcher.by_vector(rtxn, vector)?);
+            let (res, _degraded) =
+                &mut searcher
+                    .by_vector_with_cancellation(rtxn, vector, || time_budget.exceeded())?;
+            results.append(res);
         }
 
         results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));

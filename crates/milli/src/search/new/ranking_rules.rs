@@ -1,9 +1,11 @@
+use std::task::Poll;
+
 use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::{QueryGraph, SearchContext};
 use crate::score_details::ScoreDetails;
-use crate::Result;
+use crate::{Result, TimeBudget};
 
 /// An internal trait implemented by only [`PlaceholderQuery`] and [`QueryGraph`]
 pub trait RankingRuleQueryTrait: Sized + Clone + 'static {}
@@ -28,12 +30,15 @@ pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
     /// buckets using [`next_bucket`](RankingRule::next_bucket).
     ///
     /// The given universe is the universe that will be given to [`next_bucket`](RankingRule::next_bucket).
+    ///
+    /// If this function may take a long time, it should check the `time_budget` and return early if exceeded.
     fn start_iteration(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
         logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
         query: &Query,
+        time_budget: &TimeBudget,
     ) -> Result<()>;
 
     /// Return the next bucket of this ranking rule.
@@ -43,12 +48,30 @@ pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
     /// The universe given as argument is either:
     /// - a subset of the universe given to the previous call to [`next_bucket`](RankingRule::next_bucket); OR
     /// - the universe given to [`start_iteration`](RankingRule::start_iteration)
+    ///
+    /// If this function may take a long time, it should check the `time_budget` and return early if exceeded.
     fn next_bucket(
         &mut self,
         ctx: &mut SearchContext<'ctx>,
         logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
+        time_budget: &TimeBudget,
     ) -> Result<Option<RankingRuleOutput<Query>>>;
+
+    /// Return the next bucket of this ranking rule, if doing so can be done without blocking
+    ///
+    /// Even if the time budget is exceeded, when getting the next bucket is a fast operation, this should return `true`
+    /// to allow Meilisearch to collect the results.
+    ///
+    /// Default implementation conservatively returns that it would block.
+    fn non_blocking_next_bucket(
+        &mut self,
+        _ctx: &mut SearchContext<'ctx>,
+        _logger: &mut dyn SearchLogger<Query>,
+        _universe: &RoaringBitmap,
+    ) -> Result<Poll<RankingRuleOutput<Query>>> {
+        Ok(Poll::Pending)
+    }
 
     /// Finish iterating over the buckets, which yields control to the parent ranking rule
     /// The next call to this ranking rule, if any, will be [`start_iteration`](RankingRule::start_iteration).
