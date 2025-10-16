@@ -525,8 +525,10 @@ impl IndexScheduler {
             let mut task =
                 self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             current_batch.processing(Some(&mut task));
-            current_batch
-                .reason(BatchStopReason::TaskKindCannotBeBatched { kind: Kind::IndexCompaction });
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::IndexCompaction,
+                id: task_id,
+            });
             let index_uid =
                 task.index_uid().expect("Compaction task must have an index uid").to_owned();
             return Ok(Some((Batch::IndexCompaction { index_uid, task }, current_batch)));
@@ -538,7 +540,8 @@ impl IndexScheduler {
             let task_id = to_export.iter().next().expect("There must be at least one export task");
             let mut task = self.queue.tasks.get_task(rtxn, task_id)?.unwrap();
             current_batch.processing([&mut task]);
-            current_batch.reason(BatchStopReason::TaskKindCannotBeBatched { kind: Kind::Export });
+            current_batch
+                .reason(BatchStopReason::TaskCannotBeBatched { kind: Kind::Export, id: task_id });
             return Ok(Some((Batch::Export { task }, current_batch)));
         }
 
