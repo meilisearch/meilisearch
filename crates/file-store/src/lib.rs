@@ -33,6 +33,10 @@ impl FileStore {
         std::fs::create_dir_all(&path)?;
         Ok(FileStore { path })
     }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
 }
 
 impl FileStore {
