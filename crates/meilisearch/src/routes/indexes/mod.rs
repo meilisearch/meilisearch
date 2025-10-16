@@ -42,6 +42,7 @@ pub mod similar;
 mod similar_analytics;
 
 pub use enterprise_edition::proxy::{PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER};
+use enterprise_edition::proxy::{proxy, Body};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -194,7 +195,8 @@ pub async fn list_indexes(
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(Deserr, Debug, ToSchema)]
+#[derive(Deserr, Debug, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct IndexCreateRequest {
@@ -273,13 +275,24 @@ pub async fn create_index(
             &req,
         );
 
-        let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key };
-        let uid = get_task_id(&req, &opt)?;
+        let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key: primary_key.clone() };
+        let task_uid = get_task_id(&req, &opt)?;
         let dry_run = is_dry_run(&req, &opt)?;
-        let task: SummarizedTaskView =
-            tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
+
+        let task = {
+            let index_scheduler = index_scheduler.clone();
+            tokio::task::spawn_blocking(move || index_scheduler.register(task, task_uid, dry_run))
                 .await??
-                .into();
+        };
+
+        // ensure index is created on all remotes
+        let network = index_scheduler.network();
+        if network.remotes.len() > 0 && !dry_run {
+            let create_request = IndexCreateRequest { primary_key, uid: uid.clone() };
+            proxy(&index_scheduler, &uid, &req, network, Body::Inline(create_request), &task).await?;
+        }
+
+        let task: SummarizedTaskView = task.into();
         debug!(returns = ?task, "Create index");
 
         Ok(HttpResponse::Accepted().json(task))
