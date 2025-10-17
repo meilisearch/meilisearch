@@ -3313,6 +3313,7 @@ dependencies = [
  "serde",
  "serde_json",
  "synchronoise",
+ "tar",
  "tempfile",
  "thiserror 2.0.16",
  "time",

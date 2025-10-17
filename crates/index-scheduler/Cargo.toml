@@ -35,6 +35,7 @@ rayon = "1.10.0"
 roaring = { version = "0.10.12", features = ["serde"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
+tar = "0.4.44"
 synchronoise = "1.0.1"
 tempfile = "3.20.0"
 thiserror = "2.0.12"
