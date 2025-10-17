@@ -353,10 +353,13 @@ impl IndexScheduler {
                 // Wait for a buffer to be ready if there are in-flight parts that landed
                 let mut buffer = if in_flight.len() >= max_in_flight_parts {
                     let (request, buffer) = in_flight.pop_front().unwrap();
-                    let mut buffer = buffer.try_into_mut().expect("Valid to convert into BytesMut");
                     let resp = request.await.unwrap().unwrap().error_for_status().unwrap();
                     let etag =
                         resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
+                    let mut buffer = match buffer.try_into_mut() {
+                        Ok(buffer) => buffer,
+                        Err(_) => panic!("Valid to convert into BytesMut"),
+                    };
                     // TODO use bumpalo to reduce the number of allocations
                     etags.push(etag.to_str().unwrap().to_owned());
                     buffer.clear();
