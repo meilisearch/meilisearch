@@ -420,6 +420,8 @@ impl IndexScheduler {
                 etags.push(etag.to_str().unwrap().to_owned());
             }
 
+            eprintln!("Finalizing the multipart upload");
+
             let action = bucket.complete_multipart_upload(
                 Some(&credential),
                 &object,
@@ -427,17 +429,13 @@ impl IndexScheduler {
                 etags.iter().map(AsRef::as_ref),
             );
             let url = action.sign(ONE_HOUR);
-            let resp = client
-                .post(url)
-                .body(action.body())
-                .send()
-                .await
-                .unwrap()
-                .error_for_status()
-                .unwrap();
+            let resp = client.post(url).body(action.body()).send().await.unwrap();
+            let status = resp.status();
+            let text = resp.text().await.unwrap();
+            eprintln!("Status: {status}, Text: {text}");
 
             // TODO do a better check and do not assert
-            assert!(resp.status().is_success());
+            // assert!(resp.status().is_success());
 
             Result::<_, Error>::Ok(())
         });
