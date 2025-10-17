@@ -287,7 +287,7 @@ pub async fn create_index(
 
         // ensure index is created on all remotes
         let network = index_scheduler.network();
-        if network.remotes.len() > 0 && !dry_run {
+        if !network.remotes.is_empty() && !dry_run {
             let create_request = IndexCreateRequest { primary_key, uid: uid.clone() };
             proxy(&index_scheduler, &uid, &req, network, Body::Inline(create_request), &task).await?;
         }
