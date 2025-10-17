@@ -303,7 +303,8 @@ impl IndexScheduler {
         const ONE_HOUR: Duration = Duration::from_secs(3600);
         // default part size is 250MiB
         // TODO use 375MiB
-        const PART_SIZE: usize = 5 * 1024 * 1024;
+        // It must be at least twice 5MiB
+        const PART_SIZE: usize = 10 * 1024 * 1024;
 
         // The maximum number of parts that can be uploaded in parallel.
         const S3_MAX_IN_FLIGHT_PARTS: &str = "MEILI_S3_MAX_IN_FLIGHT_PARTS";
