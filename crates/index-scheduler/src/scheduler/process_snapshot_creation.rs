@@ -96,12 +96,13 @@ impl IndexScheduler {
         const S3_ACCESS_KEY: &str = "MEILI_S3_ACCESS_KEY";
         const S3_SECRET_KEY: &str = "MEILI_S3_SECRET_KEY";
 
-        let bucket_url = std::env::var(S3_BUCKET_URL);
-        let bucket_region = std::env::var(S3_BUCKET_REGION);
-        let bucket_name = std::env::var(S3_BUCKET_NAME);
-        let snapshot_prefix = std::env::var(S3_SNAPSHOT_PREFIX);
-        let access_key = std::env::var(S3_ACCESS_KEY);
-        let secret_key = std::env::var(S3_SECRET_KEY);
+        let bucket_url = std::env::var(S3_BUCKET_URL).map_err(|e| (S3_BUCKET_URL, e));
+        let bucket_region = std::env::var(S3_BUCKET_REGION).map_err(|e| (S3_BUCKET_REGION, e));
+        let bucket_name = std::env::var(S3_BUCKET_NAME).map_err(|e| (S3_BUCKET_NAME, e));
+        let snapshot_prefix =
+            std::env::var(S3_SNAPSHOT_PREFIX).map_err(|e| (S3_SNAPSHOT_PREFIX, e));
+        let access_key = std::env::var(S3_ACCESS_KEY).map_err(|e| (S3_ACCESS_KEY, e));
+        let secret_key = std::env::var(S3_SECRET_KEY).map_err(|e| (S3_SECRET_KEY, e));
         match (bucket_url, bucket_region, bucket_name, snapshot_prefix, access_key, secret_key) {
             (
                 Ok(bucket_url),
@@ -127,21 +128,21 @@ impl IndexScheduler {
                 ))
             }
             (
-                Err(VarError::NotPresent),
-                Err(VarError::NotPresent),
-                Err(VarError::NotPresent),
-                Err(VarError::NotPresent),
-                Err(VarError::NotPresent),
-                Err(VarError::NotPresent),
+                Err((_, VarError::NotPresent)),
+                Err((_, VarError::NotPresent)),
+                Err((_, VarError::NotPresent)),
+                Err((_, VarError::NotPresent)),
+                Err((_, VarError::NotPresent)),
+                Err((_, VarError::NotPresent)),
             ) => self.process_snapshots_to_disk(progress, tasks),
-            (Err(e), _, _, _, _, _)
-            | (_, Err(e), _, _, _, _)
-            | (_, _, Err(e), _, _, _)
-            | (_, _, _, Err(e), _, _)
-            | (_, _, _, _, Err(e), _)
-            | (_, _, _, _, _, Err(e)) => {
+            (Err((var, e)), _, _, _, _, _)
+            | (_, Err((var, e)), _, _, _, _)
+            | (_, _, Err((var, e)), _, _, _)
+            | (_, _, _, Err((var, e)), _, _)
+            | (_, _, _, _, Err((var, e)), _)
+            | (_, _, _, _, _, Err((var, e))) => {
                 // TODO: Handle error gracefully
-                panic!("Error while reading environment variables: {}", e);
+                panic!("Error while reading environment variables: {}: {}", var, e);
             }
         }
     }
