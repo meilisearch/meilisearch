@@ -684,7 +684,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                                     metadata,
                                     input,
                                     unused_vectors_distribution,
-                                )?;
+                                );
                             }
                             ExtractorDiff::Unchanged => { /* nothing to do */ }
                         }
@@ -724,7 +724,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         if old_is_user_provided || full_reindex {
                             session.on_embed_mut().clear_vectors(docid);
                         }
-                        session.request_embedding(metadata, input, unused_vectors_distribution)?;
+                        session.request_embedding(metadata, input, unused_vectors_distribution);
                     }
                     ExtractorDiff::Unchanged => { /* do nothing */ }
                 }
@@ -886,10 +886,10 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
     pub fn drain(self, unused_vectors_distribution: &UnusedVectorsDistributionBump) -> Result<()> {
         match self.kind {
             ChunkType::DocumentTemplate { document_template: _, session } => {
-                session.drain(unused_vectors_distribution)?;
+                session.drain(unused_vectors_distribution);
             }
             ChunkType::Fragments { fragments: _, session } => {
-                session.drain(unused_vectors_distribution)?;
+                session.drain(unused_vectors_distribution);
             }
         }
         Ok(())
@@ -1037,7 +1037,7 @@ where
                 Metadata { docid, external_docid, extractor_id: extractor.extractor_id() };
 
             if let Some(new_rendered) = new_rendered {
-                session.request_embedding(metadata, new_rendered, unused_vectors_distribution)?
+                session.request_embedding(metadata, new_rendered, unused_vectors_distribution)
             } else {
                 // remove any existing embedding
                 OnEmbed::process_embedding_response(
@@ -1073,7 +1073,7 @@ where
                 Metadata { docid, external_docid, extractor_id: extractor.extractor_id() },
                 new_rendered,
                 unused_vectors_distribution,
-            )?;
+            );
         }
     }
 

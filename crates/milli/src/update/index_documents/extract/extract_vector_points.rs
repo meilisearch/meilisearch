@@ -1192,12 +1192,12 @@ pub fn extract_embeddings_from_fragments<R: io::Read + io::Seek>(
                 Metadata { docid, external_docid: "", extractor_id },
                 value,
                 unused_vectors_distribution,
-            )?;
+            );
         }
     }
 
     // send last chunk
-    let on_embed = session.drain(unused_vectors_distribution)?;
+    let on_embed = session.drain(unused_vectors_distribution);
     on_embed.finish()
 }
 
