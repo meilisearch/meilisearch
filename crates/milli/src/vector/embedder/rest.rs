@@ -182,10 +182,15 @@ impl Embedder {
     ) -> Result<Self, NewEmbedderError> {
         let bearer = options.api_key.as_deref().map(|api_key| format!("Bearer {api_key}"));
 
+        let timeout = std::env::var("MEILI_EXPERIMENTAL_REST_EMBEDDER_TIMEOUT_SECONDS")
+            .ok()
+            .map(|p| p.parse().unwrap())
+            .unwrap_or(30);
+
         let client = ureq::AgentBuilder::new()
             .max_idle_connections(REQUEST_PARALLELISM * 2)
             .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(timeout))
             .build();
 
         let request = RequestData::new(
