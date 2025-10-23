@@ -2838,9 +2838,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heed"
-version = "0.22.1-nested-rtxns"
+version = "0.22.1-nested-rtxns-5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ff115ba5712b1f1fc7617b195f5c2f139e29c397ff79da040cd19db75ccc240"
+checksum = "65d22cbbea735456695287c2371efcb377264feaaa6be28fa23574750eb64cf3"
 dependencies = [
  "bitflags 2.9.4",
  "byteorder",
@@ -3888,9 +3888,9 @@ checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
 
 [[package]]
 name = "lmdb-master-sys"
-version = "0.2.6-nested-rtxns"
+version = "0.2.6-nested-rtxns-5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4ff85130e3c994b36877045fbbb138d521dea7197bfc19dc3d5d95101a8e20a"
+checksum = "a5a5ac4b6b0fdee8412ccc4230fe1e338e90529e4a07549d802c91374a77a0f8"
 dependencies = [
  "cc",
  "doxygen-rs",
