@@ -237,6 +237,9 @@ impl<'a> Dump<'a> {
                 KindDump::IndexCompaction { index_uid } => {
                     KindWithContent::IndexCompaction { index_uid }
                 }
+                KindDump::NetworkTopologyChange(network_topology_change) => {
+                    KindWithContent::NetworkTopologyChange(network_topology_change)
+                }
             },
         };
 

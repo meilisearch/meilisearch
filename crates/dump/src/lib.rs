@@ -10,7 +10,8 @@ use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
 use meilisearch_types::tasks::{
-    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId, TaskNetwork,
+    Details, ExportIndexSettings, IndexSwap, KindWithContent, NetworkTopologyChange, Status, Task,
+    TaskId, TaskNetwork,
 };
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
@@ -161,6 +162,7 @@ pub enum KindDump {
     IndexCompaction {
         index_uid: String,
     },
+    NetworkTopologyChange(NetworkTopologyChange),
 }
 
 impl From<Task> for TaskDump {
@@ -245,6 +247,9 @@ impl From<KindWithContent> for KindDump {
             }
             KindWithContent::IndexCompaction { index_uid } => {
                 KindDump::IndexCompaction { index_uid }
+            }
+            KindWithContent::NetworkTopologyChange(network_topology_change) => {
+                KindDump::NetworkTopologyChange(network_topology_change)
             }
         }
     }

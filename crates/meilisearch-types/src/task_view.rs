@@ -147,6 +147,11 @@ pub struct DetailsView {
     pub pre_compaction_size: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub post_compaction_size: Option<String>,
+    // network topology change
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moved_documents: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 impl DetailsView {
@@ -156,6 +161,17 @@ impl DetailsView {
                 (None, None) => None,
                 (None, Some(doc)) | (Some(doc), None) => Some(doc),
                 (Some(left), Some(right)) => Some(left + right),
+            },
+            moved_documents: match (self.moved_documents, other.moved_documents) {
+                (None, None) => None,
+                (None, Some(doc)) | (Some(doc), None) => Some(doc),
+                (Some(left), Some(right)) => Some(left + right),
+            },
+            message: match (&mut self.message, &other.message) {
+                (None, None) => todo!(),
+                (None, Some(message)) => Some(message.clone()),
+                (Some(message), None) => Some(std::mem::take(message)),
+                (Some(message), Some(_)) => Some(std::mem::take(message)),
             },
             indexed_documents: match (self.indexed_documents, other.indexed_documents) {
                 (None, None) => None,
@@ -444,6 +460,14 @@ impl From<Details> for DetailsView {
                         .map(|size| size.get_appropriate_unit(UnitType::Both).to_string()),
                     post_compaction_size: post_compaction_size
                         .map(|size| size.get_appropriate_unit(UnitType::Both).to_string()),
+                    ..Default::default()
+                }
+            }
+            Details::NetworkTopologyChange { moved_documents, received_documents, message } => {
+                DetailsView {
+                    moved_documents: Some(moved_documents),
+                    received_documents: Some(received_documents),
+                    message: Some(message),
                     ..Default::default()
                 }
             }

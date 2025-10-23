@@ -15,6 +15,7 @@ use utoipa::{schema, ToSchema};
 use uuid::Uuid;
 
 use crate::batches::BatchId;
+use crate::enterprise_edition::network::Remote;
 use crate::error::ResponseError;
 use crate::index_uid_pattern::IndexUidPattern;
 use crate::keys::Key;
@@ -58,6 +59,7 @@ impl Task {
             | TaskDeletion { .. }
             | Export { .. }
             | UpgradeDatabase { .. }
+            | NetworkTopologyChange { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -96,6 +98,7 @@ impl Task {
             | KindWithContent::SnapshotCreation
             | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. }
+            | KindWithContent::NetworkTopologyChange { .. }
             | KindWithContent::IndexCompaction { .. } => None,
         }
     }
@@ -175,6 +178,192 @@ pub enum KindWithContent {
     IndexCompaction {
         index_uid: String,
     },
+    NetworkTopologyChange(NetworkTopologyChange),
+}
+
+/// Contains the full state of a network topology change.
+///
+/// A network topology change task is unique in that it can be processed in multiple different batches, as its resolution
+/// depends on various document additions tasks being processed.
+///
+/// A network topology task has 4 states:
+///
+/// 1. Processing any task that was meant for an earlier version of the network. This is necessary to know that we have the right version of
+/// documents.
+/// 2. Sending all documents that must be moved to other remotes.
+/// 3. Processing any task coming from the remotes.
+/// 4. Finished.
+///
+/// Furthermore, it maintains some stats
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkTopologyChange {
+    state: NetworkTopologyState,
+    out_remotes: BTreeMap<String, Remote>,
+    in_remotes: BTreeMap<String, InRemote>,
+    stats: NetworkTopologyStats,
+}
+
+impl NetworkTopologyChange {
+    pub fn to_details(&self) -> Details {
+        let message = match self.state {
+            NetworkTopologyState::WaitingForOlderTasks => {
+                "Waiting for tasks enqueued before the network change to finish processing".into()
+            }
+            NetworkTopologyState::ExportingDocuments => "Exporting documents".into(),
+            NetworkTopologyState::ImportingDocuments => {
+                let mut finished_count = 0;
+                let mut first_ongoing = None;
+                let mut ongoing_total_indexes = 0;
+                let mut ongoing_processed_documents = 0;
+                let mut ongoing_missing_documents = 0;
+                let mut ongoing_total_documents = 0;
+                let mut other_ongoing_count = 0;
+                let mut first_waiting = None;
+                let mut other_waiting_count = 0;
+                for (remote_name, in_remote) in &self.in_remotes {
+                    match &in_remote.import_state {
+                        ImportState::WaitingForInitialTask => {
+                            first_waiting = match first_waiting {
+                                None => Some(remote_name),
+                                first_waiting => {
+                                    other_waiting_count += 1;
+                                    first_waiting
+                                }
+                            };
+                        }
+                        ImportState::Ongoing { import_index_state, total_indexes } => {
+                            first_ongoing = match first_ongoing {
+                                None => {
+                                    ongoing_total_indexes = *total_indexes;
+                                    Some(remote_name)
+                                }
+                                first_ongoing => {
+                                    other_ongoing_count += 1;
+                                    first_ongoing
+                                }
+                            };
+                            for import_state in import_index_state.values() {
+                                match import_state {
+                                    ImportIndexState::Ongoing {
+                                        total_documents,
+                                        processed_documents,
+                                        received_documents,
+                                    } => {
+                                        ongoing_total_documents += total_documents;
+                                        ongoing_processed_documents += processed_documents;
+                                        ongoing_missing_documents +=
+                                            total_documents.saturating_sub(*received_documents);
+                                    }
+                                    ImportIndexState::Finished { total_documents } => {
+                                        ongoing_total_documents += total_documents;
+                                        ongoing_processed_documents += total_documents;
+                                    }
+                                }
+                            }
+                        }
+                        ImportState::Finished { total_indexes, total_documents } => {
+                            finished_count += 1;
+                            ongoing_total_indexes = *total_indexes;
+                            ongoing_total_documents += *total_documents;
+                            ongoing_processed_documents += *total_documents;
+                        }
+                    }
+                }
+                format!(
+                    "Importing documents from {total} remotes{waiting}{ongoing}{finished}",
+                    total = self.in_remotes.len(),
+                    waiting = if let Some(first_waiting) = first_waiting {
+                        &format!(
+                            ", waiting on first task from `{}`{others}",
+                            first_waiting,
+                            others = if other_waiting_count > 0 {
+                                &format!(" and {other_waiting_count} other remotes")
+                            } else {
+                                ""
+                            }
+                        )
+                    } else {
+                        ""
+                    },
+                    ongoing = if let Some(first_ongoing) = first_ongoing {
+                        &format!(", awaiting {ongoing_missing_documents} and processed {ongoing_processed_documents} out of {ongoing_total_documents} documents in {ongoing_total_indexes} indexes from `{first_ongoing}`{others}",
+                others=if other_ongoing_count > 0 {&format!(" and {other_ongoing_count} other remotes")} else {""})
+                    } else {
+                        ""
+                    },
+                    finished = if finished_count >= 0 {
+                        &format!(", {finished_count} remotes finished processing")
+                    } else {
+                        ""
+                    }
+                )
+            }
+            NetworkTopologyState::Finished => "Finished".into(),
+        };
+        Details::NetworkTopologyChange {
+            moved_documents: self.stats.moved_documents,
+            received_documents: self.stats.received_documents,
+            message,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NetworkTopologyState {
+    WaitingForOlderTasks,
+    ExportingDocuments,
+    ImportingDocuments,
+    Finished,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NetworkTopologyStats {
+    pub received_documents: u64,
+    pub moved_documents: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InRemote {
+    name: String,
+    import_state: ImportState,
+}
+
+impl InRemote {
+    pub fn new(remote_name: String) -> Self {
+        Self { name: remote_name, import_state: ImportState::WaitingForInitialTask }
+    }
+
+    pub fn is_finished(&self) -> bool {
+        matches!(self.import_state, ImportState::Finished { .. })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ImportState {
+    /// Initially Meilisearch doesn't know how many documents it should expect from a remote.
+    /// The first task for each remote contains the information of how many indexes will be imported,
+    /// and the first task for each index contains the number of documents to import for that index.
+    WaitingForInitialTask,
+    Ongoing {
+        import_index_state: BTreeMap<String, ImportIndexState>,
+        total_indexes: usize,
+    },
+    Finished {
+        total_indexes: usize,
+        total_documents: usize,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ImportIndexState {
+    Ongoing { total_documents: usize, received_documents: usize, processed_documents: usize },
+    Finished { total_documents: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -212,6 +401,7 @@ impl KindWithContent {
             KindWithContent::Export { .. } => Kind::Export,
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
             KindWithContent::IndexCompaction { .. } => Kind::IndexCompaction,
+            KindWithContent::NetworkTopologyChange { .. } => Kind::NetworkTopologyChange,
         }
     }
 
@@ -224,6 +414,7 @@ impl KindWithContent {
             | TaskCancelation { .. }
             | TaskDeletion { .. }
             | Export { .. }
+            | NetworkTopologyChange { .. }
             | UpgradeDatabase { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -337,6 +528,11 @@ impl KindWithContent {
                 pre_compaction_size: None,
                 post_compaction_size: None,
             }),
+            KindWithContent::NetworkTopologyChange { .. } => Some(Details::NetworkTopologyChange {
+                moved_documents: 0,
+                received_documents: 0,
+                message: "processing tasks for previous network versions".into(),
+            }),
         }
     }
 
@@ -389,7 +585,7 @@ impl KindWithContent {
                 })
             }
             KindWithContent::IndexSwap { .. } => {
-                todo!()
+                unimplemented!("do not call `default_finished_details` for `IndexSwap` tasks")
             }
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
@@ -424,6 +620,9 @@ impl KindWithContent {
                 pre_compaction_size: None,
                 post_compaction_size: None,
             }),
+            KindWithContent::NetworkTopologyChange(network_topology_change) => {
+                Some(network_topology_change.to_details())
+            }
         }
     }
 }
@@ -491,6 +690,9 @@ impl From<&KindWithContent> for Option<Details> {
                 pre_compaction_size: None,
                 post_compaction_size: None,
             }),
+            KindWithContent::NetworkTopologyChange(network_topology_change) => {
+                Some(network_topology_change.to_details())
+            }
         }
     }
 }
@@ -602,6 +804,7 @@ pub enum Kind {
     Export,
     UpgradeDatabase,
     IndexCompaction,
+    NetworkTopologyChange,
 }
 
 impl Kind {
@@ -621,6 +824,7 @@ impl Kind {
             | Kind::DumpCreation
             | Kind::Export
             | Kind::UpgradeDatabase
+            | Kind::NetworkTopologyChange
             | Kind::SnapshotCreation => false,
         }
     }
@@ -643,6 +847,7 @@ impl Display for Kind {
             Kind::Export => write!(f, "export"),
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
             Kind::IndexCompaction => write!(f, "indexCompaction"),
+            Kind::NetworkTopologyChange => write!(f, "networkTopologyChange"),
         }
     }
 }
@@ -680,6 +885,8 @@ impl FromStr for Kind {
             Ok(Kind::UpgradeDatabase)
         } else if kind.eq_ignore_ascii_case("indexCompaction") {
             Ok(Kind::IndexCompaction)
+        } else if kind.eq_ignore_ascii_case("networkTopologyChange") {
+            Ok(Kind::NetworkTopologyChange)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -770,6 +977,11 @@ pub enum Details {
         pre_compaction_size: Option<Byte>,
         post_compaction_size: Option<Byte>,
     },
+    NetworkTopologyChange {
+        moved_documents: u64,
+        received_documents: u64,
+        message: String,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
@@ -859,6 +1071,9 @@ impl Details {
             | Self::Export { .. }
             | Self::UpgradeDatabase { .. }
             | Self::IndexSwap { .. } => (),
+            Self::NetworkTopologyChange { moved_documents: _, received_documents: _, message } => {
+                *message = format!("Failed. Previous status: {}", message);
+            }
         }
 
         details
