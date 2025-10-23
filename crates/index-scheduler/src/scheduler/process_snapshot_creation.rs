@@ -451,7 +451,7 @@ impl IndexScheduler {
         let index_scheduler = IndexScheduler::private_clone(self);
         let builder_task = tokio::task::spawn_blocking(move || {
             // NOTE enabling compression still generates a corrupted tarball
-            let writer = flate2::write::GzEncoder::new(writer, flate2::Compression::fast());
+            let writer = flate2::write::GzEncoder::new(writer, flate2::Compression::none());
             let mut tarball = tar::Builder::new(writer);
 
             // 1. Snapshot the version file
