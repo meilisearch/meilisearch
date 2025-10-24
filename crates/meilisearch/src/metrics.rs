@@ -73,6 +73,14 @@ lazy_static! {
         &["kind", "value"]
     )
     .expect("Can't create a metric");
+    pub static ref MEILISEARCH_BATCH_PROGRESS_TRACE_MS: IntGaugeVec = register_int_gauge_vec!(
+        opts!(
+            "meilisearch_batch_progress_trace_ms",
+            "Meilisearch batches progress trace in milliseconds"
+        ),
+        &["batch_uid", "step_name"]
+    )
+    .expect("Can't create a metric");
     pub static ref MEILISEARCH_LAST_UPDATE: IntGauge =
         register_int_gauge!(opts!("meilisearch_last_update", "Meilisearch Last Update"))
             .expect("Can't create a metric");
