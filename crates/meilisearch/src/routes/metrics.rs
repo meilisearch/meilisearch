@@ -148,6 +148,24 @@ pub async fn get_metrics(
         }
     }
 
+    let filters = index_scheduler.filters();
+    let query = Query::default();
+    let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(&query, filters)?;
+    if let Some(batch) = batches.into_iter().next() {
+        let batch_uid = batch.uid.to_string();
+        for (step_name, duration_str) in batch.stats.progress_trace {
+            let Some(duration_str) = duration_str.as_str() else { continue };
+            match humantime::parse_duration(duration_str) {
+                Ok(duration) => {
+                    crate::metrics::MEILISEARCH_BATCH_PROGRESS_TRACE_MS
+                        .with_label_values(&[&batch_uid, &step_name])
+                        .set(duration.as_millis() as i64);
+                }
+                Err(e) => tracing::error!("Failed to parse duration: {e}"),
+            }
+        }
+    }
+
     if let Some(last_update) = response.last_update {
         crate::metrics::MEILISEARCH_LAST_UPDATE.set(last_update.unix_timestamp());
     }
