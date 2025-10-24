@@ -310,7 +310,16 @@ impl IndexScheduler {
         const S3_MAX_IN_FLIGHT_PARTS: &str = "MEILI_S3_MAX_IN_FLIGHT_PARTS";
         let max_in_flight_parts: usize = match std::env::var(S3_MAX_IN_FLIGHT_PARTS) {
             Ok(val) => val.parse().expect("Failed to parse MEILI_S3_MAX_IN_FLIGHT_PARTS"),
-            Err(_) => 10,
+            Err(VarError::NotPresent) => 10,
+            Err(e) => panic!("Failed to read {}: {}", S3_MAX_IN_FLIGHT_PARTS, e),
+        };
+
+        // The compression level, defaults to no compression (0)
+        const S3_COMPRESSION_LEVEL: &str = "MEILI_S3_COMPRESSION_LEVEL";
+        let level: u32 = match std::env::var(S3_COMPRESSION_LEVEL) {
+            Ok(val) => val.parse().expect("Failed to parse MEILI_S3_COMPRESSION_LEVEL"),
+            Err(VarError::NotPresent) => 0,
+            Err(e) => panic!("Failed to read {}: {}", S3_COMPRESSION_LEVEL, e),
         };
 
         let client = Client::new();
@@ -451,7 +460,7 @@ impl IndexScheduler {
         let index_scheduler = IndexScheduler::private_clone(self);
         let builder_task = tokio::task::spawn_blocking(move || {
             // NOTE enabling compression still generates a corrupted tarball
-            let writer = flate2::write::GzEncoder::new(writer, flate2::Compression::none());
+            let writer = flate2::write::GzEncoder::new(writer, flate2::Compression::new(level));
             let mut tarball = tar::Builder::new(writer);
 
             // 1. Snapshot the version file
