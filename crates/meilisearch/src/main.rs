@@ -76,7 +76,10 @@ fn on_panic(info: &std::panic::PanicHookInfo) {
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
-    try_main().await.inspect_err(|error| {
+    // won't panic inside of tokio::main
+    let runtime = tokio::runtime::Handle::current();
+
+    try_main(runtime).await.inspect_err(|error| {
         tracing::error!(%error);
         let mut current = error.source();
         let mut depth = 0;
@@ -88,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
     })
 }
 
-async fn try_main() -> anyhow::Result<()> {
+async fn try_main(runtime: tokio::runtime::Handle) -> anyhow::Result<()> {
     let (opt, config_read_from) = Opt::try_build()?;
 
     std::panic::set_hook(Box::new(on_panic));
@@ -122,7 +125,7 @@ async fn try_main() -> anyhow::Result<()> {
         _ => (),
     }
 
-    let (index_scheduler, auth_controller) = setup_meilisearch(&opt)?;
+    let (index_scheduler, auth_controller) = setup_meilisearch(&opt, runtime)?;
 
     let analytics =
         analytics::Analytics::new(&opt, index_scheduler.clone(), auth_controller.clone()).await;

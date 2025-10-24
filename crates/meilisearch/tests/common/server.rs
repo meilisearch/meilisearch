@@ -49,8 +49,8 @@ impl Server<Owned> {
         }
 
         let options = default_settings(dir.path());
-
-        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let handle = tokio::runtime::Handle::current();
+        let (index_scheduler, auth) = setup_meilisearch(&options, handle).unwrap();
         let service = Service { index_scheduler, auth, options, api_key: None };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
@@ -65,7 +65,9 @@ impl Server<Owned> {
 
         options.master_key = Some("MASTER_KEY".to_string());
 
-        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let handle = tokio::runtime::Handle::current();
+
+        let (index_scheduler, auth) = setup_meilisearch(&options, handle).unwrap();
         let service = Service { index_scheduler, auth, options, api_key: None };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
@@ -78,7 +80,9 @@ impl Server<Owned> {
     }
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
-        let (index_scheduler, auth) = setup_meilisearch(&options)?;
+        let handle = tokio::runtime::Handle::current();
+
+        let (index_scheduler, auth) = setup_meilisearch(&options, handle)?;
         let service = Service { index_scheduler, auth, options, api_key: None };
 
         Ok(Server { service, _dir: None, _marker: PhantomData })
@@ -217,8 +221,9 @@ impl Server<Shared> {
         }
 
         let options = default_settings(dir.path());
+        let handle = tokio::runtime::Handle::current();
 
-        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let (index_scheduler, auth) = setup_meilisearch(&options, handle).unwrap();
         let service = Service { index_scheduler, auth, api_key: None, options };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
