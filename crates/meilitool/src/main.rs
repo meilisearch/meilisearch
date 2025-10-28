@@ -777,7 +777,7 @@ fn measure_new_roaring_disk_usage(
                 let human_size = byte_unit::Byte::from(size_as_pages as u64)
                     .get_appropriate_unit(UnitType::Binary);
                 println!(
-                    "\tThe size of the database seen by LMDB (in terms of pages): {human_size}"
+                    "\tThe size of the database seen by LMDB (in terms of pages): {human_size:.2}"
                 );
 
                 let mut key_size = 0;
@@ -800,11 +800,11 @@ fn measure_new_roaring_disk_usage(
 
                 let human_size = byte_unit::Byte::from(key_size + value_size)
                     .get_appropriate_unit(UnitType::Binary);
-                println!("\tThe raw size of the database: {human_size}");
+                println!("\tThe raw size of the database: {human_size:.2}");
 
                 let human_size = byte_unit::Byte::from(key_size + new_value_size)
                     .get_appropriate_unit(UnitType::Binary);
-                println!("\tThe raw size of the database using the new bitmaps: {human_size}");
+                println!("\tThe raw size of the database using the new bitmaps: {human_size:.2}");
             }
         }
     }
