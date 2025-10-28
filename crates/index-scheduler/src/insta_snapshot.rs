@@ -21,7 +21,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
     let IndexScheduler {
         cleanup_enabled: _,
         experimental_no_edition_2024_for_dumps: _,
-        processing_tasks,
+        runtime_tasks,
         env,
         version,
         queue,
@@ -49,7 +49,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         snap.push_str(&format!("index scheduler running on version {indx_sched_version:?}\n"));
     }
 
-    let processing = processing_tasks.read().unwrap().clone();
+    let processing = runtime_tasks.read().unwrap().processing.clone();
     snap.push_str(&format!("### Autobatching Enabled = {}\n", scheduler.autobatching_enabled));
     snap.push_str(&format!(
         "### Processing batch {:?}:\n",

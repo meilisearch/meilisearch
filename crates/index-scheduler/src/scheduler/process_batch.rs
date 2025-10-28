@@ -706,7 +706,7 @@ impl IndexScheduler {
 
         // 1. Remove from this list the tasks that we are not allowed to delete
         let enqueued_tasks = self.queue.tasks.get_status(wtxn, Status::Enqueued)?;
-        let processing_tasks = &self.processing_tasks.read().unwrap().processing.clone();
+        let processing_tasks = &self.runtime_tasks.read().unwrap().processing.processing.clone();
 
         let all_task_ids = self.queue.tasks.all_task_ids(wtxn)?;
         let mut to_delete_tasks = all_task_ids & matched_tasks;

@@ -27,7 +27,7 @@ fn query_tasks_from_and_limit() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_all_tasks");
 
     let rtxn = index_scheduler.env.read_txn().unwrap();
-    let processing = index_scheduler.processing_tasks.read().unwrap();
+    let processing = &index_scheduler.runtime_tasks.read().unwrap().processing;
     let query = Query { limit: Some(0), ..Default::default() };
     let (tasks, _) = index_scheduler
         .queue
@@ -317,7 +317,7 @@ fn query_tasks_special_rules() {
     handle.advance_till([Start, BatchCreated]);
 
     let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
+    let proc = &index_scheduler.runtime_tasks.read().unwrap().processing;
 
     let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
     let (tasks, _) = index_scheduler
@@ -414,7 +414,7 @@ fn query_tasks_canceled_by() {
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "start");
 
     let rtxn = index_scheduler.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
+    let proc = &index_scheduler.runtime_tasks.read().unwrap().processing;
     let query = Query { canceled_by: Some(vec![task_cancelation.uid]), ..Query::default() };
     let (tasks, _) = index_scheduler
         .queue

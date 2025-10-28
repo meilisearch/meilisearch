@@ -6,6 +6,21 @@ use roaring::RoaringBitmap;
 
 use crate::utils::ProcessingBatch;
 
+pub struct RuntimeTasks {
+    pub processing: ProcessingTasks,
+    pub enqueued_network: EnqueuedNetworkTasks,
+}
+impl RuntimeTasks {
+    pub(crate) fn new() -> Self {
+        Self { processing: ProcessingTasks::new(), enqueued_network: Default::default() }
+    }
+}
+
+#[derive(Default)]
+pub struct EnqueuedNetworkTasks {
+    tasks: RoaringBitmap,
+}
+
 #[derive(Clone, Default)]
 pub struct ProcessingTasks {
     pub batch: Option<Arc<ProcessingBatch>>,
