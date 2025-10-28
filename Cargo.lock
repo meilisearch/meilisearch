@@ -4161,12 +4161,14 @@ name = "meilitool"
 version = "1.24.0"
 dependencies = [
  "anyhow",
+ "byte-unit",
  "clap",
  "dump",
  "file-store",
  "indexmap",
  "meilisearch-auth",
  "meilisearch-types",
+ "roaring 0.11.2",
  "serde",
  "serde_json",
  "tempfile",

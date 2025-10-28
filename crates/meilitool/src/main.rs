@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)]
 
+use std::fmt;
 use std::fs::{read_dir, read_to_string, remove_file, File};
 use std::io::{BufWriter, Write as _};
 use std::path::PathBuf;
@@ -19,7 +20,7 @@ use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use meilisearch_types::milli::{obkv_to_json, BEU32};
+use meilisearch_types::milli::{obkv_to_json, CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::versioning::{get_version, parse_version};
 use meilisearch_types::Index;
@@ -29,6 +30,9 @@ use time::OffsetDateTime;
 use upgrade::OfflineUpgrade;
 use uuid_codec::UuidCodec;
 
+use crate::bytes_counter::BytesCounter;
+
+mod bytes_counter;
 mod upgrade;
 mod uuid_codec;
 
@@ -140,12 +144,48 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         index_part: Vec<IndexPart>,
     },
+
+    /// Measures the size of the indexes with the previous roaring version
+    /// and the brand new one with support for run-length encoding.
+    MeasureNewRoaringDiskUsage {
+        #[arg(long, value_delimiter = ',')]
+        index_name: Vec<String>,
+
+        #[arg(long, value_delimiter = ',')]
+        index_part: Vec<RoaringBasedIndexPart>,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
 enum IndexPart {
     /// Will make the vector index hot.
     Hannoy,
+}
+
+#[derive(Clone, ValueEnum)]
+enum RoaringBasedIndexPart {
+    WordDocids,
+    WordPrefixDocids,
+}
+
+impl RoaringBasedIndexPart {
+    pub fn database(&self, index: &Index) -> Database<Bytes, CboRoaringBitmapCodec> {
+        use RoaringBasedIndexPart::*;
+        match self {
+            WordDocids => index.word_docids.remap_key_type(),
+            WordPrefixDocids => index.word_prefix_docids.remap_key_type(),
+        }
+    }
+}
+
+impl fmt::Display for RoaringBasedIndexPart {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use RoaringBasedIndexPart::*;
+        match self {
+            WordDocids => write!(f, "word-docids"),
+            WordPrefixDocids => write!(f, "word-prefix-docids"),
+        }
+    }
 }
 
 fn main() -> anyhow::Result<()> {
@@ -168,6 +208,9 @@ fn main() -> anyhow::Result<()> {
         Command::IndexCompaction { index_name } => compact_index(db_path, &index_name),
         Command::HairDryer { index_name, index_part } => {
             hair_dryer(db_path, &index_name, &index_part)
+        }
+        Command::MeasureNewRoaringDiskUsage { index_name, index_part } => {
+            measure_new_roaring_disk_usage(db_path, &index_name, &index_part)
         }
     }
 }
@@ -689,6 +732,76 @@ fn hair_dryer(
             }
         } else {
             eprintln!("Found index {uid} but it's not the right index...");
+        }
+    }
+
+    Ok(())
+}
+
+fn measure_new_roaring_disk_usage(
+    db_path: PathBuf,
+    index_names: &[String],
+    index_parts: &[RoaringBasedIndexPart],
+) -> Result<(), anyhow::Error> {
+    let index_scheduler_path = db_path.join("tasks");
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+
+    eprintln!("Trying to get a read transaction on the index scheduler...");
+
+    let rtxn = env.read_txn()?;
+    let index_mapping: Database<Str, UuidCodec> =
+        try_opening_database(&env, &rtxn, "index-mapping")?;
+
+    for result in index_mapping.iter(&rtxn)? {
+        let (uid, uuid) = result?;
+        if index_names.iter().any(|i| i == uid) {
+            let index_path = db_path.join("indexes").join(uuid.to_string());
+            let index =
+                Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
+                    .with_context(|| {
+                        format!("While trying to open the index at path {:?}", index_path.display())
+                    })?;
+
+            let rtxn = index.read_txn()?;
+            for index_part in index_parts {
+                let database = index_part.database(&index);
+                println!("{uid} -> {index_part}");
+
+                let stat = database.stat(&rtxn)?;
+                let pages = stat.leaf_pages + stat.branch_pages + stat.overflow_pages;
+                let size_as_pages = pages * (stat.page_size as usize);
+                let human_size = byte_unit::Byte::from(size_as_pages as u64);
+                println!(
+                    "\tThe size of the database seen by LMDB (in terms of pages): {human_size}"
+                );
+
+                let mut key_size = 0;
+                let mut value_size = 0;
+                let mut new_value_size = 0;
+                for result in database.remap_data_type::<Bytes>().iter(&rtxn)? {
+                    let (key, value) = result?;
+                    key_size += key.len();
+                    value_size += value.len();
+
+                    let bitmap = CboRoaringBitmapCodec::deserialize_from(value)?;
+                    let mut new_bitmap =
+                        new_roaring::RoaringBitmap::from_sorted_iter(bitmap).unwrap();
+                    let _has_been_optimized = new_bitmap.optimize();
+
+                    let mut bytes_counter = BytesCounter::new();
+                    new_bitmap.serialize_into(&mut bytes_counter).unwrap();
+                    new_value_size += bytes_counter.bytes_written();
+                }
+
+                let human_size = byte_unit::Byte::from(key_size + value_size);
+                println!("\tThe raw size of the database: {human_size}");
+
+                let human_size = byte_unit::Byte::from(key_size + new_value_size);
+                println!("\tThe raw size of the database using the new bitmaps: {human_size}");
+            }
         }
     }
 

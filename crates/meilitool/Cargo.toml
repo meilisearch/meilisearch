@@ -10,12 +10,14 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.98"
+byte-unit = "5.1.6"
 clap = { version = "4.5.40", features = ["derive"] }
 dump = { path = "../dump" }
 file-store = { path = "../file-store" }
 indexmap = { version = "2.9.0", features = ["serde"] }
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
+new-roaring = { package = "roaring", version = "0.11.2" }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
 tempfile = "3.20.0"
