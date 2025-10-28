@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{bail, Context};
+use byte_unit::UnitType;
 use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
@@ -773,7 +774,8 @@ fn measure_new_roaring_disk_usage(
                 let stat = database.stat(&rtxn)?;
                 let pages = stat.leaf_pages + stat.branch_pages + stat.overflow_pages;
                 let size_as_pages = pages * (stat.page_size as usize);
-                let human_size = byte_unit::Byte::from(size_as_pages as u64);
+                let human_size = byte_unit::Byte::from(size_as_pages as u64)
+                    .get_appropriate_unit(UnitType::Binary);
                 println!(
                     "\tThe size of the database seen by LMDB (in terms of pages): {human_size}"
                 );
@@ -796,10 +798,12 @@ fn measure_new_roaring_disk_usage(
                     new_value_size += bytes_counter.bytes_written();
                 }
 
-                let human_size = byte_unit::Byte::from(key_size + value_size);
+                let human_size = byte_unit::Byte::from(key_size + value_size)
+                    .get_appropriate_unit(UnitType::Binary);
                 println!("\tThe raw size of the database: {human_size}");
 
-                let human_size = byte_unit::Byte::from(key_size + new_value_size);
+                let human_size = byte_unit::Byte::from(key_size + new_value_size)
+                    .get_appropriate_unit(UnitType::Binary);
                 println!("\tThe raw size of the database using the new bitmaps: {human_size}");
             }
         }
