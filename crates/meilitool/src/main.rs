@@ -131,7 +131,9 @@ enum Command {
     /// before running the copy and compaction. This way the current indexation must finish before
     /// the compaction operation can start. Once the compaction is done, the big index is replaced
     /// by the compacted one and the mutable transaction is released.
-    IndexCompaction { index_name: String },
+    IndexCompaction {
+        index_name: String,
+    },
 
     /// Uses the hair dryer the dedicate pages hot in cache
     ///
@@ -154,6 +156,12 @@ enum Command {
 
         #[arg(long, value_delimiter = ',')]
         index_part: Vec<RoaringBasedIndexPart>,
+    },
+
+    CompactTaskQueue,
+
+    ResizeTaskQueue {
+        new_size: byte_unit::Byte,
     },
 }
 
@@ -213,7 +221,61 @@ fn main() -> anyhow::Result<()> {
         Command::MeasureNewRoaringDiskUsage { index_name, index_part } => {
             measure_new_roaring_disk_usage(db_path, &index_name, &index_part)
         }
+        Command::CompactTaskQueue => compact_task_queue(db_path),
+        Command::ResizeTaskQueue { new_size } => resize_task_queue(db_path, new_size),
     }
+}
+
+fn resize_task_queue(db_path: PathBuf, new_size: byte_unit::Byte) -> anyhow::Result<()> {
+    let new_size = new_size.as_u64();
+    let path = db_path.join("tasks");
+    let env = unsafe {
+        EnvOpenOptions::new()
+            .read_txn_without_tls()
+            .max_dbs(100)
+            .map_size(new_size as usize)
+            .open(&path)
+    }
+    .with_context(|| format!("While trying to open {:?}", path.display()))?;
+
+    eprintln!("Acquiring a write transaction for tasks queue...");
+
+    let wtxn = env.write_txn()?;
+    wtxn.commit()?;
+
+    Ok(())
+}
+
+fn compact_task_queue(db_path: PathBuf) -> anyhow::Result<()> {
+    let path = db_path.join("tasks");
+    let env = unsafe { EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&path) }
+        .with_context(|| format!("While trying to open {:?}", path.display()))?;
+
+    eprintln!("Acquiring a write transaction for tasks queue...");
+
+    let wtxn = env.write_txn()?;
+
+    /// The name of the copy of the data.mdb file used during compaction.
+    const DATA_MDB_COPY_NAME: &str = "data.mdb.cpy";
+
+    let src_path = env.path().join("data.mdb");
+    let dst_path = tempfile::TempPath::from_path(path.join(DATA_MDB_COPY_NAME));
+    let file = File::create(&dst_path)?;
+    let mut file = tempfile::NamedTempFile::from_parts(file, dst_path);
+
+    env.copy_to_file(file.as_file_mut(), meilisearch_types::heed::CompactionOption::Enabled)?;
+    match file.persist(src_path) {
+        Ok(file) => file.sync_all()?,
+        // TODO see if we have a _resource busy_ error and probably handle this by:
+        //      1. closing the index, 2. replacing and 3. reopening it
+        Err(tempfile::PersistError { error, file: _ }) => return Err(error.into()),
+    };
+
+    eprintln!("Task persisted, aborting wtxn...");
+
+    wtxn.abort();
+
+    Ok(())
 }
 
 /// Clears the task queue located at `db_path`.
