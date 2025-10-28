@@ -783,12 +783,20 @@ fn measure_new_roaring_disk_usage(
                 let mut key_size = 0;
                 let mut value_size = 0;
                 let mut new_value_size = 0;
+                let mut number_of_containers = 0;
+                let mut number_of_array_containers = 0;
+                let mut number_of_bitset_containers = 0;
                 for result in database.remap_data_type::<Bytes>().iter(&rtxn)? {
                     let (key, value) = result?;
                     key_size += key.len();
                     value_size += value.len();
 
                     let bitmap = CboRoaringBitmapCodec::deserialize_from(value)?;
+                    let stats = bitmap.statistics();
+                    number_of_containers += stats.n_containers as usize;
+                    number_of_array_containers += stats.n_array_containers as usize;
+                    number_of_bitset_containers += stats.n_bitset_containers as usize;
+
                     let mut new_bitmap =
                         new_roaring::RoaringBitmap::from_sorted_iter(bitmap).unwrap();
                     let _has_been_optimized = new_bitmap.optimize();
@@ -805,6 +813,14 @@ fn measure_new_roaring_disk_usage(
                 let human_size = byte_unit::Byte::from(key_size + new_value_size)
                     .get_appropriate_unit(UnitType::Binary);
                 println!("\tThe raw size of the database using the new bitmaps: {human_size:.2}");
+
+                println!("number of containers: {number_of_containers}");
+                println!("number of array containers: {number_of_array_containers}");
+                println!("number of bitset containers: {number_of_bitset_containers}");
+                println!(
+                    "ratio of bitset containers: {:.2}",
+                    number_of_bitset_containers as f64 / number_of_containers as f64
+                );
             }
         }
     }
