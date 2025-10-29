@@ -848,6 +848,10 @@ fn measure_new_roaring_disk_usage(
                 let mut number_of_containers = 0;
                 let mut number_of_array_containers = 0;
                 let mut number_of_bitset_containers = 0;
+                let mut new_number_of_containers = 0;
+                let mut new_number_of_array_containers = 0;
+                let mut new_number_of_bitset_containers = 0;
+                let mut new_number_of_run_containers = 0;
                 for result in database.remap_data_type::<Bytes>().iter(&rtxn)? {
                     let (key, value) = result?;
                     key_size += key.len();
@@ -862,6 +866,11 @@ fn measure_new_roaring_disk_usage(
                     let mut new_bitmap =
                         new_roaring::RoaringBitmap::from_sorted_iter(bitmap).unwrap();
                     let _has_been_optimized = new_bitmap.optimize();
+                    let stats = new_bitmap.statistics();
+                    new_number_of_containers += stats.n_containers as usize;
+                    new_number_of_array_containers += stats.n_array_containers as usize;
+                    new_number_of_bitset_containers += stats.n_bitset_containers as usize;
+                    new_number_of_run_containers += stats.n_run_containers as usize;
 
                     let mut bytes_counter = BytesCounter::new();
                     new_bitmap.serialize_into(&mut bytes_counter).unwrap();
@@ -885,6 +894,22 @@ fn measure_new_roaring_disk_usage(
                 println!(
                     "number of bitset containers: {number_of_bitset_containers} ({:.2}%)",
                     (number_of_bitset_containers as f64 / number_of_containers as f64) * 100.0
+                );
+
+                println!("new number of containers: {new_number_of_containers}");
+                println!(
+                    "new number of array containers: {new_number_of_array_containers} ({:.2}%)",
+                    (new_number_of_array_containers as f64 / new_number_of_containers as f64)
+                        * 100.0
+                );
+                println!(
+                    "new number of bitset containers: {new_number_of_bitset_containers} ({:.2}%)",
+                    (new_number_of_bitset_containers as f64 / new_number_of_containers as f64)
+                        * 100.0
+                );
+                println!(
+                    "new number of run containers: {new_number_of_run_containers} ({:.2}%)",
+                    (new_number_of_run_containers as f64 / new_number_of_containers as f64) * 100.0
                 );
             }
         }
