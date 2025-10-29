@@ -876,12 +876,15 @@ fn measure_new_roaring_disk_usage(
                     .get_appropriate_unit(UnitType::Binary);
                 println!("\tThe raw size of the database using the new bitmaps: {human_size:.2}");
 
+                println!("number of entries: {}", database.len(&rtxn)?);
                 println!("number of containers: {number_of_containers}");
-                println!("number of array containers: {number_of_array_containers}");
-                println!("number of bitset containers: {number_of_bitset_containers}");
                 println!(
-                    "ratio of bitset containers: {:.2}",
-                    number_of_bitset_containers as f64 / number_of_containers as f64
+                    "number of array containers: {number_of_array_containers} ({:.2}%)",
+                    (number_of_array_containers as f64 / number_of_containers as f64) * 100.0
+                );
+                println!(
+                    "number of bitset containers: {number_of_bitset_containers} ({:.2}%)",
+                    (number_of_bitset_containers as f64 / number_of_containers as f64) * 100.0
                 );
             }
         }
