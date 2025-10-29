@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{bail, Context};
+use bitpacking::{BitPacker, BitPacker1x, BitPacker4x, BitPacker8x};
 use byte_unit::UnitType;
 use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
@@ -845,6 +846,9 @@ fn measure_new_roaring_disk_usage(
                 let mut key_size = 0;
                 let mut value_size = 0;
                 let mut new_value_size = 0;
+                let mut delta_encoded_1x_value_size = 0;
+                let mut delta_encoded_4x_value_size = 0;
+                let mut delta_encoded_8x_value_size = 0;
                 let mut number_of_containers = 0;
                 let mut number_of_array_containers = 0;
                 let mut number_of_bitset_containers = 0;
@@ -865,6 +869,12 @@ fn measure_new_roaring_disk_usage(
 
                     let mut new_bitmap =
                         new_roaring::RoaringBitmap::from_sorted_iter(bitmap).unwrap();
+                    delta_encoded_1x_value_size +=
+                        size_with_delta_encoding::<BitPacker1x>(&new_bitmap);
+                    delta_encoded_4x_value_size +=
+                        size_with_delta_encoding::<BitPacker4x>(&new_bitmap);
+                    delta_encoded_8x_value_size +=
+                        size_with_delta_encoding::<BitPacker8x>(&new_bitmap);
                     let _has_been_optimized = new_bitmap.optimize();
                     let stats = new_bitmap.statistics();
                     new_number_of_containers += stats.n_containers as usize;
@@ -884,6 +894,24 @@ fn measure_new_roaring_disk_usage(
                 let human_size = byte_unit::Byte::from(key_size + new_value_size)
                     .get_appropriate_unit(UnitType::Binary);
                 println!("\tThe raw size of the database using the new bitmaps: {human_size:.2}");
+
+                let human_size = byte_unit::Byte::from(key_size + delta_encoded_1x_value_size)
+                    .get_appropriate_unit(UnitType::Binary);
+                println!(
+                    "\tThe raw size of the database using the delta encoding 1x: {human_size:.2}"
+                );
+
+                let human_size = byte_unit::Byte::from(key_size + delta_encoded_4x_value_size)
+                    .get_appropriate_unit(UnitType::Binary);
+                println!(
+                    "\tThe raw size of the database using the delta encoding 4x: {human_size:.2}"
+                );
+
+                let human_size = byte_unit::Byte::from(key_size + delta_encoded_8x_value_size)
+                    .get_appropriate_unit(UnitType::Binary);
+                println!(
+                    "\tThe raw size of the database using the delta encoding 8x: {human_size:.2}"
+                );
 
                 println!("number of entries: {}", database.len(&rtxn)?);
                 println!("number of containers: {number_of_containers}");
@@ -916,4 +944,27 @@ fn measure_new_roaring_disk_usage(
     }
 
     Ok(())
+}
+
+fn size_with_delta_encoding<B: BitPacker>(bitmap: &new_roaring::RoaringBitmap) -> usize {
+    let bitpacker = B::new();
+    let mut decompressed = vec![0u32; B::BLOCK_LEN];
+    let mut buffer_index = 0;
+    let mut total_size = 0;
+    for n in bitmap {
+        decompressed[buffer_index] = n;
+        buffer_index += 1;
+        if buffer_index == B::BLOCK_LEN {
+            let initial = Some(decompressed[0]);
+            let num_bits = bitpacker.num_bits_strictly_sorted(initial, &decompressed);
+            total_size += B::compressed_block_size(num_bits);
+            buffer_index = 0;
+        }
+    }
+
+    if buffer_index != 0 {
+        total_size += buffer_index;
+    }
+
+    total_size
 }

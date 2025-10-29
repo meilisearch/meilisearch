@@ -10,6 +10,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.98"
+bitpacking = "0.9.2"
 byte-unit = "5.1.6"
 clap = { version = "4.5.40", features = ["derive"] }
 dump = { path = "../dump" }
