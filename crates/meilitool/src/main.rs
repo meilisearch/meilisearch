@@ -819,6 +819,8 @@ fn measure_new_roaring_disk_usage(
     let index_mapping: Database<Str, UuidCodec> =
         try_opening_database(&env, &rtxn, "index-mapping")?;
 
+    eprintln!("Got one! Reading indexes...");
+
     for result in index_mapping.iter(&rtxn)? {
         let (uid, uuid) = result?;
         if index_names.iter().any(|i| i == uid) {
