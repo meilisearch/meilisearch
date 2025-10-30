@@ -891,7 +891,11 @@ fn measure_new_roaring_disk_usage(
 
                 let human_size = byte_unit::Byte::from(key_size + value_size)
                     .get_appropriate_unit(UnitType::Binary);
-                println!("\tThe raw size of the database: {human_size:.2}");
+                let human_key_size =
+                    byte_unit::Byte::from(key_size).get_appropriate_unit(UnitType::Binary);
+                let human_value_size =
+                    byte_unit::Byte::from(value_size).get_appropriate_unit(UnitType::Binary);
+                println!("\tThe raw size of the database: {human_size:.2} (keys: {human_key_size:.2}, values: {human_value_size:.2})");
 
                 let human_size = byte_unit::Byte::from(key_size + new_value_size)
                     .get_appropriate_unit(UnitType::Binary);
