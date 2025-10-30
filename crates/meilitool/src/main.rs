@@ -851,6 +851,7 @@ fn measure_new_roaring_disk_usage(
                 let mut delta_encoded_1x_value_size = 0;
                 let mut delta_encoded_4x_value_size = 0;
                 let mut delta_encoded_8x_value_size = 0;
+                let mut number_of_raw_cbos = 0;
                 let mut number_of_containers = 0;
                 let mut number_of_array_containers = 0;
                 let mut number_of_bitset_containers = 0;
@@ -864,6 +865,7 @@ fn measure_new_roaring_disk_usage(
                     value_size += value.len();
 
                     let bitmap = CboRoaringBitmapCodec::deserialize_from(value)?;
+                    number_of_raw_cbos += (bitmap.len() < 7) as usize; // Cbo threshold
                     let stats = bitmap.statistics();
                     number_of_containers += stats.n_containers as usize;
                     number_of_array_containers += stats.n_array_containers as usize;
@@ -920,6 +922,10 @@ fn measure_new_roaring_disk_usage(
                 );
 
                 println!("number of entries: {}", database.len(&rtxn)?);
+                println!(
+                    "number of raw cbos: {number_of_raw_cbos} ({}%)",
+                    number_of_raw_cbos as f64 / database.len(&rtxn)? as f64 * 100.0
+                );
                 println!("number of containers: {number_of_containers}");
                 println!(
                     "number of array containers: {number_of_array_containers} ({:.2}%)",
