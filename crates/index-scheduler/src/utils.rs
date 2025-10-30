@@ -379,6 +379,7 @@ impl crate::IndexScheduler {
                 status,
                 kind,
                 network: _,
+                custom_metadata: _,
             } = task;
             assert_eq!(uid, task.uid);
             if task.status != Status::Enqueued {

@@ -98,6 +98,7 @@ pub fn upgrade_index_scheduler(
             status: Status::Enqueued,
             kind: KindWithContent::UpgradeDatabase { from },
             network: None,
+            custom_metadata: None,
         },
     )?;
     wtxn.commit()?;

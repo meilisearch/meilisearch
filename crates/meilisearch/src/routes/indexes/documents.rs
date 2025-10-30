@@ -678,6 +678,10 @@ pub struct UpdateDocumentsQuery {
     #[param(value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
+
+    #[param(example = "custom")]
+    #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
+    pub custom_metadata: Option<String>,
 }
 
 fn from_char_csv_delimiter(
@@ -819,6 +823,7 @@ pub async fn replace_documents(
         body,
         IndexDocumentsMethod::ReplaceDocuments,
         uid,
+        params.custom_metadata,
         dry_run,
         allow_index_creation,
         &req,
@@ -921,6 +926,7 @@ pub async fn update_documents(
         body,
         IndexDocumentsMethod::UpdateDocuments,
         uid,
+        params.custom_metadata,
         dry_run,
         allow_index_creation,
         &req,
@@ -940,6 +946,7 @@ async fn document_addition(
     body: Payload,
     method: IndexDocumentsMethod,
     task_id: Option<TaskId>,
+    custom_metadata: Option<String>,
     dry_run: bool,
     allow_index_creation: bool,
     req: &HttpRequest,
@@ -1065,8 +1072,10 @@ async fn document_addition(
     };
 
     let scheduler = index_scheduler.clone();
-    let task = match tokio::task::spawn_blocking(move || scheduler.register(task, task_id, dry_run))
-        .await?
+    let task = match tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(task, task_id, custom_metadata, dry_run)
+    })
+    .await?
     {
         Ok(task) => task,
         Err(e) => {

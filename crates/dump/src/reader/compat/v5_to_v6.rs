@@ -164,6 +164,7 @@ impl CompatV5ToV6 {
                     started_at: task_view.started_at,
                     finished_at: task_view.finished_at,
                     network: None,
+                    custom_metadata: None,
                 };
 
                 (task, content_file)
