@@ -844,7 +844,7 @@ fn measure_new_roaring_disk_usage(
                 println!("{uid} -> {index_part}");
 
                 eprintln!("Trying to get {thread_count} read transactions on {uid}...");
-                let rtxns = std::iter::repeat_with(|| env.read_txn())
+                let rtxns = std::iter::repeat_with(|| index.read_txn())
                     .take(thread_count)
                     .collect::<meilisearch_types::heed::Result<Vec<_>>>()?;
 
