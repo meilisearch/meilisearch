@@ -867,6 +867,7 @@ fn measure_new_roaring_disk_usage(
                     delta_encoded_1x_value_size: usize,
                     delta_encoded_4x_value_size: usize,
                     delta_encoded_8x_value_size: usize,
+                    average_distance_between_value_numbers: f32,
                     number_of_values: u64,
                     number_of_raw_cbos: usize,
                     number_of_containers: usize,
@@ -889,6 +890,7 @@ fn measure_new_roaring_disk_usage(
                             delta_encoded_1x_value_size,
                             delta_encoded_4x_value_size,
                             delta_encoded_8x_value_size,
+                            average_distance_between_value_numbers,
                             number_of_values,
                             number_of_raw_cbos,
                             number_of_containers,
@@ -909,6 +911,10 @@ fn measure_new_roaring_disk_usage(
                                 + rhs.delta_encoded_4x_value_size,
                             delta_encoded_8x_value_size: delta_encoded_8x_value_size
                                 + rhs.delta_encoded_8x_value_size,
+                            average_distance_between_value_numbers:
+                                (average_distance_between_value_numbers
+                                    + rhs.average_distance_between_value_numbers)
+                                    / 2.0,
                             number_of_values: number_of_values + rhs.number_of_values,
                             number_of_raw_cbos: number_of_raw_cbos + rhs.number_of_raw_cbos,
                             number_of_containers: number_of_containers + rhs.number_of_containers,
@@ -946,6 +952,7 @@ fn measure_new_roaring_disk_usage(
                             delta_encoded_1x_value_size,
                             delta_encoded_4x_value_size,
                             delta_encoded_8x_value_size,
+                            average_distance_between_value_numbers,
                             number_of_values,
                             number_of_raw_cbos,
                             number_of_containers,
@@ -972,6 +979,22 @@ fn measure_new_roaring_disk_usage(
                             *number_of_values += bitmap.len();
                             *number_of_raw_cbos += (bitmap.len() < 7) as usize; // Cbo threshold
                             let stats = bitmap.statistics();
+                            *average_distance_between_value_numbers = {
+                                let mut total_distance = 0usize;
+                                let mut prev = None;
+                                for n in &bitmap {
+                                    if let Some(prev) = prev {
+                                        total_distance += (n - prev) as usize;
+                                    }
+                                    prev = Some(n);
+                                }
+                                if bitmap.is_empty() {
+                                    f32::INFINITY
+                                } else {
+                                    total_distance as f32 / bitmap.len() as f32
+                                }
+                            };
+
                             *number_of_containers += stats.n_containers as usize;
                             *number_of_array_containers += stats.n_array_containers as usize;
                             *number_of_bitset_containers += stats.n_bitset_containers as usize;
@@ -1011,6 +1034,7 @@ fn measure_new_roaring_disk_usage(
                     delta_encoded_1x_value_size,
                     delta_encoded_4x_value_size,
                     delta_encoded_8x_value_size,
+                    average_distance_between_value_numbers,
                     number_of_values,
                     number_of_raw_cbos,
                     number_of_containers,
@@ -1054,8 +1078,12 @@ fn measure_new_roaring_disk_usage(
 
                 println!("\tnumber of entries: {number_of_entries}");
                 println!(
-                    "\taverage number of values: {}",
+                    "\taverage number of values: {:.2}",
                     number_of_values as f64 / number_of_entries as f64
+                );
+                println!(
+                    "\taverage distance between value numbers: {:.2}",
+                    average_distance_between_value_numbers
                 );
                 println!(
                     "\tnumber of raw cbos: {number_of_raw_cbos} ({}%)",
