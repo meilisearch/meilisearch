@@ -843,12 +843,11 @@ fn measure_new_roaring_disk_usage(
                 let database = index_part.database(&index);
                 println!("{uid} -> {index_part}");
 
-                eprintln!("Trying to get {thread_count} read transactions on {uid}...");
+                eprintln!("\tTrying to get {thread_count} read transactions on {uid}...");
                 let rtxns = std::iter::repeat_with(|| index.read_txn())
                     .take(thread_count)
                     .collect::<meilisearch_types::heed::Result<Vec<_>>>()?;
-
-                eprintln!("Got one! Reading databases...");
+                eprintln!("\tGot one! Reading databases...");
 
                 let stat = database.stat(&rtxns[0])?;
                 let number_of_entries = database.len(&rtxns[0])?;
@@ -1053,38 +1052,38 @@ fn measure_new_roaring_disk_usage(
                     "\tThe raw size of the database using the delta encoding 8x: {human_size:.2}"
                 );
 
-                println!("number of entries: {number_of_entries}");
+                println!("\tnumber of entries: {number_of_entries}");
                 println!(
-                    "average number of values: {}",
+                    "\taverage number of values: {}",
                     number_of_values as f64 / number_of_entries as f64
                 );
                 println!(
-                    "number of raw cbos: {number_of_raw_cbos} ({}%)",
+                    "\tnumber of raw cbos: {number_of_raw_cbos} ({}%)",
                     number_of_raw_cbos as f64 / number_of_entries as f64 * 100.0
                 );
-                println!("number of containers: {number_of_containers}");
+                println!("\tnumber of containers: {number_of_containers}");
                 println!(
-                    "number of array containers: {number_of_array_containers} ({:.2}%)",
+                    "\tnumber of array containers: {number_of_array_containers} ({:.2}%)",
                     (number_of_array_containers as f64 / number_of_containers as f64) * 100.0
                 );
                 println!(
-                    "number of bitset containers: {number_of_bitset_containers} ({:.2}%)",
+                    "\tnumber of bitset containers: {number_of_bitset_containers} ({:.2}%)",
                     (number_of_bitset_containers as f64 / number_of_containers as f64) * 100.0
                 );
 
-                println!("new number of containers: {new_number_of_containers}");
+                println!("\tnew number of containers: {new_number_of_containers}");
                 println!(
-                    "new number of array containers: {new_number_of_array_containers} ({:.2}%)",
+                    "\tnew number of array containers: {new_number_of_array_containers} ({:.2}%)",
                     (new_number_of_array_containers as f64 / new_number_of_containers as f64)
                         * 100.0
                 );
                 println!(
-                    "new number of bitset containers: {new_number_of_bitset_containers} ({:.2}%)",
+                    "\tnew number of bitset containers: {new_number_of_bitset_containers} ({:.2}%)",
                     (new_number_of_bitset_containers as f64 / new_number_of_containers as f64)
                         * 100.0
                 );
                 println!(
-                    "new number of run containers: {new_number_of_run_containers} ({:.2}%)",
+                    "\tnew number of run containers: {new_number_of_run_containers} ({:.2}%)",
                     (new_number_of_run_containers as f64 / new_number_of_containers as f64) * 100.0
                 );
             }
