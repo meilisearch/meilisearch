@@ -26,6 +26,7 @@ use meilisearch_types::milli::{obkv_to_json, CboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::versioning::{get_version, parse_version};
 use meilisearch_types::Index;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use serde_json::Value::Object;
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -151,6 +152,9 @@ enum Command {
 
     /// Measures the size of the indexes with the previous roaring version
     /// and the brand new one with support for run-length encoding.
+    ///
+    /// You can change the number of threads used for the measurement by
+    /// using the RAYON_NUM_THREADS environment variable.
     MeasureNewRoaringDiskUsage {
         #[arg(long, value_delimiter = ',')]
         index_name: Vec<String>,
@@ -815,13 +819,16 @@ fn measure_new_roaring_disk_usage(
 
     eprintln!("Trying to get a read transaction on the index scheduler...");
 
-    let rtxn = env.read_txn()?;
+    let scheduler_rtxn = env.read_txn()?;
     let index_mapping: Database<Str, UuidCodec> =
-        try_opening_database(&env, &rtxn, "index-mapping")?;
+        try_opening_database(&env, &scheduler_rtxn, "index-mapping")?;
 
     eprintln!("Got one! Reading indexes...");
 
-    for result in index_mapping.iter(&rtxn)? {
+    let thread_count = rayon::current_num_threads();
+    assert!(thread_count > 0);
+
+    for result in index_mapping.iter(&scheduler_rtxn)? {
         let (uid, uuid) = result?;
         if index_names.iter().any(|i| i == uid) {
             let index_path = db_path.join("indexes").join(uuid.to_string());
@@ -831,12 +838,19 @@ fn measure_new_roaring_disk_usage(
                         format!("While trying to open the index at path {:?}", index_path.display())
                     })?;
 
-            let rtxn = index.read_txn()?;
             for index_part in index_parts {
                 let database = index_part.database(&index);
                 println!("{uid} -> {index_part}");
 
-                let stat = database.stat(&rtxn)?;
+                eprintln!("Trying to get {thread_count} read transactions on {uid}...");
+                let rtxns = std::iter::repeat_with(|| env.read_txn())
+                    .take(thread_count)
+                    .collect::<meilisearch_types::heed::Result<Vec<_>>>()?;
+
+                eprintln!("Got one! Reading databases...");
+
+                let stat = database.stat(&rtxns[0])?;
+                let number_of_entries = database.len(&rtxns[0])?;
                 let pages = stat.leaf_pages + stat.branch_pages + stat.overflow_pages;
                 let size_as_pages = pages * (stat.page_size as usize);
                 let human_size = byte_unit::Byte::from(size_as_pages as u64)
@@ -845,53 +859,158 @@ fn measure_new_roaring_disk_usage(
                     "\tThe size of the database seen by LMDB (in terms of pages): {human_size:.2}"
                 );
 
-                let mut key_size = 0;
-                let mut value_size = 0;
-                let mut new_value_size = 0;
-                let mut delta_encoded_1x_value_size = 0;
-                let mut delta_encoded_4x_value_size = 0;
-                let mut delta_encoded_8x_value_size = 0;
-                let mut number_of_values = 0;
-                let mut number_of_raw_cbos = 0;
-                let mut number_of_containers = 0;
-                let mut number_of_array_containers = 0;
-                let mut number_of_bitset_containers = 0;
-                let mut new_number_of_containers = 0;
-                let mut new_number_of_array_containers = 0;
-                let mut new_number_of_bitset_containers = 0;
-                let mut new_number_of_run_containers = 0;
-                for result in database.remap_data_type::<Bytes>().iter(&rtxn)? {
-                    let (key, value) = result?;
-                    key_size += key.len();
-                    value_size += value.len();
-
-                    let bitmap = CboRoaringBitmapCodec::deserialize_from(value)?;
-                    number_of_values += bitmap.len();
-                    number_of_raw_cbos += (bitmap.len() < 7) as usize; // Cbo threshold
-                    let stats = bitmap.statistics();
-                    number_of_containers += stats.n_containers as usize;
-                    number_of_array_containers += stats.n_array_containers as usize;
-                    number_of_bitset_containers += stats.n_bitset_containers as usize;
-
-                    let mut new_bitmap =
-                        new_roaring::RoaringBitmap::from_sorted_iter(bitmap).unwrap();
-                    delta_encoded_1x_value_size +=
-                        size_with_delta_encoding::<BitPacker1x>(&new_bitmap);
-                    delta_encoded_4x_value_size +=
-                        size_with_delta_encoding::<BitPacker4x>(&new_bitmap);
-                    delta_encoded_8x_value_size +=
-                        size_with_delta_encoding::<BitPacker8x>(&new_bitmap);
-                    let _has_been_optimized = new_bitmap.optimize();
-                    let stats = new_bitmap.statistics();
-                    new_number_of_containers += stats.n_containers as usize;
-                    new_number_of_array_containers += stats.n_array_containers as usize;
-                    new_number_of_bitset_containers += stats.n_bitset_containers as usize;
-                    new_number_of_run_containers += stats.n_run_containers as usize;
-
-                    let mut bytes_counter = BytesCounter::new();
-                    new_bitmap.serialize_into(&mut bytes_counter).unwrap();
-                    new_value_size += bytes_counter.bytes_written();
+                #[derive(Default)]
+                struct ComputedStats {
+                    key_size: usize,
+                    value_size: usize,
+                    new_value_size: usize,
+                    delta_encoded_1x_value_size: usize,
+                    delta_encoded_4x_value_size: usize,
+                    delta_encoded_8x_value_size: usize,
+                    number_of_values: u64,
+                    number_of_raw_cbos: usize,
+                    number_of_containers: usize,
+                    number_of_array_containers: usize,
+                    number_of_bitset_containers: usize,
+                    new_number_of_containers: usize,
+                    new_number_of_array_containers: usize,
+                    new_number_of_bitset_containers: usize,
+                    new_number_of_run_containers: usize,
                 }
+
+                impl std::ops::Add for ComputedStats {
+                    type Output = Self;
+
+                    fn add(self, rhs: Self) -> Self::Output {
+                        let ComputedStats {
+                            key_size,
+                            value_size,
+                            new_value_size,
+                            delta_encoded_1x_value_size,
+                            delta_encoded_4x_value_size,
+                            delta_encoded_8x_value_size,
+                            number_of_values,
+                            number_of_raw_cbos,
+                            number_of_containers,
+                            number_of_array_containers,
+                            number_of_bitset_containers,
+                            new_number_of_containers,
+                            new_number_of_array_containers,
+                            new_number_of_bitset_containers,
+                            new_number_of_run_containers,
+                        } = self;
+                        ComputedStats {
+                            key_size: key_size + rhs.key_size,
+                            value_size: value_size + rhs.value_size,
+                            new_value_size: new_value_size + rhs.new_value_size,
+                            delta_encoded_1x_value_size: delta_encoded_1x_value_size
+                                + rhs.delta_encoded_1x_value_size,
+                            delta_encoded_4x_value_size: delta_encoded_4x_value_size
+                                + rhs.delta_encoded_4x_value_size,
+                            delta_encoded_8x_value_size: delta_encoded_8x_value_size
+                                + rhs.delta_encoded_8x_value_size,
+                            number_of_values: number_of_values + rhs.number_of_values,
+                            number_of_raw_cbos: number_of_raw_cbos + rhs.number_of_raw_cbos,
+                            number_of_containers: number_of_containers + rhs.number_of_containers,
+                            number_of_array_containers: number_of_array_containers
+                                + rhs.number_of_array_containers,
+                            number_of_bitset_containers: number_of_bitset_containers
+                                + rhs.number_of_bitset_containers,
+                            new_number_of_containers: new_number_of_containers
+                                + rhs.new_number_of_containers,
+                            new_number_of_array_containers: new_number_of_array_containers
+                                + rhs.new_number_of_array_containers,
+                            new_number_of_bitset_containers: new_number_of_bitset_containers
+                                + rhs.new_number_of_bitset_containers,
+                            new_number_of_run_containers: new_number_of_run_containers
+                                + rhs.new_number_of_run_containers,
+                        }
+                    }
+                }
+
+                let stats = rtxns
+                    .into_par_iter()
+                    .enumerate()
+                    .map(|(thread_id, rtxn)| {
+                        let mut stats = ComputedStats::default();
+                        let ComputedStats {
+                            key_size,
+                            value_size,
+                            new_value_size,
+                            delta_encoded_1x_value_size,
+                            delta_encoded_4x_value_size,
+                            delta_encoded_8x_value_size,
+                            number_of_values,
+                            number_of_raw_cbos,
+                            number_of_containers,
+                            number_of_array_containers,
+                            number_of_bitset_containers,
+                            new_number_of_containers,
+                            new_number_of_array_containers,
+                            new_number_of_bitset_containers,
+                            new_number_of_run_containers,
+                        } = &mut stats;
+
+                        for (index, result) in
+                            database.remap_data_type::<Bytes>().iter(&rtxn)?.enumerate()
+                        {
+                            if index % thread_count != thread_id {
+                                continue;
+                            }
+
+                            let (key, value) = result?;
+                            *key_size += key.len();
+                            *value_size += value.len();
+
+                            let bitmap = CboRoaringBitmapCodec::deserialize_from(value)?;
+                            *number_of_values += bitmap.len();
+                            *number_of_raw_cbos += (bitmap.len() < 7) as usize; // Cbo threshold
+                            let stats = bitmap.statistics();
+                            *number_of_containers += stats.n_containers as usize;
+                            *number_of_array_containers += stats.n_array_containers as usize;
+                            *number_of_bitset_containers += stats.n_bitset_containers as usize;
+
+                            let mut new_bitmap =
+                                new_roaring::RoaringBitmap::from_sorted_iter(bitmap).unwrap();
+                            *delta_encoded_1x_value_size +=
+                                size_with_delta_encoding::<BitPacker1x>(&new_bitmap);
+                            *delta_encoded_4x_value_size +=
+                                size_with_delta_encoding::<BitPacker4x>(&new_bitmap);
+                            *delta_encoded_8x_value_size +=
+                                size_with_delta_encoding::<BitPacker8x>(&new_bitmap);
+                            let _has_been_optimized = new_bitmap.optimize();
+                            let stats = new_bitmap.statistics();
+                            *new_number_of_containers += stats.n_containers as usize;
+                            *new_number_of_array_containers += stats.n_array_containers as usize;
+                            *new_number_of_bitset_containers += stats.n_bitset_containers as usize;
+                            *new_number_of_run_containers += stats.n_run_containers as usize;
+
+                            let mut bytes_counter = BytesCounter::new();
+                            new_bitmap.serialize_into(&mut bytes_counter).unwrap();
+                            *new_value_size += bytes_counter.bytes_written();
+                        }
+
+                        meilisearch_types::heed::Result::Ok(stats)
+                    })
+                    .try_reduce(ComputedStats::default, |a, b| Ok(a + b))?;
+
+                let ComputedStats {
+                    key_size,
+                    value_size,
+                    new_value_size,
+                    delta_encoded_1x_value_size,
+                    delta_encoded_4x_value_size,
+                    delta_encoded_8x_value_size,
+                    number_of_values,
+                    number_of_raw_cbos,
+                    number_of_containers,
+                    number_of_array_containers,
+                    number_of_bitset_containers,
+                    new_number_of_containers,
+                    new_number_of_array_containers,
+                    new_number_of_bitset_containers,
+                    new_number_of_run_containers,
+                } = stats;
 
                 let human_size = byte_unit::Byte::from(key_size + value_size)
                     .get_appropriate_unit(UnitType::Binary);
@@ -923,14 +1042,14 @@ fn measure_new_roaring_disk_usage(
                     "\tThe raw size of the database using the delta encoding 8x: {human_size:.2}"
                 );
 
-                println!("number of entries: {}", database.len(&rtxn)?);
+                println!("number of entries: {number_of_entries}");
                 println!(
                     "average number of values: {}",
-                    number_of_values as f64 / database.len(&rtxn)? as f64
+                    number_of_values as f64 / number_of_entries as f64
                 );
                 println!(
                     "number of raw cbos: {number_of_raw_cbos} ({}%)",
-                    number_of_raw_cbos as f64 / database.len(&rtxn)? as f64 * 100.0
+                    number_of_raw_cbos as f64 / number_of_entries as f64 * 100.0
                 );
                 println!("number of containers: {number_of_containers}");
                 println!(

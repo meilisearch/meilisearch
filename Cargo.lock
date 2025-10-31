@@ -4169,6 +4169,7 @@ dependencies = [
  "indexmap",
  "meilisearch-auth",
  "meilisearch-types",
+ "rayon",
  "roaring 0.11.2",
  "serde",
  "serde_json",
