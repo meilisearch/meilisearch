@@ -12,6 +12,7 @@ use byte_unit::UnitType;
 use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
+use indicatif::{ProgressBar, ProgressStyle};
 use meilisearch_auth::{open_auth_store_env, AuthController};
 use meilisearch_types::batches::Batch;
 use meilisearch_types::heed::types::{Bytes, SerdeJson, Str};
@@ -928,6 +929,12 @@ fn measure_new_roaring_disk_usage(
                     }
                 }
 
+                let style = ProgressStyle::with_template(
+                    "[{elapsed_precise}] [{wide_bar}] {human_pos}/{human_len} ({percent}%) ({eta})",
+                )
+                .unwrap();
+                let pb = ProgressBar::new(number_of_entries).with_style(style);
+
                 let stats = rtxns
                     .into_par_iter()
                     .enumerate()
@@ -988,11 +995,15 @@ fn measure_new_roaring_disk_usage(
                             let mut bytes_counter = BytesCounter::new();
                             new_bitmap.serialize_into(&mut bytes_counter).unwrap();
                             *new_value_size += bytes_counter.bytes_written();
+
+                            pb.inc(1);
                         }
 
                         meilisearch_types::heed::Result::Ok(stats)
                     })
                     .try_reduce(ComputedStats::default, |a, b| Ok(a + b))?;
+
+                pb.finish();
 
                 let ComputedStats {
                     key_size,

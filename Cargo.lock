@@ -1279,6 +1279,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "console"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b430743a6eb14e9764d4260d4c0d8123087d504eeb9c48f2b2a5e810dd369df4"
+dependencies = [
+ "encode_unicode",
+ "libc",
+ "once_cell",
+ "windows-sys 0.61.0",
+]
+
+[[package]]
 name = "const-random"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2892,7 +2904,7 @@ source = "git+https://github.com/dureuill/hf-hub.git?branch=rust_tls#88d4f11cb9f
 dependencies = [
  "dirs",
  "http 1.3.1",
- "indicatif",
+ "indicatif 0.17.11",
  "log",
  "rand 0.8.5",
  "serde",
@@ -3289,10 +3301,22 @@ version = "0.17.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "183b3088984b400f4cfac3620d5e076c84da5364016b4f49473de574b2586235"
 dependencies = [
- "console",
+ "console 0.15.11",
  "number_prefix",
  "portable-atomic",
  "unicode-width",
+ "web-time",
+]
+
+[[package]]
+name = "indicatif"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ade6dfcba0dfb62ad59e59e7241ec8912af34fd29e0e743e3db992bd278e8b65"
+dependencies = [
+ "console 0.16.1",
+ "portable-atomic",
+ "unit-prefix",
  "web-time",
 ]
 
@@ -3311,7 +3335,7 @@ version = "1.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "810ae6042d48e2c9e9215043563a58a80b877bc863228a74cf10c49d4620a6f5"
 dependencies = [
- "console",
+ "console 0.15.11",
  "lazy_static",
  "linked-hash-map",
  "pest",
@@ -4167,6 +4191,7 @@ dependencies = [
  "dump",
  "file-store",
  "indexmap",
+ "indicatif 0.18.2",
  "meilisearch-auth",
  "meilisearch-types",
  "rayon",
@@ -7008,6 +7033,12 @@ name = "unicode_categories"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39ec24b3121d976906ece63c9daad25b85969647682eee313cb5779fdd69e14e"
+
+[[package]]
+name = "unit-prefix"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "323402cff2dd658f39ca17c789b502021b3f18707c91cdf22e3838e1b4023817"
 
 [[package]]
 name = "unsafe-libyaml"

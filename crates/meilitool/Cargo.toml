@@ -16,6 +16,7 @@ clap = { version = "4.5.40", features = ["derive"] }
 dump = { path = "../dump" }
 file-store = { path = "../file-store" }
 indexmap = { version = "2.9.0", features = ["serde"] }
+indicatif = { version = "0.18.2", default-features = false }
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 new-roaring = { package = "roaring", version = "0.11.2" }
