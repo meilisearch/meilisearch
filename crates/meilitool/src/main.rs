@@ -865,8 +865,14 @@ fn measure_new_roaring_disk_usage(
                     value_size: usize,
                     new_value_size: usize,
                     delta_encoded_1x_value_size: usize,
+                    total_number_bits_1x_delta_encoding: usize,
+                    total_number_chunks_1x_delta_encoding: usize,
                     delta_encoded_4x_value_size: usize,
+                    total_number_bits_4x_delta_encoding: usize,
+                    total_number_chunks_4x_delta_encoding: usize,
                     delta_encoded_8x_value_size: usize,
+                    total_number_bits_8x_delta_encoding: usize,
+                    total_number_chunks_8x_delta_encoding: usize,
                     average_distance_between_value_numbers: f32,
                     number_of_values: u64,
                     number_of_raw_cbos: usize,
@@ -888,8 +894,14 @@ fn measure_new_roaring_disk_usage(
                             value_size,
                             new_value_size,
                             delta_encoded_1x_value_size,
+                            total_number_bits_1x_delta_encoding,
+                            total_number_chunks_1x_delta_encoding,
                             delta_encoded_4x_value_size,
+                            total_number_bits_4x_delta_encoding,
+                            total_number_chunks_4x_delta_encoding,
                             delta_encoded_8x_value_size,
+                            total_number_bits_8x_delta_encoding,
+                            total_number_chunks_8x_delta_encoding,
                             average_distance_between_value_numbers,
                             number_of_values,
                             number_of_raw_cbos,
@@ -907,10 +919,25 @@ fn measure_new_roaring_disk_usage(
                             new_value_size: new_value_size + rhs.new_value_size,
                             delta_encoded_1x_value_size: delta_encoded_1x_value_size
                                 + rhs.delta_encoded_1x_value_size,
+                            total_number_bits_1x_delta_encoding: total_number_bits_1x_delta_encoding
+                                + rhs.total_number_bits_1x_delta_encoding,
+                            total_number_chunks_1x_delta_encoding:
+                                total_number_chunks_1x_delta_encoding
+                                    + rhs.total_number_chunks_1x_delta_encoding,
                             delta_encoded_4x_value_size: delta_encoded_4x_value_size
                                 + rhs.delta_encoded_4x_value_size,
+                            total_number_bits_4x_delta_encoding: total_number_bits_4x_delta_encoding
+                                + rhs.total_number_bits_4x_delta_encoding,
+                            total_number_chunks_4x_delta_encoding:
+                                total_number_chunks_4x_delta_encoding
+                                    + rhs.total_number_chunks_4x_delta_encoding,
                             delta_encoded_8x_value_size: delta_encoded_8x_value_size
                                 + rhs.delta_encoded_8x_value_size,
+                            total_number_bits_8x_delta_encoding: total_number_bits_8x_delta_encoding
+                                + rhs.total_number_bits_8x_delta_encoding,
+                            total_number_chunks_8x_delta_encoding:
+                                total_number_chunks_8x_delta_encoding
+                                    + rhs.total_number_chunks_8x_delta_encoding,
                             average_distance_between_value_numbers:
                                 (average_distance_between_value_numbers
                                     + rhs.average_distance_between_value_numbers)
@@ -950,8 +977,14 @@ fn measure_new_roaring_disk_usage(
                             value_size,
                             new_value_size,
                             delta_encoded_1x_value_size,
+                            total_number_bits_1x_delta_encoding,
+                            total_number_chunks_1x_delta_encoding,
                             delta_encoded_4x_value_size,
+                            total_number_bits_4x_delta_encoding,
+                            total_number_chunks_4x_delta_encoding,
                             delta_encoded_8x_value_size,
+                            total_number_bits_8x_delta_encoding,
+                            total_number_chunks_8x_delta_encoding,
                             average_distance_between_value_numbers,
                             number_of_values,
                             number_of_raw_cbos,
@@ -1001,12 +1034,21 @@ fn measure_new_roaring_disk_usage(
 
                             let mut new_bitmap =
                                 new_roaring::RoaringBitmap::from_sorted_iter(bitmap).unwrap();
-                            *delta_encoded_1x_value_size +=
+                            let (total_bits, total_chunks, size) =
                                 size_with_delta_encoding::<BitPacker1x>(&new_bitmap);
-                            *delta_encoded_4x_value_size +=
+                            *delta_encoded_1x_value_size += size;
+                            *total_number_bits_1x_delta_encoding += total_bits;
+                            *total_number_chunks_1x_delta_encoding += total_chunks;
+                            let (total_bits, total_chunks, size) =
                                 size_with_delta_encoding::<BitPacker4x>(&new_bitmap);
-                            *delta_encoded_8x_value_size +=
+                            *delta_encoded_4x_value_size += size;
+                            *total_number_bits_4x_delta_encoding += total_bits;
+                            *total_number_chunks_4x_delta_encoding += total_chunks;
+                            let (total_bits, total_chunks, size) =
                                 size_with_delta_encoding::<BitPacker8x>(&new_bitmap);
+                            *delta_encoded_8x_value_size += size;
+                            *total_number_bits_8x_delta_encoding += total_bits;
+                            *total_number_chunks_8x_delta_encoding += total_chunks;
                             let _has_been_optimized = new_bitmap.optimize();
                             let stats = new_bitmap.statistics();
                             *new_number_of_containers += stats.n_containers as usize;
@@ -1032,8 +1074,14 @@ fn measure_new_roaring_disk_usage(
                     value_size,
                     new_value_size,
                     delta_encoded_1x_value_size,
+                    total_number_bits_1x_delta_encoding,
+                    total_number_chunks_1x_delta_encoding,
                     delta_encoded_4x_value_size,
+                    total_number_bits_4x_delta_encoding,
+                    total_number_chunks_4x_delta_encoding,
                     delta_encoded_8x_value_size,
+                    total_number_bits_8x_delta_encoding,
+                    total_number_chunks_8x_delta_encoding,
                     average_distance_between_value_numbers,
                     number_of_values,
                     number_of_raw_cbos,
@@ -1063,17 +1111,32 @@ fn measure_new_roaring_disk_usage(
                 println!(
                     "\tThe raw size of the database using the delta encoding 1x: {human_size:.2}"
                 );
+                println!(
+                    "\tThe average number of bits to encode chunks in delta encoding 1x: {:.2}",
+                    total_number_bits_1x_delta_encoding as f64
+                        / total_number_chunks_1x_delta_encoding as f64
+                );
 
                 let human_size = byte_unit::Byte::from(key_size + delta_encoded_4x_value_size)
                     .get_appropriate_unit(UnitType::Binary);
                 println!(
                     "\tThe raw size of the database using the delta encoding 4x: {human_size:.2}"
                 );
+                println!(
+                    "\tThe average number of bits to encode chunks in delta encoding 4x: {:.2}",
+                    total_number_bits_4x_delta_encoding as f64
+                        / total_number_chunks_4x_delta_encoding as f64
+                );
 
                 let human_size = byte_unit::Byte::from(key_size + delta_encoded_8x_value_size)
                     .get_appropriate_unit(UnitType::Binary);
                 println!(
                     "\tThe raw size of the database using the delta encoding 8x: {human_size:.2}"
+                );
+                println!(
+                    "\tThe average number of bits to encode chunks in delta encoding 8x: {:.2}",
+                    total_number_bits_8x_delta_encoding as f64
+                        / total_number_chunks_8x_delta_encoding as f64
                 );
 
                 println!("\tnumber of entries: {number_of_entries}");
@@ -1121,25 +1184,32 @@ fn measure_new_roaring_disk_usage(
     Ok(())
 }
 
-fn size_with_delta_encoding<B: BitPacker>(bitmap: &new_roaring::RoaringBitmap) -> usize {
+/// Returns the total number of bits to encode, the number of chunks, and the final size of the compressed bitset.
+fn size_with_delta_encoding<B: BitPacker>(
+    bitmap: &new_roaring::RoaringBitmap,
+) -> (usize, usize, usize) {
     let bitpacker = B::new();
     let mut decompressed = vec![0u32; B::BLOCK_LEN];
     let mut buffer_index = 0;
     let mut total_size = 0;
+    let mut total_num_bits = 0;
+    let mut number_of_chunks = 0;
     for n in bitmap {
         decompressed[buffer_index] = n;
         buffer_index += 1;
         if buffer_index == B::BLOCK_LEN {
             let initial = Some(decompressed[0]);
             let num_bits = bitpacker.num_bits_strictly_sorted(initial, &decompressed);
+            total_num_bits += num_bits as usize;
             total_size += B::compressed_block_size(num_bits);
+            number_of_chunks += 1;
             buffer_index = 0;
         }
     }
 
     if buffer_index != 0 {
-        total_size += buffer_index;
+        total_size += buffer_index * size_of::<u32>();
     }
 
-    total_size
+    (total_num_bits, number_of_chunks, total_size)
 }
