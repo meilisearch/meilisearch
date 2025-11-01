@@ -1195,17 +1195,18 @@ fn size_with_delta_encoding<B: BitPacker>(
     let mut total_size = 0;
     let mut total_num_bits = 0;
     let mut number_of_chunks = 0;
+    let mut initial = None;
     for n in bitmap {
         decompressed[buffer_index] = n;
         buffer_index += 1;
         if buffer_index == B::BLOCK_LEN {
-            let initial = None; // to let it store the initial value by itself
             assert!(decompressed.is_sorted());
             let num_bits = bitpacker.num_bits_strictly_sorted(initial, decompressed);
             total_num_bits += num_bits as usize;
             total_size += B::compressed_block_size(num_bits);
             number_of_chunks += 1;
             buffer_index = 0;
+            initial = decompressed.iter().last().copied();
         }
     }
 
