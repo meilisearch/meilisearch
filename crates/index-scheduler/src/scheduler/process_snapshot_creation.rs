@@ -280,6 +280,7 @@ impl IndexScheduler {
     }
 
     #[cfg(unix)]
+    #[allow(clippy::too_many_arguments)]
     pub(super) async fn process_snapshot_to_s3(
         &self,
         progress: Progress,
