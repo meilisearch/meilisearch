@@ -39,6 +39,12 @@ pub fn configure(config: &mut web::ServiceConfig) {
 # HELP meilisearch_db_size_bytes Meilisearch DB Size In Bytes
 # TYPE meilisearch_db_size_bytes gauge
 meilisearch_db_size_bytes 1130496
+# HELP meilisearch_batch_running_progress_trace The currently running progress trace
+# TYPE meilisearch_batch_running_progress_trace gauge
+meilisearch_batch_running_progress_trace{batch_uid="0",step_name="document"} 0.710618582519409
+meilisearch_batch_running_progress_trace{batch_uid="0",step_name="extracting word proximity"} 0.2222222222222222
+meilisearch_batch_running_progress_trace{batch_uid="0",step_name="indexing"} 0.6666666666666666
+meilisearch_batch_running_progress_trace{batch_uid="0",step_name="processing tasks"} 0
 # HELP meilisearch_http_requests_total Meilisearch HTTP requests total
 # TYPE meilisearch_http_requests_total counter
 meilisearch_http_requests_total{method="GET",path="/metrics",status="400"} 1
@@ -62,6 +68,13 @@ meilisearch_http_response_time_seconds_bucket{method="GET",path="/metrics",le="1
 meilisearch_http_response_time_seconds_bucket{method="GET",path="/metrics",le="+Inf"} 0
 meilisearch_http_response_time_seconds_sum{method="GET",path="/metrics"} 0
 meilisearch_http_response_time_seconds_count{method="GET",path="/metrics"} 0
+# HELP meilisearch_last_batch_progress_trace_ms The last batch progress trace in milliseconds
+# TYPE meilisearch_last_batch_progress_trace_ms gauge
+meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks"} 20170
+meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes"} 383
+meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes > preparing payloads"} 382
+meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes > preparing payloads > payload"} 382
+meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks > indexing"} 19760
 # HELP meilisearch_index_count Meilisearch Index Count
 # TYPE meilisearch_index_count gauge
 meilisearch_index_count 1
