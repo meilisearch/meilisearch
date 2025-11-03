@@ -149,15 +149,19 @@ pub async fn get_metrics(
     }
 
     let filters = index_scheduler.filters();
-    let query = Query::default();
-    let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(&query, filters)?;
+    let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
+        // Fetch the finished batches...
+        &Query { statuses: Some(vec![Status::Succeeded, Status::Failed]), ..Query::default() },
+        filters,
+    )?;
+    // ...and get the latest one only.
     if let Some(batch) = batches.into_iter().next() {
         let batch_uid = batch.uid.to_string();
         for (step_name, duration_str) in batch.stats.progress_trace {
             let Some(duration_str) = duration_str.as_str() else { continue };
             match humantime::parse_duration(duration_str) {
                 Ok(duration) => {
-                    crate::metrics::MEILISEARCH_BATCH_PROGRESS_TRACE_MS
+                    crate::metrics::MEILISEARCH_LAST_FINISHED_BATCH_PROGRESS_TRACE_MS
                         .with_label_values(&[&batch_uid, &step_name])
                         .set(duration.as_millis() as i64);
                 }
