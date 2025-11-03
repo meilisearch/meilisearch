@@ -1,20 +1,16 @@
-use std::collections::VecDeque;
 use std::env::VarError;
 use std::ffi::OsStr;
 use std::fs;
+#[cfg(unix)]
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
 
 use meilisearch_types::heed::CompactionOption;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::{compression, VERSION_FILE_NAME};
-use path_slash::PathBufExt;
-use reqwest::header::ETAG;
-use reqwest::Client;
-use rusty_s3::actions::{CreateMultipartUpload, S3Action as _};
-use rusty_s3::{Bucket, Credentials, UrlStyle};
+#[cfg(unix)]
+use path_slash::PathBufExt as _;
 
 use crate::heed::EnvOpenOptions;
 use crate::processing::{AtomicUpdateFileStep, SnapshotCreationProgress};
@@ -115,6 +111,19 @@ impl IndexScheduler {
                 Ok(secret_key),
             ) => {
                 let runtime = self.runtime.as_ref().expect("Runtime not initialized");
+                #[cfg(not(unix))]
+                {
+                    let _ = (
+                        bucket_url,
+                        bucket_region,
+                        bucket_name,
+                        snapshot_prefix,
+                        access_key,
+                        secret_key,
+                    );
+                    panic!("Non-unix platform does not support S3 snapshotting");
+                }
+                #[cfg(unix)]
                 runtime.block_on(self.process_snapshot_to_s3(
                     progress,
                     bucket_url,
@@ -276,6 +285,7 @@ impl IndexScheduler {
         Ok(tasks)
     }
 
+    #[cfg(unix)]
     #[allow(clippy::too_many_arguments)]
     pub(super) async fn process_snapshot_to_s3(
         &self,
@@ -288,13 +298,19 @@ impl IndexScheduler {
         secret_key: String,
         mut tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {
+        use std::collections::VecDeque;
         use std::fs::File;
         use std::io::{self, Seek as _, SeekFrom, Write as _};
         use std::os::fd::OwnedFd;
         use std::path::Path;
+        use std::time::Duration;
 
         use bytes::{Bytes, BytesMut};
+        use reqwest::header::ETAG;
+        use reqwest::Client;
         use reqwest::Response;
+        use rusty_s3::actions::{CreateMultipartUpload, S3Action as _};
+        use rusty_s3::{Bucket, Credentials, UrlStyle};
         use tokio::task::JoinHandle;
 
         const ONE_HOUR: Duration = Duration::from_secs(3600);
