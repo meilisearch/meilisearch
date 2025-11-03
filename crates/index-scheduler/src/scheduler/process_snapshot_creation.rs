@@ -110,7 +110,6 @@ impl IndexScheduler {
                 Ok(access_key),
                 Ok(secret_key),
             ) => {
-                let runtime = self.runtime.as_ref().expect("Runtime not initialized");
                 #[cfg(not(unix))]
                 {
                     let _ = (
@@ -124,16 +123,18 @@ impl IndexScheduler {
                     panic!("Non-unix platform does not support S3 snapshotting");
                 }
                 #[cfg(unix)]
-                runtime.block_on(self.process_snapshot_to_s3(
-                    progress,
-                    bucket_url,
-                    bucket_region,
-                    bucket_name,
-                    PathBuf::from_slash(snapshot_prefix),
-                    access_key,
-                    secret_key,
-                    tasks,
-                ))
+                self.runtime.as_ref().expect("Runtime not initialized").block_on(
+                    self.process_snapshot_to_s3(
+                        progress,
+                        bucket_url,
+                        bucket_region,
+                        bucket_name,
+                        PathBuf::from_slash(snapshot_prefix),
+                        access_key,
+                        secret_key,
+                        tasks,
+                    ),
+                )
             }
             (
                 Err((_, VarError::NotPresent)),
