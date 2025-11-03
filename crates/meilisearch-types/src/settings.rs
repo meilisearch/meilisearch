@@ -353,7 +353,7 @@ impl<T> Settings<T> {
 
 pub fn hide_secret(secret: &mut String, secret_offset: usize) {
     match secret.len().checked_sub(secret_offset) {
-        None => return,
+        None => (),
         Some(x) if x < 10 => {
             secret.replace_range(secret_offset.., "XXX...");
         }
