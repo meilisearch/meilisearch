@@ -79,11 +79,11 @@ lazy_static! {
         &["batch_uid", "step_name"]
     )
     .expect("Can't create a metric");
-    pub static ref MEILISEARCH_LAST_FINISHED_BATCH_PROGRESS_TRACE_MS: IntGaugeVec =
+    pub static ref MEILISEARCH_LAST_FINISHED_BATCHES_PROGRESS_TRACE_MS: IntGaugeVec =
         register_int_gauge_vec!(
             opts!(
-                "meilisearch_last_batch_progress_trace_ms",
-                "The last batch progress trace in milliseconds"
+                "meilisearch_last_finished_batches_progress_trace_ms",
+                "The last few batches progress trace in milliseconds"
             ),
             &["batch_uid", "step_name"]
         )
