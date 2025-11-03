@@ -150,13 +150,13 @@ pub async fn get_metrics(
     }
 
     // Fetch and expose the current progressing step
+    crate::metrics::MEILISEARCH_BATCH_RUNNING_PROGRESS_TRACE.reset();
     let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
         &Query { statuses: Some(vec![Status::Processing]), ..Query::default() },
         auth_filters,
     )?;
     if let Some(batch) = batches.into_iter().next() {
         let batch_uid = batch.uid.to_string();
-
         if let Some(progress) = batch.progress {
             for ProgressStepView { current_step, finished, total } in progress.steps {
                 crate::metrics::MEILISEARCH_BATCH_RUNNING_PROGRESS_TRACE
@@ -167,6 +167,7 @@ pub async fn get_metrics(
         }
     }
 
+    crate::metrics::MEILISEARCH_LAST_FINISHED_BATCH_PROGRESS_TRACE_MS.reset();
     let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
         // Fetch the finished batches...
         &Query { statuses: Some(vec![Status::Succeeded, Status::Failed]), ..Query::default() },
