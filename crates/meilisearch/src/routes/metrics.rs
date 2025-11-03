@@ -68,13 +68,13 @@ meilisearch_http_response_time_seconds_bucket{method="GET",path="/metrics",le="1
 meilisearch_http_response_time_seconds_bucket{method="GET",path="/metrics",le="+Inf"} 0
 meilisearch_http_response_time_seconds_sum{method="GET",path="/metrics"} 0
 meilisearch_http_response_time_seconds_count{method="GET",path="/metrics"} 0
-# HELP meilisearch_last_batch_progress_trace_ms The last batch progress trace in milliseconds
-# TYPE meilisearch_last_batch_progress_trace_ms gauge
-meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks"} 20170
-meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes"} 383
-meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes > preparing payloads"} 382
-meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes > preparing payloads > payload"} 382
-meilisearch_last_batch_progress_trace_ms{batch_uid="0",step_name="processing tasks > indexing"} 19760
+# HELP meilisearch_last_finished_batches_progress_trace_ms The last few batches progress trace in milliseconds
+# TYPE meilisearch_last_finished_batches_progress_trace_ms gauge
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks"} 19360
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes"} 368
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes > preparing payloads"} 367
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes > preparing payloads > payload"} 367
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks > indexing"} 18970
 # HELP meilisearch_index_count Meilisearch Index Count
 # TYPE meilisearch_index_count gauge
 meilisearch_index_count 1
@@ -180,20 +180,20 @@ pub async fn get_metrics(
         }
     }
 
-    crate::metrics::MEILISEARCH_LAST_FINISHED_BATCH_PROGRESS_TRACE_MS.reset();
+    crate::metrics::MEILISEARCH_LAST_FINISHED_BATCHES_PROGRESS_TRACE_MS.reset();
     let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
         // Fetch the finished batches...
         &Query { statuses: Some(vec![Status::Succeeded, Status::Failed]), ..Query::default() },
         auth_filters,
     )?;
-    // ...and get the latest one only.
-    if let Some(batch) = batches.into_iter().next() {
+    // ...and get the last three batches only.
+    for batch in batches.into_iter().take(3) {
         let batch_uid = batch.uid.to_string();
         for (step_name, duration_str) in batch.stats.progress_trace {
             let Some(duration_str) = duration_str.as_str() else { continue };
             match humantime::parse_duration(duration_str) {
                 Ok(duration) => {
-                    crate::metrics::MEILISEARCH_LAST_FINISHED_BATCH_PROGRESS_TRACE_MS
+                    crate::metrics::MEILISEARCH_LAST_FINISHED_BATCHES_PROGRESS_TRACE_MS
                         .with_label_values(&[&batch_uid, &step_name])
                         .set(duration.as_millis() as i64);
                 }
