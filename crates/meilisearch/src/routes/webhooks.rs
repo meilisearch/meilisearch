@@ -99,7 +99,8 @@ pub(super) struct WebhookWithMetadata {
 }
 
 impl WebhookWithMetadata {
-    pub fn from(uuid: Uuid, webhook: Webhook) -> Self {
+    pub fn from(uuid: Uuid, mut webhook: Webhook) -> Self {
+        webhook.redact_authorization_header();
         Self { uuid, is_editable: uuid != Uuid::nil(), webhook }
     }
 }
