@@ -4,6 +4,7 @@ use index_scheduler::{IndexScheduler, Query};
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::progress::ProgressStepView;
 use meilisearch_types::tasks::Status;
 use prometheus::{Encoder, TextEncoder};
 use time::OffsetDateTime;
@@ -145,6 +146,24 @@ pub async fn get_metrics(
             crate::metrics::MEILISEARCH_NB_TASKS
                 .with_label_values(&[&kind, &value])
                 .set(count as i64);
+        }
+    }
+
+    // Fetch and expose the current progressing step
+    let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
+        &Query { statuses: Some(vec![Status::Processing]), ..Query::default() },
+        auth_filters,
+    )?;
+    if let Some(batch) = batches.into_iter().next() {
+        let batch_uid = batch.uid.to_string();
+
+        if let Some(progress) = batch.progress {
+            for ProgressStepView { current_step, finished, total } in progress.steps {
+                crate::metrics::MEILISEARCH_BATCH_RUNNING_PROGRESS_TRACE
+                    .with_label_values(&[batch_uid.as_str(), current_step.as_ref()])
+                    // We return the completion ratio of the current step
+                    .set(finished as f64 / total as f64);
+            }
         }
     }
 
