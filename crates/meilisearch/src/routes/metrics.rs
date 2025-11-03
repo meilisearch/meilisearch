@@ -148,11 +148,10 @@ pub async fn get_metrics(
         }
     }
 
-    let filters = index_scheduler.filters();
     let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
         // Fetch the finished batches...
         &Query { statuses: Some(vec![Status::Succeeded, Status::Failed]), ..Query::default() },
-        filters,
+        auth_filters,
     )?;
     // ...and get the latest one only.
     if let Some(batch) = batches.into_iter().next() {
