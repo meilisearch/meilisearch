@@ -25,7 +25,6 @@ pub(crate) struct FeatureData {
     persisted: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
     runtime: Arc<RwLock<RuntimeTogglableFeatures>>,
     network: Arc<RwLock<Network>>,
-    experimental_personalization_api_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -193,7 +192,7 @@ impl FeatureData {
             metrics,
             logs_route,
             contains_filter,
-            experimental_personalization_api_key,
+            experimental_personalization: _,
         } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: metrics || persisted_features.metrics,
@@ -210,7 +209,6 @@ impl FeatureData {
             persisted: runtime_features_db,
             runtime,
             network: Arc::new(RwLock::new(network)),
-            experimental_personalization_api_key,
         })
     }
 
@@ -239,10 +237,6 @@ impl FeatureData {
 
     pub fn features(&self) -> RoFeatures {
         RoFeatures::new(self)
-    }
-
-    pub fn experimental_personalization_api_key(&self) -> Option<&String> {
-        self.experimental_personalization_api_key.as_ref()
     }
 
     pub fn put_network(&self, mut wtxn: RwTxn, new_network: Network) -> Result<()> {

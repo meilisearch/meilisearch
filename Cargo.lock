@@ -1237,21 +1237,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
 
 [[package]]
-name = "cohere-rust"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8b553b385b0f2562138baea705b5707335314f8e91a58e7d1a03c3a6c332423"
-dependencies = [
- "bytes",
- "reqwest",
- "serde",
- "serde_json",
- "strum_macros 0.26.4",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
 name = "color-spantrace"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3752,7 +3737,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "strum",
- "strum_macros 0.27.2",
+ "strum_macros",
  "unicode-blocks",
  "unicode-normalization",
  "unicode-segmentation",
@@ -4080,7 +4065,6 @@ dependencies = [
  "bytes",
  "cargo_toml",
  "clap",
- "cohere-rust",
  "crossbeam-channel",
  "deserr",
  "dump",
@@ -6313,20 +6297,7 @@ version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 dependencies = [
- "strum_macros 0.27.2",
-]
-
-[[package]]
-name = "strum_macros"
-version = "0.26.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.106",
+ "strum_macros",
 ]
 
 [[package]]

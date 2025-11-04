@@ -207,9 +207,8 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             ));
         }
 
-        let personalize = other
-            .personalize_user_context
-            .map(|user_context| Personalize { user_context: Some(user_context) });
+        let personalize =
+            other.personalize_user_context.map(|user_context| Personalize { user_context });
 
         Ok(Self {
             q: other.q,
@@ -350,12 +349,23 @@ pub async fn search_with_url_query(
 
     let index = index_scheduler.index(&index_uid)?;
 
+    // Extract personalization and query string before moving query
+    let personalize = query.personalize.clone();
+
+    // Get search cutoff to create deadline for personalization (before moving index)
+    let deadline = if personalize.is_some() {
+        let rtxn = index.read_txn()?;
+        index.search_cutoff(&rtxn)?.map(|cutoff_ms| {
+            std::time::Instant::now() + std::time::Duration::from_millis(cutoff_ms)
+        })
+    } else {
+        None
+    };
+
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
-    // Extract personalization and query string before moving query
-    let personalize = query.personalize.clone();
     let query_str = query.q.clone();
 
     let permit = search_queue.try_get_search_permit().await?;
@@ -386,9 +396,11 @@ pub async fn search_with_url_query(
     let mut search_result = search_result?;
 
     // Apply personalization if requested
-    search_result = personalization_service
-        .rerank_search_results(search_result, personalize.as_ref(), query_str.as_deref())
-        .await?;
+    if let Some(personalize) = personalize.as_ref() {
+        search_result = personalization_service
+            .rerank_search_results(search_result, personalize, query_str.as_deref(), deadline)
+            .await?;
+    }
 
     debug!(request_uid = ?request_uid, returns = ?search_result, "Search get");
     Ok(HttpResponse::Ok().json(search_result))
@@ -474,14 +486,25 @@ pub async fn search_with_post(
 
     let index = index_scheduler.index(&index_uid)?;
 
+    // Extract personalization and query string before moving query
+    let personalize = query.personalize.clone();
+
+    // Get search cutoff to create deadline for personalization (before moving index)
+    let deadline = if personalize.is_some() {
+        let rtxn = index.read_txn()?;
+        index.search_cutoff(&rtxn)?.map(|cutoff_ms| {
+            std::time::Instant::now() + std::time::Duration::from_millis(cutoff_ms)
+        })
+    } else {
+        None
+    };
+
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
     let include_metadata = parse_include_metadata_header(&req);
 
-    // Extract personalization and query string before moving query
-    let personalize = query.personalize.clone();
     let query_str = query.q.clone();
 
     let permit = search_queue.try_get_search_permit().await?;
@@ -513,9 +536,11 @@ pub async fn search_with_post(
     let mut search_result = search_result?;
 
     // Apply personalization if requested
-    search_result = personalization_service
-        .rerank_search_results(search_result, personalize.as_ref(), query_str.as_deref())
-        .await?;
+    if let Some(personalize) = personalize.as_ref() {
+        search_result = personalization_service
+            .rerank_search_results(search_result, personalize, query_str.as_deref(), deadline)
+            .await?;
+    }
 
     debug!(request_uid = ?request_uid, returns = ?search_result, "Search post");
     Ok(HttpResponse::Ok().json(search_result))

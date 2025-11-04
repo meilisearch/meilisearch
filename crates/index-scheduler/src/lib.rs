@@ -893,10 +893,6 @@ impl IndexScheduler {
         self.features.features()
     }
 
-    pub fn experimental_personalization_api_key(&self) -> Option<&String> {
-        self.features.experimental_personalization_api_key()
-    }
-
     pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.features.put_runtime_features(wtxn, features)?;

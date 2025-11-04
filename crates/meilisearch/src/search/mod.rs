@@ -63,7 +63,7 @@ pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 #[deserr(error = DeserrJsonError<InvalidSearchPersonalize>, rename_all = camelCase, deny_unknown_fields)]
 pub struct Personalize {
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
-    pub user_context: Option<String>,
+    pub user_context: String,
 }
 
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
