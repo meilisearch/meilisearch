@@ -707,9 +707,13 @@ impl Opt {
             let certs = load_certs(cert_path.to_path_buf())?;
             let privkey = load_private_key(key_path.to_path_buf())?;
             let ocsp = load_ocsp(&self.ssl_ocsp_path)?;
-            let mut config = config
-                .with_single_cert_with_ocsp(certs, privkey, ocsp)
-                .map_err(|_| anyhow::anyhow!("bad certificates/private key"))?;
+
+            let mut config = (if ocsp.is_empty() {
+                config.with_single_cert(certs, privkey)
+            } else {
+                config.with_single_cert_with_ocsp(certs, privkey, ocsp)
+            })
+            .map_err(|_| anyhow::anyhow!("bad certificates/private key"))?;
 
             config.key_log = Arc::new(rustls::KeyLogFile::new());
 
