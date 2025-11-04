@@ -245,7 +245,6 @@ impl IndexScheduler {
         use std::os::fd::OwnedFd;
         use std::path::Path;
         use std::path::PathBuf;
-        use std::time::Duration;
 
         use bytes::{Bytes, BytesMut};
         use path_slash::PathBufExt as _;
@@ -265,47 +264,59 @@ impl IndexScheduler {
             s3_secret_key,
             s3_max_in_flight_parts,
             s3_compression_level: level,
+            s3_signature_duration,
+            s3_multipart_part_size,
         } = opts;
-
-        const ONE_HOUR: Duration = Duration::from_secs(3600);
-        // Parts are 375MiB which enables databases of up to 3.5TiB. Must be at least 2x5MiB.
-        const PART_SIZE: usize = 375 * 1024 * 1024;
-
-        let client = Client::new();
-        // TODO Remove this unwrap
-        let s3_snapshot_prefix = PathBuf::from_slash(s3_snapshot_prefix);
-        let url = s3_bucket_url.parse().unwrap();
-        let bucket = Bucket::new(url, UrlStyle::Path, s3_bucket_name, s3_bucket_region).unwrap();
-        let credential = Credentials::new(s3_access_key, s3_secret_key);
-        // TODO change this and use the database name like in the original version
-        let object_path = s3_snapshot_prefix.join("data.ms.snapshot");
-        let object = object_path.to_slash().expect("Invalid UTF-8 path").into_owned();
-
-        eprintln!("Starting the upload of the snapshot to {object}");
 
         // TODO implement exponential backoff on upload requests: https://docs.rs/backoff
         // TODO return a result with actual errors
-        // TODO sign for longer than an hour?
-        // NOTE to make it work on Windows we could try using std::io::pipe instead.
-        //      However, we are still using the tokio unix pipe in the async upload loop.
         let (reader, writer) = std::io::pipe()?;
         let uploader_task = tokio::spawn(async move {
+            use rusty_s3::BucketError;
+
             let reader = OwnedFd::from(reader);
             let reader = tokio::net::unix::pipe::Receiver::from_owned_fd(reader)?;
-            let action = bucket.create_multipart_upload(Some(&credential), &object);
-            // TODO Question: If it is only signed for an hour and a snapshot takes longer than an hour, what happens?
-            //                If the part is deleted (like a TTL) we should sign it for at least 24 hours.
-            let url = action.sign(ONE_HOUR);
-            let resp = client.post(url).send().await.unwrap().error_for_status().unwrap();
-            let body = resp.text().await.unwrap();
 
-            let multipart = CreateMultipartUpload::parse_response(&body).unwrap();
-            let mut etags = Vec::<String>::new();
+            let s3_snapshot_prefix = PathBuf::from_slash(s3_snapshot_prefix);
+            let url = s3_bucket_url
+                .parse()
+                .map_err(BucketError::ParseError)
+                .map_err(Error::S3BucketError)?;
+            let bucket = Bucket::new(url, UrlStyle::Path, s3_bucket_name, s3_bucket_region)
+                .map_err(Error::S3BucketError)?;
+            let credential = Credentials::new(s3_access_key, s3_secret_key);
+            // TODO change this and use the database name like in the original version
+            let object_path = s3_snapshot_prefix.join("data.ms.snapshot");
+            let object = object_path.to_slash().expect("Invalid UTF-8 path").into_owned();
+
+            let action = bucket.create_multipart_upload(Some(&credential), &object);
+            let url = action.sign(s3_signature_duration);
+            let client = Client::new();
+            let resp = client.post(url).send().await.map_err(Error::S3HttpError)?;
+            let status = resp.status();
+            let body = match resp.error_for_status_ref() {
+                Ok(_) => resp.text().await.map_err(Error::S3HttpError)?,
+                Err(_) => {
+                    return Err(Error::S3Error {
+                        status,
+                        body: resp.text().await.unwrap_or_default(),
+                    })
+                }
+            };
+
+            let multipart = CreateMultipartUpload::parse_response(&body)
+                .map_err(|e| Error::S3XmlError(Box::new(e)))?;
+            tracing::debug!("Starting the upload of the snapshot to {object}");
+
+            // We use this bumpalo for etags strings.
+            let bump = bumpalo::Bump::new();
+            let mut etags = Vec::<&str>::new();
             let mut in_flight =
                 VecDeque::<(JoinHandle<reqwest::Result<Response>>, Bytes)>::with_capacity(
-                    s3_max_in_flight_parts,
+                    s3_max_in_flight_parts.get(),
                 );
 
+            // Part numbers start at 1 and cannot be larger than 10k
             for part_number in 1u16.. {
                 let part_upload = bucket.upload_part(
                     Some(&credential),
@@ -313,79 +324,79 @@ impl IndexScheduler {
                     part_number,
                     multipart.upload_id(),
                 );
-                let url = part_upload.sign(ONE_HOUR);
+                let url = part_upload.sign(s3_signature_duration);
 
                 // Wait for a buffer to be ready if there are in-flight parts that landed
-                let mut buffer = if in_flight.len() >= s3_max_in_flight_parts {
+                let mut buffer = if in_flight.len() >= s3_max_in_flight_parts.get() {
                     let (request, buffer) = in_flight.pop_front().unwrap();
-                    let resp = request.await.unwrap().unwrap().error_for_status().unwrap();
+                    let resp = request.await.unwrap().map_err(Error::S3HttpError)?;
+                    let resp = match resp.error_for_status_ref() {
+                        Ok(response) => response,
+                        Err(_) => {
+                            return Err(Error::S3Error {
+                                status: resp.status(),
+                                body: resp.text().await.unwrap_or_default(),
+                            });
+                        }
+                    };
                     let etag =
                         resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
                     let mut buffer = match buffer.try_into_mut() {
                         Ok(buffer) => buffer,
-                        Err(_) => panic!("Valid to convert into BytesMut"),
+                        Err(_) => unreachable!("Impossible to convert into BytesMut"),
                     };
-                    // TODO use bumpalo to reduce the number of allocations
-                    etags.push(etag.to_str().unwrap().to_owned());
+                    etags.push(bump.alloc_str(etag.to_str().unwrap()));
                     buffer.clear();
                     buffer
                 } else {
-                    // TODO Base this on the available memory
-                    BytesMut::with_capacity(PART_SIZE)
+                    BytesMut::with_capacity(s3_multipart_part_size as usize)
                 };
 
-                while buffer.len() < (PART_SIZE / 2) {
-                    eprintln!(
-                        "buffer is {:.2}% full, trying to read more",
-                        buffer.len() as f32 / buffer.capacity() as f32 * 100.0
-                    );
-
+                // If we successfully read enough bytes,
+                // we can continue and send the buffer/part
+                while buffer.len() < (s3_multipart_part_size as usize / 2) {
                     // Wait for the pipe to be readable
                     reader.readable().await?;
 
                     match reader.try_read_buf(&mut buffer) {
                         Ok(0) => break,
                         // We read some bytes but maybe not enough
-                        Ok(n) => {
-                            eprintln!("Read {} bytes from pipe, continuing", n);
-                            continue;
-                        }
+                        Ok(_) => continue,
                         // The readiness event is a false positive.
-                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                            eprintln!("received a WouldBlock");
-                            continue;
-                        }
+                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => continue,
                         Err(e) => return Err(e.into()),
                     }
                 }
 
-                eprintln!(
-                    "buffer is {:.2}% full",
-                    buffer.len() as f32 / buffer.capacity() as f32 * 100.0
-                );
-
                 if buffer.is_empty() {
-                    eprintln!("buffer is empty, breaking part number loop");
-                    // Break the loop if the buffer is empty
-                    // after we tried to read bytes
+                    // Break the loop if the buffer is
+                    // empty after we tried to read bytes
                     break;
                 }
 
                 let body = buffer.freeze();
-                eprintln!("Sending part {}", part_number);
+                tracing::trace!("Sending part {part_number}");
                 let task = tokio::spawn(client.put(url).body(body.clone()).send());
                 in_flight.push_back((task, body));
             }
 
             for (join_handle, _buffer) in in_flight {
-                let resp = join_handle.await.unwrap().unwrap().error_for_status().unwrap();
+                let resp = join_handle.await.unwrap().map_err(Error::S3HttpError)?;
+                let resp = match resp.error_for_status_ref() {
+                    Ok(response) => response,
+                    Err(_) => {
+                        return Err(Error::S3Error {
+                            status: resp.status(),
+                            body: resp.text().await.unwrap_or_default(),
+                        })
+                    }
+                };
                 let etag =
                     resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
-                // TODO use bumpalo to reduce the number of allocations
-                etags.push(etag.to_str().unwrap().to_owned());
+                etags.push(bump.alloc_str(etag.to_str().unwrap()));
             }
 
-            eprintln!("Finalizing the multipart upload");
+            tracing::trace!("Finalizing the multipart upload");
 
             let action = bucket.complete_multipart_upload(
                 Some(&credential),
@@ -393,23 +404,22 @@ impl IndexScheduler {
                 multipart.upload_id(),
                 etags.iter().map(AsRef::as_ref),
             );
-            let url = action.sign(ONE_HOUR);
-            let resp = client.post(url).body(action.body()).send().await.unwrap();
+            let url = action.sign(s3_signature_duration);
+            let resp =
+                client.post(url).body(action.body()).send().await.map_err(Error::S3HttpError)?;
             let status = resp.status();
-            let text = resp.text().await.unwrap();
-            eprintln!("Status: {status}, Text: {text}");
+            let body =
+                resp.text().await.map_err(|e| Error::S3Error { status, body: e.to_string() })?;
 
-            // TODO do a better check and do not assert
-            // assert!(resp.status().is_success());
-
-            Result::<_, Error>::Ok(())
+            if status.is_success() {
+                Ok(())
+            } else {
+                Err(Error::S3Error { status, body })
+            }
         });
 
-        // TODO not a big fan of this clone
-        //      remove it and get all the necessary data from the scheduler
         let index_scheduler = IndexScheduler::private_clone(self);
         let builder_task = tokio::task::spawn_blocking(move || {
-            // NOTE enabling compression still generates a corrupted tarball
             let writer = flate2::write::GzEncoder::new(writer, flate2::Compression::new(level));
             let mut tarball = tar::Builder::new(writer);
 
@@ -422,10 +432,11 @@ impl IndexScheduler {
             // 2. Snapshot the index scheduler LMDB env
             progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
             let mut tasks_env_file = index_scheduler.env.try_clone_inner_file()?;
-            // NOTE That made the trick !!! Should I memory map instead?
+            // Note: Seeking to the start of the file is necessary to ensure
+            //       the tarball reads the file from the beginning. I still
+            //       don't know why the read cursor is not at the beginning.
             tasks_env_file.seek(SeekFrom::Start(0))?;
             let path = Path::new("tasks").join("data.mdb");
-            // NOTE when commenting this line, the tarball works better
             tarball.append_file(path, &mut tasks_env_file)?;
             drop(tasks_env_file);
 
@@ -469,11 +480,8 @@ impl IndexScheduler {
                 .map(|res| res.map_err(Error::from).map(|(name, uuid)| (name.to_string(), uuid)))
                 .collect::<Result<_, Error>>()?;
 
-            dbg!(&indexes_references);
-
-            // Note that we need to collect and open all of the indexes files because
-            // otherwise, using a for loop, we would have to have a Send rtxn.
-            // TODO I don't need to do this trick if my writer is NOT async
+            // It's prettier to use a for loop instead of the IndexMapper::try_for_each_index
+            // method, especially when we need to access the UUID, local path and index number.
             for (i, (name, uuid)) in indexes_references.into_iter().enumerate() {
                 progress.update_progress(VariableNameStep::<SnapshotCreationProgress>::new(
                     &name, i as u32, nb_indexes,
@@ -482,7 +490,7 @@ impl IndexScheduler {
                 let index = index_scheduler.index_mapper.index(&rtxn, &name)?;
                 let mut index_file = index.try_clone_inner_file().unwrap();
                 index_file.seek(SeekFrom::Start(0))?;
-                eprintln!("Appending index file for {} in {}", name, path.display());
+                tracing::trace!("Appending index file for {name} in {}", path.display());
                 tarball.append_file(path, &mut index_file)?;
             }
 

@@ -5,6 +5,7 @@ use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::milli::index::RollbackOutcome;
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
+use reqwest::StatusCode;
 use thiserror::Error;
 
 use crate::TaskId;
@@ -127,6 +128,14 @@ pub enum Error {
     #[error("Aborted task")]
     AbortedTask,
 
+    #[error("S3 error: status: {status}, body: {body}")]
+    S3Error { status: StatusCode, body: String },
+    #[error("S3 HTTP error: {0}")]
+    S3HttpError(reqwest::Error),
+    #[error("S3 XML error: {0}")]
+    S3XmlError(Box<dyn std::error::Error + Send + Sync>),
+    #[error("S3 bucket error: {0}")]
+    S3BucketError(rusty_s3::BucketError),
     #[error(transparent)]
     Dump(#[from] dump::Error),
     #[error(transparent)]
@@ -226,6 +235,10 @@ impl Error {
             | Error::TaskCancelationWithEmptyQuery
             | Error::FromRemoteWhenExporting { .. }
             | Error::AbortedTask
+            | Error::S3Error { .. }
+            | Error::S3HttpError(_)
+            | Error::S3XmlError(_)
+            | Error::S3BucketError(_)
             | Error::Dump(_)
             | Error::Heed(_)
             | Error::Milli { .. }
@@ -293,8 +306,14 @@ impl ErrorCode for Error {
             Error::BatchNotFound(_) => Code::BatchNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
             Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
-            // TODO: not sure of the Code to use
             Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
+            Error::S3Error { status, .. } if status.is_client_error() => {
+                Code::InvalidS3SnapshotRequest
+            }
+            Error::S3Error { .. } => Code::S3SnapshotServerError,
+            Error::S3HttpError(_) => Code::S3SnapshotServerError,
+            Error::S3XmlError(_) => Code::S3SnapshotServerError,
+            Error::S3BucketError(_) => Code::InvalidS3SnapshotParameters,
             Error::Dump(e) => e.error_code(),
             Error::Milli { error, .. } => error.error_code(),
             Error::ProcessBatchPanicked(_) => Code::Internal,

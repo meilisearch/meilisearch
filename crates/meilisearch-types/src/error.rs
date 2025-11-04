@@ -390,6 +390,9 @@ TooManyVectors                                 , InvalidRequest       , BAD_REQU
 UnretrievableDocument                          , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                         , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                           , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
+InvalidS3SnapshotRequest                       , Internal             , BAD_REQUEST ;
+InvalidS3SnapshotParameters                    , Internal             , BAD_REQUEST ;
+S3SnapshotServerError                          , Internal             , BAD_GATEWAY ;
 
 // Experimental features
 VectorEmbeddingError                           , InvalidRequest       , BAD_REQUEST ;
