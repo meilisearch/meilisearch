@@ -217,6 +217,7 @@ pub struct IndexScheduler {
     #[cfg(test)]
     run_loop_iteration: Arc<RwLock<usize>>,
 
+    /// The tokio runtime used for asynchronous tasks.
     runtime: Option<tokio::runtime::Handle>,
 }
 

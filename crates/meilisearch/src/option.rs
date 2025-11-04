@@ -12,7 +12,7 @@ use std::{env, fmt, fs};
 use byte_unit::{Byte, ParseError, UnitType};
 use clap::Parser;
 use meilisearch_types::features::InstanceTogglableFeatures;
-use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::milli::update::{IndexerConfig, S3SnapshotOptions};
 use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
 use rustls::server::{ServerSessionMemoryCache, WebPkiClientVerifier};
 use rustls::RootCertStore;
@@ -74,6 +74,17 @@ const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
 const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
+
+// Related to S3 snapshots
+const MEILI_S3_BUCKET_URL: &str = "MEILI_S3_BUCKET_URL";
+const MEILI_S3_BUCKET_REGION: &str = "MEILI_S3_BUCKET_REGION";
+const MEILI_S3_BUCKET_NAME: &str = "MEILI_S3_BUCKET_NAME";
+const MEILI_S3_SNAPSHOT_PREFIX: &str = "MEILI_S3_SNAPSHOT_PREFIX";
+const MEILI_S3_ACCESS_KEY: &str = "MEILI_S3_ACCESS_KEY";
+const MEILI_S3_SECRET_KEY: &str = "MEILI_S3_SECRET_KEY";
+const MEILI_S3_MAX_IN_FLIGHT_PARTS: &str = "MEILI_S3_MAX_IN_FLIGHT_PARTS";
+const MEILI_S3_COMPRESSION_LEVEL: &str = "MEILI_S3_COMPRESSION_LEVEL";
+
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
 const DEFAULT_HTTP_ADDR: &str = "localhost:7700";
@@ -83,6 +94,8 @@ const DEFAULT_SNAPSHOT_DIR: &str = "snapshots/";
 const DEFAULT_SNAPSHOT_INTERVAL_SEC: u64 = 86400;
 const DEFAULT_SNAPSHOT_INTERVAL_SEC_STR: &str = "86400";
 const DEFAULT_DUMP_DIR: &str = "dumps/";
+const DEFAULT_S3_SNAPSHOT_MAX_IN_FLIGHT_PARTS: NonZeroUsize = NonZeroUsize::new(10).unwrap();
+const DEFAULT_S3_SNAPSHOT_COMPRESSION_LEVEL: u32 = 0;
 
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
@@ -479,6 +492,10 @@ pub struct Opt {
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
 
+    #[serde(flatten)]
+    #[clap(flatten)]
+    pub s3_snapshot_options: Option<S3SnapshotOpts>,
+
     /// Set the path to a configuration file that should be used to setup the engine.
     /// Format must be TOML.
     #[clap(long)]
@@ -580,6 +597,7 @@ impl Opt {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            s3_snapshot_options,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -681,6 +699,9 @@ impl Opt {
             experimental_no_snapshot_compaction.to_string(),
         );
         indexer_options.export_to_env();
+        if let Some(s3_snapshot_options) = s3_snapshot_options {
+            s3_snapshot_options.export_to_env();
+        }
     }
 
     pub fn get_ssl_config(&self) -> anyhow::Result<Option<rustls::ServerConfig>> {
@@ -849,6 +870,16 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
     type Error = anyhow::Error;
 
     fn try_from(other: &IndexerOpts) -> Result<Self, Self::Error> {
+        let IndexerOpts {
+            max_indexing_memory,
+            max_indexing_threads,
+            skip_index_budget,
+            experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_dumps,
+            experimental_no_edition_2024_for_prefix_post_processing,
+            experimental_no_edition_2024_for_facet_post_processing,
+        } = other;
+
         let thread_pool = ThreadPoolNoAbortBuilder::new_for_indexing()
             .num_threads(other.max_indexing_threads.unwrap_or_else(|| num_cpus::get() / 2))
             .build()?;
@@ -856,21 +887,124 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
         Ok(Self {
             thread_pool,
             log_every_n: Some(DEFAULT_LOG_EVERY_N),
-            max_memory: other.max_indexing_memory.map(|b| b.as_u64() as usize),
-            max_threads: *other.max_indexing_threads,
+            max_memory: max_indexing_memory.map(|b| b.as_u64() as usize),
+            max_threads: max_indexing_threads.0,
             max_positions_per_attributes: None,
-            skip_index_budget: other.skip_index_budget,
-            experimental_no_edition_2024_for_settings: other
-                .experimental_no_edition_2024_for_settings,
-            experimental_no_edition_2024_for_dumps: other.experimental_no_edition_2024_for_dumps,
+            skip_index_budget: *skip_index_budget,
+            experimental_no_edition_2024_for_settings: *experimental_no_edition_2024_for_settings,
+            experimental_no_edition_2024_for_dumps: *experimental_no_edition_2024_for_dumps,
             chunk_compression_type: Default::default(),
             chunk_compression_level: Default::default(),
             documents_chunk_size: Default::default(),
             max_nb_chunks: Default::default(),
-            experimental_no_edition_2024_for_prefix_post_processing: other
-                .experimental_no_edition_2024_for_prefix_post_processing,
-            experimental_no_edition_2024_for_facet_post_processing: other
-                .experimental_no_edition_2024_for_facet_post_processing,
+            experimental_no_edition_2024_for_prefix_post_processing:
+                *experimental_no_edition_2024_for_prefix_post_processing,
+            experimental_no_edition_2024_for_facet_post_processing:
+                *experimental_no_edition_2024_for_facet_post_processing,
+            s3_snapshot_options: None,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Parser, Deserialize)]
+// This group is a bit tricky but makes it possible to require all listed fields if one of them
+// is specified. It lets us keep an Option for the S3SnapshotOpts configuration.
+// <https://github.com/clap-rs/clap/issues/5092#issuecomment-2616986075>
+#[group(requires_all = ["s3_bucket_url", "s3_bucket_region", "s3_bucket_name", "s3_snapshot_prefix", "s3_access_key", "s3_secret_key"])]
+pub struct S3SnapshotOpts {
+    /// The S3 bucket URL in the format https://s3.<region>.amazonaws.com.
+    #[clap(long, env = MEILI_S3_BUCKET_URL, required = false)]
+    #[serde(default)]
+    pub s3_bucket_url: String,
+
+    /// The region in the format us-east-1.
+    #[clap(long, env = MEILI_S3_BUCKET_REGION, required = false)]
+    #[serde(default)]
+    pub s3_bucket_region: String,
+
+    /// The bucket name.
+    #[clap(long, env = MEILI_S3_BUCKET_NAME, required = false)]
+    #[serde(default)]
+    pub s3_bucket_name: String,
+
+    /// The prefix path where to put the snapshot, uses normal slashes (/).
+    #[clap(long, env = MEILI_S3_SNAPSHOT_PREFIX, required = false)]
+    #[serde(default)]
+    pub s3_snapshot_prefix: String,
+
+    /// The S3 access key.
+    #[clap(long, env = MEILI_S3_ACCESS_KEY, required = false)]
+    #[serde(default)]
+    pub s3_access_key: String,
+
+    /// The S3 secret key.
+    #[clap(long, env = MEILI_S3_SECRET_KEY, required = false)]
+    #[serde(default)]
+    pub s3_secret_key: String,
+
+    /// The maximum number of parts that can be uploaded in parallel.
+    #[clap(long, env = MEILI_S3_MAX_IN_FLIGHT_PARTS, default_value_t = default_s3_snapshot_max_in_flight_parts())]
+    #[serde(default = "default_s3_snapshot_max_in_flight_parts")]
+    pub s3_max_in_flight_parts: NonZeroUsize,
+
+    /// The compression level. Defaults to no compression (0).
+    #[clap(long, env = MEILI_S3_COMPRESSION_LEVEL, default_value_t = default_s3_snapshot_compression_level())]
+    #[serde(default = "default_s3_snapshot_compression_level")]
+    pub s3_compression_level: u32,
+}
+
+impl S3SnapshotOpts {
+    /// Exports the values to their corresponding env vars if they are not set.
+    pub fn export_to_env(self) {
+        let S3SnapshotOpts {
+            s3_bucket_url,
+            s3_bucket_region,
+            s3_bucket_name,
+            s3_snapshot_prefix,
+            s3_access_key,
+            s3_secret_key,
+            s3_max_in_flight_parts,
+            s3_compression_level,
+        } = self;
+
+        export_to_env_if_not_present(MEILI_S3_BUCKET_URL, s3_bucket_url);
+        export_to_env_if_not_present(MEILI_S3_BUCKET_REGION, s3_bucket_region);
+        export_to_env_if_not_present(MEILI_S3_BUCKET_NAME, s3_bucket_name);
+        export_to_env_if_not_present(MEILI_S3_SNAPSHOT_PREFIX, s3_snapshot_prefix);
+        export_to_env_if_not_present(MEILI_S3_ACCESS_KEY, s3_access_key);
+        export_to_env_if_not_present(MEILI_S3_SECRET_KEY, s3_secret_key);
+        export_to_env_if_not_present(
+            MEILI_S3_MAX_IN_FLIGHT_PARTS,
+            s3_max_in_flight_parts.to_string(),
+        );
+        export_to_env_if_not_present(MEILI_S3_COMPRESSION_LEVEL, s3_compression_level.to_string());
+    }
+}
+
+impl TryFrom<S3SnapshotOpts> for S3SnapshotOptions {
+    type Error = anyhow::Error;
+
+    fn try_from(other: S3SnapshotOpts) -> Result<Self, Self::Error> {
+        let S3SnapshotOpts {
+            s3_bucket_url,
+            s3_bucket_region,
+            s3_bucket_name,
+            s3_snapshot_prefix,
+            s3_access_key,
+            s3_secret_key,
+            s3_max_in_flight_parts,
+            s3_compression_level,
+        } = other;
+
+        Ok(S3SnapshotOptions {
+            s3_bucket_url,
+            s3_bucket_region,
+            s3_bucket_name,
+            s3_snapshot_prefix,
+            s3_access_key,
+            s3_secret_key,
+            s3_max_in_flight_parts,
+            s3_compression_level,
         })
     }
 }
@@ -1087,6 +1221,14 @@ fn default_snapshot_dir() -> PathBuf {
 
 fn default_snapshot_interval_sec() -> &'static str {
     DEFAULT_SNAPSHOT_INTERVAL_SEC_STR
+}
+
+fn default_s3_snapshot_max_in_flight_parts() -> NonZeroUsize {
+    DEFAULT_S3_SNAPSHOT_MAX_IN_FLIGHT_PARTS
+}
+
+fn default_s3_snapshot_compression_level() -> u32 {
+    DEFAULT_S3_SNAPSHOT_COMPRESSION_LEVEL
 }
 
 fn default_dump_dir() -> PathBuf {
