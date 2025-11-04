@@ -351,6 +351,7 @@ impl<T> Settings<T> {
     }
 }
 
+/// Redact a secret string, starting from the `secret_offset`th byte.
 pub fn hide_secret(secret: &mut String, secret_offset: usize) {
     match secret.len().checked_sub(secret_offset) {
         None => (),
