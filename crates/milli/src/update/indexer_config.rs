@@ -1,4 +1,5 @@
 use std::num::NonZeroUsize;
+use std::time::Duration;
 
 use grenad::CompressionType;
 
@@ -50,6 +51,8 @@ pub struct S3SnapshotOptions {
     pub s3_secret_key: String,
     pub s3_max_in_flight_parts: NonZeroUsize,
     pub s3_compression_level: u32,
+    pub s3_signature_duration: Duration,
+    pub s3_multipart_part_size: u64,
 }
 
 /// By default use only 1 thread for indexing in tests
