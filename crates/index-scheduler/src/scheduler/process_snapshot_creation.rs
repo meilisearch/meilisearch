@@ -252,7 +252,7 @@ impl IndexScheduler {
         use reqwest::Client;
         use reqwest::Response;
         use rusty_s3::actions::{CreateMultipartUpload, S3Action as _};
-        use rusty_s3::{Bucket, Credentials, UrlStyle};
+        use rusty_s3::{Bucket, BucketError, Credentials, UrlStyle};
         use tokio::task::JoinHandle;
 
         let S3SnapshotOptions {
@@ -271,9 +271,8 @@ impl IndexScheduler {
         // TODO implement exponential backoff on upload requests: https://docs.rs/backoff
         // TODO return a result with actual errors
         let (reader, writer) = std::io::pipe()?;
+        let must_stop_processing = self.scheduler.must_stop_processing.clone();
         let uploader_task = tokio::spawn(async move {
-            use rusty_s3::BucketError;
-
             let reader = OwnedFd::from(reader);
             let reader = tokio::net::unix::pipe::Receiver::from_owned_fd(reader)?;
 
@@ -318,6 +317,10 @@ impl IndexScheduler {
 
             // Part numbers start at 1 and cannot be larger than 10k
             for part_number in 1u16.. {
+                if must_stop_processing.get() {
+                    return Err(Error::AbortedTask);
+                }
+
                 let part_upload = bucket.upload_part(
                     Some(&credential),
                     &object,
@@ -515,8 +518,9 @@ impl IndexScheduler {
 
         let (uploader_result, builder_result) = tokio::join!(uploader_task, builder_task);
 
-        builder_result.unwrap()?;
+        // Check uploader result first to early return on task abortion.
         uploader_result.unwrap()?;
+        builder_result.unwrap()?;
 
         for task in &mut tasks {
             task.status = Status::Succeeded;
