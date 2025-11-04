@@ -185,6 +185,65 @@ jobs:
           asset_name: ${{ matrix.asset_name }}
           tag: ${{ github.ref }}
 
+  publish-armv7:
+    name: Publish binary for armv7
+    runs-on: ubuntu-latest
+    needs: check-version
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    container:
+      # Use ubuntu-22.04 to compile with glibc 2.35
+      image: ubuntu:22.04
+    strategy:
+      matrix:
+        include:
+          - target: armv7-unknown-linux-gnueabihf
+            asset_name: meilisearch-linux-armv7
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+      - name: Install needed dependencies
+        run: |
+          apt-get update -y && apt-get install -y \
+            curl build-essential gcc-arm-linux-gnueabihf
+      - name: Set up Docker for cross compilation
+        run: |
+          apt-get install -y curl apt-transport-https ca-certificates software-properties-common
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+          add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+          apt-get update -y && apt-get install -y docker-ce
+      - name: Installing Rust toolchain
+        uses: dtolnay/rust-toolchain@1.89
+        with:
+          profile: minimal
+          target: ${{ matrix.target }}
+      - name: Configure target armv7 GNU
+        run: |
+          echo '[target.armv7-unknown-linux-gnueabihf]' >> ~/.cargo/config
+          echo 'linker = "arm-linux-gnueabihf-gcc"' >> ~/.cargo/config
+      - name: Install a default toolchain that will be used to build cargo cross
+        run: |
+          rustup default stable
+      - name: Cargo build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          use-cross: true
+          args: --release --target ${{ matrix.target }}
+        env:
+          CROSS_DOCKER_IN_DOCKER: true
+      - name: List target output files
+        run: ls -lR ./target
+      - name: Upload the binary to release
+        # No need to upload binaries for dry run (cron or workflow_dispatch)
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@2.11.2
+        with:
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          file: target/${{ matrix.target }}/release/meilisearch
+          asset_name: ${{ matrix.asset_name }}
+          tag: ${{ github.ref }}
+
   publish-openapi-file:
     name: Publish OpenAPI file
     needs: check-version
