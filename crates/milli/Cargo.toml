@@ -97,7 +97,7 @@ ureq = { version = "2.12.1", features = ["json"] }
 url = "2.5.4"
 hashbrown = "0.15.4"
 bumpalo = "3.18.1"
-bumparaw-collections = "0.1.4"
+bumparaw-collections = { git = "https://github.com/luusl/bumparaw-collections.git", branch = "Add-ARMv7-support" }
 steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.9"
 allocator-api2 = "0.3.0"
