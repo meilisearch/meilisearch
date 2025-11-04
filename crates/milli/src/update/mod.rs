@@ -5,7 +5,7 @@ pub use self::concurrent_available_ids::ConcurrentAvailableIds;
 pub use self::facet::bulk::FacetsUpdateBulk;
 pub use self::facet::incremental::FacetsUpdateIncrementalInner;
 pub use self::index_documents::{request_threads, *};
-pub use self::indexer_config::{default_thread_pool_and_threads, IndexerConfig};
+pub use self::indexer_config::{default_thread_pool_and_threads, IndexerConfig, S3SnapshotOptions};
 pub use self::new::ChannelCongestion;
 pub use self::settings::{validate_embedding_settings, Setting, Settings};
 pub use self::update_step::UpdateIndexingStep;

@@ -233,7 +233,11 @@ pub fn setup_meilisearch(
         task_db_size: opt.max_task_db_size.as_u64() as usize,
         index_base_map_size: opt.max_index_size.as_u64() as usize,
         enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
-        indexer_config: Arc::new((&opt.indexer_options).try_into()?),
+        indexer_config: Arc::new({
+            let s3_snapshot_options =
+                opt.s3_snapshot_options.clone().map(|opt| opt.try_into()).transpose()?;
+            IndexerConfig { s3_snapshot_options, ..(&opt.indexer_options).try_into()? }
+        }),
         autobatching_enabled: true,
         cleanup_enabled: !opt.experimental_replication_parameters,
         max_number_of_tasks: 1_000_000,
@@ -534,7 +538,11 @@ fn import_dump(
     let indexer_config = if base_config.max_threads.is_none() {
         let (thread_pool, _) = default_thread_pool_and_threads();
 
-        let _config = IndexerConfig { thread_pool, ..*base_config };
+        let _config = IndexerConfig {
+            thread_pool,
+            s3_snapshot_options: base_config.s3_snapshot_options.clone(),
+            ..*base_config
+        };
         backup_config = _config;
         &backup_config
     } else {

@@ -217,6 +217,7 @@ struct Infos {
     import_snapshot: bool,
     schedule_snapshot: Option<u64>,
     snapshot_dir: bool,
+    uses_s3_snapshots: bool,
     ignore_missing_snapshot: bool,
     ignore_snapshot_if_db_exists: bool,
     http_addr: bool,
@@ -285,6 +286,7 @@ impl Infos {
             indexer_options,
             config_file_path,
             no_analytics: _,
+            s3_snapshot_options,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
@@ -348,6 +350,7 @@ impl Infos {
             import_snapshot: import_snapshot.is_some(),
             schedule_snapshot,
             snapshot_dir: snapshot_dir != PathBuf::from("snapshots/"),
+            uses_s3_snapshots: s3_snapshot_options.is_some(),
             ignore_missing_snapshot,
             ignore_snapshot_if_db_exists,
             http_addr: http_addr != default_http_addr(),
