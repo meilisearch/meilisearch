@@ -346,24 +346,26 @@ impl<T> Settings<T> {
                 continue;
             };
 
-            Self::hide_secret(api_key);
+            hide_secret(api_key, 0);
         }
     }
+}
 
-    fn hide_secret(secret: &mut String) {
-        match secret.len() {
-            x if x < 10 => {
-                secret.replace_range(.., "XXX...");
-            }
-            x if x < 20 => {
-                secret.replace_range(2.., "XXXX...");
-            }
-            x if x < 30 => {
-                secret.replace_range(3.., "XXXXX...");
-            }
-            _x => {
-                secret.replace_range(5.., "XXXXXX...");
-            }
+/// Redact a secret string, starting from the `secret_offset`th byte.
+pub fn hide_secret(secret: &mut String, secret_offset: usize) {
+    match secret.len().checked_sub(secret_offset) {
+        None => (),
+        Some(x) if x < 10 => {
+            secret.replace_range(secret_offset.., "XXX...");
+        }
+        Some(x) if x < 20 => {
+            secret.replace_range((secret_offset + 2).., "XXXX...");
+        }
+        Some(x) if x < 30 => {
+            secret.replace_range((secret_offset + 3).., "XXXXX...");
+        }
+        Some(_x) => {
+            secret.replace_range((secret_offset + 5).., "XXXXXX...");
         }
     }
 }

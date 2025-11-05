@@ -90,7 +90,7 @@ fn deny_immutable_fields_webhook(
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
-pub(super) struct WebhookWithMetadata {
+pub(super) struct WebhookWithMetadataRedactedAuthorization {
     uuid: Uuid,
     is_editable: bool,
     #[schema(value_type = WebhookSettings)]
@@ -98,8 +98,9 @@ pub(super) struct WebhookWithMetadata {
     webhook: Webhook,
 }
 
-impl WebhookWithMetadata {
-    pub fn from(uuid: Uuid, webhook: Webhook) -> Self {
+impl WebhookWithMetadataRedactedAuthorization {
+    pub fn from(uuid: Uuid, mut webhook: Webhook) -> Self {
+        webhook.redact_authorization_header();
         Self { uuid, is_editable: uuid != Uuid::nil(), webhook }
     }
 }
@@ -107,7 +108,7 @@ impl WebhookWithMetadata {
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WebhookResults {
-    results: Vec<WebhookWithMetadata>,
+    results: Vec<WebhookWithMetadataRedactedAuthorization>,
 }
 
 #[utoipa::path(
@@ -150,7 +151,7 @@ async fn get_webhooks(
     let results = webhooks
         .webhooks
         .into_iter()
-        .map(|(uuid, webhook)| WebhookWithMetadata::from(uuid, webhook))
+        .map(|(uuid, webhook)| WebhookWithMetadataRedactedAuthorization::from(uuid, webhook))
         .collect::<Vec<_>>();
     let results = WebhookResults { results };
 
@@ -301,7 +302,7 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
     tag = "Webhooks",
     security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
-        (status = 200, description = "Webhook found", body = WebhookWithMetadata, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook found", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -324,7 +325,7 @@ async fn get_webhook(
     let mut webhooks = index_scheduler.webhooks_view();
 
     let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
-    let webhook = WebhookWithMetadata::from(uuid, webhook);
+    let webhook = WebhookWithMetadataRedactedAuthorization::from(uuid, webhook);
 
     debug!(returns = ?webhook, "Get webhook");
     Ok(HttpResponse::Ok().json(webhook))
@@ -337,7 +338,7 @@ async fn get_webhook(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.create", "webhooks.*", "*"])),
     responses(
-        (status = 201, description = "Webhook created successfully", body = WebhookWithMetadata, content_type = "application/json", example = json!({
+        (status = 201, description = "Webhook created successfully", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -383,7 +384,7 @@ async fn post_webhook(
 
     analytics.publish(PostWebhooksAnalytics, &req);
 
-    let response = WebhookWithMetadata::from(uuid, webhook);
+    let response = WebhookWithMetadataRedactedAuthorization::from(uuid, webhook);
     debug!(returns = ?response, "Post webhook");
     Ok(HttpResponse::Created().json(response))
 }
@@ -395,7 +396,7 @@ async fn post_webhook(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.update", "webhooks.*", "*"])),
     responses(
-        (status = 200, description = "Webhook updated successfully", body = WebhookWithMetadata, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook updated successfully", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -435,7 +436,7 @@ async fn patch_webhook(
 
     analytics.publish(PatchWebhooksAnalytics, &req);
 
-    let response = WebhookWithMetadata::from(uuid, webhook);
+    let response = WebhookWithMetadataRedactedAuthorization::from(uuid, webhook);
     debug!(returns = ?response, "Patch webhook");
     Ok(HttpResponse::Ok().json(response))
 }

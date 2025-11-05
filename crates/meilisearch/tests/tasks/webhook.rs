@@ -82,7 +82,7 @@ async fn cli_only() {
 
     let (webhooks, code) = server.get_webhooks().await;
     snapshot!(code, @"200 OK");
-    snapshot!(webhooks, @r#"
+    snapshot!(webhooks, @r###"
     {
       "results": [
         {
@@ -90,12 +90,12 @@ async fn cli_only() {
           "isEditable": false,
           "url": "https://example-cli.com/",
           "headers": {
-            "Authorization": "Bearer a-secret-token"
+            "Authorization": "Bearer a-XXXX..."
           }
         }
       ]
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -233,7 +233,7 @@ async fn cli_with_dumps() {
 
     let (webhooks, code) = server.get_webhooks().await;
     snapshot!(code, @"200 OK");
-    snapshot!(webhooks, @r#"
+    snapshot!(webhooks, @r###"
     {
       "results": [
         {
@@ -241,7 +241,7 @@ async fn cli_with_dumps() {
           "isEditable": false,
           "url": "http://defined-in-test-cli.com/",
           "headers": {
-            "Authorization": "Bearer a-secret-token-defined-in-test-cli"
+            "Authorization": "Bearer a-secXXXXXX..."
           }
         },
         {
@@ -255,7 +255,7 @@ async fn cli_with_dumps() {
           "isEditable": true,
           "url": "https://example.com/hook",
           "headers": {
-            "authorization": "TOKEN"
+            "authorization": "XXX..."
           }
         },
         {
@@ -266,7 +266,7 @@ async fn cli_with_dumps() {
         }
       ]
     }
-    "#);
+    "###);
 }
 
 #[actix_web::test]
@@ -367,30 +367,30 @@ async fn post_get_delete() {
         }))
         .await;
     snapshot!(code, @"201 Created");
-    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r###"
     {
       "uuid": "[uuid]",
       "isEditable": true,
       "url": "https://example.com/hook",
       "headers": {
-        "authorization": "TOKEN"
+        "authorization": "XXX..."
       }
     }
-    "#);
+    "###);
 
     let uuid = value.get("uuid").unwrap().as_str().unwrap();
     let (value, code) = server.get_webhook(uuid).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r###"
     {
       "uuid": "[uuid]",
       "isEditable": true,
       "url": "https://example.com/hook",
       "headers": {
-        "authorization": "TOKEN"
+        "authorization": "XXX..."
       }
     }
-    "#);
+    "###);
 
     let (_value, code) = server.delete_webhook(uuid).await;
     snapshot!(code, @"204 No Content");
@@ -430,31 +430,31 @@ async fn create_and_patch() {
     let (value, code) =
         server.patch_webhook(&uuid, json!({ "headers": { "authorization": "TOKEN" } })).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r###"
     {
       "uuid": "[uuid]",
       "isEditable": true,
       "url": "https://example.com/hook",
       "headers": {
-        "authorization": "TOKEN"
+        "authorization": "XXX..."
       }
     }
-    "#);
+    "###);
 
     let (value, code) =
         server.patch_webhook(&uuid, json!({ "headers": { "authorization2": "TOKEN" } })).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r#"
+    snapshot!(json_string!(value, { ".uuid" => "[uuid]" }), @r###"
     {
       "uuid": "[uuid]",
       "isEditable": true,
       "url": "https://example.com/hook",
       "headers": {
-        "authorization": "TOKEN",
+        "authorization": "XXX...",
         "authorization2": "TOKEN"
       }
     }
-    "#);
+    "###);
 
     let (value, code) =
         server.patch_webhook(&uuid, json!({ "headers": { "authorization": null } })).await;
