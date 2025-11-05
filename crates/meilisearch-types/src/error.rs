@@ -686,7 +686,7 @@ impl fmt::Display for deserr_codes::InvalidNetworkSearchApiKey {
 
 impl fmt::Display for deserr_codes::InvalidSearchPersonalize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "the value of `personalize` is invalid, expected a JSON object with optional `userContext` string.")
+        write!(f, "the value of `personalize` is invalid, expected a JSON object with `userContext` string.")
     }
 }
 
