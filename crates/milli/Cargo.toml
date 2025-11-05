@@ -34,7 +34,7 @@ grenad = { version = "0.5.0", default-features = false, features = [
     "rayon",
     "tempfile",
 ] }
-heed = { version = "0.22.1-nested-rtxns", default-features = false, features = [
+heed = { version = "0.22.1-nested-rtxns-6", default-features = false, features = [
     "serde-json",
     "serde-bincode",
 ] }
