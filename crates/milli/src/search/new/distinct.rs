@@ -34,7 +34,7 @@ pub fn apply_distinct_rule(
             continue;
         }
         distinct_single_docid(ctx.index, ctx.txn, field_id, docid, &mut excluded)?;
-        remaining.try_push(docid);
+        let _ = remaining.try_push(docid);
     }
     Ok(DistinctOutput { remaining, excluded })
 }

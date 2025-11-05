@@ -24,7 +24,7 @@ impl BytesDecode<'_> for BoRoaringBitmapCodec {
 
         for chunk in bytes.chunks(size_of::<u32>()) {
             let bytes = chunk.try_into()?;
-            bitmap.push(u32::from_ne_bytes(bytes));
+            let _ = bitmap.try_push(u32::from_ne_bytes(bytes));
         }
 
         Ok(bitmap)
