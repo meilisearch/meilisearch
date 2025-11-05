@@ -47,7 +47,7 @@ obkv = "0.3.0"
 once_cell = "1.21.3"
 ordered-float = "5.0.0"
 rayon = "1.10.0"
-roaring = { version = "0.10.12", features = ["serde"] }
+roaring = { version = "0.11.2", features = ["serde"] }
 rstar = { version = "0.12.2", features = ["serde"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["preserve_order", "raw_value"] }
@@ -89,8 +89,9 @@ rhai = { version = "1.22.2", features = [
     "no_time",
     "sync",
 ] }
-arroy = "0.6.4-nested-rtxns"
 hannoy = { version = "0.0.9-nested-rtxns-2", features = ["arroy"] }
+# arroy = "0.6.4-nested-rtxns"
+arroy = { git = "https://github.com/vuongDang/arroy.git", branch = "roaring-v0.11-from-release-v0.6" }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }

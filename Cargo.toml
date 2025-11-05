@@ -34,6 +34,9 @@ readme = "README.md"
 edition = "2021"
 license = "MIT"
 
+[workspace.dependencies]
+roaring = { version = "0.11", features = ["serde"] }
+
 [profile.release]
 codegen-units = 1
 
@@ -50,6 +53,3 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.roaring]
 opt-level = 3
-
-[patch.crates-io]
-roaring = { git = "https://github.com/RoaringBitmap/roaring-rs.git" }

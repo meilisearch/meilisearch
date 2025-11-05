@@ -93,7 +93,7 @@ pub fn extract_docid_word_positions<R: io::Read + io::Seek>(
             continue;
         }
 
-        documents_ids.push(document_id);
+        documents_ids.try_push(document_id);
 
         // Update key buffer prefix.
         key_buffer.clear();

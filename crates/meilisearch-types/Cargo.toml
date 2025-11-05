@@ -26,7 +26,7 @@ flate2 = "1.1.2"
 fst = "0.4.7"
 memmap2 = "0.9.7"
 milli = { path = "../milli" }
-roaring = { version = "0.10.12", features = ["serde"] }
+roaring = { version = "0.11.2", features = ["serde"] }
 rustc-hash = "2.1.1"
 serde = { version = "1.0.219", features = ["derive"] }
 serde-cs = "0.2.4"

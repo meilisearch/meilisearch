@@ -17,10 +17,11 @@ hmac = "0.12.1"
 maplit = "1.0.2"
 meilisearch-types = { path = "../meilisearch-types" }
 rand = "0.8.5"
-roaring = { version = "0.10.12", features = ["serde"] }
+roaring = { version = "0.11.2", features = ["serde"] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
 sha2 = "0.10.9"
 thiserror = "2.0.12"
 time = { version = "0.3.41", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "1.17.0", features = ["serde", "v4"] }
+
