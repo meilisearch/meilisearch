@@ -59,6 +59,7 @@ use tracing::{error, info_span};
 use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
+use crate::personalization::PersonalizationService;
 
 /// Default number of simultaneously opened indexes.
 ///
@@ -132,6 +133,7 @@ pub fn create_app(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     search_queue: Data<SearchQueue>,
+    personalization_service: Data<PersonalizationService>,
     opt: Opt,
     logs: (LogRouteHandle, LogStderrHandle),
     analytics: Data<Analytics>,
@@ -152,6 +154,7 @@ pub fn create_app(
                 index_scheduler.clone(),
                 auth_controller.clone(),
                 search_queue.clone(),
+                personalization_service,
                 &opt,
                 logs,
                 analytics.clone(),
@@ -696,23 +699,18 @@ pub fn configure_data(
     index_scheduler: Data<IndexScheduler>,
     auth: Data<AuthController>,
     search_queue: Data<SearchQueue>,
+    personalization_service: Data<PersonalizationService>,
     opt: &Opt,
     (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
     analytics: Data<Analytics>,
 ) {
-    // Create personalization service with API key from options
-    let personalization_service = opt
-        .experimental_personalization_api_key
-        .clone()
-        .map(personalization::PersonalizationService::cohere)
-        .unwrap_or_else(personalization::PersonalizationService::disabled);
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(search_queue)
         .app_data(analytics)
-        .app_data(web::Data::new(personalization_service))
+        .app_data(personalization_service)
         .app_data(web::Data::new(logs_route))
         .app_data(web::Data::new(logs_stderr))
         .app_data(web::Data::new(opt.clone()))

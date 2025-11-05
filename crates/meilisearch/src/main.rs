@@ -14,6 +14,7 @@ use index_scheduler::IndexScheduler;
 use is_terminal::IsTerminal;
 use meilisearch::analytics::Analytics;
 use meilisearch::option::LogMode;
+use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
 use meilisearch::{
     analytics, create_app, setup_meilisearch, LogRouteHandle, LogRouteType, LogStderrHandle,
@@ -154,6 +155,13 @@ async fn run_http(
     let index_scheduler = Data::from(index_scheduler);
     let auth_controller = Data::from(auth_controller);
     let analytics = Data::from(analytics);
+    // Create personalization service with API key from options
+    let personalization_service = Data::new(
+        opt.experimental_personalization_api_key
+            .clone()
+            .map(PersonalizationService::cohere)
+            .unwrap_or_else(PersonalizationService::disabled),
+    );
     let search_queue = SearchQueue::new(
         opt.experimental_search_queue_size,
         available_parallelism()
@@ -171,6 +179,7 @@ async fn run_http(
             index_scheduler.clone(),
             auth_controller.clone(),
             search_queue.clone(),
+            personalization_service.clone(),
             opt.clone(),
             logs.clone(),
             analytics.clone(),
