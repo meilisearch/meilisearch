@@ -18,7 +18,7 @@ use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
 use meilisearch::{
     analytics, create_app, setup_meilisearch, LogRouteHandle, LogRouteType, LogStderrHandle,
-    LogStderrType, Opt, SubscriberForSecondLayer,
+    LogStderrType, Opt, ServicesData, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
@@ -153,7 +153,7 @@ async fn run_http(
     let enable_dashboard = &opt.env == "development";
     let opt_clone = opt.clone();
     let index_scheduler = Data::from(index_scheduler);
-    let auth_controller = Data::from(auth_controller);
+    let auth = Data::from(auth_controller);
     let analytics = Data::from(analytics);
     // Create personalization service with API key from options
     let personalization_service = Data::new(
@@ -173,22 +173,25 @@ async fn run_http(
         usize::from(opt.experimental_drop_search_after) as u64
     ));
     let search_queue = Data::new(search_queue);
+    let (logs_route_handle, logs_stderr_handle) = logs;
+    let logs_route_handle = Data::new(logs_route_handle);
+    let logs_stderr_handle = Data::new(logs_stderr_handle);
 
-    let http_server = HttpServer::new(move || {
-        create_app(
-            index_scheduler.clone(),
-            auth_controller.clone(),
-            search_queue.clone(),
-            personalization_service.clone(),
-            opt.clone(),
-            logs.clone(),
-            analytics.clone(),
-            enable_dashboard,
-        )
-    })
-    // Disable signals allows the server to terminate immediately when a user enter CTRL-C
-    .disable_signals()
-    .keep_alive(KeepAlive::Os);
+    let services = ServicesData {
+        index_scheduler,
+        auth,
+        search_queue,
+        personalization_service,
+        logs_route_handle,
+        logs_stderr_handle,
+        analytics,
+    };
+
+    let http_server =
+        HttpServer::new(move || create_app(services.clone(), opt.clone(), enable_dashboard))
+            // Disable signals allows the server to terminate immediately when a user enter CTRL-C
+            .disable_signals()
+            .keep_alive(KeepAlive::Os);
 
     if let Some(config) = opt_clone.get_ssl_config()? {
         http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;

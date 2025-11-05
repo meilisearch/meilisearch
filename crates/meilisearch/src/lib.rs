@@ -130,13 +130,8 @@ pub type LogStderrType = tracing_subscriber::filter::Filtered<
 >;
 
 pub fn create_app(
-    index_scheduler: Data<IndexScheduler>,
-    auth_controller: Data<AuthController>,
-    search_queue: Data<SearchQueue>,
-    personalization_service: Data<PersonalizationService>,
+    services: ServicesData,
     opt: Opt,
-    logs: (LogRouteHandle, LogStderrHandle),
-    analytics: Data<Analytics>,
     enable_dashboard: bool,
 ) -> actix_web::App<
     impl ServiceFactory<
@@ -148,18 +143,7 @@ pub fn create_app(
     >,
 > {
     let app = actix_web::App::new()
-        .configure(|s| {
-            configure_data(
-                s,
-                index_scheduler,
-                auth_controller,
-                search_queue,
-                personalization_service,
-                &opt,
-                logs,
-                analytics,
-            )
-        })
+        .configure(|s| configure_data(s, services, &opt))
         .configure(routes::configure)
         .configure(|s| dashboard(s, enable_dashboard));
 
@@ -694,16 +678,17 @@ fn import_dump(
     Ok(index_scheduler_dump.finish()?)
 }
 
-pub fn configure_data(
-    config: &mut web::ServiceConfig,
-    index_scheduler: Data<IndexScheduler>,
-    auth: Data<AuthController>,
-    search_queue: Data<SearchQueue>,
-    personalization_service: Data<PersonalizationService>,
-    opt: &Opt,
-    (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
-    analytics: Data<Analytics>,
-) {
+pub fn configure_data(config: &mut web::ServiceConfig, services: ServicesData, opt: &Opt) {
+    let ServicesData {
+        index_scheduler,
+        auth,
+        search_queue,
+        personalization_service,
+        logs_route_handle,
+        logs_stderr_handle,
+        analytics,
+    } = services;
+
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config
         .app_data(index_scheduler)
@@ -711,8 +696,8 @@ pub fn configure_data(
         .app_data(search_queue)
         .app_data(analytics)
         .app_data(personalization_service)
-        .app_data(web::Data::new(logs_route))
-        .app_data(web::Data::new(logs_stderr))
+        .app_data(logs_route_handle)
+        .app_data(logs_stderr_handle)
         .app_data(web::Data::new(opt.clone()))
         .app_data(
             web::JsonConfig::default()
@@ -772,4 +757,15 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
 #[cfg(not(feature = "mini-dashboard"))]
 pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
     config.service(web::resource("/").route(web::get().to(routes::running)));
+}
+
+#[derive(Clone)]
+pub struct ServicesData {
+    pub index_scheduler: Data<IndexScheduler>,
+    pub auth: Data<AuthController>,
+    pub search_queue: Data<SearchQueue>,
+    pub personalization_service: Data<PersonalizationService>,
+    pub logs_route_handle: Data<LogRouteHandle>,
+    pub logs_stderr_handle: Data<LogStderrHandle>,
+    pub analytics: Data<Analytics>,
 }
