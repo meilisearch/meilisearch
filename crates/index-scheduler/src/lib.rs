@@ -364,9 +364,13 @@ impl IndexScheduler {
         mut task_db_size: usize,
         max_index_count: usize,
     ) -> IndexBudget {
-        #[cfg(any(windows, target_pointer_width = "32"))]
+        #[cfg(target_pointer_width = "32")]
+        const DEFAULT_BUDGET: usize = 2 * 1024 * 1024 * 1024; // 2 GiB (max reasonable for 32-bit)
+
+        #[cfg(all(windows, not(target_pointer_width = "32")))]
         const DEFAULT_BUDGET: usize = 6 * 1024 * 1024 * 1024 * 1024; // 6 TiB, 1 index
-        #[cfg(not(any(windows, target_pointer_width = "32")))]
+
+        #[cfg(all(not(windows), not(target_pointer_width = "32")))]
         const DEFAULT_BUDGET: usize = 80 * 1024 * 1024 * 1024 * 1024; // 80 TiB, 18 indexes
 
         let budget = if Self::is_good_heed(tasks_path, DEFAULT_BUDGET) {
