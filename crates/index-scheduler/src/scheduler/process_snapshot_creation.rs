@@ -270,6 +270,11 @@ impl IndexScheduler {
 
         let must_stop_processing = self.scheduler.must_stop_processing.clone();
         let retry_backoff = backoff::ExponentialBackoff::default();
+        let db_name = {
+            let mut base_path = self.env.path().to_owned();
+            base_path.pop();
+            base_path.file_name().and_then(OsStr::to_str).unwrap_or("data.ms").to_string()
+        };
 
         let (reader, writer) = std::io::pipe()?;
         let uploader_task = tokio::spawn(async move {
@@ -284,8 +289,8 @@ impl IndexScheduler {
             let bucket = Bucket::new(url, UrlStyle::Path, s3_bucket_name, s3_bucket_region)
                 .map_err(Error::S3BucketError)?;
             let credential = Credentials::new(s3_access_key, s3_secret_key);
-            // TODO change this and use the database name like in the original version
-            let object_path = s3_snapshot_prefix.join("data.ms.snapshot");
+            // Note for the future: use with_added_extension, it's prettier
+            let object_path = s3_snapshot_prefix.join(format!("{db_name}.snapshot"));
             let object = object_path.to_slash().expect("Invalid UTF-8 path").into_owned();
 
             let action = bucket.create_multipart_upload(Some(&credential), &object);
