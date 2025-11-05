@@ -29,14 +29,8 @@ enum PersonalizationError {
     Network(String),
     #[error("Personalization service: Deadline exceeded")]
     DeadlineExceeded,
-    #[error(
-        "{disabled_action} requires enabling the `{feature}` experimental feature. See {issue_link}"
-    )]
-    FeatureNotEnabled {
-        disabled_action: &'static str,
-        feature: &'static str,
-        issue_link: &'static str,
-    },
+    #[error(transparent)]
+    FeatureNotEnabled(#[from] index_scheduler::error::FeatureNotEnabledError),
 }
 
 impl ErrorCode for PersonalizationError {
@@ -137,8 +131,6 @@ impl CohereService {
             query: query.to_string(),
             documents: documents.to_vec(),
             model: "rerank-english-v3.0".to_string(),
-            top_n: None,
-            return_documents: Some(false),
         };
 
         // Retry loop similar to vector extraction
@@ -272,9 +264,6 @@ struct CohereRerankRequest {
     query: String,
     documents: Vec<String>,
     model: String,
-    top_n: Option<usize>,
-    #[serde(rename = "return_documents")]
-    return_documents: Option<bool>,
 }
 
 #[derive(Deserialize)]
@@ -359,11 +348,13 @@ impl PersonalizationService {
                     .rerank_search_results(search_result, personalize, query, deadline)
                     .await
             }
-            Self::Disabled => Err(PersonalizationError::FeatureNotEnabled {
-                disabled_action: "reranking search results",
-                feature: "personalization",
-                issue_link: "https://github.com/orgs/meilisearch/discussions/866",
-            }
+            Self::Disabled => Err(PersonalizationError::FeatureNotEnabled(
+                index_scheduler::error::FeatureNotEnabledError {
+                    disabled_action: "reranking search results",
+                    feature: "personalization",
+                    issue_link: "https://github.com/orgs/meilisearch/discussions/866",
+                },
+            )
             .into()),
         }
     }

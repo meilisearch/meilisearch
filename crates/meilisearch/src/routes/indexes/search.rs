@@ -350,7 +350,7 @@ pub async fn search_with_url_query(
     let index = index_scheduler.index(&index_uid)?;
 
     // Extract personalization and query string before moving query
-    let personalize = query.personalize.clone();
+    let personalize = query.personalize.take();
 
     // Get search cutoff to create deadline for personalization (before moving index)
     let deadline = if personalize.is_some() {
@@ -487,7 +487,7 @@ pub async fn search_with_post(
     let index = index_scheduler.index(&index_uid)?;
 
     // Extract personalization and query string before moving query
-    let personalize = query.personalize.clone();
+    let personalize = query.personalize.take();
 
     // Get search cutoff to create deadline for personalization (before moving index)
     let deadline = if personalize.is_some() {
@@ -505,7 +505,7 @@ pub async fn search_with_post(
 
     let include_metadata = parse_include_metadata_header(&req);
 
-    let query_str = query.q.clone();
+    let query_str = personalize.is_some().then(|| query.q.clone()).flatten();
 
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
