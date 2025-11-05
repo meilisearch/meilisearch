@@ -706,7 +706,11 @@ impl Opt {
         indexer_options.export_to_env();
         if let Some(s3_snapshot_options) = s3_snapshot_options {
             #[cfg(not(unix))]
-            panic!("S3 snapshot options are not supported on Windows");
+            {
+                let _ = s3_snapshot_options;
+                panic!("S3 snapshot options are not supported on Windows");
+            }
+            #[cfg(unix)]
             s3_snapshot_options.export_to_env();
         }
     }
