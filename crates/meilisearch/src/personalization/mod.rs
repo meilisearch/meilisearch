@@ -327,7 +327,12 @@ pub enum PersonalizationService {
 
 impl PersonalizationService {
     pub fn cohere(api_key: String) -> Self {
-        Self::Cohere(CohereService::new(api_key))
+        // If the API key is empty, consider the personalization service as disabled
+        if api_key.trim().is_empty() {
+            Self::disabled()
+        } else {
+            Self::Cohere(CohereService::new(api_key))
+        }
     }
 
     pub fn disabled() -> Self {

@@ -366,7 +366,8 @@ pub async fn search_with_url_query(
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
-    let query_str = query.q.clone();
+    // Save the query string for personalization if requested
+    let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
     let permit = search_queue.try_get_search_permit().await?;
     let include_metadata = parse_include_metadata_header(&req);
@@ -398,7 +399,12 @@ pub async fn search_with_url_query(
     // Apply personalization if requested
     if let Some(personalize) = personalize.as_ref() {
         search_result = personalization_service
-            .rerank_search_results(search_result, personalize, query_str.as_deref(), deadline)
+            .rerank_search_results(
+                search_result,
+                personalize,
+                personalize_query.as_deref(),
+                deadline,
+            )
             .await?;
     }
 
@@ -505,7 +511,8 @@ pub async fn search_with_post(
 
     let include_metadata = parse_include_metadata_header(&req);
 
-    let query_str = personalize.is_some().then(|| query.q.clone()).flatten();
+    // Save the query string for personalization if requested
+    let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
@@ -538,7 +545,12 @@ pub async fn search_with_post(
     // Apply personalization if requested
     if let Some(personalize) = personalize.as_ref() {
         search_result = personalization_service
-            .rerank_search_results(search_result, personalize, query_str.as_deref(), deadline)
+            .rerank_search_results(
+                search_result,
+                personalize,
+                personalize_query.as_deref(),
+                deadline,
+            )
             .await?;
     }
 

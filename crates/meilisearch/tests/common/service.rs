@@ -10,6 +10,7 @@ use actix_web::test::TestRequest;
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
+use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
 use meilisearch::{create_app, Opt, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
@@ -135,11 +136,18 @@ impl Service {
             self.options.experimental_search_queue_size,
             NonZeroUsize::new(1).unwrap(),
         );
+        let personalization_service = self
+            .options
+            .experimental_personalization_api_key
+            .clone()
+            .map(PersonalizationService::cohere)
+            .unwrap_or_else(PersonalizationService::disabled);
 
         actix_web::test::init_service(create_app(
             self.index_scheduler.clone().into(),
             self.auth.clone().into(),
             Data::new(search_queue),
+            Data::new(personalization_service),
             self.options.clone(),
             (route_layer_handle, stderr_layer_handle),
             Data::new(Analytics::no_analytics()),

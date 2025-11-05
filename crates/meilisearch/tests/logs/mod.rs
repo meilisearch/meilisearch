@@ -8,6 +8,7 @@ use actix_web::http::header::ContentType;
 use actix_web::web::Data;
 use meili_snap::snapshot;
 use meilisearch::analytics::Analytics;
+use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
 use meilisearch::{create_app, Opt, SubscriberForSecondLayer};
 use tracing::level_filters::LevelFilter;
@@ -53,6 +54,7 @@ async fn basic_test_log_stream_route() {
         server.service.index_scheduler.clone().into(),
         server.service.auth.clone().into(),
         Data::new(search_queue),
+        Data::new(PersonalizationService::disabled()),
         server.service.options.clone(),
         (route_layer_handle, stderr_layer_handle),
         Data::new(Analytics::no_analytics()),
