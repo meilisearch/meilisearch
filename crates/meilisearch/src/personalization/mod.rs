@@ -11,23 +11,23 @@ const MAX_RETRIES: u32 = 10;
 
 #[derive(Debug, thiserror::Error)]
 enum PersonalizationError {
-    #[error("HTTP request failed: {0}")]
+    #[error("Personalization service: HTTP request failed: {0}")]
     Request(#[from] reqwest::Error),
-    #[error("Failed to parse response: {0}")]
+    #[error("Personalization service: Failed to parse response: {0}")]
     Parse(String),
-    #[error("Cohere API error: {0}")]
+    #[error("Personalization service: Cohere API error: {0}")]
     Api(String),
-    #[error("Unauthorized: invalid API key")]
+    #[error("Personalization service: Unauthorized: invalid API key")]
     Unauthorized,
-    #[error("Rate limited: too many requests")]
+    #[error("Personalization service: Rate limited: too many requests")]
     RateLimited,
-    #[error("Bad request: {0}")]
+    #[error("Personalization service: Bad request: {0}")]
     BadRequest(String),
-    #[error("Internal server error: {0}")]
+    #[error("Personalization service: Internal server error: {0}")]
     InternalServerError(String),
-    #[error("Network error: {0}")]
+    #[error("Personalization service: Network error: {0}")]
     Network(String),
-    #[error("Deadline exceeded")]
+    #[error("Personalization service: Deadline exceeded")]
     DeadlineExceeded,
     #[error(
         "{disabled_action} requires enabling the `{feature}` experimental feature. See {issue_link}"
