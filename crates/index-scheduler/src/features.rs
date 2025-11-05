@@ -188,12 +188,7 @@ impl FeatureData {
 
         let persisted_features: RuntimeTogglableFeatures =
             runtime_features_db.get(wtxn, db_keys::EXPERIMENTAL_FEATURES)?.unwrap_or_default();
-        let InstanceTogglableFeatures {
-            metrics,
-            logs_route,
-            contains_filter,
-            experimental_personalization: _,
-        } = instance_features;
+        let InstanceTogglableFeatures { metrics, logs_route, contains_filter } = instance_features;
         let runtime = Arc::new(RwLock::new(RuntimeTogglableFeatures {
             metrics: metrics || persisted_features.metrics,
             logs_route: logs_route || persisted_features.logs_route,

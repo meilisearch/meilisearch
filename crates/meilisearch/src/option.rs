@@ -780,7 +780,6 @@ impl Opt {
             metrics: self.experimental_enable_metrics,
             logs_route: self.experimental_enable_logs_route,
             contains_filter: self.experimental_contains_filter,
-            experimental_personalization: self.experimental_personalization_api_key.is_some(),
         }
     }
 }

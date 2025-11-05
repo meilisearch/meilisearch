@@ -62,7 +62,7 @@ pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema, Debug)]
 #[deserr(error = DeserrJsonError<InvalidSearchPersonalize>, rename_all = camelCase, deny_unknown_fields)]
 pub struct Personalize {
-    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
+    #[deserr(error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
     pub user_context: String,
 }
 
@@ -973,7 +973,7 @@ pub struct SearchResultWithIndex {
     pub result: SearchResult,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
     #[serde(rename_all = "camelCase")]
