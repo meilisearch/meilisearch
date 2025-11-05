@@ -151,13 +151,13 @@ pub fn create_app(
         .configure(|s| {
             configure_data(
                 s,
-                index_scheduler.clone(),
-                auth_controller.clone(),
-                search_queue.clone(),
+                index_scheduler,
+                auth_controller,
+                search_queue,
                 personalization_service,
                 &opt,
                 logs,
-                analytics.clone(),
+                analytics,
             )
         })
         .configure(routes::configure)
