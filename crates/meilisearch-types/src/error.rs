@@ -315,8 +315,8 @@ InvalidSearchShowRankingScoreDetails           , InvalidRequest       , BAD_REQU
 InvalidSimilarShowRankingScoreDetails          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchDistinct                          , InvalidRequest       , BAD_REQUEST ;
-InvalidSearchPersonalize                        , InvalidRequest       , BAD_REQUEST ;
-InvalidSearchPersonalizeUserContext             , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalize                       , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalizeUserContext            , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchMediaAndVector                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes             , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute               , InvalidRequest       , BAD_REQUEST ;
