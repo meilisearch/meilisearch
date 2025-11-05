@@ -276,9 +276,6 @@ struct CohereRerankResponse {
 #[derive(Deserialize)]
 struct CohereRerankResult {
     index: u32,
-    #[serde(default)]
-    #[allow(dead_code)]
-    relevance_score: Option<f64>,
 }
 
 // Retry strategy similar to vector extraction
