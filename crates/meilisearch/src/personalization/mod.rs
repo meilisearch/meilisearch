@@ -29,11 +29,20 @@ enum PersonalizationError {
     Network(String),
     #[error("Deadline exceeded")]
     DeadlineExceeded,
+    #[error(
+        "{disabled_action} requires enabling the `{feature}` experimental feature. See {issue_link}"
+    )]
+    FeatureNotEnabled {
+        disabled_action: &'static str,
+        feature: &'static str,
+        issue_link: &'static str,
+    },
 }
 
 impl ErrorCode for PersonalizationError {
     fn error_code(&self) -> Code {
         match self {
+            PersonalizationError::FeatureNotEnabled { .. } => Code::FeatureNotEnabled,
             PersonalizationError::Unauthorized => Code::RemoteInvalidApiKey,
             PersonalizationError::RateLimited => Code::TooManySearchRequests,
             PersonalizationError::BadRequest(_) => Code::RemoteBadRequest,
@@ -324,7 +333,7 @@ impl Retry {
 
 pub enum PersonalizationService {
     Cohere(CohereService),
-    Uninitialized,
+    Disabled,
 }
 
 impl PersonalizationService {
@@ -332,9 +341,9 @@ impl PersonalizationService {
         Self::Cohere(CohereService::new(api_key))
     }
 
-    pub fn uninitialized() -> Self {
-        debug!("Personalization service uninitialized");
-        Self::Uninitialized
+    pub fn disabled() -> Self {
+        debug!("Personalization service disabled");
+        Self::Disabled
     }
 
     pub async fn rerank_search_results(
@@ -350,7 +359,12 @@ impl PersonalizationService {
                     .rerank_search_results(search_result, personalize, query, deadline)
                     .await
             }
-            Self::Uninitialized => Ok(search_result),
+            Self::Disabled => Err(PersonalizationError::FeatureNotEnabled {
+                disabled_action: "reranking search results",
+                feature: "personalization",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/866",
+            }
+            .into()),
         }
     }
 }
