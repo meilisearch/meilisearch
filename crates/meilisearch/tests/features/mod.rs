@@ -315,10 +315,10 @@ async fn multi_search_with_personalization_without_enabling_the_feature() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: reranking search results requires enabling the `personalization` experimental feature. See https://github.com/orgs/meilisearch/discussions/866",
-      "code": "feature_not_enabled",
+      "message": "Inside `.queries[0]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from query #0 or remove `federation` from the request",
+      "code": "invalid_multi_search_query_personalization",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_personalization"
     }
     "###);
 }

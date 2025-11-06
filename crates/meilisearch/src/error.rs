@@ -38,6 +38,8 @@ pub enum MeilisearchHttpError {
     PaginationInFederatedQuery(usize, &'static str),
     #[error("Inside `.queries[{0}]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #{0} or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.{1}: {2:?}` for facets in federated search")]
     FacetsInFederatedQuery(usize, String, Vec<String>),
+    #[error("Inside `.queries[{0}]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from query #{0} or remove `federation` from the request")]
+    PersonalizationInFederatedQuery(usize),
     #[error("Inconsistent order for values in facet `{facet}`: index `{previous_uid}` orders {previous_facet_order}, but index `{current_uid}` orders {index_facet_order}.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.")]
     InconsistentFacetOrder {
         facet: String,
@@ -136,6 +138,9 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::FacetsInFederatedQuery(..) => Code::InvalidMultiSearchQueryFacets,
             MeilisearchHttpError::InconsistentFacetOrder { .. } => {
                 Code::InvalidMultiSearchFacetOrder
+            }
+            MeilisearchHttpError::PersonalizationInFederatedQuery(_) => {
+                Code::InvalidMultiSearchQueryPersonalization
             }
             MeilisearchHttpError::InconsistentOriginHeaders { .. } => {
                 Code::InconsistentDocumentChangeHeaders

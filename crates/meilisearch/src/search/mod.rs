@@ -585,6 +585,10 @@ impl SearchQueryWithIndex {
         self.facets.as_deref().filter(|v| !v.is_empty())
     }
 
+    pub fn has_personalize(&self) -> bool {
+        self.personalize.is_some()
+    }
+
     pub fn from_index_query_federation(
         index_uid: IndexUid,
         query: SearchQuery,
