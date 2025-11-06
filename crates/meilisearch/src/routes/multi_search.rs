@@ -146,6 +146,7 @@ pub struct SearchResults {
 pub async fn multi_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
     params: AwebJson<FederatedSearch, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
@@ -236,7 +237,7 @@ pub async fn multi_search_with_post(
             // changes.
             let search_results: Result<_, (ResponseError, usize)> = async {
                 let mut search_results = Vec::with_capacity(queries.len());
-                for (query_index, (index_uid, query, federation_options)) in queries
+                for (query_index, (index_uid, mut query, federation_options)) in queries
                     .into_iter()
                     .map(SearchQueryWithIndex::into_index_query_federation)
                     .enumerate()
@@ -269,6 +270,13 @@ pub async fn multi_search_with_post(
                         })
                         .with_index(query_index)?;
 
+                    // Extract personalization and query string before moving query
+                    let personalize = query.personalize.take();
+
+                    // Save the query string for personalization if requested
+                    let personalize_query =
+                        personalize.is_some().then(|| query.q.clone()).flatten();
+
                     let index_uid_str = index_uid.to_string();
 
                     let search_kind = search_kind(
@@ -280,7 +288,7 @@ pub async fn multi_search_with_post(
                     .with_index(query_index)?;
                     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
-                    let search_result = tokio::task::spawn_blocking(move || {
+                    let (mut search_result, time_budget) = tokio::task::spawn_blocking(move || {
                         perform_search(
                             SearchParams {
                                 index_uid: index_uid_str.clone(),
@@ -295,11 +303,25 @@ pub async fn multi_search_with_post(
                         )
                     })
                     .await
+                    .with_index(query_index)?
                     .with_index(query_index)?;
+
+                    // Apply personalization if requested
+                    if let Some(personalize) = personalize.as_ref() {
+                        search_result = personalization_service
+                            .rerank_search_results(
+                                search_result,
+                                personalize,
+                                personalize_query.as_deref(),
+                                time_budget,
+                            )
+                            .await
+                            .with_index(query_index)?;
+                    }
 
                     search_results.push(SearchResultWithIndex {
                         index_uid: index_uid.into_inner(),
-                        result: search_result.with_index(query_index)?,
+                        result: search_result,
                     });
                 }
                 Ok(search_results)

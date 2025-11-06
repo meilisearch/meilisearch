@@ -1,9 +1,12 @@
 use crate::search::{Personalize, SearchResult};
-use meilisearch_types::error::{Code, ErrorCode, ResponseError};
+use meilisearch_types::{
+    error::{Code, ErrorCode, ResponseError},
+    milli::TimeBudget,
+};
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tracing::{debug, info, warn};
 
 const COHERE_API_URL: &str = "https://api.cohere.ai/v1/rerank";
@@ -72,7 +75,7 @@ impl CohereService {
         search_result: SearchResult,
         personalize: &Personalize,
         query: Option<&str>,
-        deadline: Option<Instant>,
+        time_budget: TimeBudget,
     ) -> Result<SearchResult, ResponseError> {
         // Extract user context from personalization
         let user_context = personalize.user_context.as_str();
@@ -99,7 +102,7 @@ impl CohereService {
 
         // Call Cohere's rerank API with retry logic
         let reranked_indices =
-            match self.call_rerank_with_retry(&prompt, &documents, deadline).await {
+            match self.call_rerank_with_retry(&prompt, &documents, time_budget).await {
                 Ok(indices) => indices,
                 Err(PersonalizationError::DeadlineExceeded) => {
                     // If the deadline is exceeded, return the original search result instead of an error
@@ -125,7 +128,7 @@ impl CohereService {
         &self,
         query: &str,
         documents: &[String],
-        deadline: Option<Instant>,
+        time_budget: TimeBudget,
     ) -> Result<Vec<usize>, PersonalizationError> {
         let request_body = CohereRerankRequest {
             query: query.to_string(),
@@ -142,18 +145,8 @@ impl CohereService {
                 Err(retry) => {
                     warn!("Cohere rerank attempt #{} failed: {}", attempt, retry.error);
 
-                    if let Some(deadline) = deadline {
-                        let now = Instant::now();
-                        if now > deadline {
-                            warn!("Could not rerank due to deadline");
-                            return Err(PersonalizationError::DeadlineExceeded);
-                        }
-
-                        let duration_to_deadline = deadline - now;
-                        match retry.into_duration(attempt) {
-                            Ok(d) => d.min(duration_to_deadline),
-                            Err(error) => return Err(error),
-                        }
+                    if time_budget.exceeded() {
+                        return Err(PersonalizationError::DeadlineExceeded);
                     } else {
                         match retry.into_duration(attempt) {
                             Ok(d) => d,
@@ -345,12 +338,12 @@ impl PersonalizationService {
         search_result: SearchResult,
         personalize: &Personalize,
         query: Option<&str>,
-        deadline: Option<Instant>,
+        time_budget: TimeBudget,
     ) -> Result<SearchResult, ResponseError> {
         match self {
             Self::Cohere(cohere_service) => {
                 cohere_service
-                    .rerank_search_results(search_result, personalize, query, deadline)
+                    .rerank_search_results(search_result, personalize, query, time_budget)
                     .await
             }
             Self::Disabled => Err(PersonalizationError::FeatureNotEnabled(

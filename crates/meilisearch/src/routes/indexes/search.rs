@@ -352,16 +352,6 @@ pub async fn search_with_url_query(
     // Extract personalization and query string before moving query
     let personalize = query.personalize.take();
 
-    // Get search cutoff to create deadline for personalization (before moving index)
-    let deadline = if personalize.is_some() {
-        let rtxn = index.read_txn()?;
-        index.search_cutoff(&rtxn)?.map(|cutoff_ms| {
-            std::time::Instant::now() + std::time::Duration::from_millis(cutoff_ms)
-        })
-    } else {
-        None
-    };
-
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
@@ -389,12 +379,12 @@ pub async fn search_with_url_query(
     .await;
     permit.drop().await;
     let search_result = search_result?;
-    if let Ok(ref search_result) = search_result {
+    if let Ok((search_result, _)) = search_result.as_ref() {
         aggregate.succeed(search_result);
     }
     analytics.publish(aggregate, &req);
 
-    let mut search_result = search_result?;
+    let (mut search_result, time_budget) = search_result?;
 
     // Apply personalization if requested
     if let Some(personalize) = personalize.as_ref() {
@@ -403,7 +393,7 @@ pub async fn search_with_url_query(
                 search_result,
                 personalize,
                 personalize_query.as_deref(),
-                deadline,
+                time_budget,
             )
             .await?;
     }
@@ -495,16 +485,6 @@ pub async fn search_with_post(
     // Extract personalization and query string before moving query
     let personalize = query.personalize.take();
 
-    // Get search cutoff to create deadline for personalization (before moving index)
-    let deadline = if personalize.is_some() {
-        let rtxn = index.read_txn()?;
-        index.search_cutoff(&rtxn)?.map(|cutoff_ms| {
-            std::time::Instant::now() + std::time::Duration::from_millis(cutoff_ms)
-        })
-    } else {
-        None
-    };
-
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
@@ -532,7 +512,7 @@ pub async fn search_with_post(
     .await;
     permit.drop().await;
     let search_result = search_result?;
-    if let Ok(ref search_result) = search_result {
+    if let Ok((ref search_result, _)) = search_result {
         aggregate.succeed(search_result);
         if search_result.degraded {
             MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
@@ -540,7 +520,7 @@ pub async fn search_with_post(
     }
     analytics.publish(aggregate, &req);
 
-    let mut search_result = search_result?;
+    let (mut search_result, time_budget) = search_result?;
 
     // Apply personalization if requested
     if let Some(personalize) = personalize.as_ref() {
@@ -549,7 +529,7 @@ pub async fn search_with_post(
                 search_result,
                 personalize,
                 personalize_query.as_deref(),
-                deadline,
+                time_budget,
             )
             .await?;
     }

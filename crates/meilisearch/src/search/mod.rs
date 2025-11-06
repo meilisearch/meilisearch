@@ -1171,7 +1171,10 @@ pub struct SearchParams {
     pub include_metadata: bool,
 }
 
-pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResult, ResponseError> {
+pub fn perform_search(
+    params: SearchParams,
+    index: &Index,
+) -> Result<(SearchResult, TimeBudget), ResponseError> {
     let SearchParams {
         index_uid,
         query,
@@ -1190,7 +1193,7 @@ pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResul
     };
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, &search_kind, time_budget, features)?;
+        prepare_search(index, &rtxn, &query, &search_kind, time_budget.clone(), features)?;
 
     let (
         milli::SearchResult {
@@ -1314,7 +1317,7 @@ pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResul
         request_uid: Some(request_uid),
         metadata,
     };
-    Ok(result)
+    Ok((result, time_budget))
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
