@@ -304,7 +304,7 @@ fn stream_tarball_into_pipe(
     writer: std::io::PipeWriter,
     index_scheduler: IndexScheduler,
 ) -> std::result::Result<(), Error> {
-    use std::io::{Seek as _, SeekFrom, Write as _};
+    use std::io::Write as _;
     use std::path::Path;
 
     let writer = flate2::write::GzEncoder::new(writer, flate2::Compression::new(level));
@@ -316,13 +316,9 @@ fn stream_tarball_into_pipe(
 
     // 2. Snapshot the index scheduler LMDB env
     progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
-    let mut tasks_env_file = index_scheduler.env.try_clone_inner_file()?;
-    // Note: A previous snapshot operation may have left the cursor
-    //       at the end of the file so we need to seek to the start.
-    tasks_env_file.seek(SeekFrom::Start(0))?;
+    let tasks_env_file = index_scheduler.env.try_clone_inner_file()?;
     let path = Path::new("tasks").join("data.mdb");
-    tarball.append_file(path, &mut tasks_env_file)?;
-    drop(tasks_env_file);
+    append_file_to_tarball(&mut tarball, path, tasks_env_file)?;
 
     // 2.3 Create a read transaction on the index-scheduler
     let rtxn = index_scheduler.env.read_txn()?;
@@ -374,24 +370,18 @@ fn stream_tarball_into_pipe(
         ));
         let path = indexes_dir.join(uuid.to_string()).join("data.mdb");
         let index = index_scheduler.index_mapper.index(&rtxn, &name)?;
-        let mut index_file = index.try_clone_inner_file()?;
-        // Note: A previous snapshot operation may have left the cursor
-        //       at the end of the file so we need to seek to the start.
-        index_file.seek(SeekFrom::Start(0))?;
+        let index_file = index.try_clone_inner_file()?;
         tracing::trace!("Appending index file for {name} in {}", path.display());
-        tarball.append_file(path, &mut index_file)?;
+        append_file_to_tarball(&mut tarball, path, index_file)?;
     }
 
     drop(rtxn);
 
     // 4. Snapshot the auth LMDB env
     progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
-    let mut auth_env_file = index_scheduler.scheduler.auth_env.try_clone_inner_file()?;
-    // Note: A previous snapshot operation may have left the cursor
-    //       at the end of the file so we need to seek to the start.
-    auth_env_file.seek(SeekFrom::Start(0))?;
+    let auth_env_file = index_scheduler.scheduler.auth_env.try_clone_inner_file()?;
     let path = Path::new("auth").join("data.mdb");
-    tarball.append_file(path, &mut auth_env_file)?;
+    append_file_to_tarball(&mut tarball, path, auth_env_file)?;
 
     let mut gzencoder = tarball.into_inner()?;
     gzencoder.flush()?;
@@ -400,6 +390,25 @@ fn stream_tarball_into_pipe(
     writer.flush()?;
 
     Result::<_, Error>::Ok(())
+}
+
+#[cfg(unix)]
+fn append_file_to_tarball<W, P>(
+    tarball: &mut tar::Builder<W>,
+    path: P,
+    mut auth_env_file: fs::File,
+) -> Result<(), Error>
+where
+    W: std::io::Write,
+    P: AsRef<std::path::Path>,
+{
+    use std::io::{Seek as _, SeekFrom};
+
+    // Note: A previous snapshot operation may have left the cursor
+    //       at the end of the file so we need to seek to the start.
+    auth_env_file.seek(SeekFrom::Start(0))?;
+    tarball.append_file(path, &mut auth_env_file)?;
+    Ok(())
 }
 
 /// Streams the content read from the given reader to S3.
