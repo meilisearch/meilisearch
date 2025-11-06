@@ -373,7 +373,7 @@ fn stream_tarball_into_pipe(
         ));
         let path = indexes_dir.join(uuid.to_string()).join("data.mdb");
         let index = index_scheduler.index_mapper.index(&rtxn, &name)?;
-        let mut index_file = index.try_clone_inner_file().unwrap();
+        let mut index_file = index.try_clone_inner_file()?;
         // Note: A previous snapshot operation may have left the cursor
         //       at the end of the file so we need to seek to the start.
         index_file.seek(SeekFrom::Start(0))?;
@@ -385,7 +385,7 @@ fn stream_tarball_into_pipe(
 
     // 4. Snapshot the auth LMDB env
     progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
-    let mut auth_env_file = index_scheduler.scheduler.auth_env.try_clone_inner_file().unwrap();
+    let mut auth_env_file = index_scheduler.scheduler.auth_env.try_clone_inner_file()?;
     // Note: A previous snapshot operation may have left the cursor
     //       at the end of the file so we need to seek to the start.
     auth_env_file.seek(SeekFrom::Start(0))?;

@@ -425,8 +425,8 @@ impl Index {
         self.env.info().map_size
     }
 
-    pub fn try_clone_inner_file(&self) -> Result<File> {
-        Ok(self.env.try_clone_inner_file()?)
+    pub fn try_clone_inner_file(&self) -> heed::Result<File> {
+        self.env.try_clone_inner_file()
     }
 
     pub fn copy_to_file(&self, file: &mut File, option: CompactionOption) -> Result<()> {
