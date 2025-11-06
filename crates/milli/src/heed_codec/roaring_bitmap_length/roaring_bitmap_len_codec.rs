@@ -28,7 +28,15 @@ impl RoaringBitmapLenCodec {
                 bytes.read_exact(&mut run_bitmap)?;
                 (size, size >= NO_OFFSET_THRESHOLD, Some(run_bitmap))
             } else {
-                return Err(io::Error::other("unknown cookie value"));
+                // TODO: temporary fix since there are some
+                // locations in the codebase that are still writing
+                // data in lmdb byte order format rather than writing in roaring bitmap format
+                // Some merge operations produce byte order data that reach this code
+                let mut entire_bytes = Vec::with_capacity(mem::size_of::<u32>() + bytes.len());
+                entire_bytes.extend_from_slice(&cookie.to_le_bytes());
+                entire_bytes.extend_from_slice(bytes);
+                return Ok((entire_bytes.len() / mem::size_of::<u32>()) as u64);
+                // return Err(io::Error::new(io::ErrorKind::Other, "unknown cookie value"));
             }
         };
 

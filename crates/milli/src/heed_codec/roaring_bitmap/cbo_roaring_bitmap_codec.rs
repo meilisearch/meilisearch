@@ -28,17 +28,53 @@ impl CboRoaringBitmapCodec {
         roaring.serialize_into(writer)
     }
 
-    pub fn deserialize_from(bytes: &[u8]) -> io::Result<RoaringBitmap> {
-        // Otherwise, it means we used the classic RoaringBitmapCodec and
-        // that the header takes threshold integers.
-        RoaringBitmap::deserialize_unchecked_from(bytes)
+    pub fn deserialize_from(mut bytes: &[u8]) -> io::Result<RoaringBitmap> {
+        match RoaringBitmap::deserialize_unchecked_from(bytes) {
+            Ok(bitmap) => Ok(bitmap),
+            Err(_) => {
+                // FIX: this is a bandaid because in the codebase
+                // there is still code that writes non-roaring bitmap values in lmmd
+                // This does not work if the first bytes match a special cookie value from `roaring`
+                // and is not roaring bitmap
+                // For example function
+                //  `milli::update::index_documents::extract::extract_word_docids::words_into_sorter`
+                // writes raw document id in the memory
+                let mut bitmap = RoaringBitmap::new();
+                while let Ok(integer) =
+                    byteorder::ReadBytesExt::read_u32::<byteorder::NativeEndian>(&mut bytes)
+                {
+                    bitmap.insert(integer);
+                }
+                Ok(bitmap)
+            }
+        }
     }
 
     pub fn intersection_with_serialized(
-        bytes: &[u8],
+        mut bytes: &[u8],
         other: &RoaringBitmap,
     ) -> io::Result<RoaringBitmap> {
-        other.intersection_with_serialized_unchecked(Cursor::new(bytes))
+        match other.intersection_with_serialized_unchecked(Cursor::new(bytes)) {
+            Ok(bitmap) => Ok(bitmap),
+            Err(_) => {
+                // FIX: this is a bandaid because in the codebase
+                // there is still code that writes non-roaring bitmap values in lmmd
+                // This does not work if the first bytes match a special cookie value from `roaring`
+                // and is not roaring bitmap
+                // For example function
+                //  `milli::update::index_documents::extract::extract_word_docids::words_into_sorter`
+                // writes raw document id in the memory
+                let mut bitmap = RoaringBitmap::new();
+                while let Ok(integer) =
+                    byteorder::ReadBytesExt::read_u32::<byteorder::NativeEndian>(&mut bytes)
+                {
+                    if other.contains(integer) {
+                        bitmap.insert(integer);
+                    }
+                }
+                Ok(bitmap)
+            }
+        }
     }
 
     /// Merge serialized CboRoaringBitmaps in a buffer.
@@ -55,7 +91,7 @@ impl CboRoaringBitmapCodec {
         let mut vec = Vec::new();
 
         for bytes in slices {
-            roaring |= RoaringBitmap::deserialize_unchecked_from(bytes.as_ref())?;
+            roaring |= CboRoaringBitmapCodec::deserialize_from(bytes.as_ref())?;
         }
 
         if roaring.is_empty() {
