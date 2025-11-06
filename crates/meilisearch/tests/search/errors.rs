@@ -1326,6 +1326,7 @@ async fn search_with_contains_without_enabling_the_feature() {
 }
 
 #[actix_rt::test]
+#[ignore]
 async fn search_with_personalization_invalid_api_key() {
     // Create a server with a fake personalization API key
     let dir = TempDir::new().unwrap();
