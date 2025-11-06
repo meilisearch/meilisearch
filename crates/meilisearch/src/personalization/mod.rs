@@ -77,6 +77,12 @@ impl CohereService {
         query: Option<&str>,
         time_budget: TimeBudget,
     ) -> Result<SearchResult, ResponseError> {
+        if time_budget.exceeded() {
+            warn!("Could not rerank due to deadline");
+            // If the deadline is exceeded, return the original search result instead of an error
+            return Ok(search_result);
+        }
+
         // Extract user context from personalization
         let user_context = personalize.user_context.as_str();
 
@@ -146,6 +152,7 @@ impl CohereService {
                     warn!("Cohere rerank attempt #{} failed: {}", attempt, retry.error);
 
                     if time_budget.exceeded() {
+                        warn!("Could not rerank due to deadline");
                         return Err(PersonalizationError::DeadlineExceeded);
                     } else {
                         match retry.into_duration(attempt) {
