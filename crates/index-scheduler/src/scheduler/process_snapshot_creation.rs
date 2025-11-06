@@ -246,7 +246,6 @@ impl IndexScheduler {
         use std::path::PathBuf;
 
         use bytes::{Bytes, BytesMut};
-        use path_slash::PathBufExt as _;
         use reqwest::header::ETAG;
         use reqwest::Client;
         use reqwest::Response;
@@ -280,7 +279,7 @@ impl IndexScheduler {
             let reader = OwnedFd::from(reader);
             let reader = tokio::net::unix::pipe::Receiver::from_owned_fd(reader)?;
 
-            let s3_snapshot_prefix = PathBuf::from_slash(s3_snapshot_prefix);
+            let s3_snapshot_prefix = PathBuf::from(s3_snapshot_prefix);
             let url = s3_bucket_url
                 .parse()
                 .map_err(BucketError::ParseError)
@@ -290,7 +289,9 @@ impl IndexScheduler {
             let credential = Credentials::new(s3_access_key, s3_secret_key);
             // Note for the future (rust 1.91+): use with_added_extension, it's prettier
             let object_path = s3_snapshot_prefix.join(format!("{db_name}.snapshot"));
-            let object = object_path.to_slash().expect("Invalid UTF-8 path").into_owned();
+            // Note: It doesn't work on Windows and if a port to this platform is needed,
+            //       use the slash-path crate or similar to get the correct path separator.
+            let object = object_path.display().to_string();
 
             let action = bucket.create_multipart_upload(Some(&credential), &object);
             let url = action.sign(s3_signature_duration);

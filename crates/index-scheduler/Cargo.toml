@@ -29,7 +29,6 @@ meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 memmap2 = "0.9.7"
 page_size = "0.6.0"
-path-slash = "0.2.1"
 rayon = "1.10.0"
 roaring = { version = "0.10.12", features = ["serde"] }
 serde = { version = "1.0.219", features = ["derive"] }
