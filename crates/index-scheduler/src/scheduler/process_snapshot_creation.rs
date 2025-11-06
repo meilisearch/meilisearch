@@ -472,9 +472,8 @@ impl IndexScheduler {
             // 2. Snapshot the index scheduler LMDB env
             progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
             let mut tasks_env_file = index_scheduler.env.try_clone_inner_file()?;
-            // Note: Seeking to the start of the file is necessary to ensure
-            //       the tarball reads the file from the beginning. I still
-            //       don't know why the read cursor is not at the beginning.
+            // Note: A previous snapshot operation may have left the cursor
+            //       at the end of the file so we need to seek to the start.
             tasks_env_file.seek(SeekFrom::Start(0))?;
             let path = Path::new("tasks").join("data.mdb");
             tarball.append_file(path, &mut tasks_env_file)?;
@@ -529,6 +528,8 @@ impl IndexScheduler {
                 let path = indexes_dir.join(uuid.to_string()).join("data.mdb");
                 let index = index_scheduler.index_mapper.index(&rtxn, &name)?;
                 let mut index_file = index.try_clone_inner_file().unwrap();
+                // Note: A previous snapshot operation may have left the cursor
+                //       at the end of the file so we need to seek to the start.
                 index_file.seek(SeekFrom::Start(0))?;
                 tracing::trace!("Appending index file for {name} in {}", path.display());
                 tarball.append_file(path, &mut index_file)?;
@@ -540,6 +541,8 @@ impl IndexScheduler {
             progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
             let mut auth_env_file =
                 index_scheduler.scheduler.auth_env.try_clone_inner_file().unwrap();
+            // Note: A previous snapshot operation may have left the cursor
+            //       at the end of the file so we need to seek to the start.
             auth_env_file.seek(SeekFrom::Start(0))?;
             let path = Path::new("auth").join("data.mdb");
             tarball.append_file(path, &mut auth_env_file)?;
