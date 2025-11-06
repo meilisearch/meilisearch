@@ -83,10 +83,11 @@ const MEILI_S3_BUCKET_NAME: &str = "MEILI_S3_BUCKET_NAME";
 const MEILI_S3_SNAPSHOT_PREFIX: &str = "MEILI_S3_SNAPSHOT_PREFIX";
 const MEILI_S3_ACCESS_KEY: &str = "MEILI_S3_ACCESS_KEY";
 const MEILI_S3_SECRET_KEY: &str = "MEILI_S3_SECRET_KEY";
-const MEILI_S3_MAX_IN_FLIGHT_PARTS: &str = "MEILI_S3_MAX_IN_FLIGHT_PARTS";
-const MEILI_S3_COMPRESSION_LEVEL: &str = "MEILI_S3_COMPRESSION_LEVEL";
-const MEILI_S3_SIGNATURE_DURATION_SECONDS: &str = "MEILI_S3_SIGNATURE_DURATION_SECONDS";
-const MEILI_S3_MULTIPART_PART_SIZE: &str = "MEILI_S3_MULTIPART_PART_SIZE";
+const MEILI_EXPERIMENTAL_S3_MAX_IN_FLIGHT_PARTS: &str = "MEILI_EXPERIMENTAL_S3_MAX_IN_FLIGHT_PARTS";
+const MEILI_EXPERIMENTAL_S3_COMPRESSION_LEVEL: &str = "MEILI_EXPERIMENTAL_S3_COMPRESSION_LEVEL";
+const MEILI_EXPERIMENTAL_S3_SIGNATURE_DURATION_SECONDS: &str =
+    "MEILI_EXPERIMENTAL_S3_SIGNATURE_DURATION_SECONDS";
+const MEILI_EXPERIMENTAL_S3_MULTIPART_PART_SIZE: &str = "MEILI_EXPERIMENTAL_S3_MULTIPART_PART_SIZE";
 
 const DEFAULT_CONFIG_FILE_PATH: &str = "./config.toml";
 const DEFAULT_DB_PATH: &str = "./data.ms";
@@ -954,28 +955,36 @@ pub struct S3SnapshotOpts {
     pub s3_secret_key: String,
 
     /// The maximum number of parts that can be uploaded in parallel.
-    #[clap(long, env = MEILI_S3_MAX_IN_FLIGHT_PARTS, default_value_t = default_s3_snapshot_max_in_flight_parts())]
-    #[serde(default = "default_s3_snapshot_max_in_flight_parts")]
-    pub s3_max_in_flight_parts: NonZeroUsize,
+    ///
+    /// For more information, see <https://github.com/orgs/meilisearch/discussions/869>.
+    #[clap(long, env = MEILI_EXPERIMENTAL_S3_MAX_IN_FLIGHT_PARTS, default_value_t = default_experimental_s3_snapshot_max_in_flight_parts())]
+    #[serde(default = "default_experimental_s3_snapshot_max_in_flight_parts")]
+    pub experimental_s3_max_in_flight_parts: NonZeroUsize,
 
     /// The compression level. Defaults to no compression (0).
-    #[clap(long, env = MEILI_S3_COMPRESSION_LEVEL, default_value_t = default_s3_snapshot_compression_level())]
-    #[serde(default = "default_s3_snapshot_compression_level")]
-    pub s3_compression_level: u32,
+    ///
+    /// For more information, see <https://github.com/orgs/meilisearch/discussions/869>.
+    #[clap(long, env = MEILI_EXPERIMENTAL_S3_COMPRESSION_LEVEL, default_value_t = default_experimental_s3_snapshot_compression_level())]
+    #[serde(default = "default_experimental_s3_snapshot_compression_level")]
+    pub experimental_s3_compression_level: u32,
 
     /// The signature duration for the multipart upload.
-    #[clap(long, env = MEILI_S3_SIGNATURE_DURATION_SECONDS, default_value_t = default_s3_snapshot_signature_duration_seconds())]
-    #[serde(default = "default_s3_snapshot_signature_duration_seconds")]
-    pub s3_signature_duration_seconds: u64,
+    ///
+    /// For more information, see <https://github.com/orgs/meilisearch/discussions/869>.
+    #[clap(long, env = MEILI_EXPERIMENTAL_S3_SIGNATURE_DURATION_SECONDS, default_value_t = default_experimental_s3_snapshot_signature_duration_seconds())]
+    #[serde(default = "default_experimental_s3_snapshot_signature_duration_seconds")]
+    pub experimental_s3_signature_duration_seconds: u64,
 
     /// The size of the the multipart parts.
     ///
     /// Must not be less than 10MiB and larger than 8GiB. Yes,
     /// twice the boundaries of the AWS S3 multipart upload
     /// because we use it a bit differently internally.
-    #[clap(long, env = MEILI_S3_MULTIPART_PART_SIZE, default_value_t = default_s3_snapshot_multipart_part_size())]
-    #[serde(default = "default_s3_snapshot_multipart_part_size")]
-    pub s3_multipart_part_size: Byte,
+    ///
+    /// For more information, see <https://github.com/orgs/meilisearch/discussions/869>.
+    #[clap(long, env = MEILI_EXPERIMENTAL_S3_MULTIPART_PART_SIZE, default_value_t = default_experimental_s3_snapshot_multipart_part_size())]
+    #[serde(default = "default_experimental_s3_snapshot_multipart_part_size")]
+    pub experimental_s3_multipart_part_size: Byte,
 }
 
 impl S3SnapshotOpts {
@@ -988,10 +997,10 @@ impl S3SnapshotOpts {
             s3_snapshot_prefix,
             s3_access_key,
             s3_secret_key,
-            s3_max_in_flight_parts,
-            s3_compression_level,
-            s3_signature_duration_seconds,
-            s3_multipart_part_size,
+            experimental_s3_max_in_flight_parts,
+            experimental_s3_compression_level,
+            experimental_s3_signature_duration_seconds,
+            experimental_s3_multipart_part_size,
         } = self;
 
         export_to_env_if_not_present(MEILI_S3_BUCKET_URL, s3_bucket_url);
@@ -1001,17 +1010,20 @@ impl S3SnapshotOpts {
         export_to_env_if_not_present(MEILI_S3_ACCESS_KEY, s3_access_key);
         export_to_env_if_not_present(MEILI_S3_SECRET_KEY, s3_secret_key);
         export_to_env_if_not_present(
-            MEILI_S3_MAX_IN_FLIGHT_PARTS,
-            s3_max_in_flight_parts.to_string(),
-        );
-        export_to_env_if_not_present(MEILI_S3_COMPRESSION_LEVEL, s3_compression_level.to_string());
-        export_to_env_if_not_present(
-            MEILI_S3_SIGNATURE_DURATION_SECONDS,
-            s3_signature_duration_seconds.to_string(),
+            MEILI_EXPERIMENTAL_S3_MAX_IN_FLIGHT_PARTS,
+            experimental_s3_max_in_flight_parts.to_string(),
         );
         export_to_env_if_not_present(
-            MEILI_S3_MULTIPART_PART_SIZE,
-            s3_multipart_part_size.to_string(),
+            MEILI_EXPERIMENTAL_S3_COMPRESSION_LEVEL,
+            experimental_s3_compression_level.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_S3_SIGNATURE_DURATION_SECONDS,
+            experimental_s3_signature_duration_seconds.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_S3_MULTIPART_PART_SIZE,
+            experimental_s3_multipart_part_size.to_string(),
         );
     }
 }
@@ -1027,10 +1039,10 @@ impl TryFrom<S3SnapshotOpts> for S3SnapshotOptions {
             s3_snapshot_prefix,
             s3_access_key,
             s3_secret_key,
-            s3_max_in_flight_parts,
-            s3_compression_level,
-            s3_signature_duration_seconds,
-            s3_multipart_part_size,
+            experimental_s3_max_in_flight_parts,
+            experimental_s3_compression_level,
+            experimental_s3_signature_duration_seconds,
+            experimental_s3_multipart_part_size,
         } = other;
 
         Ok(S3SnapshotOptions {
@@ -1040,10 +1052,10 @@ impl TryFrom<S3SnapshotOpts> for S3SnapshotOptions {
             s3_snapshot_prefix,
             s3_access_key,
             s3_secret_key,
-            s3_max_in_flight_parts,
-            s3_compression_level,
-            s3_signature_duration: Duration::from_secs(s3_signature_duration_seconds),
-            s3_multipart_part_size: s3_multipart_part_size.as_u64(),
+            s3_max_in_flight_parts: experimental_s3_max_in_flight_parts,
+            s3_compression_level: experimental_s3_compression_level,
+            s3_signature_duration: Duration::from_secs(experimental_s3_signature_duration_seconds),
+            s3_multipart_part_size: experimental_s3_multipart_part_size.as_u64(),
         })
     }
 }
@@ -1262,19 +1274,19 @@ fn default_snapshot_interval_sec() -> &'static str {
     DEFAULT_SNAPSHOT_INTERVAL_SEC_STR
 }
 
-fn default_s3_snapshot_max_in_flight_parts() -> NonZeroUsize {
+fn default_experimental_s3_snapshot_max_in_flight_parts() -> NonZeroUsize {
     DEFAULT_S3_SNAPSHOT_MAX_IN_FLIGHT_PARTS
 }
 
-fn default_s3_snapshot_compression_level() -> u32 {
+fn default_experimental_s3_snapshot_compression_level() -> u32 {
     DEFAULT_S3_SNAPSHOT_COMPRESSION_LEVEL
 }
 
-fn default_s3_snapshot_signature_duration_seconds() -> u64 {
+fn default_experimental_s3_snapshot_signature_duration_seconds() -> u64 {
     DEFAULT_S3_SNAPSHOT_SIGNATURE_DURATION_SECONDS
 }
 
-fn default_s3_snapshot_multipart_part_size() -> Byte {
+fn default_experimental_s3_snapshot_multipart_part_size() -> Byte {
     DEFAULT_S3_SNAPSHOT_MULTIPART_PART_SIZE
 }
 
