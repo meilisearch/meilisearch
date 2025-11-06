@@ -284,6 +284,7 @@ impl IndexScheduler {
         let (uploader_result, builder_result) = tokio::join!(uploader_task, builder_task);
 
         // Check uploader result first to early return on task abortion.
+        // safety: JoinHandle can return an error if the task was aborted, cancelled, or panicked.
         uploader_result.unwrap()?;
         builder_result.unwrap()?;
 
@@ -403,6 +404,7 @@ fn stream_tarball_into_pipe(
 
 /// Streams the content read from the given reader to S3.
 #[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
 async fn multipart_stream_to_s3(
     s3_bucket_url: String,
     s3_bucket_region: String,
@@ -479,7 +481,8 @@ async fn multipart_stream_to_s3(
 
         // Wait for a buffer to be ready if there are in-flight parts that landed
         let mut buffer = if in_flight.len() >= s3_max_in_flight_parts.get() {
-            let (request, buffer) = in_flight.pop_front().unwrap();
+            let (request, buffer) = in_flight.pop_front().expect("At least one in flight request");
+            // safety: Panic happens if the task (JoinHandle) was aborted, cancelled, or panicked
             let resp = request.await.unwrap().map_err(Error::S3HttpError)?;
             let resp = match resp.error_for_status_ref() {
                 Ok(response) => response,
@@ -495,7 +498,8 @@ async fn multipart_stream_to_s3(
                 Ok(buffer) => buffer,
                 Err(_) => unreachable!("All bytes references were consumed in the task"),
             };
-            etags.push(bump.alloc_str(etag.to_str().unwrap()));
+            let etag = etag.to_str().expect("etag is a valid string");
+            etags.push(bump.alloc_str(etag));
             buffer.clear();
             buffer
         } else {
@@ -550,6 +554,7 @@ async fn multipart_stream_to_s3(
     }
 
     for (join_handle, _buffer) in in_flight {
+        // safety: Panic happens if the task (JoinHandle) was aborted, cancelled, or panicked
         let resp = join_handle.await.unwrap().map_err(Error::S3HttpError)?;
         let resp = match resp.error_for_status_ref() {
             Ok(response) => response,
@@ -561,7 +566,8 @@ async fn multipart_stream_to_s3(
             }
         };
         let etag = resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
-        etags.push(bump.alloc_str(etag.to_str().unwrap()));
+        let etag = etag.to_str().expect("etag is a valid string");
+        etags.push(bump.alloc_str(etag));
     }
 
     tracing::debug!("Finalizing the multipart upload");
