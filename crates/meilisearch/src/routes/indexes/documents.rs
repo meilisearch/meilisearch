@@ -1153,7 +1153,7 @@ async fn copy_body_to_file(
 /// Delete a set of documents based on an array of document ids.
 #[utoipa::path(
     post,
-    path = "{indexUid}/delete-batch",
+    path = "{indexUid}/documents/delete-batch",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
