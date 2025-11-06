@@ -207,3 +207,118 @@ async fn errors() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn search_with_personalization_without_enabling_the_feature() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    // Create the index and add some documents
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index
+        .add_documents(
+            json!([
+                {"id": 1, "title": "The Dark Knight", "genre": "Action"},
+                {"id": 2, "title": "Inception", "genre": "Sci-Fi"},
+                {"id": 3, "title": "The Matrix", "genre": "Sci-Fi"}
+            ]),
+            None,
+        )
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Try to search with personalization - should return feature_not_enabled error
+    let (response, code) = index
+        .search_post(json!({
+            "q": "movie",
+            "personalize": {
+                "userContext": "I love science fiction movies"
+            }
+        }))
+        .await;
+
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "reranking search results requires enabling the `personalization` experimental feature. See https://github.com/orgs/meilisearch/discussions/866",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn multi_search_with_personalization_without_enabling_the_feature() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    // Create the index and add some documents
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index
+        .add_documents(
+            json!([
+                {"id": 1, "title": "The Dark Knight", "genre": "Action"},
+                {"id": 2, "title": "Inception", "genre": "Sci-Fi"},
+                {"id": 3, "title": "The Matrix", "genre": "Sci-Fi"}
+            ]),
+            None,
+        )
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Try to multi-search with personalization - should return feature_not_enabled error
+    let (response, code) = server
+        .multi_search(json!({
+            "queries": [
+                {
+                    "indexUid": index.uid,
+                    "q": "movie",
+                    "personalize": {
+                        "userContext": "I love science fiction movies"
+                    }
+                }
+            ]
+        }))
+        .await;
+
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "Inside `.queries[0]`: reranking search results requires enabling the `personalization` experimental feature. See https://github.com/orgs/meilisearch/discussions/866",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // Try to federated search with personalization - should return feature_not_enabled error
+    let (response, code) = server
+        .multi_search(json!({
+          "federation": {},
+            "queries": [
+                {
+                    "indexUid": index.uid,
+                    "q": "movie",
+                    "personalize": {
+                        "userContext": "I love science fiction movies"
+                    }
+                }
+            ]
+        }))
+        .await;
+
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "Inside `.queries[0]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from query #0 or remove `federation` from the request",
+      "code": "invalid_multi_search_query_personalization",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_personalization"
+    }
+    "###);
+}

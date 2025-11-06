@@ -24,9 +24,9 @@ use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, perform_search, HybridQuery, MatchingStrategy, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    add_search_rules, perform_search, HybridQuery, MatchingStrategy, Personalize,
+    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult,
+    SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
@@ -134,6 +134,8 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
     #[param(value_type = Vec<Locale>, explode = false)]
     pub locales: Option<CS<Locale>>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
+    pub personalize_user_context: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]
@@ -205,6 +207,9 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             ));
         }
 
+        let personalize =
+            other.personalize_user_context.map(|user_context| Personalize { user_context });
+
         Ok(Self {
             q: other.q,
             // `media` not supported for `GET`
@@ -234,6 +239,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             hybrid,
             ranking_score_threshold: other.ranking_score_threshold.map(|o| o.0),
             locales: other.locales.map(|o| o.into_iter().collect()),
+            personalize,
         })
     }
 }
@@ -322,6 +328,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
@@ -342,9 +349,16 @@ pub async fn search_with_url_query(
 
     let index = index_scheduler.index(&index_uid)?;
 
+    // Extract personalization and query string before moving query
+    let personalize = query.personalize.take();
+
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
+
+    // Save the query string for personalization if requested
+    let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
+
     let permit = search_queue.try_get_search_permit().await?;
     let include_metadata = parse_include_metadata_header(&req);
 
@@ -365,12 +379,24 @@ pub async fn search_with_url_query(
     .await;
     permit.drop().await;
     let search_result = search_result?;
-    if let Ok(ref search_result) = search_result {
+    if let Ok((search_result, _)) = search_result.as_ref() {
         aggregate.succeed(search_result);
     }
     analytics.publish(aggregate, &req);
 
-    let search_result = search_result?;
+    let (mut search_result, time_budget) = search_result?;
+
+    // Apply personalization if requested
+    if let Some(personalize) = personalize.as_ref() {
+        search_result = personalization_service
+            .rerank_search_results(
+                search_result,
+                personalize,
+                personalize_query.as_deref(),
+                time_budget,
+            )
+            .await?;
+    }
 
     debug!(request_uid = ?request_uid, returns = ?search_result, "Search get");
     Ok(HttpResponse::Ok().json(search_result))
@@ -435,6 +461,7 @@ pub async fn search_with_url_query(
 pub async fn search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
     index_uid: web::Path<String>,
     params: AwebJson<SearchQuery, DeserrJsonError>,
     req: HttpRequest,
@@ -455,11 +482,17 @@ pub async fn search_with_post(
 
     let index = index_scheduler.index(&index_uid)?;
 
+    // Extract personalization and query string before moving query
+    let personalize = query.personalize.take();
+
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
     let include_metadata = parse_include_metadata_header(&req);
+
+    // Save the query string for personalization if requested
+    let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
     let permit = search_queue.try_get_search_permit().await?;
     let search_result = tokio::task::spawn_blocking(move || {
@@ -479,7 +512,7 @@ pub async fn search_with_post(
     .await;
     permit.drop().await;
     let search_result = search_result?;
-    if let Ok(ref search_result) = search_result {
+    if let Ok((ref search_result, _)) = search_result {
         aggregate.succeed(search_result);
         if search_result.degraded {
             MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
@@ -487,7 +520,19 @@ pub async fn search_with_post(
     }
     analytics.publish(aggregate, &req);
 
-    let search_result = search_result?;
+    let (mut search_result, time_budget) = search_result?;
+
+    // Apply personalization if requested
+    if let Some(personalize) = personalize.as_ref() {
+        search_result = personalization_service
+            .rerank_search_results(
+                search_result,
+                personalize,
+                personalize_query.as_deref(),
+                time_budget,
+            )
+            .await?;
+    }
 
     debug!(request_uid = ?request_uid, returns = ?search_result, "Search post");
     Ok(HttpResponse::Ok().json(search_result))

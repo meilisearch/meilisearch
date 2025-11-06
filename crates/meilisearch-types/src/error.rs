@@ -258,6 +258,7 @@ InvalidIndexUid                                , InvalidRequest       , BAD_REQU
 InvalidMultiSearchFacets                       , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacetsByIndex                , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacetOrder                   , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchQueryPersonalization         , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederated                    , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederationOptions            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchMaxValuesPerFacet            , InvalidRequest       , BAD_REQUEST ;
@@ -315,6 +316,8 @@ InvalidSearchShowRankingScoreDetails           , InvalidRequest       , BAD_REQU
 InvalidSimilarShowRankingScoreDetails          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchDistinct                          , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalize                       , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalizeUserContext            , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchMediaAndVector                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes             , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute               , InvalidRequest       , BAD_REQUEST ;
@@ -679,6 +682,18 @@ impl fmt::Display for deserr_codes::InvalidNetworkUrl {
 impl fmt::Display for deserr_codes::InvalidNetworkSearchApiKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "the value of `searchApiKey` is invalid, expected a string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchPersonalize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `personalize` is invalid, expected a JSON object with `userContext` string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchPersonalizeUserContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `userContext` is invalid, expected a string.")
     }
 }
 

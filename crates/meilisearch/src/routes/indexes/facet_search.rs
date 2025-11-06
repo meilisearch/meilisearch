@@ -343,6 +343,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             hybrid,
             ranking_score_threshold,
             locales,
+            personalize: None,
         }
     }
 }

@@ -10,8 +10,9 @@ use actix_web::test::TestRequest;
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
+use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
-use meilisearch::{create_app, Opt, SubscriberForSecondLayer};
+use meilisearch::{create_app, Opt, ServicesData, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer;
@@ -135,14 +136,24 @@ impl Service {
             self.options.experimental_search_queue_size,
             NonZeroUsize::new(1).unwrap(),
         );
+        let personalization_service = self
+            .options
+            .experimental_personalization_api_key
+            .clone()
+            .map(PersonalizationService::cohere)
+            .unwrap_or_else(PersonalizationService::disabled);
 
         actix_web::test::init_service(create_app(
-            self.index_scheduler.clone().into(),
-            self.auth.clone().into(),
-            Data::new(search_queue),
+            ServicesData {
+                index_scheduler: self.index_scheduler.clone().into(),
+                auth: self.auth.clone().into(),
+                search_queue: Data::new(search_queue),
+                personalization_service: Data::new(personalization_service),
+                logs_route_handle: Data::new(route_layer_handle),
+                logs_stderr_handle: Data::new(stderr_layer_handle),
+                analytics: Data::new(Analytics::no_analytics()),
+            },
             self.options.clone(),
-            (route_layer_handle, stderr_layer_handle),
-            Data::new(Analytics::no_analytics()),
             true,
         ))
         .await

@@ -1,7 +1,11 @@
 use meili_snap::*;
+use meilisearch::Opt;
+use tempfile::TempDir;
 
 use super::test_settings_documents_indexing_swapping_and_search;
-use crate::common::{shared_does_not_exists_index, Server, DOCUMENTS, NESTED_DOCUMENTS};
+use crate::common::{
+    default_settings, shared_does_not_exists_index, Server, DOCUMENTS, NESTED_DOCUMENTS,
+};
 use crate::json;
 
 #[actix_rt::test]
@@ -1319,4 +1323,99 @@ async fn search_with_contains_without_enabling_the_feature() {
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
     "#);
+}
+
+#[actix_rt::test]
+#[ignore]
+async fn search_with_personalization_invalid_api_key() {
+    // Create a server with a fake personalization API key
+    let dir = TempDir::new().unwrap();
+    let options = Opt {
+        experimental_personalization_api_key: Some("fake-api-key-12345".to_string()),
+        ..default_settings(dir.path())
+    };
+    let server = Server::new_with_options(options).await.unwrap();
+    let index = server.unique_index();
+
+    // Create the index and add some documents
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index
+        .add_documents(
+            json!([
+                {"id": 1, "title": "The Dark Knight", "genre": "Action"},
+                {"id": 2, "title": "Inception", "genre": "Sci-Fi"},
+                {"id": 3, "title": "The Matrix", "genre": "Sci-Fi"}
+            ]),
+            None,
+        )
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Try to search with personalization - should return remote_invalid_api_key error
+    let (response, code) = index
+        .search_post(json!({
+            "q": "the",
+            "personalize": {
+                "userContext": "I love science fiction movies"
+            }
+        }))
+        .await;
+
+    snapshot!(code, @"403 Forbidden");
+    snapshot!(json_string!(response), @r#"
+    {
+      "message": "Personalization service: Unauthorized: invalid API key",
+      "code": "remote_invalid_api_key",
+      "type": "auth",
+      "link": "https://docs.meilisearch.com/errors#remote_invalid_api_key"
+    }
+    "#);
+}
+
+#[actix_rt::test]
+async fn search_with_personalization_no_user_context() {
+    // Create a server with a fake personalization API key
+    let dir = TempDir::new().unwrap();
+    let options = Opt {
+        experimental_personalization_api_key: Some("fake-api-key-12345".to_string()),
+        ..default_settings(dir.path())
+    };
+    let server = Server::new_with_options(options).await.unwrap();
+    let index = server.unique_index();
+
+    // Create the index and add some documents
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index
+        .add_documents(
+            json!([
+                {"id": 1, "title": "The Dark Knight", "genre": "Action"},
+                {"id": 2, "title": "Inception", "genre": "Sci-Fi"},
+                {"id": 3, "title": "The Matrix", "genre": "Sci-Fi"}
+            ]),
+            None,
+        )
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Try to search with personalization - should return remote_invalid_api_key error
+    let (response, code) = index
+        .search_post(json!({
+            "q": "the",
+            "personalize": {}
+        }))
+        .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Missing field `userContext` inside `.personalize`",
+      "code": "invalid_search_personalize",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_personalize"
+    }
+    "###);
 }

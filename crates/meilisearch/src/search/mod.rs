@@ -59,6 +59,13 @@ pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 
+#[derive(Clone, Default, PartialEq, Deserr, ToSchema, Debug)]
+#[deserr(error = DeserrJsonError<InvalidSearchPersonalize>, rename_all = camelCase, deny_unknown_fields)]
+pub struct Personalize {
+    #[deserr(error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
+    pub user_context: String,
+}
+
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
@@ -122,6 +129,8 @@ pub struct SearchQuery {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
+    pub personalize: Option<Personalize>,
 }
 
 impl From<SearchParameters> for SearchQuery {
@@ -169,6 +178,7 @@ impl From<SearchParameters> for SearchQuery {
             highlight_post_tag: DEFAULT_HIGHLIGHT_POST_TAG(),
             crop_marker: DEFAULT_CROP_MARKER(),
             locales: None,
+            personalize: None,
         }
     }
 }
@@ -250,6 +260,7 @@ impl fmt::Debug for SearchQuery {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalize,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -336,6 +347,10 @@ impl fmt::Debug for SearchQuery {
 
         if let Some(locales) = locales {
             debug.field("locales", &locales);
+        }
+
+        if let Some(personalize) = personalize {
+            debug.field("personalize", &personalize);
         }
 
         debug.finish()
@@ -543,6 +558,9 @@ pub struct SearchQueryWithIndex {
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
+    #[serde(skip)]
+    pub personalize: Option<Personalize>,
 
     #[deserr(default)]
     pub federation_options: Option<FederationOptions>,
@@ -565,6 +583,10 @@ impl SearchQueryWithIndex {
 
     pub fn has_facets(&self) -> Option<&[String]> {
         self.facets.as_deref().filter(|v| !v.is_empty())
+    }
+
+    pub fn has_personalize(&self) -> bool {
+        self.personalize.is_some()
     }
 
     pub fn from_index_query_federation(
@@ -600,6 +622,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalize,
         } = query;
 
         SearchQueryWithIndex {
@@ -631,6 +654,7 @@ impl SearchQueryWithIndex {
             attributes_to_search_on,
             ranking_score_threshold,
             locales,
+            personalize,
             federation_options,
         }
     }
@@ -666,6 +690,7 @@ impl SearchQueryWithIndex {
             hybrid,
             ranking_score_threshold,
             locales,
+            personalize,
         } = self;
         (
             index_uid,
@@ -697,6 +722,7 @@ impl SearchQueryWithIndex {
                 hybrid,
                 ranking_score_threshold,
                 locales,
+                personalize,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -1149,7 +1175,10 @@ pub struct SearchParams {
     pub include_metadata: bool,
 }
 
-pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResult, ResponseError> {
+pub fn perform_search(
+    params: SearchParams,
+    index: &Index,
+) -> Result<(SearchResult, TimeBudget), ResponseError> {
     let SearchParams {
         index_uid,
         query,
@@ -1168,7 +1197,7 @@ pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResul
     };
 
     let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, &search_kind, time_budget, features)?;
+        prepare_search(index, &rtxn, &query, &search_kind, time_budget.clone(), features)?;
 
     let (
         milli::SearchResult {
@@ -1226,6 +1255,7 @@ pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResul
         attributes_to_search_on: _,
         filter: _,
         distinct: _,
+        personalize: _,
     } = query;
 
     let format = AttributesFormat {
@@ -1291,7 +1321,7 @@ pub fn perform_search(params: SearchParams, index: &Index) -> Result<SearchResul
         request_uid: Some(request_uid),
         metadata,
     };
-    Ok(result)
+    Ok((result, time_budget))
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]

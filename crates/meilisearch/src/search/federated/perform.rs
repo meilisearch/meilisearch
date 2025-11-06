@@ -601,6 +601,10 @@ impl PartitionedQueries {
             .into());
         }
 
+        if federated_query.has_personalize() {
+            return Err(MeilisearchHttpError::PersonalizationInFederatedQuery(query_index).into());
+        }
+
         let (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
         let federation_options = federation_options.unwrap_or_default();

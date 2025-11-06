@@ -8,8 +8,9 @@ use actix_web::http::header::ContentType;
 use actix_web::web::Data;
 use meili_snap::snapshot;
 use meilisearch::analytics::Analytics;
+use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
-use meilisearch::{create_app, Opt, SubscriberForSecondLayer};
+use meilisearch::{create_app, Opt, ServicesData, SubscriberForSecondLayer};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::Layer;
@@ -50,12 +51,16 @@ async fn basic_test_log_stream_route() {
     );
 
     let app = actix_web::test::init_service(create_app(
-        server.service.index_scheduler.clone().into(),
-        server.service.auth.clone().into(),
-        Data::new(search_queue),
+        ServicesData {
+            index_scheduler: server.service.index_scheduler.clone().into(),
+            auth: server.service.auth.clone().into(),
+            search_queue: Data::new(search_queue),
+            personalization_service: Data::new(PersonalizationService::disabled()),
+            logs_route_handle: Data::new(route_layer_handle),
+            logs_stderr_handle: Data::new(stderr_layer_handle),
+            analytics: Data::new(Analytics::no_analytics()),
+        },
         server.service.options.clone(),
-        (route_layer_handle, stderr_layer_handle),
-        Data::new(Analytics::no_analytics()),
         true,
     ))
     .await;

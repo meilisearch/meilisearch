@@ -75,6 +75,8 @@ const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
 const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
+const MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY: &str =
+    "MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY";
 
 // Related to S3 snapshots
 const MEILI_S3_BUCKET_URL: &str = "MEILI_S3_BUCKET_URL";
@@ -494,6 +496,12 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_no_snapshot_compaction: bool,
 
+    /// Experimental personalization API key feature.
+    ///
+    /// Sets the API key for personalization features.
+    #[clap(long, env = MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY)]
+    pub experimental_personalization_api_key: Option<String>,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -603,6 +611,7 @@ impl Opt {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_personalization_api_key,
             s3_snapshot_options,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
@@ -704,6 +713,12 @@ impl Opt {
             MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION,
             experimental_no_snapshot_compaction.to_string(),
         );
+        if let Some(experimental_personalization_api_key) = experimental_personalization_api_key {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY,
+                experimental_personalization_api_key,
+            );
+        }
         indexer_options.export_to_env();
         if let Some(s3_snapshot_options) = s3_snapshot_options {
             #[cfg(not(unix))]
