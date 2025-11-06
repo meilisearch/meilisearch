@@ -12,6 +12,8 @@ use crate::processing::{AtomicUpdateFileStep, SnapshotCreationProgress};
 use crate::queue::TaskQueue;
 use crate::{Error, IndexScheduler, Result};
 
+const UPDATE_FILES_DIR_NAME: &str = "update_files";
+
 /// # Safety
 ///
 /// See [`EnvOpenOptions::open`].
@@ -150,7 +152,7 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn()?;
 
         // 2.4 Create the update files directory
-        let update_files_dir = temp_snapshot_dir.path().join("update_files");
+        let update_files_dir = temp_snapshot_dir.path().join(UPDATE_FILES_DIR_NAME);
         fs::create_dir_all(&update_files_dir)?;
 
         // 2.5 Only copy the update files of the enqueued tasks
@@ -329,10 +331,17 @@ fn stream_tarball_into_pipe(
     let enqueued = index_scheduler.queue.tasks.get_status(&rtxn, Status::Enqueued)?;
     let (atomic, update_file_progress) = AtomicUpdateFileStep::new(enqueued.len() as u32);
     progress.update_progress(update_file_progress);
-    // TODO I need to create the update files directory (even if empty)
-    //      I should probably simply use the append_dir_all method
-    //      but I'll loose the progression.
-    let update_files_dir = Path::new("update_files");
+
+    // We create the update_files directory so that it
+    // always exists even if there are no update files
+    let update_files_dir = Path::new(UPDATE_FILES_DIR_NAME);
+    let src_update_files_dir = {
+        let mut path = index_scheduler.env.path().to_path_buf();
+        path.pop();
+        path.join(UPDATE_FILES_DIR_NAME)
+    };
+    tarball.append_dir(update_files_dir, src_update_files_dir)?;
+
     for task_id in enqueued {
         let task = index_scheduler
             .queue
