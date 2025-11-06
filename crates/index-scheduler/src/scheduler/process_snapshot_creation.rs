@@ -288,7 +288,7 @@ impl IndexScheduler {
             let bucket = Bucket::new(url, UrlStyle::Path, s3_bucket_name, s3_bucket_region)
                 .map_err(Error::S3BucketError)?;
             let credential = Credentials::new(s3_access_key, s3_secret_key);
-            // Note for the future: use with_added_extension, it's prettier
+            // Note for the future (rust 1.91+): use with_added_extension, it's prettier
             let object_path = s3_snapshot_prefix.join(format!("{db_name}.snapshot"));
             let object = object_path.to_slash().expect("Invalid UTF-8 path").into_owned();
 
@@ -350,7 +350,7 @@ impl IndexScheduler {
                         resp.headers().get(ETAG).expect("every UploadPart request returns an Etag");
                     let mut buffer = match buffer.try_into_mut() {
                         Ok(buffer) => buffer,
-                        Err(_) => unreachable!("Impossible to convert into BytesMut"),
+                        Err(_) => unreachable!("All bytes references were consumed in the task"),
                     };
                     etags.push(bump.alloc_str(etag.to_str().unwrap()));
                     buffer.clear();
