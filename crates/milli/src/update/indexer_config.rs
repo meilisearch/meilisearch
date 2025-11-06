@@ -1,3 +1,6 @@
+use std::num::NonZeroUsize;
+use std::time::Duration;
+
 use grenad::CompressionType;
 
 use super::GrenadParameters;
@@ -20,6 +23,7 @@ pub struct IndexerConfig {
     pub experimental_no_edition_2024_for_dumps: bool,
     pub experimental_no_edition_2024_for_prefix_post_processing: bool,
     pub experimental_no_edition_2024_for_facet_post_processing: bool,
+    pub s3_snapshot_options: Option<S3SnapshotOptions>,
 }
 
 impl IndexerConfig {
@@ -35,6 +39,20 @@ impl IndexerConfig {
                 .experimental_no_edition_2024_for_facet_post_processing,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct S3SnapshotOptions {
+    pub s3_bucket_url: String,
+    pub s3_bucket_region: String,
+    pub s3_bucket_name: String,
+    pub s3_snapshot_prefix: String,
+    pub s3_access_key: String,
+    pub s3_secret_key: String,
+    pub s3_max_in_flight_parts: NonZeroUsize,
+    pub s3_compression_level: u32,
+    pub s3_signature_duration: Duration,
+    pub s3_multipart_part_size: u64,
 }
 
 /// By default use only 1 thread for indexing in tests
@@ -76,6 +94,7 @@ impl Default for IndexerConfig {
             experimental_no_edition_2024_for_dumps: false,
             experimental_no_edition_2024_for_prefix_post_processing: false,
             experimental_no_edition_2024_for_facet_post_processing: false,
+            s3_snapshot_options: None,
         }
     }
 }

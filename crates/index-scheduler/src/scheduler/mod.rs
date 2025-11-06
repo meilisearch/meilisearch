@@ -25,6 +25,7 @@ use convert_case::{Case, Casing as _};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
 use meilisearch_types::milli;
+use meilisearch_types::milli::update::S3SnapshotOptions;
 use meilisearch_types::tasks::Status;
 use process_batch::ProcessBatchInfo;
 use rayon::current_num_threads;
@@ -87,11 +88,14 @@ pub struct Scheduler {
 
     /// Snapshot compaction status.
     pub(crate) experimental_no_snapshot_compaction: bool,
+
+    /// S3 Snapshot options.
+    pub(crate) s3_snapshot_options: Option<S3SnapshotOptions>,
 }
 
 impl Scheduler {
-    pub(crate) fn private_clone(&self) -> Scheduler {
-        Scheduler {
+    pub(crate) fn private_clone(&self) -> Self {
+        Self {
             must_stop_processing: self.must_stop_processing.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
@@ -103,23 +107,52 @@ impl Scheduler {
             version_file_path: self.version_file_path.clone(),
             embedding_cache_cap: self.embedding_cache_cap,
             experimental_no_snapshot_compaction: self.experimental_no_snapshot_compaction,
+            s3_snapshot_options: self.s3_snapshot_options.clone(),
         }
     }
 
     pub fn new(options: &IndexSchedulerOptions, auth_env: Env<WithoutTls>) -> Scheduler {
+        let IndexSchedulerOptions {
+            version_file_path,
+            auth_path: _,
+            tasks_path: _,
+            update_file_path: _,
+            indexes_path: _,
+            snapshots_path,
+            dumps_path,
+            cli_webhook_url: _,
+            cli_webhook_authorization: _,
+            task_db_size: _,
+            index_base_map_size: _,
+            enable_mdb_writemap: _,
+            index_growth_amount: _,
+            index_count: _,
+            indexer_config,
+            autobatching_enabled,
+            cleanup_enabled: _,
+            max_number_of_tasks: _,
+            max_number_of_batched_tasks,
+            batched_tasks_size_limit,
+            instance_features: _,
+            auto_upgrade: _,
+            embedding_cache_cap,
+            experimental_no_snapshot_compaction,
+        } = options;
+
         Scheduler {
             must_stop_processing: MustStopProcessing::default(),
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
-            autobatching_enabled: options.autobatching_enabled,
-            max_number_of_batched_tasks: options.max_number_of_batched_tasks,
-            batched_tasks_size_limit: options.batched_tasks_size_limit,
-            dumps_path: options.dumps_path.clone(),
-            snapshots_path: options.snapshots_path.clone(),
+            autobatching_enabled: *autobatching_enabled,
+            max_number_of_batched_tasks: *max_number_of_batched_tasks,
+            batched_tasks_size_limit: *batched_tasks_size_limit,
+            dumps_path: dumps_path.clone(),
+            snapshots_path: snapshots_path.clone(),
             auth_env,
-            version_file_path: options.version_file_path.clone(),
-            embedding_cache_cap: options.embedding_cache_cap,
-            experimental_no_snapshot_compaction: options.experimental_no_snapshot_compaction,
+            version_file_path: version_file_path.clone(),
+            embedding_cache_cap: *embedding_cache_cap,
+            experimental_no_snapshot_compaction: *experimental_no_snapshot_compaction,
+            s3_snapshot_options: indexer_config.s3_snapshot_options.clone(),
         }
     }
 }
