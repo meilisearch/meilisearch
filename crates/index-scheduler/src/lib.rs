@@ -259,14 +259,23 @@ impl IndexScheduler {
     }
 
     /// Create an index scheduler and start its run loop.
-    #[allow(private_interfaces)] // because test_utils is private
     pub fn new(
         options: IndexSchedulerOptions,
         auth_env: Env<WithoutTls>,
         from_db_version: (u32, u32, u32),
         runtime: Option<tokio::runtime::Handle>,
-        #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
-        #[cfg(test)] planned_failures: Vec<(usize, test_utils::FailureLocation)>,
+    ) -> Result<Self> {
+        let this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
+
+        this.run();
+        Ok(this)
+    }
+
+    fn new_without_run(
+        options: IndexSchedulerOptions,
+        auth_env: Env<WithoutTls>,
+        from_db_version: (u32, u32, u32),
+        runtime: Option<tokio::runtime::Handle>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&options.tasks_path)?;
         std::fs::create_dir_all(&options.update_file_path)?;
@@ -321,8 +330,7 @@ impl IndexScheduler {
 
         wtxn.commit()?;
 
-        // allow unreachable_code to get rids of the warning in the case of a test build.
-        let this = Self {
+        Ok(Self {
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             version,
             queue,
@@ -338,16 +346,32 @@ impl IndexScheduler {
             webhooks: Arc::new(webhooks),
             embedders: Default::default(),
 
-            #[cfg(test)]
-            test_breakpoint_sdr,
-            #[cfg(test)]
-            planned_failures,
+            #[cfg(test)] // Will be replaced in `new_tests` in test environments
+            test_breakpoint_sdr: crossbeam_channel::bounded(0).0,
+            #[cfg(test)] // Will be replaced in `new_tests` in test environments
+            planned_failures: Default::default(),
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
             chat_settings,
             runtime,
-        };
+        })
+    }
+
+    /// Create an index scheduler and start its run loop.
+    #[cfg(test)]
+    fn new_test(
+        options: IndexSchedulerOptions,
+        auth_env: Env<WithoutTls>,
+        from_db_version: (u32, u32, u32),
+        runtime: Option<tokio::runtime::Handle>,
+        test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
+        planned_failures: Vec<(usize, test_utils::FailureLocation)>,
+    ) -> Result<Self> {
+        let mut this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
+
+        this.test_breakpoint_sdr = test_breakpoint_sdr;
+        this.planned_failures = planned_failures;
 
         this.run();
         Ok(this)
