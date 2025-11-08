@@ -864,15 +864,7 @@ fn measure_new_roaring_disk_usage(
                     key_size: usize,
                     value_size: usize,
                     new_value_size: usize,
-                    delta_encoded_1x_value_size: usize,
-                    total_number_bits_1x_delta_encoding: usize,
-                    total_number_chunks_1x_delta_encoding: usize,
-                    delta_encoded_4x_value_size: usize,
-                    total_number_bits_4x_delta_encoding: usize,
-                    total_number_chunks_4x_delta_encoding: usize,
-                    delta_encoded_8x_value_size: usize,
-                    total_number_bits_8x_delta_encoding: usize,
-                    total_number_chunks_8x_delta_encoding: usize,
+                    delta_encoded_value_size: usize,
                     average_distance_between_value_numbers: f32,
                     number_of_values: u64,
                     number_of_raw_cbos: usize,
@@ -893,15 +885,7 @@ fn measure_new_roaring_disk_usage(
                             key_size,
                             value_size,
                             new_value_size,
-                            delta_encoded_1x_value_size,
-                            total_number_bits_1x_delta_encoding,
-                            total_number_chunks_1x_delta_encoding,
-                            delta_encoded_4x_value_size,
-                            total_number_bits_4x_delta_encoding,
-                            total_number_chunks_4x_delta_encoding,
-                            delta_encoded_8x_value_size,
-                            total_number_bits_8x_delta_encoding,
-                            total_number_chunks_8x_delta_encoding,
+                            delta_encoded_value_size,
                             average_distance_between_value_numbers,
                             number_of_values,
                             number_of_raw_cbos,
@@ -917,27 +901,8 @@ fn measure_new_roaring_disk_usage(
                             key_size: key_size + rhs.key_size,
                             value_size: value_size + rhs.value_size,
                             new_value_size: new_value_size + rhs.new_value_size,
-                            delta_encoded_1x_value_size: delta_encoded_1x_value_size
-                                + rhs.delta_encoded_1x_value_size,
-                            total_number_bits_1x_delta_encoding: total_number_bits_1x_delta_encoding
-                                + rhs.total_number_bits_1x_delta_encoding,
-                            total_number_chunks_1x_delta_encoding:
-                                total_number_chunks_1x_delta_encoding
-                                    + rhs.total_number_chunks_1x_delta_encoding,
-                            delta_encoded_4x_value_size: delta_encoded_4x_value_size
-                                + rhs.delta_encoded_4x_value_size,
-                            total_number_bits_4x_delta_encoding: total_number_bits_4x_delta_encoding
-                                + rhs.total_number_bits_4x_delta_encoding,
-                            total_number_chunks_4x_delta_encoding:
-                                total_number_chunks_4x_delta_encoding
-                                    + rhs.total_number_chunks_4x_delta_encoding,
-                            delta_encoded_8x_value_size: delta_encoded_8x_value_size
-                                + rhs.delta_encoded_8x_value_size,
-                            total_number_bits_8x_delta_encoding: total_number_bits_8x_delta_encoding
-                                + rhs.total_number_bits_8x_delta_encoding,
-                            total_number_chunks_8x_delta_encoding:
-                                total_number_chunks_8x_delta_encoding
-                                    + rhs.total_number_chunks_8x_delta_encoding,
+                            delta_encoded_value_size: delta_encoded_value_size
+                                + rhs.delta_encoded_value_size,
                             average_distance_between_value_numbers:
                                 (average_distance_between_value_numbers
                                     + rhs.average_distance_between_value_numbers)
@@ -976,15 +941,7 @@ fn measure_new_roaring_disk_usage(
                             key_size,
                             value_size,
                             new_value_size,
-                            delta_encoded_1x_value_size,
-                            total_number_bits_1x_delta_encoding,
-                            total_number_chunks_1x_delta_encoding,
-                            delta_encoded_4x_value_size,
-                            total_number_bits_4x_delta_encoding,
-                            total_number_chunks_4x_delta_encoding,
-                            delta_encoded_8x_value_size,
-                            total_number_bits_8x_delta_encoding,
-                            total_number_chunks_8x_delta_encoding,
+                            delta_encoded_value_size,
                             average_distance_between_value_numbers,
                             number_of_values,
                             number_of_raw_cbos,
@@ -1034,21 +991,10 @@ fn measure_new_roaring_disk_usage(
 
                             let mut new_bitmap =
                                 new_roaring::RoaringBitmap::from_sorted_iter(bitmap).unwrap();
-                            let (total_bits, total_chunks, size) =
-                                size_with_delta_encoding::<BitPacker1x>(&new_bitmap);
-                            *delta_encoded_1x_value_size += size;
-                            *total_number_bits_1x_delta_encoding += total_bits;
-                            *total_number_chunks_1x_delta_encoding += total_chunks;
-                            let (total_bits, total_chunks, size) =
-                                size_with_delta_encoding::<BitPacker4x>(&new_bitmap);
-                            *delta_encoded_4x_value_size += size;
-                            *total_number_bits_4x_delta_encoding += total_bits;
-                            *total_number_chunks_4x_delta_encoding += total_chunks;
-                            let (total_bits, total_chunks, size) =
-                                size_with_delta_encoding::<BitPacker8x>(&new_bitmap);
-                            *delta_encoded_8x_value_size += size;
-                            *total_number_bits_8x_delta_encoding += total_bits;
-                            *total_number_chunks_8x_delta_encoding += total_chunks;
+                            let compressed = encode_bitmap_with_delta_encoding(&new_bitmap);
+                            *delta_encoded_value_size += compressed.len();
+                            let decoded_bitmap = decode_bitmap_with_delta_encoding(&compressed[..]);
+                            assert_eq!(decoded_bitmap, new_bitmap);
                             let _has_been_optimized = new_bitmap.optimize();
                             let stats = new_bitmap.statistics();
                             *new_number_of_containers += stats.n_containers as usize;
@@ -1073,15 +1019,7 @@ fn measure_new_roaring_disk_usage(
                     key_size,
                     value_size,
                     new_value_size,
-                    delta_encoded_1x_value_size,
-                    total_number_bits_1x_delta_encoding,
-                    total_number_chunks_1x_delta_encoding,
-                    delta_encoded_4x_value_size,
-                    total_number_bits_4x_delta_encoding,
-                    total_number_chunks_4x_delta_encoding,
-                    delta_encoded_8x_value_size,
-                    total_number_bits_8x_delta_encoding,
-                    total_number_chunks_8x_delta_encoding,
+                    delta_encoded_value_size,
                     average_distance_between_value_numbers,
                     number_of_values,
                     number_of_raw_cbos,
@@ -1106,37 +1044,10 @@ fn measure_new_roaring_disk_usage(
                     .get_appropriate_unit(UnitType::Binary);
                 println!("\tThe raw size of the database using the new bitmaps: {human_size:.2}");
 
-                let human_size = byte_unit::Byte::from(key_size + delta_encoded_1x_value_size)
-                    .get_appropriate_unit(UnitType::Binary);
                 println!(
-                    "\tThe raw size of the database using the delta encoding 1x: {human_size:.2}"
-                );
-                println!(
-                    "\tThe average number of bits to encode chunks in delta encoding 1x: {:.2}",
-                    total_number_bits_1x_delta_encoding as f64
-                        / total_number_chunks_1x_delta_encoding as f64
-                );
-
-                let human_size = byte_unit::Byte::from(key_size + delta_encoded_4x_value_size)
-                    .get_appropriate_unit(UnitType::Binary);
-                println!(
-                    "\tThe raw size of the database using the delta encoding 4x: {human_size:.2}"
-                );
-                println!(
-                    "\tThe average number of bits to encode chunks in delta encoding 4x: {:.2}",
-                    total_number_bits_4x_delta_encoding as f64
-                        / total_number_chunks_4x_delta_encoding as f64
-                );
-
-                let human_size = byte_unit::Byte::from(key_size + delta_encoded_8x_value_size)
-                    .get_appropriate_unit(UnitType::Binary);
-                println!(
-                    "\tThe raw size of the database using the delta encoding 8x: {human_size:.2}"
-                );
-                println!(
-                    "\tThe average number of bits to encode chunks in delta encoding 8x: {:.2}",
-                    total_number_bits_8x_delta_encoding as f64
-                        / total_number_chunks_8x_delta_encoding as f64
+                    "\tThe raw size of the database using the delta encoding: {:.2}",
+                    byte_unit::Byte::from(key_size + delta_encoded_value_size)
+                        .get_appropriate_unit(UnitType::Binary)
                 );
 
                 println!("\tnumber of entries: {number_of_entries}");
@@ -1184,35 +1095,204 @@ fn measure_new_roaring_disk_usage(
     Ok(())
 }
 
-/// Returns the total number of bits to encode, the number of chunks, and the final size of the compressed bitset.
-fn size_with_delta_encoding<B: BitPacker>(
-    bitmap: &new_roaring::RoaringBitmap,
-) -> (usize, usize, usize) {
-    let bitpacker = B::new();
-    let mut decompressed = vec![0u32; B::BLOCK_LEN];
+/// The magic header for our custom encoding format
+const MAGIC_HEADER: u8 = 0xF0;
+
+/// Returns the delta-encoded compressed version of the given roaring bitmap.
+fn encode_bitmap_with_delta_encoding(bitmap: &new_roaring::RoaringBitmap) -> Vec<u8> {
+    let mut compressed = Vec::new();
+
+    // Insert the magic header
+    compressed.push(MAGIC_HEADER);
+
+    let bitpacker8x = BitPacker8x::new();
+    let bitpacker4x = BitPacker4x::new();
+    let bitpacker1x = BitPacker1x::new();
+
+    let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
     let decompressed = &mut decompressed[..];
+
     let mut buffer_index = 0;
-    let mut total_size = 0;
-    let mut total_num_bits = 0;
-    let mut number_of_chunks = 0;
     let mut initial = None;
     for n in bitmap {
         decompressed[buffer_index] = n;
         buffer_index += 1;
-        if buffer_index == B::BLOCK_LEN {
-            assert!(decompressed.is_sorted());
-            let num_bits = bitpacker.num_bits_strictly_sorted(initial, decompressed);
-            total_num_bits += num_bits as usize;
-            total_size += B::compressed_block_size(num_bits);
-            number_of_chunks += 1;
+        if buffer_index == BitPacker8x::BLOCK_LEN {
+            encode_with_packer(&bitpacker8x, decompressed, initial, &mut compressed);
+            initial = Some(n);
             buffer_index = 0;
-            initial = decompressed.iter().last().copied();
         }
     }
 
-    if buffer_index != 0 {
-        total_size += buffer_index * size_of::<u32>();
+    // No more integers, let's compress them with smaller bitpackers
+    let mut chunks = decompressed.chunks_exact(BitPacker4x::BLOCK_LEN);
+    for decompressed in chunks.by_ref() {
+        encode_with_packer(&bitpacker4x, &decompressed, initial, &mut compressed);
+        initial = decompressed.iter().last().copied();
     }
 
-    (total_num_bits, number_of_chunks, total_size)
+    let decompressed = chunks.remainder();
+    let mut chunks = decompressed.chunks_exact(BitPacker1x::BLOCK_LEN);
+    for decompressed in chunks.by_ref() {
+        encode_with_packer(&bitpacker1x, &decompressed, initial, &mut compressed);
+        initial = decompressed.iter().last().copied();
+    }
+
+    // If we have remaining integers that we were not able to compress
+    // with our smallest bitpacker we put it raw at the end of out buffer
+    // with a header.
+    let decompressed = chunks.remainder();
+    if !decompressed.is_empty() {
+        let header = encode_bitpacker_level_and_num_bits(BitPackerLevel::None, u32::BITS as u8);
+        let original_len = compressed.len();
+        let additional = decompressed.len() * std::mem::size_of::<u32>() + 1;
+        compressed.resize(original_len + additional, 0);
+        let buffer = &mut compressed[original_len..];
+        let (header_in_buffer, buffer) = buffer.split_first_mut().unwrap();
+        *header_in_buffer = header;
+        buffer.copy_from_slice(bytemuck::cast_slice(decompressed));
+    }
+
+    compressed
+}
+
+fn encode_with_packer<B: BitPackerExt>(
+    bitpacker: &B,
+    decompressed: &[u32],
+    initial: Option<u32>,
+    output: &mut Vec<u8>,
+) {
+    let num_bits = bitpacker.num_bits_strictly_sorted(initial, decompressed);
+    let compressed_len = BitPacker8x::compressed_block_size(num_bits);
+    let chunk_header = encode_bitpacker_level_and_num_bits(B::level(), num_bits);
+    let original_len = output.len();
+    output.resize(original_len + compressed_len + 1, 0);
+    let buffer = &mut output[original_len..];
+    let (header_in_buffer, buffer) = buffer.split_first_mut().unwrap();
+    *header_in_buffer = chunk_header;
+    bitpacker.compress_strictly_sorted(initial, decompressed, buffer, num_bits);
+}
+
+// TODO do not panic and return error messages
+fn decode_bitmap_with_delta_encoding(compressed: &[u8]) -> new_roaring::RoaringBitmap {
+    let (&header, compressed) = compressed.split_first().expect("compressed must not be empty");
+
+    assert_eq!(
+        header, MAGIC_HEADER,
+        "Invalid header. Found 0x{:x}, expecting 0x{:x}",
+        header, MAGIC_HEADER
+    );
+
+    let bitpacker8x = BitPacker8x::new();
+    let bitpacker4x = BitPacker4x::new();
+    let bitpacker1x = BitPacker1x::new();
+
+    let mut output = new_roaring::RoaringBitmap::new();
+    let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
+    let decompressed = &mut decompressed[..];
+    let mut compressed = compressed;
+    let mut initial = None;
+
+    loop {
+        let Some((&chunk_header, encoded)) = compressed.split_first() else { break };
+        let (level, num_bits) = decode_bitpacker_level_and_num_bits(chunk_header);
+
+        let (bytes_read, decompressed) = match level {
+            BitPackerLevel::None => {
+                assert_eq!(num_bits, u32::BITS as u8);
+                // TODO we may prefer returning an iterator of u32 instead to avoid this copy.
+                //      However, that may not be the most important part to optimize.
+                let decompressed_bytes = bytemuck::cast_slice_mut(decompressed);
+                decompressed_bytes.copy_from_slice(encoded);
+                // FIXME: Remove this ugly cast
+                (encoded.len(), bytemuck::cast_slice::<_, u32>(decompressed_bytes))
+            }
+            BitPackerLevel::BitPacker1x => {
+                decode_with_packer(&bitpacker1x, decompressed, initial, encoded, num_bits)
+            }
+            BitPackerLevel::BitPacker4x => {
+                decode_with_packer(&bitpacker4x, decompressed, initial, encoded, num_bits)
+            }
+            BitPackerLevel::BitPacker8x => {
+                decode_with_packer(&bitpacker8x, decompressed, initial, encoded, num_bits)
+            }
+        };
+
+        initial = decompressed.iter().last().copied();
+        // TODO investigate perf
+        output.append(decompressed.iter().copied()).unwrap();
+        // What the delta-decoding read plus the chunk header size
+        compressed = &compressed[bytes_read + 1..];
+    }
+
+    output
+}
+
+/// Returns the number of bytes read and the decoded unsigned integers.
+fn decode_with_packer<'d, B: BitPacker>(
+    bitpacker: &B,
+    decompressed: &'d mut [u32],
+    initial: Option<u32>,
+    compressed: &[u8],
+    num_bits: u8,
+) -> (usize, &'d [u32]) {
+    let decompressed = &mut decompressed[..B::BLOCK_LEN];
+    let read = bitpacker.decompress_strictly_sorted(initial, compressed, decompressed, num_bits);
+    (read, decompressed)
+}
+
+#[repr(u8)]
+enum BitPackerLevel {
+    /// The remaining bytes are raw little endian encoded u32s.
+    None,
+    /// The remaining bits are encoded using a `BitPacker1x`.
+    BitPacker1x,
+    /// The remaining bits are encoded using a `BitPacker4x`.
+    BitPacker4x,
+    /// The remaining bits are encoded using a `BitPacker8x`.
+    BitPacker8x,
+}
+
+// TODO: never panic in this function and rather return a result
+fn encode_bitpacker_level_and_num_bits(level: BitPackerLevel, num_bits: u8) -> u8 {
+    assert!(num_bits as u32 <= u8::BITS);
+    let level = level as u8;
+    assert!(level <= 3);
+    num_bits | (level << 6)
+}
+
+// TODO: never panic in this function and rather return a result
+fn decode_bitpacker_level_and_num_bits(data: u8) -> (BitPackerLevel, u8) {
+    let num_bits = data & 0b00111111;
+    let level = match data >> 6 {
+        0 => BitPackerLevel::None,
+        1 => BitPackerLevel::BitPacker1x,
+        2 => BitPackerLevel::BitPacker4x,
+        3 => BitPackerLevel::BitPacker8x,
+        invalid => panic!("Invalid bitpacker level: {invalid}"),
+    };
+    assert!(num_bits as u32 <= u8::BITS);
+    (level, num_bits)
+}
+
+trait BitPackerExt: BitPacker {
+    fn level() -> BitPackerLevel;
+}
+
+impl BitPackerExt for BitPacker8x {
+    fn level() -> BitPackerLevel {
+        BitPackerLevel::BitPacker8x
+    }
+}
+
+impl BitPackerExt for BitPacker4x {
+    fn level() -> BitPackerLevel {
+        BitPackerLevel::BitPacker4x
+    }
+}
+
+impl BitPackerExt for BitPacker1x {
+    fn level() -> BitPackerLevel {
+        BitPackerLevel::BitPacker1x
+    }
 }
