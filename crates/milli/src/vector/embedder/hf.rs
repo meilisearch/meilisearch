@@ -6,6 +6,7 @@ use candle_transformers::models::modernbert::{Config as ModernConfig, ModernBert
 use hf_hub::api::sync::Api;
 use hf_hub::{Repo, RepoType};
 use tokenizers::{PaddingParams, Tokenizer};
+use safetensors::SafeTensors;
 
 use super::EmbeddingCache;
 use crate::vector::error::{EmbedError, NewEmbedderError};
@@ -111,6 +112,51 @@ impl std::fmt::Debug for Embedder {
             .field("pooling", &self.pooling)
             .finish()
     }
+}
+
+// some models do not have the "model." prefix in their safetensors weights
+fn change_tensor_names(weights_path: &std::path::Path) -> Result<std::path::PathBuf, NewEmbedderError> {
+    let data = std::fs::read(weights_path)
+        .map_err(|e| NewEmbedderError::safetensor_weight(candle_core::Error::Io(e)))?;
+
+    let tensors = SafeTensors::deserialize(&data)
+        .map_err(|e| NewEmbedderError::safetensor_weight(candle_core::Error::Msg(e.to_string())))?;
+
+    let names = tensors.names();
+    let has_model_prefix = names.iter().any(|n| n.starts_with("model."));
+
+    if has_model_prefix {
+        return Ok(weights_path.to_path_buf());
+    }
+
+    let fixed_path = weights_path.with_extension("fixed.safetensors");
+
+    if fixed_path.exists() {
+        return Ok(fixed_path);
+    }
+
+    let mut new_tensors = vec![];
+    for name in names {
+        let tensor_view = tensors.tensor(name)
+            .map_err(|e| NewEmbedderError::safetensor_weight(candle_core::Error::Msg(e.to_string())))?;
+
+        let new_name = format!("model.{}", name);
+        let data_offset = tensor_view.data();
+        let shape = tensor_view.shape();
+        let dtype = tensor_view.dtype();
+
+        new_tensors.push((new_name, shape.to_vec(), dtype, data_offset));
+    }
+
+    use safetensors::tensor::TensorView;
+    let views: Vec<(&str, TensorView)> = new_tensors.iter().map(|(name, shape, dtype, data)| {
+        (name.as_str(), TensorView::new(*dtype, shape.clone(), *data).unwrap())
+    }).collect();
+
+    safetensors::serialize_to_file(views, None, &fixed_path)
+        .map_err(|e| NewEmbedderError::safetensor_weight(candle_core::Error::Msg(e.to_string())))?;
+
+    Ok(fixed_path)
 }
 
 #[derive(Clone, Copy, serde::Deserialize)]
@@ -254,10 +300,15 @@ impl Embedder {
 
         let is_modern = has_arch("modernbert");
         tracing::debug!(is_modern, model_type, "detected HF architecture");
-        // default to BERT otherwise
 
         let mut tokenizer = Tokenizer::from_file(&tokenizer_filename)
             .map_err(|inner| NewEmbedderError::open_tokenizer(tokenizer_filename, inner))?;
+
+        let weights_filename = if is_modern && weight_source == WeightSource::Safetensors {
+            change_tensor_names(&weights_filename)?
+        } else {
+            weights_filename
+        };
 
         let vb = match weight_source {
             WeightSource::Pytorch => VarBuilder::from_pth(&weights_filename, DTYPE, &device)
