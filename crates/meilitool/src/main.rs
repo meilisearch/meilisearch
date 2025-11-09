@@ -1255,7 +1255,7 @@ enum BitPackerLevel {
 
 // TODO: never panic in this function and rather return a result
 fn encode_bitpacker_level_and_num_bits(level: BitPackerLevel, num_bits: u8) -> u8 {
-    assert!(num_bits as u32 <= u8::BITS);
+    assert!(num_bits as u32 <= 2_u32.pow(6));
     let level = level as u8;
     assert!(level <= 3);
     num_bits | (level << 6)
@@ -1271,7 +1271,7 @@ fn decode_bitpacker_level_and_num_bits(data: u8) -> (BitPackerLevel, u8) {
         3 => BitPackerLevel::BitPacker8x,
         invalid => panic!("Invalid bitpacker level: {invalid}"),
     };
-    assert!(num_bits as u32 <= u8::BITS);
+    assert!(num_bits as u32 <= 2_u32.pow(6));
     (level, num_bits)
 }
 
