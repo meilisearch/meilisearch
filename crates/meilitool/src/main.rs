@@ -1125,6 +1125,7 @@ fn encode_bitmap_with_delta_encoding(bitmap: &new_roaring::RoaringBitmap) -> Vec
     }
 
     // No more integers, let's compress them with smaller bitpackers
+    let decompressed = &decompressed[..buffer_index];
     let mut chunks = decompressed.chunks_exact(BitPacker4x::BLOCK_LEN);
     for decompressed in chunks.by_ref() {
         encode_with_packer(&bitpacker4x, &decompressed, initial, &mut compressed);
@@ -1203,6 +1204,8 @@ fn decode_bitmap_with_delta_encoding(compressed: &[u8]) -> new_roaring::RoaringB
                 // TODO we may prefer returning an iterator of u32 instead to avoid this copy.
                 //      However, that may not be the most important part to optimize.
                 let decompressed_bytes = bytemuck::cast_slice_mut(decompressed);
+                assert!(encoded.len().is_multiple_of(std::mem::size_of::<u32>()));
+                let decompressed_bytes = &mut decompressed_bytes[..encoded.len()];
                 decompressed_bytes.copy_from_slice(encoded);
                 // FIXME: Remove this ugly cast
                 (encoded.len(), bytemuck::cast_slice::<_, u32>(decompressed_bytes))
@@ -1241,6 +1244,7 @@ fn decode_with_packer<'d, B: BitPacker>(
     (read, decompressed)
 }
 
+#[derive(Debug)]
 #[repr(u8)]
 enum BitPackerLevel {
     /// The remaining bytes are raw little endian encoded u32s.
@@ -1294,5 +1298,36 @@ impl BitPackerExt for BitPacker4x {
 impl BitPackerExt for BitPacker1x {
     fn level() -> BitPackerLevel {
         BitPackerLevel::BitPacker1x
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use new_roaring::RoaringBitmap;
+
+    use crate::{decode_bitmap_with_delta_encoding, encode_bitmap_with_delta_encoding};
+
+    #[test]
+    fn small() {
+        let bitmap = RoaringBitmap::from_iter([1, 2, 3, 5, 6, 0, 4]);
+        let compressed = encode_bitmap_with_delta_encoding(&bitmap);
+        let decompressed = decode_bitmap_with_delta_encoding(&compressed);
+        assert_eq!(decompressed, bitmap);
+    }
+
+    #[test]
+    fn medium() {
+        let bitmap = RoaringBitmap::from_iter((0..).take(523));
+        let compressed = encode_bitmap_with_delta_encoding(&bitmap);
+        let decompressed = decode_bitmap_with_delta_encoding(&compressed);
+        assert_eq!(decompressed, bitmap);
+    }
+
+    #[test]
+    fn large() {
+        let bitmap = RoaringBitmap::from_iter((0..).take(1_076_374));
+        let compressed = encode_bitmap_with_delta_encoding(&bitmap);
+        let decompressed = decode_bitmap_with_delta_encoding(&compressed);
+        assert_eq!(decompressed, bitmap);
     }
 }
