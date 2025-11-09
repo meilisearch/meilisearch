@@ -1164,7 +1164,7 @@ fn encode_with_packer<B: BitPackerExt>(
     output: &mut Vec<u8>,
 ) {
     let num_bits = bitpacker.num_bits_strictly_sorted(initial, decompressed);
-    let compressed_len = BitPacker8x::compressed_block_size(num_bits);
+    let compressed_len = B::compressed_block_size(num_bits);
     let chunk_header = encode_bitpacker_level_and_num_bits(B::level(), num_bits);
     let original_len = output.len();
     output.resize(original_len + compressed_len + 1, 0);
@@ -1244,7 +1244,7 @@ fn decode_with_packer<'d, B: BitPacker>(
     (read, decompressed)
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 enum BitPackerLevel {
     /// The remaining bytes are raw little endian encoded u32s.
@@ -1304,8 +1304,12 @@ impl BitPackerExt for BitPacker1x {
 #[cfg(test)]
 mod tests {
     use new_roaring::RoaringBitmap;
+    use quickcheck::quickcheck;
 
-    use crate::{decode_bitmap_with_delta_encoding, encode_bitmap_with_delta_encoding};
+    use crate::{
+        decode_bitmap_with_delta_encoding, decode_bitpacker_level_and_num_bits,
+        encode_bitmap_with_delta_encoding, encode_bitpacker_level_and_num_bits, BitPackerLevel,
+    };
 
     #[test]
     fn small() {
@@ -1329,5 +1333,35 @@ mod tests {
         let compressed = encode_bitmap_with_delta_encoding(&bitmap);
         let decompressed = decode_bitmap_with_delta_encoding(&compressed);
         assert_eq!(decompressed, bitmap);
+    }
+
+    #[test]
+    fn bitpacker_level_and_num_bits() {
+        for num_bits in 0..64 {
+            let left = encode_bitpacker_level_and_num_bits(crate::BitPackerLevel::None, num_bits);
+            let (level, out_num_bits) = decode_bitpacker_level_and_num_bits(left);
+            assert_eq!(level, BitPackerLevel::None);
+            assert_eq!(num_bits, out_num_bits);
+        }
+    }
+
+    #[test]
+    fn repro_num_bits_is_zero() {
+        let bitmap = RoaringBitmap::from_iter([
+            2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 1, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 0, 27, 28, 29, 30, 32,
+        ]);
+        let compressed = encode_bitmap_with_delta_encoding(&bitmap);
+        let decompressed = decode_bitmap_with_delta_encoding(&compressed);
+        assert_eq!(decompressed, bitmap);
+    }
+
+    quickcheck! {
+        fn qc_random(xs: Vec<u32>) -> bool {
+            let bitmap = RoaringBitmap::from_iter(xs);
+            let compressed = encode_bitmap_with_delta_encoding(&bitmap);
+            let decompressed = decode_bitmap_with_delta_encoding(&compressed);
+            decompressed == bitmap
+        }
     }
 }

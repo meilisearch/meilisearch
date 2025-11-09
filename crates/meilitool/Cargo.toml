@@ -27,3 +27,6 @@ serde_json = { version = "1.0.140", features = ["preserve_order"] }
 tempfile = "3.20.0"
 time = { version = "0.3.41", features = ["formatting", "parsing", "alloc"] }
 uuid = { version = "1.17.0", features = ["v4"], default-features = false }
+
+[dev-dependencies]
+quickcheck = "1.0.3"
