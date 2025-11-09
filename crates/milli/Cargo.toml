@@ -91,7 +91,7 @@ rhai = { version = "1.22.2", features = [
 ] }
 hannoy = { version = "0.0.9-nested-rtxns-2", features = ["arroy"] }
 # arroy = "0.6.4-nested-rtxns"
-arroy = { git = "https://github.com/vuongDang/arroy.git", branch = "roaring-v0.11-from-release-v0.6" }
+arroy = { git = "https://github.com/vuongDang/arroy.git", branch = "use-heed-nested-rtxns-roaring-v0.11" }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
