@@ -44,6 +44,7 @@ pub struct EmbedSession<'doc, C, I> {
     embedder_name: &'doc str,
 
     embedder_stats: &'doc EmbedderStats,
+    ignore_embedding_failures: bool,
 
     on_embed: C,
 }
@@ -87,6 +88,7 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
         threads: &'doc ThreadPoolNoAbort,
         doc_alloc: &'doc Bump,
         embedder_stats: &'doc EmbedderStats,
+        ignore_embedding_failures: bool,
         on_embed: C,
     ) -> Self {
         let capacity = embedder.prompt_count_in_chunk_hint() * embedder.chunk_count_hint();
@@ -99,6 +101,7 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
             threads,
             embedder_name,
             embedder_stats,
+            ignore_embedding_failures,
             on_embed,
         }
     }
@@ -144,24 +147,33 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
                 Ok(())
             }
             Err(error) => {
-                // reset metadata and inputs, and send metadata to the error processing.
+                // send metadata to the error processing.
                 let doc_alloc = self.metadata.bump();
                 let metadata = std::mem::replace(
                     &mut self.metadata,
                     BVec::with_capacity_in(self.inputs.capacity(), doc_alloc),
                 );
-                self.inputs.clear();
-                return Err(self.on_embed.process_embedding_error(
+                Err(self.on_embed.process_embedding_error(
                     error,
                     self.embedder_name,
                     unused_vectors_distribution,
                     metadata,
-                ));
+                ))
             }
         };
         self.inputs.clear();
         self.metadata.clear();
-        res
+        if self.ignore_embedding_failures {
+            if let Err(err) = res {
+                tracing::warn!(
+                    %err,
+                    "ignored error embedding batch of documents due to failure policy"
+                );
+            }
+            Ok(())
+        } else {
+            res
+        }
     }
 
     pub(crate) fn embedder_name(&self) -> &'doc str {

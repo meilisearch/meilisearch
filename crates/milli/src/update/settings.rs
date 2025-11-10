@@ -1631,8 +1631,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
             // Update index settings
             let embedding_config_updates = self.update_embedding_configs()?;
+            self.update_user_defined_searchable_attributes()?;
 
-            let new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+            let mut new_inner_settings =
+                InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+            new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
 
             let primary_key_id = self
                 .index
