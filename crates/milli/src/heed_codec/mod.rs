@@ -1,6 +1,7 @@
 mod beu16_str_codec;
 mod beu32_str_codec;
 mod byte_slice_ref;
+mod de_bitmap;
 pub mod facet;
 mod field_id_word_count_codec;
 mod fst_set_codec;
@@ -19,6 +20,7 @@ use thiserror::Error;
 
 pub use self::beu16_str_codec::BEU16StrCodec;
 pub use self::beu32_str_codec::BEU32StrCodec;
+pub use self::de_bitmap::DeBitmapCodec;
 pub use self::field_id_word_count_codec::FieldIdWordCountCodec;
 pub use self::fst_set_codec::FstSetCodec;
 pub use self::obkv_codec::ObkvCodec;
