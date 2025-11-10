@@ -155,7 +155,7 @@ fn change_tensor_names(
     let views: Vec<(&str, TensorView)> = new_tensors
         .iter()
         .map(|(name, shape, dtype, data)| {
-            (name.as_str(), TensorView::new(*dtype, shape.clone(), *data).unwrap())
+            (name.as_str(), TensorView::new(*dtype, shape.clone(), data).unwrap())
         })
         .collect();
 
