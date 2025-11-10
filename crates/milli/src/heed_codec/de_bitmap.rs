@@ -1,4 +1,5 @@
-use std::{io, mem::size_of};
+use std::io::{self, ErrorKind};
+use std::mem::{size_of, size_of_val};
 
 use bitpacking::{BitPacker, BitPacker1x, BitPacker4x, BitPacker8x};
 use roaring::RoaringBitmap;
@@ -15,12 +16,13 @@ pub struct DeBitmapCodec;
 //  - merge_into
 //  - merge_deladd_into
 impl DeBitmapCodec {
+    /// Returns the delta-encoded compressed version of the given roaring bitmap.
     pub fn serialize_into<W: io::Write>(bitmap: &RoaringBitmap, writer: W) -> io::Result<()> {
         let mut tmp_buffer = Vec::new();
         Self::serialize_into_with_tmp_buffer(bitmap, writer, &mut tmp_buffer)
     }
 
-    /// Returns the delta-encoded compressed version of the given roaring bitmap.
+    /// Same as [Self::serialize_into] but accepts a buffer to avoid allocating one.
     pub fn serialize_into_with_tmp_buffer<W: io::Write>(
         bitmap: &RoaringBitmap,
         mut writer: W,
@@ -61,7 +63,7 @@ impl DeBitmapCodec {
         let decompressed = &decompressed[..buffer_index];
         let mut chunks = decompressed.chunks_exact(BitPacker4x::BLOCK_LEN);
         for decompressed in chunks.by_ref() {
-            let output = encode_with_packer(&bitpacker4x, &decompressed, initial, compressed);
+            let output = encode_with_packer(&bitpacker4x, decompressed, initial, compressed);
             writer.write_all(output)?;
             initial = decompressed.iter().last().copied();
         }
@@ -70,16 +72,16 @@ impl DeBitmapCodec {
         let decompressed = chunks.remainder();
         let mut chunks = decompressed.chunks_exact(BitPacker1x::BLOCK_LEN);
         for decompressed in chunks.by_ref() {
-            let output = encode_with_packer(&bitpacker1x, &decompressed, initial, compressed);
+            let output = encode_with_packer(&bitpacker1x, decompressed, initial, compressed);
             writer.write_all(output)?;
             initial = decompressed.iter().last().copied();
         }
 
-        // Until we don't have any small enough bitpacker. We put them raw
+        // ...Until we don't have any small enough bitpacker. We put them raw
         // at the end of out buffer with a header indicating the matter.
         let decompressed = chunks.remainder();
         if !decompressed.is_empty() {
-            let header = encode_bitpacker_level_and_num_bits(BitPackerLevel::None, u32::BITS as u8);
+            let header = encode_chunk_header(BitPackerLevel::None, u32::BITS as u8);
             // Note: Not convinced about the performance of writing a single
             //       byte followed by a larger write. However, we will use this
             //       codec with a BufWriter or directly with a Vec of bytes.
@@ -90,29 +92,28 @@ impl DeBitmapCodec {
         Ok(())
     }
 
+    /// Returns the delta-decoded roaring bitmap from the compressed bytes.
     pub fn deserialize_from(compressed: &[u8]) -> io::Result<RoaringBitmap> {
         let mut tmp_buffer = Vec::new();
         Self::deserialize_from_with_tmp_buffer(compressed, &mut tmp_buffer)
     }
 
-    // TODO do not panic and return error messages
+    /// Same as [Self::deserialize_from] but accepts a buffer to avoid allocating one.
     pub fn deserialize_from_with_tmp_buffer(
-        compressed: &[u8],
+        input: &[u8],
         tmp_buffer: &mut Vec<u32>,
     ) -> io::Result<RoaringBitmap> {
-        let (header, mut compressed) = compressed
-            .split_at_checked(std::mem::size_of_val(&MAGIC_HEADER))
-            .expect("compressed must be at least two bytes");
+        let Some((header, mut compressed)) = input.split_at_checked(size_of_val(&MAGIC_HEADER))
+        else {
+            return Err(io::Error::new(ErrorKind::UnexpectedEof, "expecting a two-bytes header"));
+        };
 
         // Safety: This unwrap cannot happen as the header buffer is the right size
         let header = u16::from_ne_bytes(header.try_into().unwrap());
 
-        // TODO return an actual error
-        assert_eq!(
-            header, MAGIC_HEADER,
-            "Invalid header. Found 0x{:x}, expecting 0x{:x}",
-            header, MAGIC_HEADER
-        );
+        if header != MAGIC_HEADER {
+            return Err(io::Error::other("invalid header value"));
+        }
 
         let bitpacker8x = BitPacker8x::new();
         let bitpacker4x = BitPacker4x::new();
@@ -124,21 +125,33 @@ impl DeBitmapCodec {
         let mut initial = None;
 
         while let Some((&chunk_header, encoded)) = compressed.split_first() {
-            let (level, num_bits) = decode_bitpacker_level_and_num_bits(chunk_header);
+            let (level, num_bits) = decode_chunk_header(chunk_header);
             let (bytes_read, decompressed) = match level {
                 BitPackerLevel::None => {
-                    assert_eq!(num_bits, u32::BITS as u8);
+                    if num_bits != u32::BITS as u8 {
+                        return Err(io::Error::new(
+                            ErrorKind::InvalidData,
+                            "invalid number of bits to encode non-compressed u32s",
+                        ));
+                    }
 
-                    let integers = encoded
-                        .chunks_exact(size_of::<u32>())
+                    let chunks = encoded.chunks_exact(size_of::<u32>());
+                    if !chunks.remainder().is_empty() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "expecting last chunk to be a multiple of the size of an u32",
+                        ));
+                    }
+
+                    let integers = chunks
                         // safety: This unwrap cannot happen as
                         //         the size of u32 is set correctly.
                         .map(|b| b.try_into().unwrap())
                         .map(u32::from_ne_bytes);
 
-                    // TODO: It is possible that a bad encoding generates
-                    //       non-strictly sorted integers.
-                    bitmap.append(integers).unwrap();
+                    bitmap
+                        .append(integers)
+                        .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
 
                     // This is basically always the last chunk that exists in
                     // this delta-encoded format as the raw u32s are appended
@@ -158,8 +171,8 @@ impl DeBitmapCodec {
 
             initial = decompressed.iter().last().copied();
             // TODO investigate perf
-            // QUESTION: Is it possible that a bad encoding generates
-            //           non-strictly sorted integers? I don't think so.
+            // Safety: Bitpackers cannot output unsorter integers when
+            //         used with the compress_strictly_sorted function.
             bitmap.append(decompressed.iter().copied()).unwrap();
             // What the delta-decoding read plus the chunk header size
             compressed = &compressed[bytes_read + 1..];
@@ -169,8 +182,9 @@ impl DeBitmapCodec {
     }
 }
 
-/// Takes a strickly sorted list of u32s and outputs delta-encoded bytes
-/// with a chunk header.
+/// Takes a strickly sorted list of u32s and outputs delta-encoded
+/// bytes with a chunk header. We expect the output buffer to be
+/// at least BLOCK_LEN + 1.
 fn encode_with_packer<'c, B: BitPackerExt>(
     bitpacker: &B,
     decompressed: &[u32],
@@ -179,8 +193,9 @@ fn encode_with_packer<'c, B: BitPackerExt>(
 ) -> &'c [u8] {
     let num_bits = bitpacker.num_bits_strictly_sorted(initial, decompressed);
     let compressed_len = B::compressed_block_size(num_bits);
-    let chunk_header = encode_bitpacker_level_and_num_bits(B::level(), num_bits);
+    let chunk_header = encode_chunk_header(B::level(), num_bits);
     let buffer = &mut output[..compressed_len + 1];
+    // Safety: The buffer is at least one byte
     let (header_in_buffer, encoded) = buffer.split_first_mut().unwrap();
     *header_in_buffer = chunk_header;
     bitpacker.compress_strictly_sorted(initial, decompressed, encoded, num_bits);
@@ -200,6 +215,8 @@ fn decode_with_packer<'d, B: BitPacker>(
     (read, decompressed)
 }
 
+/// An identifier for the bitpacker to be able
+/// to correctly decode the compressed integers.
 #[derive(Debug, PartialEq, Eq)]
 #[repr(u8)]
 enum BitPackerLevel {
@@ -213,16 +230,18 @@ enum BitPackerLevel {
     BitPacker8x,
 }
 
-// TODO: never panic in this function and rather return a result
-fn encode_bitpacker_level_and_num_bits(level: BitPackerLevel, num_bits: u8) -> u8 {
-    assert!(num_bits as u32 <= 2_u32.pow(6));
+/// Returns the chunk header based on the bitpacker level
+/// and the number of bits to encode the list of integers.
+fn encode_chunk_header(level: BitPackerLevel, num_bits: u8) -> u8 {
+    debug_assert!(num_bits as u32 <= 2_u32.pow(6));
     let level = level as u8;
-    assert!(level <= 3);
+    debug_assert!(level <= 3);
     num_bits | (level << 6)
 }
 
-// TODO: never panic in this function and rather return a result
-fn decode_bitpacker_level_and_num_bits(data: u8) -> (BitPackerLevel, u8) {
+/// Decodes the chunk header and output the bitpacker level
+/// and the number of bits to decode the following bytes.
+fn decode_chunk_header(data: u8) -> (BitPackerLevel, u8) {
     let num_bits = data & 0b00111111;
     let level = match data >> 6 {
         0 => BitPackerLevel::None,
@@ -231,11 +250,15 @@ fn decode_bitpacker_level_and_num_bits(data: u8) -> (BitPackerLevel, u8) {
         3 => BitPackerLevel::BitPacker8x,
         invalid => panic!("Invalid bitpacker level: {invalid}"),
     };
-    assert!(num_bits as u32 <= 2_u32.pow(6));
+    debug_assert!(num_bits as u32 <= 2_u32.pow(6));
     (level, num_bits)
 }
 
+/// A simple helper trait to get the BitPackerLevel
+/// and correctly generate the chunk header.
 trait BitPackerExt: BitPacker {
+    /// Returns the level of the bitpacker: an identifier to be
+    /// able to decode the numbers with the right bitpacker.
     fn level() -> BitPackerLevel;
 }
 
