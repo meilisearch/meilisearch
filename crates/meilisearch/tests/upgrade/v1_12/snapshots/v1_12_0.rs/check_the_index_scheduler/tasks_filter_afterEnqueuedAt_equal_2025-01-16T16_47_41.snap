@@ -12,7 +12,7 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
       "canceledBy": null,
       "details": {
         "upgradeFrom": "v1.12.0",
-        "upgradeTo": "v1.24.0"
+        "upgradeTo": "v1.25.0"
       },
       "error": null,
       "duration": "[duration]",
