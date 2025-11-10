@@ -1170,38 +1170,32 @@ struct EmbedderFailureModes {
 
 impl EmbedderFailureModes {
     fn from_env() -> Self {
-        std::env::var_os("MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES")
-            .map(|failure_modes| {
-                Self::parse_from_os_str(
-                    &failure_modes,
-                    "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES`",
-                )
-            })
-            .unwrap_or_default()
+        match std::env::var("MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES") {
+            Ok(failure_modes) => Self::parse_from_str(
+                &failure_modes,
+                "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES`",
+            ),
+            Err(std::env::VarError::NotPresent) => Self::default(),
+            Err(std::env::VarError::NotUnicode(_)) => panic!(
+                "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES` contains a non-unicode value"
+            ),
+        }
     }
 
-    fn parse_from_os_str(failure_modes: &std::ffi::OsStr, provenance: &'static str) -> Self {
-        if failure_modes == "ignore_document_template_failures,ignore_embedder_failures"
-            || failure_modes == "ignore_embedder_failures,ignore_document_template_failures"
-        {
-            Self { ignore_document_template_failures: true, ignore_embedder_failures: true }
-        } else if failure_modes == "ignore_document_template_failures"
-            || failure_modes == "ignore_document_template_failures,"
-            || failure_modes == ",ignore_document_template_failures"
-        {
-            Self { ignore_document_template_failures: true, ignore_embedder_failures: false }
-        } else if failure_modes == "ignore_embedder_failures"
-            || failure_modes == "ignore_embedder_failures,"
-            || failure_modes == ",ignore_embedder_failures"
-        {
-            Self { ignore_embedder_failures: true, ignore_document_template_failures: false }
-        } else if failure_modes == " " || failure_modes.is_empty() || failure_modes == "," {
-            Self { ignore_document_template_failures: false, ignore_embedder_failures: false }
-        } else {
-            panic!(
-                "Unexpected value {failure_modes} for {provenance}",
-                failure_modes = failure_modes.to_string_lossy()
-            )
+    fn parse_from_str(failure_modes: &str, provenance: &'static str) -> Self {
+        let Self { mut ignore_document_template_failures, mut ignore_embedder_failures } =
+            Default::default();
+        for segment in failure_modes.split(',') {
+            let segment = segment.trim();
+            match segment {
+                "ignore_document_template_failures" => {
+                    ignore_document_template_failures = true;
+                }
+                "ignore_embedder_failures" => ignore_embedder_failures = true,
+                "" => continue,
+                segment => panic!("Unrecognized segment value for {provenance}: {segment}"),
+            }
         }
+        Self { ignore_document_template_failures, ignore_embedder_failures }
     }
 }
