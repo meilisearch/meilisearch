@@ -656,3 +656,119 @@ async fn forbidden_fields() {
     }
     "#);
 }
+
+#[actix_web::test]
+async fn receive_custom_metadata() {
+    let WebhookHandle { server_handle: handle1, url: url1, receiver: mut receiver1 } =
+        create_webhook_server().await;
+    let WebhookHandle { server_handle: handle2, url: url2, receiver: mut receiver2 } =
+        create_webhook_server().await;
+    let WebhookHandle { server_handle: handle3, url: url3, receiver: mut receiver3 } =
+        create_webhook_server().await;
+
+    let db_path = tempfile::tempdir().unwrap();
+    let server = Server::new_with_options(Opt {
+        task_webhook_url: Some(Url::parse(&url3).unwrap()),
+        ..default_settings(db_path.path())
+    })
+    .await
+    .unwrap();
+
+    for url in [url1, url2] {
+        let (value, code) = server.create_webhook(json!({ "url": url })).await;
+        snapshot!(code, @"201 Created");
+        snapshot!(json_string!(value, { ".uuid" => "[uuid]", ".url" => "[ignored]" }), @r#"
+        {
+          "uuid": "[uuid]",
+          "isEditable": true,
+          "url": "[ignored]",
+          "headers": {}
+        }
+        "#);
+    }
+    let index = server.index("tamo");
+    let (response, code) = index
+        .add_documents_with_custom_metadata(
+            json!({ "id": 1, "doggo": "bone" }),
+            None,
+            Some("test_meta"),
+        )
+        .await;
+
+    snapshot!(response, @r###"
+    {
+      "taskUid": 0,
+      "indexUid": "tamo",
+      "status": "enqueued",
+      "type": "documentAdditionOrUpdate",
+      "enqueuedAt": "[date]",
+      "customMetadata": "test_meta"
+    }
+    "###);
+    snapshot!(code, @"202 Accepted");
+
+    let mut count1 = 0;
+    let mut count2 = 0;
+    let mut count3 = 0;
+    while count1 == 0 || count2 == 0 || count3 == 0 {
+        tokio::select! {
+            msg = receiver1.recv() => {
+              if let Some(msg) = msg {
+                count1 += 1;
+                check_metadata(msg);
+              }
+           },
+            msg = receiver2.recv() => {
+              if let Some(msg) = msg {
+                count2 += 1;
+                check_metadata(msg);
+              }
+             },
+            msg = receiver3.recv() => {
+              if let Some(msg) = msg {
+                count3 += 1;
+                check_metadata(msg);
+              }
+            },
+        }
+    }
+
+    assert_eq!(count1, 1);
+    assert_eq!(count2, 1);
+    assert_eq!(count3, 1);
+
+    handle1.abort();
+    handle2.abort();
+    handle3.abort();
+}
+
+fn check_metadata(msg: Vec<u8>) {
+    let msg = String::from_utf8(msg).unwrap();
+    let tasks = msg.split('\n');
+    for task in tasks {
+        if task.is_empty() {
+            continue;
+        }
+        let task: serde_json::Value = serde_json::from_str(task).unwrap();
+        snapshot!(common::Value(task), @r###"
+        {
+          "uid": "[uid]",
+          "batchUid": "[batch_uid]",
+          "indexUid": "tamo",
+          "status": "succeeded",
+          "type": "documentAdditionOrUpdate",
+          "canceledBy": null,
+          "details": {
+            "receivedDocuments": 1,
+            "indexedDocuments": 1
+          },
+          "error": null,
+          "duration": "[duration]",
+          "enqueuedAt": "[date]",
+          "startedAt": "[date]",
+          "finishedAt": "[date]",
+          "customMetadata": "test_meta"
+        }
+        "###);
+    }
+}

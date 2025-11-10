@@ -150,6 +150,7 @@ impl<'a> Dump<'a> {
             details: task.details,
             status: task.status,
             network: task.network,
+            custom_metadata: task.custom_metadata,
             kind: match task.kind {
                 KindDump::DocumentImport {
                     primary_key,

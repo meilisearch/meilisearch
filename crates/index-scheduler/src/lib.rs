@@ -757,6 +757,19 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
+        self.register_with_custom_metadata(kind, task_id, None, dry_run)
+    }
+
+    /// Register a new task in the scheduler, with metadata.
+    ///
+    /// If it fails and data was associated with the task, it tries to delete the associated data.
+    pub fn register_with_custom_metadata(
+        &self,
+        kind: KindWithContent,
+        task_id: Option<TaskId>,
+        custom_metadata: Option<String>,
+        dry_run: bool,
+    ) -> Result<Task> {
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
             && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64
@@ -766,7 +779,7 @@ impl IndexScheduler {
         }
 
         let mut wtxn = self.env.write_txn()?;
-        let task = self.queue.register(&mut wtxn, &kind, task_id, dry_run)?;
+        let task = self.queue.register(&mut wtxn, &kind, task_id, custom_metadata, dry_run)?;
 
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).

@@ -45,6 +45,9 @@ pub struct Task {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<TaskNetwork>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_metadata: Option<String>,
 }
 
 impl Task {

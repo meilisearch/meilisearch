@@ -218,6 +218,8 @@ pub struct SummarizedTaskView {
         deserialize_with = "time::serde::rfc3339::deserialize"
     )]
     enqueued_at: OffsetDateTime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    custom_metadata: Option<String>,
 }
 
 impl From<Task> for SummarizedTaskView {
@@ -228,6 +230,7 @@ impl From<Task> for SummarizedTaskView {
             status: task.status,
             kind: task.kind.as_kind(),
             enqueued_at: task.enqueued_at,
+            custom_metadata: task.custom_metadata,
         }
     }
 }

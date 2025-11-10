@@ -254,6 +254,7 @@ InvalidSearchHybridQuery                       , InvalidRequest       , BAD_REQU
 InvalidIndexLimit                              , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                             , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                         , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexCustomMetadata                     , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexUid                                , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacets                       , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacetsByIndex                , InvalidRequest       , BAD_REQUEST ;

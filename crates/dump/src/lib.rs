@@ -96,6 +96,8 @@ pub struct TaskDump {
     pub finished_at: Option<OffsetDateTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<TaskNetwork>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_metadata: Option<String>,
 }
 
 // A `Kind` specific version made for the dump. If modified you may break the dump.
@@ -178,6 +180,7 @@ impl From<Task> for TaskDump {
             started_at: task.started_at,
             finished_at: task.finished_at,
             network: task.network,
+            custom_metadata: task.custom_metadata,
         }
     }
 }
@@ -396,6 +399,7 @@ pub(crate) mod test {
                     started_at: Some(datetime!(2022-11-20 0:00 UTC)),
                     finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
                     network: None,
+                    custom_metadata: None,
                 },
                 None,
             ),
@@ -421,6 +425,7 @@ pub(crate) mod test {
                     started_at: None,
                     finished_at: None,
                     network: None,
+                    custom_metadata: None,
                 },
                 Some(vec![
                     json!({ "id": 4, "race": "leonberg" }).as_object().unwrap().clone(),
@@ -441,6 +446,7 @@ pub(crate) mod test {
                     started_at: None,
                     finished_at: None,
                     network: None,
+                    custom_metadata: None,
                 },
                 None,
             ),

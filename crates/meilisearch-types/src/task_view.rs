@@ -55,6 +55,9 @@ pub struct TaskView {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub network: Option<TaskNetwork>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_metadata: Option<String>,
 }
 
 impl TaskView {
@@ -73,6 +76,7 @@ impl TaskView {
             started_at: task.started_at,
             finished_at: task.finished_at,
             network: task.network.clone(),
+            custom_metadata: task.custom_metadata.clone(),
         }
     }
 }

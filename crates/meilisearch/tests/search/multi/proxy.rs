@@ -3141,3 +3141,513 @@ fn fail(override_response_body: Option<&str>) -> ResponseTemplate {
         response.set_body_json(json!({"error": "provoked error", "code": "test_error", "link": "https://docs.meilisearch.com/errors#test_error"}))
     }
 }
+
+#[actix_rt::test]
+async fn remote_auto_sharding() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms2.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // set self & sharding
+
+    let (response, code) = ms0.set_network(json!({"self": "ms0", "sharding": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms0",
+      "remotes": {},
+      "sharding": true
+    }
+    "###);
+    let (response, code) = ms1.set_network(json!({"self": "ms1", "sharding": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms1",
+      "remotes": {},
+      "sharding": true
+    }
+    "###);
+    let (response, code) = ms2.set_network(json!({"self": "ms2", "sharding": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms2",
+      "remotes": {},
+      "sharding": true
+    }
+    "###);
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!({"remotes": {
+        "ms0": {
+            "url": rms0.url()
+        },
+        "ms1": {
+            "url": rms1.url()
+        },
+        "ms2": {
+            "url": rms2.url()
+        }
+    }});
+
+    println!("{}", serde_json::to_string_pretty(&network).unwrap());
+
+    let (_response, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+    let (_response, status_code) = ms1.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+    let (_response, status_code) = ms2.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+
+    // add documents
+    let documents = SCORE_DOCUMENTS.clone();
+    let documents = documents.as_array().unwrap();
+    let index0 = ms0.index("test");
+    let _index1 = ms1.index("test");
+    let _index2 = ms2.index("test");
+
+    let (task, _status_code) = index0.add_documents(json!(documents), None).await;
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    // perform multi-search
+    let query = "badman returns";
+    let request = json!({
+        "federation": {},
+        "queries": [
+            {
+                "q": query,
+                "indexUid": "test",
+                "federationOptions": {
+                    "remote": "ms0"
+                }
+            },
+            {
+                "q": query,
+                "indexUid": "test",
+                "federationOptions": {
+                    "remote": "ms1"
+                }
+            },
+            {
+                "q": query,
+                "indexUid": "test",
+                "federationOptions": {
+                    "remote": "ms2"
+                }
+            },
+        ]
+    });
+
+    let (response, _status_code) = ms0.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman Returns",
+          "id": "C",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.8317901234567902,
+            "remote": "ms2"
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "id": "A",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362,
+            "remote": "ms1"
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "id": "B",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362,
+            "remote": "ms1"
+          }
+        },
+        {
+          "title": "Badman",
+          "id": "E",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.5,
+            "remote": "ms2"
+          }
+        },
+        {
+          "title": "Batman",
+          "id": "D",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.23106060606060605,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+    let (response, _status_code) = ms1.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman Returns",
+          "id": "C",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.8317901234567902,
+            "remote": "ms2"
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "id": "A",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362,
+            "remote": "ms1"
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "id": "B",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362,
+            "remote": "ms1"
+          }
+        },
+        {
+          "title": "Badman",
+          "id": "E",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.5,
+            "remote": "ms2"
+          }
+        },
+        {
+          "title": "Batman",
+          "id": "D",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.23106060606060605,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+    let (response, _status_code) = ms2.multi_search(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman Returns",
+          "id": "C",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.8317901234567902,
+            "remote": "ms2"
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "id": "A",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362,
+            "remote": "ms1"
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "id": "B",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362,
+            "remote": "ms1"
+          }
+        },
+        {
+          "title": "Badman",
+          "id": "E",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.5,
+            "remote": "ms2"
+          }
+        },
+        {
+          "title": "Batman",
+          "id": "D",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.23106060606060605,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn remote_auto_sharding_with_custom_metadata() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms2.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // set self & sharding
+
+    let (response, code) = ms0.set_network(json!({"self": "ms0", "sharding": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms0",
+      "remotes": {},
+      "sharding": true
+    }
+    "###);
+    let (response, code) = ms1.set_network(json!({"self": "ms1", "sharding": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms1",
+      "remotes": {},
+      "sharding": true
+    }
+    "###);
+    let (response, code) = ms2.set_network(json!({"self": "ms2", "sharding": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "self": "ms2",
+      "remotes": {},
+      "sharding": true
+    }
+    "###);
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!({"remotes": {
+        "ms0": {
+            "url": rms0.url()
+        },
+        "ms1": {
+            "url": rms1.url()
+        },
+        "ms2": {
+            "url": rms2.url()
+        }
+    }});
+
+    println!("{}", serde_json::to_string_pretty(&network).unwrap());
+
+    let (_response, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+    let (_response, status_code) = ms1.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+    let (_response, status_code) = ms2.set_network(network.clone()).await;
+    snapshot!(status_code, @"200 OK");
+
+    // add documents
+    let documents = SCORE_DOCUMENTS.clone();
+    let documents = documents.as_array().unwrap();
+    let index0 = ms0.index("test");
+    let _index1 = ms1.index("test");
+    let _index2 = ms2.index("test");
+
+    let (task, _status_code) = index0
+        .add_documents_with_custom_metadata(
+            json!(documents),
+            None,
+            Some("remote_auto_sharding_with_custom_metadata"),
+        )
+        .await;
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    let t = ms0.wait_task(t0).await.succeeded();
+    snapshot!(t, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 5,
+        "indexedDocuments": 1
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]",
+      "network": {
+        "remote_tasks": {
+          "ms1": {
+            "taskUid": 0,
+            "error": null
+          },
+          "ms2": {
+            "taskUid": 0,
+            "error": null
+          }
+        }
+      },
+      "customMetadata": "remote_auto_sharding_with_custom_metadata"
+    }
+    "###);
+
+    let t = ms1.wait_task(t1).await.succeeded();
+    snapshot!(t, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 5,
+        "indexedDocuments": 2
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]",
+      "network": {
+        "origin": {
+          "remoteName": "ms0",
+          "taskUid": 0
+        }
+      },
+      "customMetadata": "remote_auto_sharding_with_custom_metadata"
+    }
+    "###);
+
+    let t = ms2.wait_task(t2).await.succeeded();
+    snapshot!(t, @r###"
+    {
+      "uid": "[uid]",
+      "batchUid": "[batch_uid]",
+      "indexUid": "test",
+      "status": "succeeded",
+      "type": "documentAdditionOrUpdate",
+      "canceledBy": null,
+      "details": {
+        "receivedDocuments": 5,
+        "indexedDocuments": 2
+      },
+      "error": null,
+      "duration": "[duration]",
+      "enqueuedAt": "[date]",
+      "startedAt": "[date]",
+      "finishedAt": "[date]",
+      "network": {
+        "origin": {
+          "remoteName": "ms0",
+          "taskUid": 0
+        }
+      },
+      "customMetadata": "remote_auto_sharding_with_custom_metadata"
+    }
+    "###);
+}

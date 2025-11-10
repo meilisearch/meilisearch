@@ -232,6 +232,7 @@ pub fn snapshot_task(task: &Task) -> String {
         status,
         kind,
         network,
+        custom_metadata,
     } = task;
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
@@ -251,6 +252,9 @@ pub fn snapshot_task(task: &Task) -> String {
     snap.push_str(&format!("kind: {kind:?}"));
     if let Some(network) = network {
         snap.push_str(&format!("network: {network:?}, "))
+    }
+    if let Some(custom_metadata) = custom_metadata {
+        snap.push_str(&format!("custom_metadata: {custom_metadata:?}"))
     }
 
     snap.push('}');

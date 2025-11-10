@@ -91,7 +91,16 @@ impl<'a> Index<'a, Owned> {
         documents: Value,
         primary_key: Option<&str>,
     ) -> (Value, StatusCode) {
-        self._add_documents(documents, primary_key).await
+        self._add_documents(documents, primary_key, None).await
+    }
+
+    pub async fn add_documents_with_custom_metadata(
+        &self,
+        documents: Value,
+        primary_key: Option<&str>,
+        custom_metadata: Option<&str>,
+    ) -> (Value, StatusCode) {
+        self._add_documents(documents, primary_key, custom_metadata).await
     }
 
     pub async fn raw_add_documents(
@@ -352,12 +361,25 @@ impl<State> Index<'_, State> {
         &self,
         documents: Value,
         primary_key: Option<&str>,
+        custom_metadata: Option<&str>,
     ) -> (Value, StatusCode) {
-        let url = match primary_key {
-            Some(key) => {
-                format!("/indexes/{}/documents?primaryKey={}", urlencode(self.uid.as_ref()), key)
+        let url = match (primary_key, custom_metadata) {
+            (Some(key), Some(meta)) => {
+                format!(
+                    "/indexes/{}/documents?primaryKey={key}&customMetadata={meta}",
+                    urlencode(self.uid.as_ref()),
+                )
             }
-            None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
+            (None, Some(meta)) => {
+                format!(
+                    "/indexes/{}/documents?&customMetadata={meta}",
+                    urlencode(self.uid.as_ref()),
+                )
+            }
+            (Some(key), None) => {
+                format!("/indexes/{}/documents?&primaryKey={key}", urlencode(self.uid.as_ref()),)
+            }
+            (None, None) => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
         };
         self.service.post_encoded(url, documents, self.encoder).await
     }

@@ -257,6 +257,7 @@ impl Queue {
         wtxn: &mut RwTxn,
         kind: &KindWithContent,
         task_id: Option<TaskId>,
+        custom_metadata: Option<String>,
         dry_run: bool,
     ) -> Result<Task> {
         let next_task_id = self.tasks.next_task_id(wtxn)?;
@@ -280,6 +281,7 @@ impl Queue {
             status: Status::Enqueued,
             kind: kind.clone(),
             network: None,
+            custom_metadata,
         };
         // For deletion and cancelation tasks, we want to make extra sure that they
         // don't attempt to delete/cancel tasks that are newer than themselves.
@@ -343,6 +345,7 @@ impl Queue {
                 ),
                 tasks: to_delete,
             },
+            None,
             None,
             false,
         )?;

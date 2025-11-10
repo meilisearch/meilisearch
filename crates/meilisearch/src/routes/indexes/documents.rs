@@ -333,10 +333,12 @@ impl Aggregate for DocumentsDeletionAggregator {
 pub async fn delete_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     path: web::Path<DocumentParam>,
+    params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let CustomMetadataQuery { custom_metadata } = params.into_inner();
     let DocumentParam { index_uid, document_id } = path.into_inner();
     let index_uid = IndexUid::try_from(index_uid)?;
     let network = index_scheduler.network();
@@ -359,7 +361,10 @@ pub async fn delete_document(
     let dry_run = is_dry_run(&req, &opt)?;
     let task = {
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
+        tokio::task::spawn_blocking(move || {
+            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+        })
+        .await??
     };
 
     if network.sharding && !dry_run {
@@ -678,6 +683,19 @@ pub struct UpdateDocumentsQuery {
     #[param(value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
+
+    #[param(example = "custom")]
+    #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
+    pub custom_metadata: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Deserr, IntoParams)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
+#[into_params(parameter_in = Query, rename_all = "camelCase")]
+pub struct CustomMetadataQuery {
+    #[param(example = "custom")]
+    #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
+    pub custom_metadata: Option<String>,
 }
 
 fn from_char_csv_delimiter(
@@ -819,6 +837,7 @@ pub async fn replace_documents(
         body,
         IndexDocumentsMethod::ReplaceDocuments,
         uid,
+        params.custom_metadata,
         dry_run,
         allow_index_creation,
         &req,
@@ -921,6 +940,7 @@ pub async fn update_documents(
         body,
         IndexDocumentsMethod::UpdateDocuments,
         uid,
+        params.custom_metadata,
         dry_run,
         allow_index_creation,
         &req,
@@ -940,6 +960,7 @@ async fn document_addition(
     body: Payload,
     method: IndexDocumentsMethod,
     task_id: Option<TaskId>,
+    custom_metadata: Option<String>,
     dry_run: bool,
     allow_index_creation: bool,
     req: &HttpRequest,
@@ -1065,8 +1086,10 @@ async fn document_addition(
     };
 
     let scheduler = index_scheduler.clone();
-    let task = match tokio::task::spawn_blocking(move || scheduler.register(task, task_id, dry_run))
-        .await?
+    let task = match tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(task, task_id, custom_metadata, dry_run)
+    })
+    .await?
     {
         Ok(task) => task,
         Err(e) => {
@@ -1130,7 +1153,7 @@ async fn copy_body_to_file(
 /// Delete a set of documents based on an array of document ids.
 #[utoipa::path(
     post,
-    path = "{indexUid}/delete-batch",
+    path = "{indexUid}/documents/delete-batch",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
@@ -1161,11 +1184,14 @@ pub async fn delete_documents_batch(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: web::Json<Vec<Value>>,
+    params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by batch");
+    let CustomMetadataQuery { custom_metadata } = params.into_inner();
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let network = index_scheduler.network();
 
@@ -1190,7 +1216,10 @@ pub async fn delete_documents_batch(
     let dry_run = is_dry_run(&req, &opt)?;
     let task = {
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
+        tokio::task::spawn_blocking(move || {
+            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+        })
+        .await??
     };
 
     if network.sharding && !dry_run {
@@ -1244,12 +1273,15 @@ pub struct DocumentDeletionByFilter {
 pub async fn delete_documents_by_filter(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
+    params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     body: AwebJson<DocumentDeletionByFilter, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Delete documents by filter");
+    let CustomMetadataQuery { custom_metadata } = params.into_inner();
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
     let filter = body.into_inner();
@@ -1282,7 +1314,10 @@ pub async fn delete_documents_by_filter(
     let dry_run = is_dry_run(&req, &opt)?;
     let task = {
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
+        tokio::task::spawn_blocking(move || {
+            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+        })
+        .await??
     };
 
     if network.sharding && !dry_run {
@@ -1372,12 +1407,14 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
 pub async fn edit_documents_by_function(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_ALL }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
-    params: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
+    params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
+    body: AwebJson<DocumentEditionByFunction, DeserrJsonError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    debug!(parameters = ?params, "Edit documents by function");
+    debug!(parameters = ?body, "Edit documents by function");
+    let CustomMetadataQuery { custom_metadata } = params.into_inner();
 
     index_scheduler
         .features()
@@ -1387,23 +1424,23 @@ pub async fn edit_documents_by_function(
 
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
-    let params = params.into_inner();
+    let body = body.into_inner();
 
     analytics.publish(
         EditDocumentsByFunctionAggregator {
-            filtered: params.filter.is_some(),
-            with_context: params.context.is_some(),
+            filtered: body.filter.is_some(),
+            with_context: body.context.is_some(),
             index_creation: index_scheduler.index(&index_uid).is_err(),
         },
         &req,
     );
 
     let engine = milli::rhai::Engine::new();
-    if let Err(e) = engine.compile(&params.function) {
+    if let Err(e) = engine.compile(&body.function) {
         return Err(ResponseError::from_msg(e.to_string(), Code::BadRequest));
     }
 
-    if let Some(ref filter) = params.filter {
+    if let Some(ref filter) = body.filter {
         // we ensure the filter is well formed before enqueuing it
         crate::search::parse_filter(
             filter,
@@ -1414,8 +1451,8 @@ pub async fn edit_documents_by_function(
     }
     let task = KindWithContent::DocumentEdition {
         index_uid: index_uid.clone(),
-        filter_expr: params.filter.clone(),
-        context: match params.context.clone() {
+        filter_expr: body.filter.clone(),
+        context: match body.context.clone() {
             Some(Value::Object(m)) => Some(m),
             None => None,
             _ => {
@@ -1425,18 +1462,21 @@ pub async fn edit_documents_by_function(
                 ))
             }
         },
-        function: params.function.clone(),
+        function: body.function.clone(),
     };
 
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
     let task = {
         let index_scheduler = index_scheduler.clone();
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
+        tokio::task::spawn_blocking(move || {
+            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+        })
+        .await??
     };
 
     if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(params), &task).await?;
+        proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(body), &task).await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -1477,12 +1517,14 @@ pub async fn edit_documents_by_function(
 pub async fn clear_all_documents(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_DELETE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
+    params: AwebQueryParameter<CustomMetadataQuery, DeserrQueryParamError>,
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let network = index_scheduler.network();
+    let CustomMetadataQuery { custom_metadata } = params.into_inner();
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -1501,7 +1543,10 @@ pub async fn clear_all_documents(
     let task = {
         let index_scheduler = index_scheduler.clone();
 
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run)).await??
+        tokio::task::spawn_blocking(move || {
+            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+        })
+        .await??
     };
 
     if network.sharding && !dry_run {
