@@ -74,12 +74,13 @@ csv = "1.3.1"
 candle-core = { version = "0.9.1" }
 candle-transformers = { version = "0.9.1" }
 candle-nn = { version = "0.9.1" }
-tokenizers = { git = "https://github.com/huggingface/tokenizers.git", tag = "v0.15.2", version = "0.15.2", default-features = false, features = [
+tokenizers = { version = "0.22.1", default-features = false, features = [
     "onig",
 ] }
 hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default-features = false, features = [
     "online",
 ] }
+safetensors = "0.6.2"
 tiktoken-rs = "0.7.0"
 liquid = "0.26.11"
 rhai = { version = "1.22.2", features = [

@@ -550,9 +550,9 @@ pub struct DeserializePoolingConfig {
 #[derive(Debug, thiserror::Error)]
 #[error("model `{model_name}` appears to be unsupported{}\n  - inner error: {inner}",
 if architectures.is_empty() {
-    "\n  - Note: only models with architecture \"BertModel\" are supported.".to_string()
+    "\n  - Note: only models with architecture \"BertModel\" or \"ModernBert\" are supported.".to_string()
 } else {
-    format!("\n  - Note: model has declared architectures `{architectures:?}`, only models with architecture `\"BertModel\"` are supported.")
+    format!("\n  - Note: model has declared architectures `{architectures:?}`, only models with architecture `\"BertModel\"` or `\"ModernBert\"` are supported.")
 })]
 pub struct UnsupportedModel {
     pub model_name: String,
