@@ -306,6 +306,18 @@ fn create_or_open_index(
 ) -> Result<Index> {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
+
+    let map_size = match std::env::var("MEILI_MAX_INDEX_SIZE") {
+        Ok(max_size) => {
+            let max_size = max_size.parse().unwrap();
+            map_size.min(max_size)
+        }
+        Err(VarError::NotPresent) => map_size,
+        Err(VarError::NotUnicode(e)) => {
+            panic!("Non unicode max index size in `MEILI_MAX_INDEX_SIZE`: {e:?}")
+        }
+    };
+
     options.map_size(clamp_to_page_size(map_size));
 
     // You can find more details about this experimental
