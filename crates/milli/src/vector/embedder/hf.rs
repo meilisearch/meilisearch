@@ -110,6 +110,8 @@ impl std::fmt::Debug for Embedder {
             .field("tokenizer", &self.tokenizer)
             .field("options", &self.options)
             .field("pooling", &self.pooling)
+            .field("device", &self.device)
+            .field("max_len", &self.max_len)
             .finish()
     }
 }
@@ -152,12 +154,9 @@ fn change_tensor_names(
     }
 
     use safetensors::tensor::TensorView;
-    let views: Vec<(&str, TensorView)> = new_tensors
-        .iter()
-        .map(|(name, shape, dtype, data)| {
-            (name.as_str(), TensorView::new(*dtype, shape.clone(), data).unwrap())
-        })
-        .collect();
+    let views = new_tensors.iter().map(|(name, shape, dtype, data)| {
+        (name.as_str(), TensorView::new(*dtype, shape.clone(), data).unwrap())
+    });
 
     safetensors::serialize_to_file(views, None, &fixed_path)
         .map_err(|e| NewEmbedderError::safetensor_weight(candle_core::Error::Msg(e.to_string())))?;
