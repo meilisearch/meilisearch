@@ -4,7 +4,7 @@ use bitpacking::{BitPacker, BitPacker1x, BitPacker4x, BitPacker8x};
 use roaring::RoaringBitmap;
 
 /// The magic header for our custom encoding format
-const MAGIC_HEADER: u8 = 178;
+const MAGIC_HEADER: u16 = 36869;
 
 pub struct DeBitmapCodec;
 
@@ -27,8 +27,7 @@ impl DeBitmapCodec {
         tmp_buffer: &mut Vec<u32>,
     ) -> io::Result<()> {
         // Insert the magic header
-        // TODO switch to a native endian u16
-        writer.write_all(&[MAGIC_HEADER])?;
+        writer.write_all(&MAGIC_HEADER.to_ne_bytes())?;
 
         let bitpacker8x = BitPacker8x::new();
         let bitpacker4x = BitPacker4x::new();
@@ -101,9 +100,14 @@ impl DeBitmapCodec {
         compressed: &[u8],
         tmp_buffer: &mut Vec<u32>,
     ) -> io::Result<RoaringBitmap> {
-        let (&header, mut compressed) =
-            compressed.split_first().expect("compressed must not be empty");
+        let (header, mut compressed) = compressed
+            .split_at_checked(std::mem::size_of_val(&MAGIC_HEADER))
+            .expect("compressed must be at least two bytes");
 
+        // Safety: This unwrap cannot happen as the header buffer is the right size
+        let header = u16::from_ne_bytes(header.try_into().unwrap());
+
+        // TODO return an actual error
         assert_eq!(
             header, MAGIC_HEADER,
             "Invalid header. Found 0x{:x}, expecting 0x{:x}",
