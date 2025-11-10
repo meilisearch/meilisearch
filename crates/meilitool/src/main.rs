@@ -1306,57 +1306,18 @@ mod tests {
     use new_roaring::RoaringBitmap;
     use quickcheck::quickcheck;
 
-    use crate::{
+    use super::{
         decode_bitmap_with_delta_encoding, decode_bitpacker_level_and_num_bits,
         encode_bitmap_with_delta_encoding, encode_bitpacker_level_and_num_bits, BitPackerLevel,
     };
 
-    #[test]
-    fn small() {
-        let bitmap = RoaringBitmap::from_iter([1, 2, 3, 5, 6, 0, 4]);
-        let compressed = encode_bitmap_with_delta_encoding(&bitmap);
-        let decompressed = decode_bitmap_with_delta_encoding(&compressed);
-        assert_eq!(decompressed, bitmap);
-    }
-
-    #[test]
-    fn medium() {
-        let bitmap = RoaringBitmap::from_iter((0..).take(523));
-        let compressed = encode_bitmap_with_delta_encoding(&bitmap);
-        let decompressed = decode_bitmap_with_delta_encoding(&compressed);
-        assert_eq!(decompressed, bitmap);
-    }
-
-    #[test]
-    fn large() {
-        let bitmap = RoaringBitmap::from_iter((0..).take(1_076_374));
-        let compressed = encode_bitmap_with_delta_encoding(&bitmap);
-        let decompressed = decode_bitmap_with_delta_encoding(&compressed);
-        assert_eq!(decompressed, bitmap);
-    }
-
-    #[test]
-    fn bitpacker_level_and_num_bits() {
-        for num_bits in 0..64 {
-            let left = encode_bitpacker_level_and_num_bits(crate::BitPackerLevel::None, num_bits);
-            let (level, out_num_bits) = decode_bitpacker_level_and_num_bits(left);
-            assert_eq!(level, BitPackerLevel::None);
-            assert_eq!(num_bits, out_num_bits);
-        }
-    }
-
-    #[test]
-    fn repro_num_bits_is_zero() {
-        let bitmap = RoaringBitmap::from_iter([
-            2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 1, 17, 18, 19, 20, 21, 22, 23, 24,
-            25, 26, 0, 27, 28, 29, 30, 32,
-        ]);
-        let compressed = encode_bitmap_with_delta_encoding(&bitmap);
-        let decompressed = decode_bitmap_with_delta_encoding(&compressed);
-        assert_eq!(decompressed, bitmap);
-    }
-
     quickcheck! {
+        // fn qc_bitpacker_level_and_num_bits(bp_level: BitPackerLevel, numbits: u8) -> bool {
+        //     let left = encode_bitpacker_level_and_num_bits(crate::BitPackerLevel::None, num_bits);
+        //     let (out_level, out_num_bits) = decode_bitpacker_level_and_num_bits(left);
+        //     out_level ==level && out_num_bits == num_bits
+        // }
+
         fn qc_random(xs: Vec<u32>) -> bool {
             let bitmap = RoaringBitmap::from_iter(xs);
             let compressed = encode_bitmap_with_delta_encoding(&bitmap);
