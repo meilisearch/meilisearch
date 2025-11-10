@@ -35,6 +35,7 @@ pub struct EmbeddingExtractor<'a, 'b> {
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     embedder_stats: &'a EmbedderStats,
     threads: &'a ThreadPoolNoAbort,
+    failure_modes: EmbedderFailureModes,
 }
 
 impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
@@ -46,7 +47,15 @@ impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
         threads: &'a ThreadPoolNoAbort,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
-        Self { embedders, sender, threads, possible_embedding_mistakes, embedder_stats }
+        let failure_modes = EmbedderFailureModes::from_env();
+        Self {
+            embedders,
+            sender,
+            threads,
+            possible_embedding_mistakes,
+            embedder_stats,
+            failure_modes,
+        }
     }
 }
 
@@ -91,6 +100,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                 self.threads,
                 self.sender,
                 &context.doc_alloc,
+                self.failure_modes,
             ))
         }
 
@@ -267,6 +277,7 @@ pub struct SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
     sender: EmbeddingSender<'a, 'b>,
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     threads: &'a ThreadPoolNoAbort,
+    failure_modes: EmbedderFailureModes,
 }
 
 impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
@@ -279,7 +290,16 @@ impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
         threads: &'a ThreadPoolNoAbort,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
-        Self { settings_delta, embedder_stats, sender, threads, possible_embedding_mistakes }
+        let failure_modes = EmbedderFailureModes::from_env();
+
+        Self {
+            settings_delta,
+            embedder_stats,
+            sender,
+            threads,
+            possible_embedding_mistakes,
+            failure_modes,
+        }
     }
 }
 
@@ -336,6 +356,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                     self.threads,
                     self.sender,
                     &context.doc_alloc,
+                    self.failure_modes,
                 ),
                 reindex_action,
             ));
@@ -539,6 +560,7 @@ struct Chunks<'a, 'b, 'extractor> {
 enum ChunkType<'a, 'b> {
     DocumentTemplate {
         document_template: &'a Prompt,
+        ignore_document_template_failures: bool,
         session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, &'a str>,
     },
     Fragments {
@@ -559,6 +581,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         threads: &'a ThreadPoolNoAbort,
         sender: EmbeddingSender<'a, 'b>,
         doc_alloc: &'a Bump,
+        failure_modes: EmbedderFailureModes,
     ) -> Self {
         let embedder = &runtime.embedder;
         let dimensions = embedder.dimensions();
@@ -567,12 +590,14 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         let kind = if fragments.is_empty() {
             ChunkType::DocumentTemplate {
                 document_template: &runtime.document_template,
+                ignore_document_template_failures: failure_modes.ignore_document_template_failures,
                 session: EmbedSession::new(
                     &runtime.embedder,
                     embedder_name,
                     threads,
                     doc_alloc,
                     embedder_stats,
+                    failure_modes.ignore_embedder_failures,
                     OnEmbeddingDocumentUpdates {
                         embedder_id: embedder_info.embedder_id,
                         sender,
@@ -589,6 +614,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     threads,
                     doc_alloc,
                     embedder_stats,
+                    failure_modes.ignore_embedder_failures,
                     OnEmbeddingDocumentUpdates {
                         embedder_id: embedder_info.embedder_id,
                         sender,
@@ -693,7 +719,11 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     },
                 )?;
             }
-            ChunkType::DocumentTemplate { document_template, session } => {
+            ChunkType::DocumentTemplate {
+                document_template,
+                ignore_document_template_failures,
+                session,
+            } => {
                 let doc_alloc = session.doc_alloc();
 
                 let old_embedder = settings_delta.old_embedders().get(session.embedder_name());
@@ -702,6 +732,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 } else {
                     old_embedder.as_ref().map(|old_embedder| &old_embedder.document_template)
                 };
+
                 let extractor =
                     DocumentTemplateExtractor::new(document_template, doc_alloc, fields_ids_map);
                 let old_extractor = old_document_template.map(|old_document_template| {
@@ -710,7 +741,15 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 let metadata =
                     Metadata { docid, external_docid, extractor_id: extractor.extractor_id() };
 
-                match extractor.diff_settings(document, &external_docid, old_extractor.as_ref())? {
+                let extractor_diff = if *ignore_document_template_failures {
+                    let extractor = extractor.ignore_errors();
+                    let old_extractor = old_extractor.map(DocumentTemplateExtractor::ignore_errors);
+                    extractor.diff_settings(document, &external_docid, old_extractor.as_ref())?
+                } else {
+                    extractor.diff_settings(document, &external_docid, old_extractor.as_ref())?
+                };
+
+                match extractor_diff {
                     ExtractorDiff::Removed => {
                         if old_is_user_provided || full_reindex {
                             session.on_embed_mut().clear_vectors(docid);
@@ -758,7 +797,11 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
             new_must_regenerate,
         );
         match &mut self.kind {
-            ChunkType::DocumentTemplate { document_template, session } => {
+            ChunkType::DocumentTemplate {
+                document_template,
+                ignore_document_template_failures,
+                session,
+            } => {
                 let doc_alloc = session.doc_alloc();
                 let ex = DocumentTemplateExtractor::new(
                     document_template,
@@ -766,18 +809,33 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     new_fields_ids_map,
                 );
 
-                update_autogenerated(
-                    docid,
-                    external_docid,
-                    [ex],
-                    old_document,
-                    new_document,
-                    &external_docid,
-                    old_must_regenerate,
-                    old_is_user_provided,
-                    session,
-                    unused_vectors_distribution,
-                )?
+                if *ignore_document_template_failures {
+                    update_autogenerated(
+                        docid,
+                        external_docid,
+                        [ex.ignore_errors()],
+                        old_document,
+                        new_document,
+                        &external_docid,
+                        old_must_regenerate,
+                        old_is_user_provided,
+                        session,
+                        unused_vectors_distribution,
+                    )
+                } else {
+                    update_autogenerated(
+                        docid,
+                        external_docid,
+                        [ex],
+                        old_document,
+                        new_document,
+                        &external_docid,
+                        old_must_regenerate,
+                        old_is_user_provided,
+                        session,
+                        unused_vectors_distribution,
+                    )
+                }?
             }
             ChunkType::Fragments { fragments, session } => {
                 let doc_alloc = session.doc_alloc();
@@ -844,23 +902,38 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         );
 
         match &mut self.kind {
-            ChunkType::DocumentTemplate { document_template, session } => {
+            ChunkType::DocumentTemplate {
+                document_template,
+                ignore_document_template_failures,
+                session,
+            } => {
                 let doc_alloc = session.doc_alloc();
                 let ex = DocumentTemplateExtractor::new(
                     document_template,
                     doc_alloc,
                     new_fields_ids_map,
                 );
-
-                insert_autogenerated(
-                    docid,
-                    external_docid,
-                    [ex],
-                    new_document,
-                    &external_docid,
-                    session,
-                    unused_vectors_distribution,
-                )?;
+                if *ignore_document_template_failures {
+                    insert_autogenerated(
+                        docid,
+                        external_docid,
+                        [ex.ignore_errors()],
+                        new_document,
+                        &external_docid,
+                        session,
+                        unused_vectors_distribution,
+                    )?;
+                } else {
+                    insert_autogenerated(
+                        docid,
+                        external_docid,
+                        [ex],
+                        new_document,
+                        &external_docid,
+                        session,
+                        unused_vectors_distribution,
+                    )?;
+                }
             }
             ChunkType::Fragments { fragments, session } => {
                 let doc_alloc = session.doc_alloc();
@@ -884,7 +957,11 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
 
     pub fn drain(self, unused_vectors_distribution: &UnusedVectorsDistributionBump) -> Result<()> {
         match self.kind {
-            ChunkType::DocumentTemplate { document_template: _, session } => {
+            ChunkType::DocumentTemplate {
+                document_template: _,
+                ignore_document_template_failures: _,
+                session,
+            } => {
                 session.drain(unused_vectors_distribution)?;
             }
             ChunkType::Fragments { fragments: _, session } => {
@@ -896,9 +973,11 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
 
     pub fn embedder_name(&self) -> &'a str {
         match &self.kind {
-            ChunkType::DocumentTemplate { document_template: _, session } => {
-                session.embedder_name()
-            }
+            ChunkType::DocumentTemplate {
+                document_template: _,
+                ignore_document_template_failures: _,
+                session,
+            } => session.embedder_name(),
             ChunkType::Fragments { fragments: _, session } => session.embedder_name(),
         }
     }
@@ -967,7 +1046,11 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
             }
         }
         match &mut self.kind {
-            ChunkType::DocumentTemplate { document_template: _, session } => {
+            ChunkType::DocumentTemplate {
+                document_template: _,
+                ignore_document_template_failures: _,
+                session,
+            } => {
                 session.on_embed_mut().process_embeddings(
                     Metadata { docid, external_docid, extractor_id: 0 },
                     embeddings,
@@ -1077,4 +1160,42 @@ where
     }
 
     Ok(())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+struct EmbedderFailureModes {
+    pub ignore_document_template_failures: bool,
+    pub ignore_embedder_failures: bool,
+}
+
+impl EmbedderFailureModes {
+    fn from_env() -> Self {
+        match std::env::var("MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES") {
+            Ok(failure_modes) => Self::parse_from_str(
+                &failure_modes,
+                "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES`",
+            ),
+            Err(std::env::VarError::NotPresent) => Self::default(),
+            Err(std::env::VarError::NotUnicode(_)) => panic!(
+                "`MEILI_EXPERIMENTAL_CONFIG_EMBEDDER_FAILURE_MODES` contains a non-unicode value"
+            ),
+        }
+    }
+
+    fn parse_from_str(failure_modes: &str, provenance: &'static str) -> Self {
+        let Self { mut ignore_document_template_failures, mut ignore_embedder_failures } =
+            Default::default();
+        for segment in failure_modes.split(',') {
+            let segment = segment.trim();
+            match segment {
+                "ignore_document_template_failures" => {
+                    ignore_document_template_failures = true;
+                }
+                "ignore_embedder_failures" => ignore_embedder_failures = true,
+                "" => continue,
+                segment => panic!("Unrecognized segment value for {provenance}: {segment}"),
+            }
+        }
+        Self { ignore_document_template_failures, ignore_embedder_failures }
+    }
 }

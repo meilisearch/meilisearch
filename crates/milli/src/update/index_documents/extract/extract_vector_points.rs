@@ -1173,6 +1173,7 @@ pub fn extract_embeddings_from_fragments<R: io::Read + io::Seek>(
         request_threads,
         &doc_alloc,
         embedder_stats,
+        false,
         on_embed,
     );
 

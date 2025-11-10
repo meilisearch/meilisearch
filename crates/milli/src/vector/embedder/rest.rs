@@ -91,6 +91,7 @@ struct EmbedderData {
     request: RequestData,
     response: Response,
     configuration_source: ConfigurationSource,
+    max_retry_duration: std::time::Duration,
 }
 
 #[derive(Debug)]
@@ -182,10 +183,15 @@ impl Embedder {
     ) -> Result<Self, NewEmbedderError> {
         let bearer = options.api_key.as_deref().map(|api_key| format!("Bearer {api_key}"));
 
+        let timeout = std::env::var("MEILI_EXPERIMENTAL_REST_EMBEDDER_TIMEOUT_SECONDS")
+            .ok()
+            .map(|p| p.parse().unwrap())
+            .unwrap_or(30);
+
         let client = ureq::AgentBuilder::new()
             .max_idle_connections(REQUEST_PARALLELISM * 2)
             .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(timeout))
             .build();
 
         let request = RequestData::new(
@@ -196,6 +202,14 @@ impl Embedder {
 
         let response = Response::new(options.response, &request)?;
 
+        let max_retry_duration =
+            std::env::var("MEILI_EXPERIMENTAL_REST_EMBEDDER_MAX_RETRY_DURATION_SECONDS")
+                .ok()
+                .map(|p| p.parse().unwrap())
+                .unwrap_or(60);
+
+        let max_retry_duration = std::time::Duration::from_secs(max_retry_duration);
+
         let data = EmbedderData {
             client,
             bearer,
@@ -204,6 +218,7 @@ impl Embedder {
             response,
             configuration_source,
             headers: options.headers,
+            max_retry_duration,
         };
 
         let dimensions = if let Some(dimensions) = options.dimensions {
@@ -457,7 +472,7 @@ where
             }
         }?;
 
-        let retry_duration = retry_duration.min(std::time::Duration::from_secs(60)); // don't wait more than a minute
+        let retry_duration = retry_duration.min(data.max_retry_duration); // don't wait more than the max duration
 
         // randomly up to double the retry duration
         let retry_duration = retry_duration
