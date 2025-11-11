@@ -235,6 +235,11 @@ where
     SD: SettingsDelta + Sync,
 {
     delete_old_embedders_and_fragments(wtxn, index, settings_delta)?;
+    // TODO delete useless searchable databases
+    //      - Removed the fid_* database entries if a searchable is removed
+    //      - Clear word_pair_proximity if byWord to byAttribute
+    //      - Clear fid_prefix_* in the post processing
+    //      - clear the prefix + fid_prefix if setting `PrefixSearch` is enabled
 
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
