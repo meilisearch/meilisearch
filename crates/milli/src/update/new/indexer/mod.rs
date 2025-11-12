@@ -11,6 +11,7 @@ use hashbrown::HashMap;
 use heed::{RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
 pub use post_processing::recompute_word_fst_from_word_docids_database;
+pub use settings_changes::settings_change_extract;
 pub use update_by_function::UpdateByFunction;
 pub use write::ChannelCongestion;
 use write::{build_vectors, update_index, write_to_db};

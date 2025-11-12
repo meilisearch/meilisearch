@@ -14,10 +14,14 @@ use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
 };
+use crate::update::new::indexer::settings_changes::{
+    settings_change_extract, DocumentsIndentifiers, SettingsChangeExtractor,
+};
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
-use crate::update::new::DocumentChange;
+use crate::update::new::{DocumentChange, DocumentIdentifiers};
+use crate::update::settings::SettingsDelta;
 use crate::{bucketed_position, DocumentId, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE};
 
 const MAX_COUNTED_WORDS: usize = 30;
@@ -409,5 +413,127 @@ impl WordDocidsExtractors {
         let buffer_size = size_of::<FieldId>();
         let mut buffer = BumpVec::with_capacity_in(buffer_size, &context.doc_alloc);
         cached_sorter.flush_fid_word_count(&mut buffer)
+    }
+}
+
+pub struct WordDocidsSettingsExtractorsData<'a, SD> {
+    tokenizer: DocumentTokenizer<'a>,
+    max_memory_by_thread: Option<usize>,
+    buckets: usize,
+    settings_delta: &'a SD,
+}
+
+impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
+    for WordDocidsSettingsExtractorsData<'_, SD>
+{
+    type Data = RefCell<Option<WordDocidsBalancedCaches<'extractor>>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(Some(WordDocidsBalancedCaches::new_in(
+            self.buckets,
+            self.max_memory_by_thread,
+            extractor_alloc,
+        ))))
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
+        context: &'doc DocumentContext<Self::Data>,
+    ) -> crate::Result<()> {
+        for document in documents {
+            let document = document?;
+            SettingsChangeWordDocidsExtractors::extract_settings_change(
+                document,
+                context,
+                &self.tokenizer,
+                self.settings_delta,
+            )?;
+        }
+        Ok(())
+    }
+}
+
+pub struct SettingsChangeWordDocidsExtractors;
+
+impl SettingsChangeWordDocidsExtractors {
+    pub fn run_extraction<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+        settings_delta: &SD,
+        documents: &'indexer DocumentsIndentifiers<'indexer>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+        step: IndexingStep,
+    ) -> Result<WordDocidsCaches<'extractor>>
+    where
+        SD: SettingsDelta + Sync,
+        MSP: Fn() -> bool + Sync,
+    {
+        // Warning: this is duplicated code from extract_word_pair_proximity_docids.rs
+        let rtxn = indexing_context.index.read_txn()?;
+        let stop_words = indexing_context.index.stop_words(&rtxn)?;
+        let allowed_separators = indexing_context.index.allowed_separators(&rtxn)?;
+        let allowed_separators: Option<Vec<_>> =
+            allowed_separators.as_ref().map(|s| s.iter().map(String::as_str).collect());
+        let dictionary = indexing_context.index.dictionary(&rtxn)?;
+        let dictionary: Option<Vec<_>> =
+            dictionary.as_ref().map(|s| s.iter().map(String::as_str).collect());
+        let mut builder = tokenizer_builder(
+            stop_words.as_ref(),
+            allowed_separators.as_deref(),
+            dictionary.as_deref(),
+        );
+        let tokenizer = builder.build();
+        let localized_attributes_rules =
+            indexing_context.index.localized_attributes_rules(&rtxn)?.unwrap_or_default();
+        let document_tokenizer = DocumentTokenizer {
+            tokenizer: &tokenizer,
+            localized_attributes_rules: &localized_attributes_rules,
+            max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
+        };
+        let extractor_data = WordDocidsSettingsExtractorsData {
+            tokenizer: document_tokenizer,
+            max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
+            buckets: rayon::current_num_threads(),
+            settings_delta,
+        };
+        let datastore = ThreadLocal::new();
+        {
+            let span = tracing::debug_span!(target: "indexing::documents::extract", "vectors");
+            let _entered = span.enter();
+
+            settings_change_extract(
+                documents,
+                &extractor_data,
+                indexing_context,
+                extractor_allocs,
+                &datastore,
+                step,
+            )?;
+        }
+
+        let mut merger = WordDocidsCaches::new();
+        for cache in datastore.into_iter().flat_map(RefCell::into_inner) {
+            merger.push(cache)?;
+        }
+
+        Ok(merger)
+    }
+
+    // TODO find a better name (extract_document_change?)
+    //      and document this method.
+    fn extract_settings_change<SD: SettingsDelta>(
+        document: DocumentIdentifiers<'_>,
+        context: &DocumentContext<RefCell<Option<WordDocidsBalancedCaches>>>,
+        document_tokenizer: &DocumentTokenizer,
+        settings_delta: &SD,
+    ) -> Result<()> {
+        // TODO extract words based on the settings delta here
+
+        // Note: In insert_del_u32 we should touch the word_fid_docids and
+        //       the fid_word_count_docids if the current field has been added
+        //       or deleted from the list (we can add a boolean to help).
+        dbg!(document.external_document_id());
+
+        Ok(())
     }
 }
