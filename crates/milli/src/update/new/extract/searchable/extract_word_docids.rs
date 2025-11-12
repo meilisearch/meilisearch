@@ -8,7 +8,8 @@ use bumpalo::Bump;
 
 use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
-use crate::update::new::document::DocumentContext;
+use crate::fields_ids_map::metadata::Metadata;
+use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
@@ -528,11 +529,49 @@ impl SettingsChangeWordDocidsExtractors {
         settings_delta: &SD,
     ) -> Result<()> {
         // TODO extract words based on the settings delta here
-
+        //
         // Note: In insert_del_u32 we should touch the word_fid_docids and
         //       the fid_word_count_docids if the current field has been added
         //       or deleted from the list (we can add a boolean to help).
+
         dbg!(document.external_document_id());
+
+        // TODO do this outside the loop
+        let new_fields_ids_map = settings_delta.new_fields_ids_map();
+        let old_fields_ids_map = context.index.fields_ids_map_with_metadata(&context.rtxn)?;
+
+        let current_document = document.current(
+            &context.rtxn,
+            context.index,
+            old_fields_ids_map.as_fields_ids_map(),
+        )?;
+
+        for result in current_document.iter_top_level_fields() {
+            let (field_name, field_value) = result?;
+
+            let field_id = old_fields_ids_map.id(field_name).unwrap();
+            let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
+            let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
+
+            match (new_field_metadata, old_field_metadata) {
+                (Metadata { searchable: Some(_), .. }, Metadata { searchable: None, .. }) => {
+                    eprintln!(
+                        "The document with id `{}` has the field `{}` that must be deleted (be careful)",
+                        document.external_document_id(), field_name,
+                    );
+                }
+                (Metadata { searchable: None, .. }, Metadata { searchable: Some(_), .. }) => {
+                    eprintln!(
+                        "The document with id `{}` has the field `{}` that must be tokenized",
+                        document.external_document_id(),
+                        field_name,
+                    );
+                }
+                _ => todo!(),
+            }
+
+            // TODO extract words from the document here
+        }
 
         Ok(())
     }
