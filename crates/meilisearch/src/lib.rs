@@ -230,7 +230,11 @@ pub fn setup_meilisearch(
         cleanup_enabled: !opt.experimental_replication_parameters,
         max_number_of_tasks: 1_000_000,
         max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
-        batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size.into(),
+        batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size.map_or_else(
+            // By default, we use half of the available memory to determine the size of batched tasks
+            || opt.indexer_options.max_indexing_memory.map_or(u64::MAX, |mem| mem.as_u64() / 2),
+            |size| size.as_u64(),
+        ),
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
         index_count: DEFAULT_INDEX_COUNT,
         instance_features: opt.to_instance_features(),
