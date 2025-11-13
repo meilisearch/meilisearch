@@ -9,9 +9,9 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
+use meilisearch_types::tasks::enterprise_edition::network::{NetworkTopologyChange, TaskNetwork};
 use meilisearch_types::tasks::{
-    Details, ExportIndexSettings, IndexSwap, KindWithContent, NetworkTopologyChange, Status, Task,
-    TaskId, TaskNetwork,
+    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
 };
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;

@@ -11,8 +11,16 @@ use actix_web::http::header::CONTENT_TYPE;
 use actix_web::HttpRequest;
 use bytes::Bytes;
 use index_scheduler::IndexScheduler;
+use meilisearch_types::enterprise_edition::network::Remote;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::tasks::{Origin, RemoteTask, TaskNetwork};
+use meilisearch_types::milli::DocumentId;
+use meilisearch_types::tasks::enterprise_edition::network::headers::{
+    PROXY_IMPORT_DOCS_HEADER, PROXY_IMPORT_FIRST_DOC_HEADER, PROXY_IMPORT_INDEX_HEADER,
+    PROXY_IMPORT_REMOTE_HEADER, PROXY_ORIGIN_NETWORK_VERSION_HEADER, PROXY_ORIGIN_REMOTE_HEADER,
+    PROXY_ORIGIN_TASK_UID_HEADER,
+};
+use meilisearch_types::tasks::enterprise_edition::network::{ImportData, Origin, TaskNetwork};
+use meilisearch_types::tasks::Task;
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -23,19 +31,79 @@ use crate::routes::indexes::enterprise_edition::proxy::error::{
 };
 use crate::routes::SummarizedTaskView;
 
-pub enum Body<T: serde::Serialize> {
+pub enum Body<T, F>
+where
+    T: serde::Serialize,
+    F: FnMut(&str, &Remote, &mut T),
+{
     NdJsonPayload(File),
     Inline(T),
+    Generated(T, F),
     None,
 }
 
-impl Body<()> {
+impl Body<(), fn(&str, &Remote, &mut ())> {
     pub fn with_ndjson_payload(file: File) -> Self {
         Self::NdJsonPayload(file)
     }
 
     pub fn none() -> Self {
         Self::None
+    }
+}
+
+impl<T> Body<T, fn(&str, &Remote, &mut T)>
+where
+    T: serde::Serialize,
+{
+    pub fn inline(payload: T) -> Self {
+        Self::Inline(payload)
+    }
+}
+
+impl<T, F> Body<T, F>
+where
+    T: serde::Serialize,
+    F: FnMut(&str, &Remote, &mut T),
+{
+    pub fn generated(initial: T, f: F) -> Self {
+        Self::Generated(initial, f)
+    }
+}
+
+impl<T, F> Body<T, F>
+where
+    T: serde::Serialize,
+    F: FnMut(&str, &Remote, &mut T),
+{
+    pub fn into_bytes_iter(
+        self,
+        remotes: impl IntoIterator<Item = (String, Remote)>,
+    ) -> Result<
+        impl Iterator<Item = (Option<Bytes>, (String, Remote))>,
+        meilisearch_types::milli::Error,
+    > {
+        let bytes = match self {
+            Body::NdJsonPayload(file) => {
+                Some(Bytes::from_owner(unsafe { memmap2::Mmap::map(&file)? }))
+            }
+
+            Body::Inline(payload) => {
+                Some(Bytes::copy_from_slice(&serde_json::to_vec(&payload).unwrap()))
+            }
+
+            Body::None => None,
+
+            Body::Generated(mut initial, mut f) => {
+                return Ok(either::Right(remotes.into_iter().map(move |(name, remote)| {
+                    f(&name, &remote, &mut initial);
+                    let bytes =
+                        Some(Bytes::copy_from_slice(&serde_json::to_vec(&initial).unwrap()));
+                    (bytes, (name, remote))
+                })));
+            }
+        };
+        Ok(either::Left(std::iter::repeat(bytes).zip(remotes)))
     }
 }
 
@@ -49,14 +117,19 @@ impl Body<()> {
 ///     1. The task originates with the current node
 ///     2. There's a declared `leader`
 ///     3. The declared leader is **not** the current node
-/// - `MeilisearchHttpError::InvalidHeaderValue`: if only parts of the headers are present, or if they cannot be parsed as an origin.
-pub fn origin_or_check_leader(
+/// - `MeilisearchHttpError::InvalidHeaderValue`: if only parts of the headers are present, or if they cannot be parsed as a task network.
+/// - `MeilisearchHttpError::Inconsistent`
+pub fn task_network_and_check_leader(
     req: &HttpRequest,
     network: &meilisearch_types::enterprise_edition::network::Network,
-) -> Result<Option<Origin>, MeilisearchHttpError> {
-    match origin_from_req(req)? {
-        Some(origin) => Ok(Some(origin)),
-        None => {
+) -> Result<TaskNetwork, MeilisearchHttpError> {
+    match (origin_from_req(req)?, import_from_req(req)?) {
+        (Some(network_change), Some(import_from)) => {
+            Ok(TaskNetwork::Import { import_from, network_change })
+        }
+        (Some(origin), None) => Ok(TaskNetwork::Origin { origin }),
+        (None, Some(_)) => Err(MeilisearchHttpError::MissingOriginHeaders),
+        (None, None) => {
             match (network.leader.as_deref(), network.local.as_deref()) {
                 // 1. Always allowed if there is no leader
                 (None, _) => (),
@@ -70,12 +143,15 @@ pub fn origin_or_check_leader(
                 }
             }
 
-            Ok(None)
+            Ok(TaskNetwork::Remotes {
+                remote_tasks: Default::default(),
+                network_version: network.version,
+            })
         }
     }
 }
 
-/// If necessary, proxies the passed request to the network and update the task description.
+/// Updates the task description and, if necessary, proxies the passed request to the network and update the task description.
 ///
 /// This function reads the custom headers from the request to determine if must proxy the request or if the request
 /// has already been proxied.
@@ -85,156 +161,139 @@ pub fn origin_or_check_leader(
 ///   with the task ids from the task queues of the remotes.
 /// - when the request has already been proxied, the custom headers contains information about the remote that created the initial task.
 ///   This information is copied to the passed task.
-pub async fn proxy<T: serde::Serialize>(
+///
+/// # Returns
+///
+/// The updated task. The task is read back from the database to avoid erasing concurrent changes.
+pub async fn proxy<T, F>(
     index_scheduler: &IndexScheduler,
-    index_uid: &str,
+    index_uid: Option<&str>,
     req: &HttpRequest,
-    origin: Option<Origin>,
+    mut task_network: TaskNetwork,
     network: meilisearch_types::enterprise_edition::network::Network,
-    body: Body<T>,
+    body: Body<T, F>,
     task: &meilisearch_types::tasks::Task,
-) -> Result<(), MeilisearchHttpError> {
-    match origin {
-        Some(origin) => {
-            index_scheduler.set_task_network(task.uid, TaskNetwork::Origin { origin })?
+) -> Result<Task, MeilisearchHttpError>
+where
+    T: serde::Serialize,
+    F: FnMut(&str, &Remote, &mut T),
+{
+    if let TaskNetwork::Remotes { remote_tasks, network_version: _ } = &mut task_network {
+        let this = network
+            .local
+            .as_deref()
+            .expect("inconsistent `network.sharding` and `network.self`")
+            .to_owned();
+
+        let content_type = match &body {
+            // for file bodies, force x-ndjson
+            Body::NdJsonPayload(_) => Some(b"application/x-ndjson".as_slice()),
+            // otherwise get content type from request
+            _ => req.headers().get(CONTENT_TYPE).map(|h| h.as_bytes()),
+        };
+
+        let mut in_flight_remote_queries = BTreeMap::new();
+        let client = reqwest::ClientBuilder::new()
+            .connect_timeout(std::time::Duration::from_secs(3))
+            .build()
+            .unwrap();
+
+        let method = from_old_http_method(req.method());
+
+        // send payload to all remotes
+        for (body, (node_name, node)) in body
+            .into_bytes_iter(network.remotes.into_iter().filter(|(name, _)| name.as_str() != this))
+            .map_err(|err| {
+                MeilisearchHttpError::from_milli(err, index_uid.map(ToOwned::to_owned))
+            })?
+        {
+            let client = client.clone();
+            let api_key = node.write_api_key;
+            let this = this.clone();
+            let method = method.clone();
+            let path_and_query = req.uri().path_and_query().map(|paq| paq.as_str()).unwrap_or("/");
+
+            in_flight_remote_queries.insert(
+                node_name,
+                tokio::spawn({
+                    let url = format!("{}{}", node.url, path_and_query);
+
+                    let url_encoded_this = urlencoding::encode(&this).into_owned();
+                    let url_encoded_task_uid = task.uid.to_string(); // it's url encoded i promize
+
+                    let content_type = content_type.map(|b| b.to_owned());
+
+                    let backoff = backoff::ExponentialBackoffBuilder::new()
+                        .with_max_elapsed_time(Some(std::time::Duration::from_secs(25)))
+                        .build();
+
+                    backoff::future::retry(backoff, move || {
+                        let url = url.clone();
+                        let client = client.clone();
+                        let url_encoded_this = url_encoded_this.clone();
+                        let url_encoded_task_uid = url_encoded_task_uid.clone();
+                        let content_type = content_type.clone();
+
+                        let body = body.clone();
+                        let api_key = api_key.clone();
+                        let method = method.clone();
+
+                        async move {
+                            try_proxy(
+                                method,
+                                &url,
+                                content_type.as_deref(),
+                                api_key.as_deref(),
+                                &client,
+                                &url_encoded_this,
+                                &url_encoded_task_uid,
+                                body,
+                            )
+                            .await
+                        }
+                    })
+                }),
+            );
         }
-        None => {
-            let this = network
-                .local
-                .as_deref()
-                .expect("inconsistent `network.sharding` and `network.self`")
-                .to_owned();
 
-            let content_type = match &body {
-                // for file bodies, force x-ndjson
-                Body::NdJsonPayload(_) => Some(b"application/x-ndjson".as_slice()),
-                // otherwise get content type from request
-                _ => req.headers().get(CONTENT_TYPE).map(|h| h.as_bytes()),
-            };
+        // wait for all in-flight queries to finish and collect their results
+        for (node_name, handle) in in_flight_remote_queries {
+            match handle.await {
+                Ok(Ok(res)) => {
+                    let task_uid = res.task_uid;
 
-            let body = match body {
-                Body::NdJsonPayload(file) => Some(Bytes::from_owner(unsafe {
-                    memmap2::Mmap::map(&file).map_err(|err| {
-                        MeilisearchHttpError::from_milli(err.into(), Some(index_uid.to_owned()))
-                    })?
-                })),
-
-                Body::Inline(payload) => {
-                    Some(Bytes::copy_from_slice(&serde_json::to_vec(&payload).unwrap()))
+                    remote_tasks.insert(node_name, Ok(task_uid).into());
                 }
-
-                Body::None => None,
-            };
-
-            let mut in_flight_remote_queries = BTreeMap::new();
-            let client = reqwest::ClientBuilder::new()
-                .connect_timeout(std::time::Duration::from_secs(3))
-                .build()
-                .unwrap();
-
-            let method = from_old_http_method(req.method());
-
-            // send payload to all remotes
-            for (node_name, node) in
-                network.remotes.into_iter().filter(|(name, _)| name.as_str() != this)
-            {
-                let body = body.clone();
-                let client = client.clone();
-                let api_key = node.write_api_key;
-                let this = this.clone();
-                let method = method.clone();
-                let path_and_query =
-                    req.uri().path_and_query().map(|paq| paq.as_str()).unwrap_or("/");
-
-                in_flight_remote_queries.insert(
-                    node_name,
-                    tokio::spawn({
-                        let url = format!("{}{}", node.url, path_and_query);
-
-                        let url_encoded_this = urlencoding::encode(&this).into_owned();
-                        let url_encoded_task_uid = task.uid.to_string(); // it's url encoded i promize
-
-                        let content_type = content_type.map(|b| b.to_owned());
-
-                        let backoff = backoff::ExponentialBackoffBuilder::new()
-                            .with_max_elapsed_time(Some(std::time::Duration::from_secs(25)))
-                            .build();
-
-                        backoff::future::retry(backoff, move || {
-                            let url = url.clone();
-                            let client = client.clone();
-                            let url_encoded_this = url_encoded_this.clone();
-                            let url_encoded_task_uid = url_encoded_task_uid.clone();
-                            let content_type = content_type.clone();
-
-                            let body = body.clone();
-                            let api_key = api_key.clone();
-                            let method = method.clone();
-
-                            async move {
-                                try_proxy(
-                                    method,
-                                    &url,
-                                    content_type.as_deref(),
-                                    api_key.as_deref(),
-                                    &client,
-                                    &url_encoded_this,
-                                    &url_encoded_task_uid,
-                                    body,
-                                )
-                                .await
-                            }
-                        })
-                    }),
-                );
-            }
-
-            // wait for all in-flight queries to finish and collect their results
-            let mut remote_tasks: BTreeMap<String, RemoteTask> = BTreeMap::new();
-            for (node_name, handle) in in_flight_remote_queries {
-                match handle.await {
-                    Ok(Ok(res)) => {
-                        let task_uid = res.task_uid;
-
-                        remote_tasks.insert(node_name, Ok(task_uid).into());
-                    }
-                    Ok(Err(error)) => {
-                        remote_tasks.insert(node_name, Err(error.as_response_error()).into());
-                    }
-                    Err(panic) => match panic.try_into_panic() {
-                        Ok(panic) => {
-                            let msg = match panic.downcast_ref::<&'static str>() {
-                                Some(s) => *s,
-                                None => match panic.downcast_ref::<String>() {
-                                    Some(s) => &s[..],
-                                    None => "Box<dyn Any>",
-                                },
-                            };
-                            remote_tasks.insert(
-                                node_name,
-                                Err(ResponseError::from_msg(
-                                    msg.to_string(),
-                                    meilisearch_types::error::Code::Internal,
-                                ))
-                                .into(),
-                            );
-                        }
-                        Err(_) => {
-                            tracing::error!("proxy task was unexpectedly cancelled")
-                        }
-                    },
+                Ok(Err(error)) => {
+                    remote_tasks.insert(node_name, Err(error.as_response_error()).into());
                 }
+                Err(panic) => match panic.try_into_panic() {
+                    Ok(panic) => {
+                        let msg = match panic.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match panic.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        remote_tasks.insert(
+                            node_name,
+                            Err(ResponseError::from_msg(
+                                msg.to_string(),
+                                meilisearch_types::error::Code::Internal,
+                            ))
+                            .into(),
+                        );
+                    }
+                    Err(_) => {
+                        tracing::error!("proxy task was unexpectedly cancelled")
+                    }
+                },
             }
-
-            // edit details to contain the return values from the remotes
-            index_scheduler.set_task_network(
-                task.uid,
-                TaskNetwork::Remotes { remote_tasks, network_version: network.version },
-            )?;
         }
     }
 
-    Ok(())
+    Ok(index_scheduler.set_task_network(task.uid, task_network)?)
 }
 
 fn from_old_http_method(method: &actix_http::Method) -> reqwest::Method {
@@ -416,15 +475,11 @@ mod error {
     }
 }
 
-pub const PROXY_ORIGIN_REMOTE_HEADER: &str = "Meili-Proxy-Origin-Remote";
-pub const PROXY_ORIGIN_TASK_UID_HEADER: &str = "Meili-Proxy-Origin-TaskUid";
-pub const PROXY_ORIGIN_NETWORK_VERSION: &str = "Meili-Proxy-Origin-Network-Version";
-
 pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchHttpError> {
     let (remote_name, task_uid, network_version) = match (
         req.headers().get(PROXY_ORIGIN_REMOTE_HEADER),
         req.headers().get(PROXY_ORIGIN_TASK_UID_HEADER),
-        req.headers().get(PROXY_ORIGIN_NETWORK_VERSION),
+        req.headers().get(PROXY_ORIGIN_NETWORK_VERSION_HEADER),
     ) {
         (None, None, _) => return Ok(None),
         (None, Some(_), _) => {
@@ -460,13 +515,13 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
                 Some(network_version) => {
                     urlencoding::decode(network_version.to_str().map_err(|err| {
                         MeilisearchHttpError::InvalidHeaderValue {
-                            header_name: PROXY_ORIGIN_NETWORK_VERSION,
+                            header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
                             msg: format!("while parsing network version as UTF-8: {err}"),
                         }
                     })?)
                     .map_err(|err| {
                         MeilisearchHttpError::InvalidHeaderValue {
-                            header_name: PROXY_ORIGIN_NETWORK_VERSION,
+                            header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
                             msg: format!("while URL-decoding network version: {err}"),
                         }
                     })?
@@ -477,7 +532,7 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
         }
     };
 
-    let task_uid: usize =
+    let task_uid: u32 =
         task_uid.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
             header_name: PROXY_ORIGIN_TASK_UID_HEADER,
             msg: format!("while parsing the task UID as an integer: {err}"),
@@ -485,11 +540,96 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
 
     let network_version: u128 =
         network_version.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-            header_name: PROXY_ORIGIN_NETWORK_VERSION,
+            header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
             msg: format!("while parsing the network version as a u128: {err}"),
         })?;
 
     let network_version = uuid::Uuid::from_u128(network_version);
 
     Ok(Some(Origin { remote_name: remote_name.into_owned(), task_uid, network_version }))
+}
+
+pub fn import_from_req(req: &HttpRequest) -> Result<Option<ImportData>, MeilisearchHttpError> {
+    let (remote_name, index_name, last_documents, documents) = match (
+        req.headers().get(PROXY_IMPORT_REMOTE_HEADER),
+        req.headers().get(PROXY_IMPORT_INDEX_HEADER),
+        req.headers().get(PROXY_IMPORT_FIRST_DOC_HEADER),
+        req.headers().get(PROXY_IMPORT_DOCS_HEADER),
+    ) {
+        (None, None, None, None) => return Ok(None),
+        (Some(remote_name), Some(index_name), Some(last_documents), Some(documents)) => {
+            let remote_name = urlencoding::decode(remote_name.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_REMOTE_HEADER,
+                    msg: format!("while parsing import remote name as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_REMOTE_HEADER,
+                msg: format!("while URL-decoding import remote name: {err}"),
+            })?;
+
+            let index_name = urlencoding::decode(index_name.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_INDEX_HEADER,
+                    msg: format!("while parsing import index name as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_INDEX_HEADER,
+                msg: format!("while URL-decoding import index name: {err}"),
+            })?;
+
+            let last_documents = urlencoding::decode(last_documents.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_FIRST_DOC_HEADER,
+                    msg: format!("while parsing last documents as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_FIRST_DOC_HEADER,
+                msg: format!("while URL-decoding last documents: {err}"),
+            })?;
+
+            let documents = urlencoding::decode(documents.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_DOCS_HEADER,
+                    msg: format!("while parsing documents as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_DOCS_HEADER,
+                msg: format!("while URL-decoding documents: {err}"),
+            })?;
+            (remote_name, index_name, last_documents, documents)
+        }
+        // catch-all pattern that has to contain an inconsistency since we already matched (None, None, None) and (Some, Some, Some)
+        (remote_name, index_name, last_documents, documents) => {
+            return Err(MeilisearchHttpError::InconsistentImportHeaders {
+                is_remote_missing: remote_name.is_none(),
+                is_index_missing: index_name.is_none(),
+                is_last_docs_missing: last_documents.is_none(),
+                is_docs_missing: documents.is_none(),
+            })
+        }
+    };
+
+    let first_docid: DocumentId =
+        last_documents.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+            header_name: PROXY_IMPORT_FIRST_DOC_HEADER,
+            msg: format!("while parsing the last documents as an integer: {err}"),
+        })?;
+
+    let document_count: u64 =
+        documents.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+            header_name: PROXY_IMPORT_DOCS_HEADER,
+            msg: format!("while parsing the documents as an integer: {err}"),
+        })?;
+
+    Ok(Some(ImportData {
+        remote_name: remote_name.to_string(),
+        index_name: index_name.to_string(),
+        first_docid,
+        document_count,
+    }))
 }

@@ -15,7 +15,6 @@ use utoipa::{schema, ToSchema};
 use uuid::Uuid;
 
 use crate::batches::BatchId;
-use crate::enterprise_edition::network::Remote;
 use crate::error::ResponseError;
 use crate::index_uid_pattern::IndexUidPattern;
 use crate::keys::Key;
@@ -23,6 +22,8 @@ use crate::settings::{Settings, Unchecked};
 use crate::{versioning, InstanceUid};
 
 pub type TaskId = u32;
+
+pub mod enterprise_edition;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -45,7 +46,7 @@ pub struct Task {
     pub kind: KindWithContent,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub network: Option<TaskNetwork>,
+    pub network: Option<enterprise_edition::network::TaskNetwork>,
 }
 
 impl Task {
@@ -178,192 +179,7 @@ pub enum KindWithContent {
     IndexCompaction {
         index_uid: String,
     },
-    NetworkTopologyChange(NetworkTopologyChange),
-}
-
-/// Contains the full state of a network topology change.
-///
-/// A network topology change task is unique in that it can be processed in multiple different batches, as its resolution
-/// depends on various document additions tasks being processed.
-///
-/// A network topology task has 4 states:
-///
-/// 1. Processing any task that was meant for an earlier version of the network. This is necessary to know that we have the right version of
-/// documents.
-/// 2. Sending all documents that must be moved to other remotes.
-/// 3. Processing any task coming from the remotes.
-/// 4. Finished.
-///
-/// Furthermore, it maintains some stats
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NetworkTopologyChange {
-    state: NetworkTopologyState,
-    out_remotes: BTreeMap<String, Remote>,
-    in_remotes: BTreeMap<String, InRemote>,
-    stats: NetworkTopologyStats,
-}
-
-impl NetworkTopologyChange {
-    pub fn to_details(&self) -> Details {
-        let message = match self.state {
-            NetworkTopologyState::WaitingForOlderTasks => {
-                "Waiting for tasks enqueued before the network change to finish processing".into()
-            }
-            NetworkTopologyState::ExportingDocuments => "Exporting documents".into(),
-            NetworkTopologyState::ImportingDocuments => {
-                let mut finished_count = 0;
-                let mut first_ongoing = None;
-                let mut ongoing_total_indexes = 0;
-                let mut ongoing_processed_documents = 0;
-                let mut ongoing_missing_documents = 0;
-                let mut ongoing_total_documents = 0;
-                let mut other_ongoing_count = 0;
-                let mut first_waiting = None;
-                let mut other_waiting_count = 0;
-                for (remote_name, in_remote) in &self.in_remotes {
-                    match &in_remote.import_state {
-                        ImportState::WaitingForInitialTask => {
-                            first_waiting = match first_waiting {
-                                None => Some(remote_name),
-                                first_waiting => {
-                                    other_waiting_count += 1;
-                                    first_waiting
-                                }
-                            };
-                        }
-                        ImportState::Ongoing { import_index_state, total_indexes } => {
-                            first_ongoing = match first_ongoing {
-                                None => {
-                                    ongoing_total_indexes = *total_indexes;
-                                    Some(remote_name)
-                                }
-                                first_ongoing => {
-                                    other_ongoing_count += 1;
-                                    first_ongoing
-                                }
-                            };
-                            for import_state in import_index_state.values() {
-                                match import_state {
-                                    ImportIndexState::Ongoing {
-                                        total_documents,
-                                        processed_documents,
-                                        received_documents,
-                                    } => {
-                                        ongoing_total_documents += total_documents;
-                                        ongoing_processed_documents += processed_documents;
-                                        ongoing_missing_documents +=
-                                            total_documents.saturating_sub(*received_documents);
-                                    }
-                                    ImportIndexState::Finished { total_documents } => {
-                                        ongoing_total_documents += total_documents;
-                                        ongoing_processed_documents += total_documents;
-                                    }
-                                }
-                            }
-                        }
-                        ImportState::Finished { total_indexes, total_documents } => {
-                            finished_count += 1;
-                            ongoing_total_indexes = *total_indexes;
-                            ongoing_total_documents += *total_documents;
-                            ongoing_processed_documents += *total_documents;
-                        }
-                    }
-                }
-                format!(
-                    "Importing documents from {total} remotes{waiting}{ongoing}{finished}",
-                    total = self.in_remotes.len(),
-                    waiting = if let Some(first_waiting) = first_waiting {
-                        &format!(
-                            ", waiting on first task from `{}`{others}",
-                            first_waiting,
-                            others = if other_waiting_count > 0 {
-                                &format!(" and {other_waiting_count} other remotes")
-                            } else {
-                                ""
-                            }
-                        )
-                    } else {
-                        ""
-                    },
-                    ongoing = if let Some(first_ongoing) = first_ongoing {
-                        &format!(", awaiting {ongoing_missing_documents} and processed {ongoing_processed_documents} out of {ongoing_total_documents} documents in {ongoing_total_indexes} indexes from `{first_ongoing}`{others}",
-                others=if other_ongoing_count > 0 {&format!(" and {other_ongoing_count} other remotes")} else {""})
-                    } else {
-                        ""
-                    },
-                    finished = if finished_count >= 0 {
-                        &format!(", {finished_count} remotes finished processing")
-                    } else {
-                        ""
-                    }
-                )
-            }
-            NetworkTopologyState::Finished => "Finished".into(),
-        };
-        Details::NetworkTopologyChange {
-            moved_documents: self.stats.moved_documents,
-            received_documents: self.stats.received_documents,
-            message,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum NetworkTopologyState {
-    WaitingForOlderTasks,
-    ExportingDocuments,
-    ImportingDocuments,
-    Finished,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct NetworkTopologyStats {
-    pub received_documents: u64,
-    pub moved_documents: u64,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct InRemote {
-    name: String,
-    import_state: ImportState,
-}
-
-impl InRemote {
-    pub fn new(remote_name: String) -> Self {
-        Self { name: remote_name, import_state: ImportState::WaitingForInitialTask }
-    }
-
-    pub fn is_finished(&self) -> bool {
-        matches!(self.import_state, ImportState::Finished { .. })
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum ImportState {
-    /// Initially Meilisearch doesn't know how many documents it should expect from a remote.
-    /// The first task for each remote contains the information of how many indexes will be imported,
-    /// and the first task for each index contains the number of documents to import for that index.
-    WaitingForInitialTask,
-    Ongoing {
-        import_index_state: BTreeMap<String, ImportIndexState>,
-        total_indexes: usize,
-    },
-    Finished {
-        total_indexes: usize,
-        total_documents: usize,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-enum ImportIndexState {
-    Ongoing { total_documents: usize, received_documents: usize, processed_documents: usize },
-    Finished { total_documents: usize },
+    NetworkTopologyChange(enterprise_edition::network::NetworkTopologyChange),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -982,53 +798,6 @@ pub enum Details {
         received_documents: u64,
         message: String,
     },
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(untagged, rename_all = "camelCase")]
-pub enum TaskNetwork {
-    Origin {
-        origin: Origin,
-    },
-    Remotes {
-        remote_tasks: BTreeMap<String, RemoteTask>,
-        #[serde(default)]
-        network_version: Uuid,
-    },
-}
-
-impl TaskNetwork {
-    pub fn network_version(&self) -> Uuid {
-        match self {
-            TaskNetwork::Origin { origin } => origin.network_version,
-            TaskNetwork::Remotes { remote_tasks: _, network_version } => *network_version,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Origin {
-    pub remote_name: String,
-    pub task_uid: usize,
-    pub network_version: Uuid,
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteTask {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    task_uid: Option<TaskId>,
-    error: Option<ResponseError>,
-}
-
-impl From<Result<TaskId, ResponseError>> for RemoteTask {
-    fn from(res: Result<TaskId, ResponseError>) -> RemoteTask {
-        match res {
-            Ok(task_uid) => RemoteTask { task_uid: Some(task_uid), error: None },
-            Err(err) => RemoteTask { task_uid: None, error: Some(err) },
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]

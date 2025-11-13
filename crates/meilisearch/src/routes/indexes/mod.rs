@@ -41,7 +41,9 @@ mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
 
-pub use enterprise_edition::proxy::{PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER};
+pub use meilisearch_types::tasks::enterprise_edition::network::headers::{
+    PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER,
+};
 
 #[derive(OpenApi)]
 #[openapi(

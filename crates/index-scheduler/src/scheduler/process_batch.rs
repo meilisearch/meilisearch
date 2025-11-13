@@ -1,14 +1,21 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::{Seek, SeekFrom};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
+use bumpalo::Bump;
 use byte_unit::Byte;
 use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
+use meilisearch_types::enterprise_edition::network::Remote;
 use meilisearch_types::heed::{RoTxn, RwTxn};
+use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::heed::CompactionOption;
-use meilisearch_types::milli::progress::{Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{EmbedderStats, Progress, VariableNameStep};
+use meilisearch_types::milli::update::new::indexer;
+use meilisearch_types::milli::update::new::indexer::enterprise_edition::sharding::Shards;
 use meilisearch_types::milli::{self, ChannelCongestion};
+use meilisearch_types::tasks::enterprise_edition::network::{NetworkTopologyState, Origin};
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use milli::update::Settings as MilliSettings;
@@ -22,6 +29,7 @@ use crate::processing::{
     IndexCompaction, InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress,
     TaskDeletionProgress, UpdateIndexProgress,
 };
+use crate::scheduler::process_export::{ExportContext, ExportOptions, TargetInstance};
 use crate::utils::{
     self, remove_n_tasks_datetime_earlier_than, remove_task_datetime, swap_index_uid_in_task,
     ProcessingBatch,
@@ -535,7 +543,208 @@ impl IndexScheduler {
 
                 Ok((tasks, ProcessBatchInfo::default()))
             }
+            Batch::NetworkIndexBatch { mut network_task, inner_batch } => {
+                let (mut tasks, info) =
+                    self.process_batch(*inner_batch, current_batch, progress)?;
+                let KindWithContent::NetworkTopologyChange(network_topology_change) =
+                    &mut network_task.kind
+                else {
+                    return Err(Error::CorruptedTaskQueue);
+                };
+                for task in &tasks {
+                    let Some(network) = task.network.as_ref() else {
+                        continue;
+                    };
+                    let Some(import) = network.import_data() else {
+                        continue;
+                    };
+                    network_topology_change.process_remote_tasks(
+                        &import.remote_name,
+                        &import.index_name,
+                        import.document_count,
+                    );
+                }
+                tasks.push(network_task);
+                Ok((tasks, info))
+            }
+            Batch::NetworkWait { mut task } => {
+                let KindWithContent::NetworkTopologyChange(network_topology_change) =
+                    &mut task.kind
+                else {
+                    tracing::error!("network topology change task has the wrong kind with content");
+                    return Err(Error::CorruptedTaskQueue);
+                };
+
+                let Some(task_network) = &task.network else {
+                    tracing::error!("network topology change task has no network");
+                    return Err(Error::CorruptedTaskQueue);
+                };
+
+                let origin;
+                let origin = match task_network.origin() {
+                    Some(origin) => origin,
+                    None => {
+                        let myself =
+                            network_topology_change.in_name().expect("origin is not the leader");
+                        origin = Origin {
+                            remote_name: myself.to_string(),
+                            task_uid: task.uid,
+                            network_version: task_network.network_version(),
+                        };
+                        &origin
+                    }
+                };
+
+                if let Some((remotes, out_name)) = network_topology_change.export_to_process() {
+                    self.balance_documents(
+                        remotes,
+                        out_name,
+                        network_topology_change.in_name(),
+                        origin,
+                        &progress,
+                        &self.scheduler.must_stop_processing,
+                    )?;
+                }
+                network_topology_change.update_state();
+                if network_topology_change.state() == NetworkTopologyState::Finished {
+                    task.status = Status::Succeeded;
+                }
+                Ok((vec![task], Default::default()))
+            }
         }
+    }
+
+    fn balance_documents(
+        &self,
+        remotes: &BTreeMap<String, Remote>,
+        out_name: &str,
+        in_name: Option<&str>,
+        network_change_origin: &Origin,
+        progress: &Progress,
+        must_stop_processing: &crate::scheduler::MustStopProcessing,
+    ) -> crate::Result<()> {
+        let new_shards = Shards::from_remotes_local(remotes.keys().map(String::as_str), in_name);
+
+        // TECHDEBT: this spawns a `ureq` agent additionally to `reqwest`. We probably want to harmonize all of this.
+        let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(5)).build();
+
+        let mut indexer_alloc = Bump::new();
+
+        let scheduler_rtxn = self.env.read_txn()?;
+
+        let index_count = self.index_mapper.index_count(&scheduler_rtxn)?;
+
+        // process by batches of 20MiB. Allow for compression? Don't forget about embeddings
+        let _: Vec<()> = self.index_mapper.try_for_each_index(
+            &scheduler_rtxn,
+            |index_uid, index| -> crate::Result<()> {
+                indexer_alloc.reset();
+                let err = |err| Error::from_milli(err, Some(index_uid.to_string()));
+                let index_rtxn = index.read_txn()?;
+                let all_docids = index.external_documents_ids();
+                let mut documents_to_move_to: HashMap<String, RoaringBitmap> = HashMap::new();
+                let mut documents_to_delete = RoaringBitmap::new();
+
+                for res in all_docids.iter(&index_rtxn)? {
+                    let (external_docid, docid) = res?;
+                    match new_shards.processing_shard(external_docid) {
+                        Some(shard) if shard.is_own => continue,
+                        Some(shard) => {
+                            documents_to_move_to
+                                .entry(shard.name.clone())
+                                .or_default()
+                                .insert(docid);
+                        }
+                        None => {
+                            documents_to_delete.insert(docid);
+                        }
+                    }
+                }
+
+                let fields_ids_map = index.fields_ids_map(&index_rtxn)?;
+
+                for (remote, documents_to_move) in documents_to_move_to {
+                    /// TODO: justify the unwrap
+                    let remote = remotes.get(&remote).unwrap();
+
+                    let target = TargetInstance {
+                        base_url: &remote.url,
+                        api_key: remote.write_api_key.as_deref(),
+                    };
+                    let options = ExportOptions {
+                        index_uid,
+                        payload_size: None,
+                        override_settings: false,
+                        /// TODO: index count and max docs nb
+                        export_mode: super::process_export::ExportMode::NetworkBalancing {
+                            index_count,
+                            export_old_remote_name: out_name,
+                            network_change_origin,
+                        },
+                    };
+                    let ctx = ExportContext {
+                        index,
+                        index_rtxn: &index_rtxn,
+                        universe: &documents_to_move,
+                        progress,
+                        agent: &agent,
+                        must_stop_processing,
+                    };
+
+                    self.export_one_index(target, options, ctx)?;
+
+                    documents_to_delete |= documents_to_move;
+                }
+
+                if documents_to_delete.is_empty() {
+                    return Ok(());
+                }
+
+                let mut new_fields_ids_map = fields_ids_map.clone();
+
+                // candidates not empty => index not empty => a primary key is set
+                let primary_key = index.primary_key(&index_rtxn)?.unwrap();
+
+                let primary_key = PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
+                    .map_err(milli::Error::from)
+                    .map_err(err)?;
+
+                let mut index_wtxn = index.write_txn()?;
+
+                let mut indexer = indexer::DocumentDeletion::new();
+                indexer.delete_documents_by_docids(documents_to_delete);
+                let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
+                let embedders = index
+                    .embedding_configs()
+                    .embedding_configs(&index_wtxn)
+                    .map_err(milli::Error::from)
+                    .map_err(err)?;
+                let embedders = self.embedders(index_uid.to_string(), embedders)?;
+                let indexer_config = self.index_mapper.indexer_config();
+                let pool = &indexer_config.thread_pool;
+
+                indexer::index(
+                    &mut index_wtxn,
+                    index,
+                    pool,
+                    indexer_config.grenad_parameters(),
+                    &fields_ids_map,
+                    new_fields_ids_map,
+                    None, // document deletion never changes primary key
+                    &document_changes,
+                    embedders,
+                    &|| must_stop_processing.get(),
+                    &progress,
+                    &EmbedderStats::default(),
+                )
+                .map_err(err)?;
+
+                index_wtxn.commit()?;
+
+                Ok(())
+            },
+        )?;
+        Ok(())
     }
 
     fn apply_compaction(

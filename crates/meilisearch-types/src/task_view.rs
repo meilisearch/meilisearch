@@ -9,9 +9,9 @@ use utoipa::ToSchema;
 use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
+use crate::tasks::enterprise_edition::network::TaskNetwork;
 use crate::tasks::{
     serialize_duration, Details, DetailsExportIndexSettings, IndexSwap, Kind, Status, Task, TaskId,
-    TaskNetwork,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]

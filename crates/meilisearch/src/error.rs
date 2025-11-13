@@ -6,6 +6,10 @@ use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
 use meilisearch_types::milli;
 use meilisearch_types::milli::OrderBy;
+use meilisearch_types::tasks::enterprise_edition::network::headers::{
+    PROXY_IMPORT_DOCS_HEADER, PROXY_IMPORT_FIRST_DOC_HEADER, PROXY_IMPORT_INDEX_HEADER,
+    PROXY_IMPORT_REMOTE_HEADER,
+};
 use serde_json::Value;
 use tokio::task::JoinError;
 
@@ -91,6 +95,26 @@ pub enum MeilisearchHttpError {
     } else { PROXY_ORIGIN_TASK_UID_HEADER }
 )]
     InconsistentOriginHeaders { is_remote_missing: bool },
+    #[error("Inconsistent `Import` headers: {remote}: {remote_status}, {index}: {index_status}, {last}: {last_status}, {docs}: {docs_status}.\n - Hint: either all four headers should be provided, or none of them",
+        remote = PROXY_IMPORT_REMOTE_HEADER,
+        remote_status = if *is_remote_missing { "missing" } else{ "provided" },
+        index = PROXY_IMPORT_INDEX_HEADER,
+        index_status = if *is_index_missing { "missing" } else { "provided" },
+        last = PROXY_IMPORT_FIRST_DOC_HEADER,
+        last_status = if *is_last_docs_missing { "missing" } else { "provided" },
+        docs = PROXY_IMPORT_DOCS_HEADER,
+        docs_status = if *is_docs_missing { "missing" } else { "provided" }
+    )]
+    InconsistentImportHeaders {
+        is_remote_missing: bool,
+        is_index_missing: bool,
+        is_last_docs_missing: bool,
+        is_docs_missing: bool,
+    },
+    #[error(
+        "Inconsistent headers: `Import` headers are present, but `Origin` headers are missing."
+    )]
+    MissingOriginHeaders,
     #[error("Invalid value for header {header_name}: {msg}")]
     InvalidHeaderValue { header_name: &'static str, msg: String },
     #[error("This remote is not the leader of the network.\n  - Note: only the leader `{leader}` can receive new tasks.")]
@@ -142,6 +166,12 @@ impl ErrorCode for MeilisearchHttpError {
                 Code::InvalidMultiSearchFacetOrder
             }
             MeilisearchHttpError::InconsistentOriginHeaders { .. } => {
+                Code::InconsistentDocumentChangeHeaders
+            }
+            MeilisearchHttpError::InconsistentImportHeaders { .. } => {
+                Code::InconsistentDocumentChangeHeaders
+            }
+            MeilisearchHttpError::MissingOriginHeaders { .. } => {
                 Code::InconsistentDocumentChangeHeaders
             }
             MeilisearchHttpError::InvalidHeaderValue { .. } => Code::InvalidHeaderValue,

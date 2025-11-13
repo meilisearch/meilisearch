@@ -15,7 +15,10 @@ use meilisearch_types::error::deserr_codes::{
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::tasks::Origin;
+use meilisearch_types::tasks::enterprise_edition::network::{
+    NetworkTopologyChange, Origin, TaskNetwork,
+};
+use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
@@ -25,6 +28,8 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::routes::indexes::enterprise_edition::proxy::{proxy, Body};
+use crate::routes::SummarizedTaskView;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -85,7 +90,7 @@ async fn get_network(
     Ok(HttpResponse::Ok().json(network))
 }
 
-#[derive(Debug, Deserr, ToSchema, Serialize)]
+#[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError<InvalidNetworkRemotes>, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -108,7 +113,7 @@ pub struct Remote {
     pub write_api_key: Setting<String>,
 }
 
-#[derive(Debug, Deserr, ToSchema, Serialize)]
+#[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -245,23 +250,174 @@ async fn patch_network_without_origin(
     let old_network = index_scheduler.network();
     debug!(parameters = ?new_network, "Patch network");
 
-    if new_network.previous_remotes.set().is_some() {
+    if !matches!(new_network.previous_remotes, Setting::NotSet) {
         return Err(MeilisearchHttpError::UnexpectedNetworkPreviousRemotes.into());
     }
 
+    let merged_network = merge_networks(old_network.clone(), new_network)?;
+    index_scheduler.put_network(merged_network.clone())?;
+
+    analytics.publish(
+        PatchNetworkAnalytics {
+            network_size: merged_network.remotes.len(),
+            network_has_self: merged_network.local.is_some(),
+        },
+        &req,
+    );
+
+    /// TODO: spawn task only if necessary
+    let network_topology_change =
+        NetworkTopologyChange::new(old_network.clone(), merged_network.clone());
+    let task = KindWithContent::NetworkTopologyChange(network_topology_change);
+    let task = {
+        let index_scheduler = index_scheduler.clone();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, None, false)).await??
+    };
+
+    let mut proxied_network = Network {
+        remotes: Setting::Set(to_settings_remotes(&merged_network.remotes)),
+        local: Setting::NotSet,
+        leader: Setting::some_or_not_set(merged_network.leader.clone()),
+        previous_remotes: Setting::Set(to_settings_remotes(&old_network.remotes)),
+    };
+    let mut deleted_network = old_network;
+
+    let deleted_remotes = &mut deleted_network.remotes;
+    deleted_remotes.retain(|node, _| !merged_network.remotes.contains_key(node));
+
+    // proxy network change to the remaining remotes.
+    let updated_task = proxy(
+        &index_scheduler,
+        None,
+        &req,
+        TaskNetwork::Remotes {
+            remote_tasks: Default::default(),
+            network_version: merged_network.version,
+        },
+        merged_network,
+        Body::generated(proxied_network.clone(), |name, _remote, network| {
+            network.local = Setting::Set(name.to_string());
+        }),
+        &task,
+    )
+    .await?;
+    // unwrap: network was set by `proxy`
+    let task_network = updated_task.network.unwrap();
+
+    proxied_network.previous_remotes = Setting::NotSet;
+
+    // proxy network change to the deleted remotes
+    proxy(
+        &index_scheduler,
+        None,
+        &req,
+        task_network,
+        deleted_network,
+        Body::generated(proxied_network.clone(), |_name, _remote, network| {
+            network.local = Setting::Reset;
+        }),
+        &task,
+    )
+    .await?;
+
+    let task: SummarizedTaskView = task.into();
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
+}
+
+async fn patch_network_with_origin(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
+    merged_network: AwebJson<Network, DeserrJsonError>,
+    req: HttpRequest,
+    origin: Origin,
+    analytics: Data<Analytics>,
+) -> Result<HttpResponse, ResponseError> {
+    let merged_network = merged_network.into_inner();
+    debug!(parameters = ?merged_network, ?origin, "Patch network");
+    let mut remotes = BTreeMap::new();
+    let mut old_network = index_scheduler.network();
+
+    for (name, remote) in merged_network.remotes.set().into_iter().flat_map(|x| x.into_iter()) {
+        let Some(remote) = remote else { continue };
+        let remote = remote.try_into_db_node(&name)?;
+        remotes.insert(name, remote);
+    }
+    let mut previous_remotes = BTreeMap::new();
+    for (name, remote) in
+        merged_network.previous_remotes.set().into_iter().flat_map(|x| x.into_iter())
+    {
+        let Some(remote) = remote else {
+            continue;
+        };
+        let remote = remote.try_into_db_node(&name)?;
+        previous_remotes.insert(name, remote);
+    }
+
+    old_network.remotes = previous_remotes;
+
+    let new_network = DbNetwork {
+        local: merged_network.local.set(),
+        remotes,
+        leader: merged_network.leader.set(),
+        version: origin.network_version,
+    };
+    index_scheduler.put_network(new_network.clone())?;
+
+    analytics.publish(
+        PatchNetworkAnalytics {
+            network_size: new_network.remotes.len(),
+            network_has_self: new_network.local.is_some(),
+        },
+        &req,
+    );
+
+    /// TODO: spawn task only if necessary
+    let network_topology_change = NetworkTopologyChange::new(old_network, new_network);
+    let task = KindWithContent::NetworkTopologyChange(network_topology_change);
+    let task = {
+        let index_scheduler = index_scheduler.clone();
+        tokio::task::spawn_blocking(move || index_scheduler.register(task, None, false)).await??
+    };
+
+    index_scheduler.set_task_network(task.uid, TaskNetwork::Origin { origin })?;
+
+    let task: SummarizedTaskView = task.into();
+    debug!("returns: {:?}", task);
+    Ok(HttpResponse::Accepted().json(task))
+}
+
+fn to_settings_remotes(
+    db_remotes: &BTreeMap<String, DbRemote>,
+) -> BTreeMap<String, Option<Remote>> {
+    db_remotes
+        .iter()
+        .map(|(name, remote)| {
+            (
+                name.clone(),
+                Some(Remote {
+                    url: Setting::Set(remote.url.clone()),
+                    search_api_key: Setting::some_or_not_set(remote.search_api_key.clone()),
+                    write_api_key: Setting::some_or_not_set(remote.write_api_key.clone()),
+                }),
+            )
+        })
+        .collect()
+}
+
+fn merge_networks(
+    old_network: DbNetwork,
+    new_network: Network,
+) -> Result<DbNetwork, ResponseError> {
     let merged_self = match new_network.local {
         Setting::Set(new_self) => Some(new_self),
         Setting::Reset => None,
         Setting::NotSet => old_network.local,
     };
-
     let merged_leader = match new_network.leader {
         Setting::Set(new_leader) => Some(new_leader),
         Setting::Reset => None,
         Setting::NotSet => old_network.leader,
     };
-
-    // check that making the changes is allowed
     match (merged_leader.as_deref(), merged_self.as_deref()) {
         // 1. Always allowed if there is no leader
         (None, _) => (),
@@ -272,9 +428,7 @@ async fn patch_network_without_origin(
             return Err(MeilisearchHttpError::NotLeader { leader: leader.to_string() }.into())
         }
     }
-
     let new_version = uuid::Uuid::now_v7();
-
     let merged_remotes = match new_network.remotes {
         Setting::Set(new_remotes) => {
             let mut merged_remotes = BTreeMap::new();
@@ -346,64 +500,11 @@ async fn patch_network_without_origin(
         Setting::Reset => BTreeMap::new(),
         Setting::NotSet => old_network.remotes,
     };
-
-    analytics.publish(
-        PatchNetworkAnalytics {
-            network_size: merged_remotes.len(),
-            network_has_self: merged_self.is_some(),
-        },
-        &req,
-    );
-
     let merged_network = DbNetwork {
         local: merged_self,
         remotes: merged_remotes,
         leader: merged_leader,
         version: new_version,
     };
-    index_scheduler.put_network(merged_network.clone())?;
-
-    // register a "rebalancing" task with the old and new network
-
-    // proxy that task and network to the other remotes.
-
-    debug!(returns = ?merged_network, "Patch network");
-    Ok(HttpResponse::Ok().json(merged_network))
-}
-
-async fn patch_network_with_origin(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
-    merged_network: AwebJson<Network, DeserrJsonError>,
-    req: HttpRequest,
-    origin: Origin,
-    analytics: Data<Analytics>,
-) -> Result<HttpResponse, ResponseError> {
-    let merged_network = merged_network.into_inner();
-    debug!(parameters = ?merged_network, ?origin, "Patch network");
-    let mut remotes = BTreeMap::new();
-
-    for (name, remote) in merged_network.remotes.set().into_iter().flat_map(|x| x.into_iter()) {
-        let Some(remote) = remote else { continue };
-        let remote = remote.try_into_db_node(&name)?;
-        remotes.insert(name, remote);
-    }
-    let new_network = DbNetwork {
-        local: merged_network.local.set(),
-        remotes,
-        leader: merged_network.leader.set(),
-        version: origin.network_version,
-    };
-    index_scheduler.put_network(new_network.clone())?;
-
-    // register a "rebalancing" task with the old and new network
-
-    analytics.publish(
-        PatchNetworkAnalytics {
-            network_size: new_network.remotes.len(),
-            network_has_self: new_network.local.is_some(),
-        },
-        &req,
-    );
-    debug!(returns = ?new_network, "Patch network");
-    Ok(HttpResponse::Ok().json(new_network))
+    Ok(merged_network)
 }

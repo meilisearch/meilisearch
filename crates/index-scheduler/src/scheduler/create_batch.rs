@@ -4,6 +4,7 @@ use std::io::ErrorKind;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::{Settings, Unchecked};
+use meilisearch_types::tasks::enterprise_edition::network::NetworkTopologyState;
 use meilisearch_types::tasks::{BatchStopReason, Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
@@ -57,6 +58,13 @@ pub(crate) enum Batch {
     },
     IndexCompaction {
         index_uid: String,
+        task: Task,
+    },
+    NetworkIndexBatch {
+        network_task: Task,
+        inner_batch: Box<Batch>,
+    },
+    NetworkWait {
         task: Task,
     },
 }
@@ -140,8 +148,13 @@ impl Batch {
                     ..
                 } => RoaringBitmap::from_iter(tasks.iter().chain(other).map(|task| task.uid)),
             },
-            Batch::IndexSwap { task } => {
+            Batch::IndexSwap { task } | Batch::NetworkWait { task } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
+            }
+            Batch::NetworkIndexBatch { network_task, inner_batch } => {
+                let mut tasks = inner_batch.ids();
+                tasks.insert(network_task.uid);
+                tasks
             }
         }
     }
@@ -156,12 +169,14 @@ impl Batch {
             | Dump(_)
             | Export { .. }
             | UpgradeDatabase { .. }
+            | NetworkWait { .. }
             | IndexSwap { .. } => None,
             IndexOperation { op, .. } => Some(op.index_uid()),
             IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid, .. }
             | IndexCompaction { index_uid, .. } => Some(index_uid),
+            NetworkIndexBatch { network_task: _, inner_batch } => inner_batch.index_uid(),
         }
     }
 }
@@ -184,6 +199,8 @@ impl fmt::Display for Batch {
             Batch::IndexCompaction { .. } => f.write_str("IndexCompaction")?,
             Batch::Export { .. } => f.write_str("Export")?,
             Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
+            Batch::NetworkIndexBatch { .. } => f.write_str("NetworkTopologyChange")?,
+            Batch::NetworkWait { .. } => f.write_str("NetworkTopologyChange")?,
         };
         match index_uid {
             Some(name) => f.write_fmt(format_args!(" on {name:?} from tasks: {tasks:?}")),
@@ -466,7 +483,6 @@ impl IndexScheduler {
         let mut current_batch = ProcessingBatch::new(batch_id);
 
         let enqueued = &self.queue.tasks.get_status(rtxn, Status::Enqueued)?;
-        let count_total_enqueued = enqueued.len();
         let failed = &self.queue.tasks.get_status(rtxn, Status::Failed)?;
 
         // 0. we get the last task to cancel.
@@ -525,6 +541,14 @@ impl IndexScheduler {
             return Ok(Some((Batch::TaskDeletions(tasks), current_batch)));
         }
 
+        // 3. Check for enqueued network topology changes
+        let network_changes =
+            self.queue.tasks.get_kind(rtxn, Kind::NetworkTopologyChange)? & enqueued;
+        if let Some(task_id) = network_changes.iter().next() {
+            let task = self.queue.tasks.get_task(rtxn, task_id)?.unwrap();
+            return self.start_processing_network(rtxn, task, enqueued, current_batch);
+        }
+
         // 3. we batch the export.
         let to_export = self.queue.tasks.get_kind(rtxn, Kind::Export)? & enqueued;
         if !to_export.is_empty() {
@@ -559,7 +583,24 @@ impl IndexScheduler {
         }
 
         // 6. We make a batch from the unprioritised tasks. Start by taking the next enqueued task.
-        let task_id = if let Some(task_id) = enqueued.min() { task_id } else { return Ok(None) };
+        let (batch, current_batch) =
+            self.create_next_batch_unprioritized(rtxn, &enqueued, current_batch)?;
+        Ok(batch.map(|batch| (batch, current_batch)))
+    }
+
+    fn create_next_batch_unprioritized(
+        &self,
+        rtxn: &RoTxn,
+        enqueued: &RoaringBitmap,
+        mut current_batch: ProcessingBatch,
+    ) -> Result<(Option<Batch>, ProcessingBatch)> {
+        let count_total_enqueued = enqueued.len();
+
+        let task_id = if let Some(task_id) = enqueued.min() {
+            task_id
+        } else {
+            return Ok((None, current_batch));
+        };
         let mut task =
             self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
@@ -576,7 +617,7 @@ impl IndexScheduler {
                 kind: Kind::IndexSwap,
                 id: task.uid,
             });
-            return Ok(Some((Batch::IndexSwap { task }, current_batch)));
+            return Ok((Some(Batch::IndexSwap { task }), current_batch));
         };
 
         let index_already_exists = self.index_mapper.exists(rtxn, index_name)?;
@@ -641,7 +682,7 @@ impl IndexScheduler {
             autobatcher::autobatch(enqueued, index_already_exists, primary_key.as_deref())
         {
             current_batch.reason(autobatch_stop_reason.unwrap_or(stop_reason));
-            return Ok(self
+            let batch = self
                 .create_next_batch_index(
                     rtxn,
                     index_name.to_string(),
@@ -649,11 +690,81 @@ impl IndexScheduler {
                     &mut current_batch,
                     create_index,
                 )?
-                .map(|batch| (batch, current_batch)));
+                .map(|batch| batch);
+            return Ok((batch, current_batch));
         }
 
         // If we found no tasks then we were notified for something that got autobatched
         // somehow and there is nothing to do.
-        Ok(None)
+        Ok((None, current_batch))
     }
+
+    fn start_processing_network(
+        &self,
+        rtxn: &RoTxn,
+        mut task: Task,
+        enqueued: &RoaringBitmap,
+        current_batch: ProcessingBatch,
+    ) -> Result<Option<(Batch, ProcessingBatch)>> {
+        let change_version =
+            task.network.as_ref().map(|network| network.network_version()).unwrap_or_default();
+        let KindWithContent::NetworkTopologyChange(network_topology_change) = &task.kind else {
+            panic!("inconsistent kind with content")
+        };
+        match network_topology_change.state() {
+            NetworkTopologyState::WaitingForOlderTasks => {
+                let mut old_tasks = RoaringBitmap::new();
+                for task_id in enqueued {
+                    let task = self
+                        .queue
+                        .tasks
+                        .get_task(rtxn, task_id)?
+                        .ok_or(Error::CorruptedTaskQueue)?;
+
+                    let has_index = task.index_uid().is_some();
+
+                    if !has_index {
+                        continue;
+                    }
+
+                    let has_older_network_version = task
+                        .network
+                        .map(|network| network.network_version() <= change_version)
+                        // if there is no version, we never retain the task
+                        .unwrap_or_default();
+
+                    if has_older_network_version {
+                        old_tasks.push(task_id);
+                    }
+                }
+
+                let res = self.create_next_batch_unprioritized(rtxn, &old_tasks, current_batch);
+                self.runtime_tasks.write().unwrap().enqueued_network.swap(old_tasks);
+
+                let (batch, mut current_batch) = res?;
+
+                current_batch.processing(Some(&mut task));
+
+                let batch = match batch {
+                    Some(batch) => {
+                        let inner_batch = Box::new(batch);
+
+                        Batch::NetworkIndexBatch { network_task: task, inner_batch }
+                    }
+                    None => Batch::NetworkWait { task },
+                };
+
+                Ok(Some((batch, current_batch)))
+            }
+            NetworkTopologyState::ImportingDocuments => todo!(),
+            NetworkTopologyState::ExportingDocuments | NetworkTopologyState::Finished => {
+                Ok(Some((Batch::NetworkWait { task }, current_batch)))
+            }
+        }
+    }
+}
+
+pub enum BatchOutcome {
+    NoTaskToProcess,
+    Batch { batch: Batch, processing: ProcessingBatch },
 }

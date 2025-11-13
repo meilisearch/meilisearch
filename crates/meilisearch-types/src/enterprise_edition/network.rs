@@ -25,14 +25,10 @@ pub struct Network {
 impl Network {
     pub fn shards(&self) -> Option<Shards> {
         if self.leader.is_some() {
-            let this = self.local.as_deref().expect("Inconsistent `sharding` and `self`");
-            let others = self
-                .remotes
-                .keys()
-                .filter(|name| name.as_str() != this)
-                .map(|name| name.to_owned())
-                .collect();
-            Some(Shards { own: vec![this.to_owned()], others })
+            Some(Shards::from_remotes_local(
+                self.remotes.keys().map(String::as_str),
+                self.local.as_deref(),
+            ))
         } else {
             None
         }

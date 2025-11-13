@@ -21,6 +21,13 @@ pub struct EnqueuedNetworkTasks {
     tasks: RoaringBitmap,
 }
 
+impl EnqueuedNetworkTasks {
+    pub fn swap(&mut self, mut new: RoaringBitmap) -> RoaringBitmap {
+        std::mem::swap(&mut self.tasks, &mut new);
+        new
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct ProcessingTasks {
     pub batch: Option<Arc<ProcessingBatch>>,
