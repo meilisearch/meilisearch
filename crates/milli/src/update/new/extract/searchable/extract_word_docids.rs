@@ -2,7 +2,6 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem::size_of;
 use std::ops::DerefMut as _;
-use std::sync::RwLock;
 
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
@@ -11,7 +10,7 @@ use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
 use crate::attribute_patterns::match_field_legacy;
 use crate::fields_ids_map::metadata::Metadata;
-use crate::update::new::document::{Document, DocumentContext};
+use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
 use crate::update::new::indexer::document_changes::{
@@ -26,7 +25,7 @@ use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;
 use crate::{
-    bucketed_position, DocumentId, FieldId, GlobalFieldsIdsMap, PatternMatch, Result, UserError,
+    bucketed_position, DocumentId, FieldId, PatternMatch, Result, UserError,
     MAX_POSITION_PER_ATTRIBUTE,
 };
 
@@ -555,8 +554,6 @@ impl SettingsChangeWordDocidsExtractors {
         let cached_sorter = cached_sorter_ref.as_mut().unwrap();
         let doc_alloc = &context.doc_alloc;
 
-        // TODO extract words based on the settings delta here
-        //
         // Note: In insert_del_u32 we should touch the word_fid_docids and
         //       the fid_word_count_docids if the current field has been added
         //       or deleted from the list (we can add a boolean to help).
@@ -574,25 +571,99 @@ impl SettingsChangeWordDocidsExtractors {
             old_fields_ids_map.as_fields_ids_map(),
         )?;
 
+        #[derive(Debug, Clone, Copy, PartialEq)]
+        enum ActionToOperate {
+            ReindexAllFields,
+            // TODO improve by listing field prefixes
+            IndexAddedFields,
+            SkipDocument,
+        }
+
+        // Here we do a preliminary check to determine the action
+        // to take. This check doesn't trigger the tokenizer.
+        let mut action = ActionToOperate::SkipDocument;
+        document_tokenizer.tokenize_document(
+            current_document,
+            &mut |field_name| {
+                let fid = new_fields_ids_map.id(field_name).expect("All fields IDs must exist");
+
+                if action == ActionToOperate::ReindexAllFields {
+                    return Ok((fid, PatternMatch::NoMatch));
+                }
+
+                let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
+                let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
+
+                action = match (old_field_metadata, new_field_metadata) {
+                    (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. })
+                        if old_exact != new_exact =>
+                    {
+                        ActionToOperate::ReindexAllFields
+                    }
+                    (Metadata { searchable: Some(_), .. }, Metadata { searchable: None, .. }) => {
+                        ActionToOperate::ReindexAllFields
+                    }
+                    (Metadata { searchable: None, .. }, Metadata { searchable: Some(_), .. }) => {
+                        ActionToOperate::IndexAddedFields
+                    }
+                    _ => action,
+                };
+
+                Ok((fid, PatternMatch::Parent))
+            },
+            &mut |_, _, _, _| Ok(()),
+        )?;
+
+        // Early return when we don't need to index the document
+        if action == ActionToOperate::SkipDocument {
+            return Ok(());
+        }
+
         let mut should_tokenize = |field_name: &str| {
             let field_id = new_fields_ids_map.id(field_name).expect("All fields IDs must exist");
-            let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
             let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
+            let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
 
-            let pattern_match =
-                if old_field_metadata.is_searchable() || new_field_metadata.is_searchable() {
-                    PatternMatch::Match
-                // If any old or new field is searchable then we need to iterate over all fields
-                // else if any field matches we need to iterate over all fields
-                } else if old_searchable.zip(new_searchable).map_or(true, |(old, new)| {
-                    old.iter()
-                        .chain(new)
-                        .any(|attr| match_field_legacy(attr, field_name) == PatternMatch::Parent)
-                }) {
-                    PatternMatch::Parent
-                } else {
-                    PatternMatch::NoMatch
-                };
+            let pattern_match = match action {
+                ActionToOperate::ReindexAllFields => {
+                    if old_field_metadata.is_searchable() || new_field_metadata.is_searchable() {
+                        PatternMatch::Match
+                    // If any old or new field is searchable then we need to iterate over all fields
+                    // else if any field matches we need to iterate over all fields
+                    } else if old_searchable.zip(new_searchable).map_or(true, |(old, new)| {
+                        old.iter().chain(new).any(|attr| {
+                            match_field_legacy(attr, field_name) == PatternMatch::Parent
+                        })
+                    }) {
+                        PatternMatch::Parent
+                    } else {
+                        PatternMatch::NoMatch
+                    }
+                }
+                ActionToOperate::IndexAddedFields => {
+                    let has_searchable_children =
+                        |field_name: &str, searchable: Option<&Vec<String>>| {
+                            searchable.map_or(true, |fields| {
+                                fields.iter().any(|attr| {
+                                    match_field_legacy(attr, field_name) != PatternMatch::Parent
+                                })
+                            })
+                        };
+
+                    // Was not searchable but now is
+                    if !old_field_metadata.is_searchable() && new_field_metadata.is_searchable() {
+                        PatternMatch::Match
+                    // If the field was not a parent of a searchable before and is now
+                    } else if !has_searchable_children(field_name, old_searchable)
+                        && has_searchable_children(field_name, new_searchable)
+                    {
+                        PatternMatch::Parent
+                    } else {
+                        PatternMatch::NoMatch
+                    }
+                }
+                ActionToOperate::SkipDocument => unreachable!(),
+            };
 
             Ok((field_id, pattern_match))
         };
@@ -653,6 +724,8 @@ impl SettingsChangeWordDocidsExtractors {
             }
         };
 
+        // TODO we must tokenize twice when we change global parameters like stop words,
+        //      the language settings, dictionary, separators, non-separators...
         document_tokenizer.tokenize_document(
             current_document,
             &mut should_tokenize,

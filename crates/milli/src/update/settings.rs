@@ -2062,9 +2062,12 @@ impl InnerIndexSettings {
         let sortable_fields = index.sortable_fields(rtxn)?;
         let asc_desc_fields = index.asc_desc_fields(rtxn)?;
         let distinct_field = index.distinct_field(rtxn)?.map(|f| f.to_string());
-        let user_defined_searchable_attributes = index
-            .user_defined_searchable_fields(rtxn)?
-            .map(|fields| fields.into_iter().map(|f| f.to_string()).collect());
+        let user_defined_searchable_attributes = match index.user_defined_searchable_fields(rtxn)? {
+            Some(fields) if fields.iter().any(|&f| f == "*") => None,
+            Some(fields) => Some(fields.into_iter().map(|f| f.to_string()).collect()),
+            None => None,
+        };
+
         let builder = MetadataBuilder::from_index(index, rtxn)?;
         let fields_ids_map = FieldIdMapWithMetadata::new(fields_ids_map, builder);
         let disabled_typos_terms = index.disabled_typos_terms(rtxn)?;
