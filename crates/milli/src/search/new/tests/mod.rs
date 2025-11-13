@@ -16,6 +16,7 @@ pub mod stop_words;
 pub mod typo;
 pub mod typo_proximity;
 pub mod words_tms;
+mod attribute_update;
 
 fn collect_field_values(
     index: &crate::Index,
