@@ -8,10 +8,7 @@ use crate::update::new::document::Document;
 use crate::update::new::extract::perm_json_p::{
     seek_leaf_values_in_array, seek_leaf_values_in_object, Depth,
 };
-use crate::{
-    FieldId, GlobalFieldsIdsMap, InternalError, LocalizedAttributesRule, Result, UserError,
-    MAX_WORD_LENGTH,
-};
+use crate::{FieldId, InternalError, LocalizedAttributesRule, Result, MAX_WORD_LENGTH};
 
 // todo: should be crate::proximity::MAX_DISTANCE but it has been forgotten
 const MAX_DISTANCE: u32 = 8;
@@ -26,22 +23,16 @@ impl DocumentTokenizer<'_> {
     pub fn tokenize_document<'doc>(
         &self,
         document: impl Document<'doc>,
-        field_id_map: &mut GlobalFieldsIdsMap,
+        should_tokenize: &mut impl FnMut(&str) -> Result<(FieldId, PatternMatch)>,
         token_fn: &mut impl FnMut(&str, FieldId, u16, &str) -> Result<()>,
     ) -> Result<()> {
         let mut field_position = HashMap::new();
         let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
-            let Some((field_id, meta)) = field_id_map.id_with_metadata_or_insert(field_name) else {
-                return Err(UserError::AttributeLimitReached.into());
-            };
-
-            if meta.is_searchable() {
+            let (field_id, pattern_match) = should_tokenize(field_name)?;
+            if pattern_match == PatternMatch::Match {
                 self.tokenize_field(field_id, field_name, value, token_fn, &mut field_position)?;
             }
-
-            // todo: should be a match on the field_name using `match_field_legacy` function,
-            // but for legacy reasons we iterate over all the fields to fill the field_id_map.
-            Ok(PatternMatch::Match)
+            Ok(pattern_match)
         };
 
         for entry in document.iter_top_level_fields() {
@@ -192,7 +183,7 @@ mod test {
     use super::*;
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::update::new::document::{DocumentFromVersions, Versions};
-    use crate::FieldsIdsMap;
+    use crate::{FieldsIdsMap, GlobalFieldsIdsMap};
 
     #[test]
     fn test_tokenize_document() {

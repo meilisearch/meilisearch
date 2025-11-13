@@ -2,12 +2,14 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::mem::size_of;
 use std::ops::DerefMut as _;
+use std::sync::RwLock;
 
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
 
 use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
+use crate::attribute_patterns::match_field_legacy;
 use crate::fields_ids_map::metadata::Metadata;
 use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::extract::cache::BalancedCaches;
@@ -23,7 +25,10 @@ use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
 use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;
-use crate::{bucketed_position, DocumentId, FieldId, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{
+    bucketed_position, DocumentId, FieldId, GlobalFieldsIdsMap, PatternMatch, Result, UserError,
+    MAX_POSITION_PER_ATTRIBUTE,
+};
 
 const MAX_COUNTED_WORDS: usize = 30;
 
@@ -330,6 +335,24 @@ impl WordDocidsExtractors {
             exact_attributes.iter().any(|attr| contained_in(fname, attr))
                 || disabled_typos_terms.is_exact(word)
         };
+
+        let mut should_tokenize = |field_name: &str| {
+            let Some((field_id, meta)) = new_fields_ids_map.id_with_metadata_or_insert(field_name)
+            else {
+                return Err(UserError::AttributeLimitReached.into());
+            };
+
+            let pattern_match = if meta.is_searchable() {
+                PatternMatch::Match
+            } else {
+                // TODO: should be a match on the field_name using `match_field_legacy` function,
+                //       but for legacy reasons we iterate over all the fields to fill the field_id_map.
+                PatternMatch::Parent
+            };
+
+            Ok((field_id, pattern_match))
+        };
+
         match document_change {
             DocumentChange::Deletion(inner) => {
                 let mut token_fn = |fname: &str, fid, pos, word: &str| {
@@ -344,7 +367,7 @@ impl WordDocidsExtractors {
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
-                    new_fields_ids_map,
+                    &mut should_tokenize,
                     &mut token_fn,
                 )?;
             }
@@ -372,7 +395,7 @@ impl WordDocidsExtractors {
                 };
                 document_tokenizer.tokenize_document(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
-                    new_fields_ids_map,
+                    &mut should_tokenize,
                     &mut token_fn,
                 )?;
 
@@ -388,7 +411,7 @@ impl WordDocidsExtractors {
                 };
                 document_tokenizer.tokenize_document(
                     inner.merged(rtxn, index, context.db_fields_ids_map)?,
-                    new_fields_ids_map,
+                    &mut should_tokenize,
                     &mut token_fn,
                 )?;
             }
@@ -405,7 +428,7 @@ impl WordDocidsExtractors {
                 };
                 document_tokenizer.tokenize_document(
                     inner.inserted(),
-                    new_fields_ids_map,
+                    &mut should_tokenize,
                     &mut token_fn,
                 )?;
             }
@@ -528,17 +551,22 @@ impl SettingsChangeWordDocidsExtractors {
         document_tokenizer: &DocumentTokenizer,
         settings_delta: &SD,
     ) -> Result<()> {
+        let mut cached_sorter_ref = context.data.borrow_mut_or_yield();
+        let cached_sorter = cached_sorter_ref.as_mut().unwrap();
+        let doc_alloc = &context.doc_alloc;
+
         // TODO extract words based on the settings delta here
         //
         // Note: In insert_del_u32 we should touch the word_fid_docids and
         //       the fid_word_count_docids if the current field has been added
         //       or deleted from the list (we can add a boolean to help).
 
-        dbg!(document.external_document_id());
-
         // TODO do this outside the loop
         let new_fields_ids_map = settings_delta.new_fields_ids_map();
         let old_fields_ids_map = context.index.fields_ids_map_with_metadata(&context.rtxn)?;
+
+        let old_searchable = settings_delta.old_searchable_attributes().as_ref();
+        let new_searchable = settings_delta.new_searchable_attributes().as_ref();
 
         let current_document = document.current(
             &context.rtxn,
@@ -546,32 +574,90 @@ impl SettingsChangeWordDocidsExtractors {
             old_fields_ids_map.as_fields_ids_map(),
         )?;
 
-        for result in current_document.iter_top_level_fields() {
-            let (field_name, field_value) = result?;
-
-            let field_id = old_fields_ids_map.id(field_name).unwrap();
+        let mut should_tokenize = |field_name: &str| {
+            let field_id = new_fields_ids_map.id(field_name).expect("All fields IDs must exist");
             let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
             let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
 
-            match (new_field_metadata, old_field_metadata) {
-                (Metadata { searchable: Some(_), .. }, Metadata { searchable: None, .. }) => {
-                    eprintln!(
-                        "The document with id `{}` has the field `{}` that must be deleted (be careful)",
-                        document.external_document_id(), field_name,
-                    );
-                }
-                (Metadata { searchable: None, .. }, Metadata { searchable: Some(_), .. }) => {
-                    eprintln!(
-                        "The document with id `{}` has the field `{}` that must be tokenized",
-                        document.external_document_id(),
-                        field_name,
-                    );
-                }
-                _ => todo!(),
-            }
+            let pattern_match =
+                if old_field_metadata.is_searchable() || new_field_metadata.is_searchable() {
+                    PatternMatch::Match
+                // If any old or new field is searchable then we need to iterate over all fields
+                // else if any field matches we need to iterate over all fields
+                } else if old_searchable.zip(new_searchable).map_or(true, |(old, new)| {
+                    old.iter()
+                        .chain(new)
+                        .any(|attr| match_field_legacy(attr, field_name) == PatternMatch::Parent)
+                }) {
+                    PatternMatch::Parent
+                } else {
+                    PatternMatch::NoMatch
+                };
 
-            // TODO extract words from the document here
-        }
+            Ok((field_id, pattern_match))
+        };
+
+        let mut token_fn = |_field_name: &str, field_id, pos, word: &str| {
+            let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
+            let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
+
+            match (old_field_metadata, new_field_metadata) {
+                (
+                    Metadata { searchable: Some(_), exact: old_exact, .. },
+                    Metadata { searchable: None, .. },
+                ) => {
+                    cached_sorter.insert_del_u32(
+                        field_id,
+                        pos,
+                        word,
+                        // TODO don't forget to check `disabled_typos_terms` and add it to the SettingsDelta
+                        old_exact,
+                        document.docid(),
+                        doc_alloc,
+                    )
+                }
+                (
+                    Metadata { searchable: None, .. },
+                    Metadata { searchable: Some(_), exact: new_exact, .. },
+                ) => {
+                    cached_sorter.insert_add_u32(
+                        field_id,
+                        pos,
+                        word,
+                        // TODO same
+                        new_exact,
+                        document.docid(),
+                        doc_alloc,
+                    )
+                }
+                (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. }) => {
+                    cached_sorter.insert_del_u32(
+                        field_id,
+                        pos,
+                        word,
+                        // TODO same
+                        old_exact,
+                        document.docid(),
+                        doc_alloc,
+                    )?;
+                    cached_sorter.insert_add_u32(
+                        field_id,
+                        pos,
+                        word,
+                        // TODO same
+                        new_exact,
+                        document.docid(),
+                        doc_alloc,
+                    )
+                }
+            }
+        };
+
+        document_tokenizer.tokenize_document(
+            current_document,
+            &mut should_tokenize,
+            &mut token_fn,
+        )?;
 
         Ok(())
     }
