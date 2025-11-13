@@ -492,6 +492,7 @@ impl SettingsChangeWordDocidsExtractors {
         MSP: Fn() -> bool + Sync,
     {
         // Warning: this is duplicated code from extract_word_pair_proximity_docids.rs
+        // TODO we need to read the new AND old settings to support changing global parameters
         let rtxn = indexing_context.index.read_txn()?;
         let stop_words = indexing_context.index.stop_words(&rtxn)?;
         let allowed_separators = indexing_context.index.allowed_separators(&rtxn)?;
@@ -554,9 +555,10 @@ impl SettingsChangeWordDocidsExtractors {
         let cached_sorter = cached_sorter_ref.as_mut().unwrap();
         let doc_alloc = &context.doc_alloc;
 
-        // Note: In insert_del_u32 we should touch the word_fid_docids and
-        //       the fid_word_count_docids if the current field has been added
-        //       or deleted from the list (we can add a boolean to help).
+        // Note: Whenever we delete a searchable field, we should remove the
+        //       corresponding field from the word_fid_docids and fid_word_count_docids
+        //       in a more optimized way. Like deleting every key that starts with
+        //       the field id instead of deleting entries document by document.
 
         // TODO do this outside the loop
         let new_fields_ids_map = settings_delta.new_fields_ids_map();
@@ -668,6 +670,9 @@ impl SettingsChangeWordDocidsExtractors {
             Ok((field_id, pattern_match))
         };
 
+        let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
+        let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
+
         let mut token_fn = |_field_name: &str, field_id, pos, word: &str| {
             let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
             let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
@@ -676,38 +681,31 @@ impl SettingsChangeWordDocidsExtractors {
                 (
                     Metadata { searchable: Some(_), exact: old_exact, .. },
                     Metadata { searchable: None, .. },
-                ) => {
-                    cached_sorter.insert_del_u32(
-                        field_id,
-                        pos,
-                        word,
-                        // TODO don't forget to check `disabled_typos_terms` and add it to the SettingsDelta
-                        old_exact,
-                        document.docid(),
-                        doc_alloc,
-                    )
-                }
+                ) => cached_sorter.insert_del_u32(
+                    field_id,
+                    pos,
+                    word,
+                    old_exact || old_disabled_typos_terms.is_exact(word),
+                    document.docid(),
+                    doc_alloc,
+                ),
                 (
                     Metadata { searchable: None, .. },
                     Metadata { searchable: Some(_), exact: new_exact, .. },
-                ) => {
-                    cached_sorter.insert_add_u32(
-                        field_id,
-                        pos,
-                        word,
-                        // TODO same
-                        new_exact,
-                        document.docid(),
-                        doc_alloc,
-                    )
-                }
+                ) => cached_sorter.insert_add_u32(
+                    field_id,
+                    pos,
+                    word,
+                    new_exact || new_disabled_typos_terms.is_exact(word),
+                    document.docid(),
+                    doc_alloc,
+                ),
                 (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. }) => {
                     cached_sorter.insert_del_u32(
                         field_id,
                         pos,
                         word,
-                        // TODO same
-                        old_exact,
+                        old_exact || old_disabled_typos_terms.is_exact(word),
                         document.docid(),
                         doc_alloc,
                     )?;
@@ -715,8 +713,7 @@ impl SettingsChangeWordDocidsExtractors {
                         field_id,
                         pos,
                         word,
-                        // TODO same
-                        new_exact,
+                        new_exact || new_disabled_typos_terms.is_exact(word),
                         document.docid(),
                         doc_alloc,
                     )
