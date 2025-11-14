@@ -88,6 +88,10 @@ impl Value {
         }
         self.clone()
     }
+
+    pub fn null() -> Self {
+        Self(serde_json::Value::Null)
+    }
 }
 
 impl From<serde_json::Value> for Value {

@@ -11,7 +11,7 @@ use time::OffsetDateTime;
 use utoipa::OpenApi;
 
 use crate::extractors::authentication::policies::ActionPolicy;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::authentication::OptionallyGuardedData;
 use crate::routes::create_all_stats;
 use crate::search_queue::SearchQueue;
 
@@ -123,20 +123,15 @@ meilisearch_used_db_size_bytes 409600
     )
 )]
 pub async fn get_metrics(
-    index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
+    index_scheduler: OptionallyGuardedData<
+        ActionPolicy<{ actions::METRICS_GET }>,
+        Data<IndexScheduler>,
+    >,
     auth_controller: Data<AuthController>,
     search_queue: web::Data<SearchQueue>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_metrics()?;
     let auth_filters = index_scheduler.filters();
-    if !auth_filters.all_indexes_authorized() {
-        let mut error = ResponseError::from(AuthenticationError::InvalidToken);
-        error
-            .message
-            .push_str(" The API key for the `/metrics` route must allow access to all indexes.");
-        return Err(error);
-    }
-
     let response = create_all_stats((*index_scheduler).clone(), auth_controller, auth_filters)?;
 
     crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(response.database_size as i64);
@@ -148,10 +143,12 @@ pub async fn get_metrics(
     crate::metrics::MEILISEARCH_SEARCHES_WAITING_TO_BE_PROCESSED
         .set(search_queue.searches_waiting() as i64);
 
-    for (index, value) in response.indexes.iter() {
-        crate::metrics::MEILISEARCH_INDEX_DOCS_COUNT
-            .with_label_values(&[index])
-            .set(value.number_of_documents as i64);
+    if auth_filters.all_indexes_authorized() {
+        for (index, value) in response.indexes.iter() {
+            crate::metrics::MEILISEARCH_INDEX_DOCS_COUNT
+                .with_label_values(&[index])
+                .set(value.number_of_documents as i64);
+        }
     }
 
     for (kind, value) in index_scheduler.get_stats()? {
