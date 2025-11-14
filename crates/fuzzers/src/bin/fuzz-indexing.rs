@@ -59,7 +59,10 @@ fn main() {
         let handle = std::thread::spawn(move || {
             let options = EnvOpenOptions::new();
             let mut options = options.read_txn_without_tls();
-            options.map_size(1024 * 1024 * 1024 * 1024);
+            #[cfg(target_pointer_width = "32")]
+            options.map_size(2 * 1024 * 1024 * 1024); // 2 GiB
+            #[cfg(not(target_pointer_width = "32"))]
+            options.map_size(1024 * 1024 * 1024 * 1024); // 1 TiB
             let tempdir = match opt.path {
                 Some(path) => TempDir::new_in(path).unwrap(),
                 None => TempDir::new().unwrap(),
