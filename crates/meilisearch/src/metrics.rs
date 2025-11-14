@@ -1,7 +1,8 @@
 use lazy_static::lazy_static;
 use prometheus::{
-    opts, register_gauge, register_histogram_vec, register_int_counter_vec, register_int_gauge,
-    register_int_gauge_vec, Gauge, HistogramVec, IntCounterVec, IntGauge, IntGaugeVec,
+    opts, register_gauge, register_gauge_vec, register_histogram_vec, register_int_counter_vec,
+    register_int_gauge, register_int_gauge_vec, Gauge, GaugeVec, HistogramVec, IntCounterVec,
+    IntGauge, IntGaugeVec,
 };
 
 lazy_static! {
@@ -73,6 +74,20 @@ lazy_static! {
         &["kind", "value"]
     )
     .expect("Can't create a metric");
+    pub static ref MEILISEARCH_BATCH_RUNNING_PROGRESS_TRACE: GaugeVec = register_gauge_vec!(
+        opts!("meilisearch_batch_running_progress_trace", "The currently running progress trace"),
+        &["batch_uid", "step_name"]
+    )
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_LAST_FINISHED_BATCHES_PROGRESS_TRACE_MS: IntGaugeVec =
+        register_int_gauge_vec!(
+            opts!(
+                "meilisearch_last_finished_batches_progress_trace_ms",
+                "The last few batches progress trace in milliseconds"
+            ),
+            &["batch_uid", "step_name"]
+        )
+        .expect("Can't create a metric");
     pub static ref MEILISEARCH_LAST_UPDATE: IntGauge =
         register_int_gauge!(opts!("meilisearch_last_update", "Meilisearch Last Update"))
             .expect("Can't create a metric");
