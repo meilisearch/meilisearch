@@ -27,7 +27,7 @@ pub(crate) struct FeatureData {
     network: Arc<RwLock<Network>>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct RoFeatures {
     runtime: RuntimeTogglableFeatures,
 }
