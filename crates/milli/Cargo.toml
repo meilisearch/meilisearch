@@ -101,7 +101,6 @@ bumpalo = "3.18.1"
 bumparaw-collections = "0.1.4"
 steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.9"
-allocator-api2 = "0.3.0"
 rustc-hash = "2.1.1"
 enum-iterator = "2.1.0"
 bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
