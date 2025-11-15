@@ -359,7 +359,7 @@ impl Infos {
             http_payload_size_limit,
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size:
-                experimental_limit_batched_tasks_total_size.into(),
+                experimental_limit_batched_tasks_total_size.map_or(u64::MAX, |size| size.as_u64()),
             task_queue_webhook: task_webhook_url.is_some(),
             task_webhook_authorization_header: task_webhook_authorization_header.is_some(),
             log_level: log_level.to_string(),
