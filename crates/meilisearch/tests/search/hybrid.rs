@@ -516,7 +516,7 @@ async fn issue_5976_missing_docs_hf() {
     let are_empty: Vec<_> = response["hits"]
         .as_array()
         .unwrap()
-        .into_iter()
+        .iter()
         .map(|hit| hit["_vectors"]["default"]["embeddings"].as_array().unwrap().is_empty())
         .collect();
     snapshot!(json!(are_empty), @r###"
