@@ -112,13 +112,12 @@ impl<'doc, C: OnEmbed<'doc>, I: Input> EmbedSession<'doc, C, I> {
         rendered: I,
         unused_vectors_distribution: &C::ErrorMetadata,
     ) -> Result<()> {
-        if self.inputs.len() < self.inputs.capacity() {
-            self.inputs.push(rendered);
-            self.metadata.push(metadata);
-            return Ok(());
+        if self.inputs.len() >= self.inputs.capacity() {
+            self.embed_chunks(unused_vectors_distribution)?;
         }
-
-        self.embed_chunks(unused_vectors_distribution)
+        self.inputs.push(rendered);
+        self.metadata.push(metadata);
+        Ok(())
     }
 
     pub fn drain(mut self, unused_vectors_distribution: &C::ErrorMetadata) -> Result<C> {
