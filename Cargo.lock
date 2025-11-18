@@ -3206,6 +3206,7 @@ dependencies = [
  "enum-iterator",
  "file-store",
  "flate2",
+ "futures",
  "indexmap",
  "insta",
  "maplit",
