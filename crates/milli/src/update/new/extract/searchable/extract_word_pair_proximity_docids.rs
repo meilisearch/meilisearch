@@ -16,7 +16,9 @@ use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
 use crate::update::new::DocumentChange;
-use crate::{FieldId, GlobalFieldsIdsMap, Result, MAX_POSITION_PER_ATTRIBUTE};
+use crate::{
+    FieldId, GlobalFieldsIdsMap, PatternMatch, Result, UserError, MAX_POSITION_PER_ATTRIBUTE,
+};
 
 pub struct WordPairProximityDocidsExtractorData<'a> {
     tokenizer: DocumentTokenizer<'a>,
@@ -279,7 +281,24 @@ fn process_document_tokens<'doc>(
         word_positions.push_back((Rc::from(word), pos));
         Ok(())
     };
-    document_tokenizer.tokenize_document(document, fields_ids_map, &mut token_fn)?;
+
+    let mut should_tokenize = |field_name: &str| {
+        let Some((field_id, meta)) = fields_ids_map.id_with_metadata_or_insert(field_name) else {
+            return Err(UserError::AttributeLimitReached.into());
+        };
+
+        let pattern_match = if meta.is_searchable() {
+            PatternMatch::Match
+        } else {
+            // TODO: should be a match on the field_name using `match_field_legacy` function,
+            //       but for legacy reasons we iterate over all the fields to fill the field_id_map.
+            PatternMatch::Parent
+        };
+
+        Ok((field_id, pattern_match))
+    };
+
+    document_tokenizer.tokenize_document(document, &mut should_tokenize, &mut token_fn)?;
 
     drain_word_positions(word_positions, word_pair_proximity);
     Ok(())
