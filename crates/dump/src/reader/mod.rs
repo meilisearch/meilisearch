@@ -242,10 +242,10 @@ pub(crate) mod test {
         //
         // "vector", configured with an embedder
         // contains:
-        // - one document with an overriden vector,
+        // - one document with an overridden vector,
         // - one document with a natural vector
         // - one document with a _vectors map containing one additional embedder name and a natural vector
-        // - one document with a _vectors map containing one additional embedder name and an overriden vector
+        // - one document with a _vectors map containing one additional embedder name and an overridden vector
         //
         // "novector", no embedder
         // contains:
