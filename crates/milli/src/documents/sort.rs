@@ -87,7 +87,7 @@ impl Iterator for SortedDocumentsIterator<'_> {
         };
 
         // Otherwise don't directly iterate over children, skip them if we know we will go further
-        let mut to_skip = n - 1;
+        let mut to_skip = n;
         while to_skip > 0 {
             if let Err(e) = SortedDocumentsIterator::update_current(
                 current_child,

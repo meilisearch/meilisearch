@@ -1339,3 +1339,98 @@ async fn get_document_with_vectors() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn test_fetch_documents_pagination_with_sorting() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Add documents as described in the bug report
+    let documents = json!([
+        {"id": 1, "name": "a"},
+        {"id": 2, "name": "b"},
+        {"id": 3, "name": "c"},
+        {"id": 4, "name": "d"},
+        {"id": 5, "name": "e"},
+        {"id": 6, "name": "f"}
+    ]);
+    let (task, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202);
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Set name as sortable attribute
+    let (task, code) = index.update_settings_sortable_attributes(json!(["name"])).await;
+    assert_eq!(code, 202);
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Request 1 (first page): offset 0, limit 2
+    let (response, code) = index
+        .fetch_documents(json!({
+            "offset": 0,
+            "limit": 2,
+            "sort": ["name:asc"]
+        }))
+        .await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r#"
+    [
+      {
+        "id": 1,
+        "name": "a"
+      },
+      {
+        "id": 2,
+        "name": "b"
+      }
+    ]
+    "#);
+
+    // Request 2 (second page): offset 2, limit 2
+    let (response, code) = index
+        .fetch_documents(json!({
+            "offset": 2,
+            "limit": 2,
+            "sort": ["name:asc"]
+        }))
+        .await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r###"
+    [
+      {
+        "id": 3,
+        "name": "c"
+      },
+      {
+        "id": 4,
+        "name": "d"
+      }
+    ]
+    "###);
+
+    // Request 3 (third page): offset 4, limit 2
+    let (response, code) = index
+        .fetch_documents(json!({
+            "offset": 4,
+            "limit": 2,
+            "sort": ["name:asc"]
+        }))
+        .await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r#"
+    [
+      {
+        "id": 5,
+        "name": "e"
+      },
+      {
+        "id": 6,
+        "name": "f"
+      }
+    ]
+    "#);
+}
