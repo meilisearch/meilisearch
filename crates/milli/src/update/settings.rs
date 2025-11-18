@@ -1589,33 +1589,33 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         // only use the new indexer when only the embedder possibly changed
         if let Self {
-            searchable_fields: Setting::NotSet,
+            searchable_fields: _,
             displayed_fields: Setting::NotSet,
             filterable_fields: Setting::NotSet,
             sortable_fields: Setting::NotSet,
             criteria: Setting::NotSet,
-            stop_words: Setting::NotSet,
-            non_separator_tokens: Setting::NotSet,
-            separator_tokens: Setting::NotSet,
-            dictionary: Setting::NotSet,
+            stop_words: Setting::NotSet, // TODO (require force reindexing of searchables)
+            non_separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
+            separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
+            dictionary: Setting::NotSet, // TODO (require force reindexing of searchables)
             distinct_field: Setting::NotSet,
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
             min_word_len_two_typos: Setting::NotSet,
             min_word_len_one_typo: Setting::NotSet,
-            exact_words: Setting::NotSet,
-            exact_attributes: Setting::NotSet,
+            exact_words: Setting::NotSet, // TODO (require force reindexing of searchables)
+            exact_attributes: _,
             max_values_per_facet: Setting::NotSet,
             sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
             proximity_precision: Setting::NotSet,
             embedder_settings: _,
             search_cutoff: Setting::NotSet,
-            localized_attributes_rules: Setting::NotSet,
-            prefix_search: Setting::NotSet,
+            localized_attributes_rules: Setting::NotSet, // TODO to start with
+            prefix_search: Setting::NotSet,              // TODO continue with this
             facet_search: Setting::NotSet,
-            disable_on_numbers: Setting::NotSet,
+            disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
             chat: Setting::NotSet,
             vector_store: Setting::NotSet,
             wtxn: _,
