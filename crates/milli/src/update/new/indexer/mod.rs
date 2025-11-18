@@ -300,6 +300,8 @@ where
                 .unwrap()
             })?;
 
+        let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
+
         let new_embedders = settings_delta.new_embedders();
         let embedder_actions = settings_delta.embedder_actions();
         let index_embedder_category_ids = settings_delta.new_embedder_category_id();
@@ -330,6 +332,18 @@ where
                 &mut vector_stores,
                 Some(embedder_actions),
                 &indexing_context.must_stop_processing,
+            )
+        })
+        .unwrap()?;
+
+        pool.install(|| {
+            // WARN When implementing the facets don't forget this
+            let facet_field_ids_delta = FacetFieldIdsDelta::new(0, 0);
+            post_processing::post_process(
+                indexing_context,
+                wtxn,
+                global_fields_ids_map,
+                facet_field_ids_delta,
             )
         })
         .unwrap()?;
