@@ -2064,7 +2064,7 @@ impl InnerIndexSettings {
         let asc_desc_fields = index.asc_desc_fields(rtxn)?;
         let distinct_field = index.distinct_field(rtxn)?.map(|f| f.to_string());
         let user_defined_searchable_attributes = match index.user_defined_searchable_fields(rtxn)? {
-            Some(fields) if fields.iter().any(|&f| f == "*") => None,
+            Some(fields) if fields.contains(&"*") => None,
             Some(fields) => Some(fields.into_iter().map(|f| f.to_string()).collect()),
             None => None,
         };
