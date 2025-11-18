@@ -108,7 +108,7 @@ impl Iterator for SortedDocumentsIterator<'_> {
                 continue;
             } else {
                 // The current iterator is large enough, so we can forward the call to it.
-                return inner.nth(to_skip + 1);
+                return inner.nth(to_skip);
             }
         }
 

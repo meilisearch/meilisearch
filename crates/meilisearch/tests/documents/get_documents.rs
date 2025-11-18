@@ -1347,21 +1347,17 @@ async fn test_fetch_documents_pagination_with_sorting() {
     let (task, _code) = index.create(None).await;
     server.wait_task(task.uid()).await.succeeded();
 
-    // Add documents as described in the bug report
-    let documents = json!([
-        {"id": 1, "name": "a"},
-        {"id": 2, "name": "b"},
-        {"id": 3, "name": "c"},
-        {"id": 4, "name": "d"},
-        {"id": 5, "name": "e"},
-        {"id": 6, "name": "f"}
-    ]);
-    let (task, code) = index.add_documents(documents, None).await;
+    // Set name as sortable attribute
+    let (task, code) = index.update_settings_sortable_attributes(json!(["name"])).await;
     assert_eq!(code, 202);
     server.wait_task(task.uid()).await.succeeded();
 
-    // Set name as sortable attribute
-    let (task, code) = index.update_settings_sortable_attributes(json!(["name"])).await;
+    let documents = json!((0..50)
+        .map(|i| json!({"id": i, "name": format!("doc_{:05}", std::cmp::min(i, 5))}))
+        .collect::<Vec<_>>());
+
+    // Add documents as described in the bug report
+    let (task, code) = index.add_documents(documents, None).await;
     assert_eq!(code, 202);
     server.wait_task(task.uid()).await.succeeded();
 
@@ -1375,18 +1371,18 @@ async fn test_fetch_documents_pagination_with_sorting() {
         .await;
     assert_eq!(code, 200);
     let results = response["results"].as_array().unwrap();
-    snapshot!(json_string!(results), @r#"
+    snapshot!(json_string!(results), @r###"
     [
       {
-        "id": 1,
-        "name": "a"
+        "id": 0,
+        "name": "doc_00000"
       },
       {
-        "id": 2,
-        "name": "b"
+        "id": 1,
+        "name": "doc_00001"
       }
     ]
-    "#);
+    "###);
 
     // Request 2 (second page): offset 2, limit 2
     let (response, code) = index
@@ -1401,12 +1397,12 @@ async fn test_fetch_documents_pagination_with_sorting() {
     snapshot!(json_string!(results), @r###"
     [
       {
-        "id": 3,
-        "name": "c"
+        "id": 2,
+        "name": "doc_00002"
       },
       {
-        "id": 4,
-        "name": "d"
+        "id": 3,
+        "name": "doc_00003"
       }
     ]
     "###);
@@ -1421,16 +1417,39 @@ async fn test_fetch_documents_pagination_with_sorting() {
         .await;
     assert_eq!(code, 200);
     let results = response["results"].as_array().unwrap();
-    snapshot!(json_string!(results), @r#"
+    snapshot!(json_string!(results), @r###"
     [
       {
-        "id": 5,
-        "name": "e"
+        "id": 4,
+        "name": "doc_00004"
       },
       {
-        "id": 6,
-        "name": "f"
+        "id": 5,
+        "name": "doc_00005"
       }
     ]
-    "#);
+    "###);
+
+    // Request 4 (fourth page): offset 6, limit 2
+    let (response, code) = index
+        .fetch_documents(json!({
+            "offset": 6,
+            "limit": 2,
+            "sort": ["name:asc"]
+        }))
+        .await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r###"
+    [
+      {
+        "id": 6,
+        "name": "doc_00005"
+      },
+      {
+        "id": 7,
+        "name": "doc_00005"
+      }
+    ]
+    "###);
 }
