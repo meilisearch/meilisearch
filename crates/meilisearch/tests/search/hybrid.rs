@@ -137,6 +137,60 @@ static SIMPLE_SEARCH_DOCUMENTS: Lazy<Value> = Lazy::new(|| {
     }])
 });
 
+static MANY_DOCS: Lazy<Value> = Lazy::new(|| {
+    json!([
+    {
+        "title": "Shazam!",
+        "desc": "a Captain Marvel ersatz",
+        "id": "1",
+    },
+    {
+        "title": "Captain Planet",
+        "desc": "He's not part of the Marvel Cinematic Universe",
+        "id": "2",
+    },
+    {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "3",
+    },
+        {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "4",
+    },
+        {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "5",
+    },
+        {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "6",
+    },
+        {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "7",
+    },
+        {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "8",
+    },
+        {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "9",
+    },
+        {
+        "title": "Captain Marvel",
+        "desc": "a Shazam ersatz",
+        "id": "10",
+    }])
+});
+
 #[actix_rt::test]
 async fn simple_search() {
     let server = Server::new_shared();
@@ -447,6 +501,38 @@ async fn simple_search_hf() {
     snapshot!(code, @"200 OK");
     snapshot!(response["hits"], @r###"[{"title":"Captain Marvel","desc":"a Shazam ersatz","id":"3"},{"title":"Shazam!","desc":"a Captain Marvel ersatz","id":"1"},{"title":"Captain Planet","desc":"He's not part of the Marvel Cinematic Universe","id":"2"}]"###);
     snapshot!(response["semanticHitCount"], @"3");
+}
+
+#[actix_rt::test]
+async fn issue_5976_missing_docs_hf() {
+    let server = Server::new_shared();
+    let index = index_with_documents_hf(server, &MANY_DOCS).await;
+    let (response, code) = index
+        .search_post(
+            json!({"q": "Wonder replacement", "hybrid": {"embedder": "default", "semanticRatio": 1.0}, "retrieveVectors": true}),
+        )
+        .await;
+    snapshot!(code, @"200 OK");
+    let are_empty: Vec<_> = response["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|hit| hit["_vectors"]["default"]["embeddings"].as_array().unwrap().is_empty())
+        .collect();
+    snapshot!(json!(are_empty), @r###"
+    [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+    "###);
 }
 
 #[actix_rt::test]
