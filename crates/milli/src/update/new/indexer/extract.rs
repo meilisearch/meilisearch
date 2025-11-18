@@ -390,7 +390,7 @@ where
         extractor_allocs,
     )?;
 
-    'word_docids: {
+    '_word_docids: {
         let WordDocidsCaches {
             word_docids,
             word_fid_docids,

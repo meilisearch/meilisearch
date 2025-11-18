@@ -65,6 +65,7 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn insert_add_u32(
         &mut self,
         field_id: FieldId,
@@ -116,6 +117,7 @@ impl<'extractor> WordDocidsBalancedCaches<'extractor> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn insert_del_u32(
         &mut self,
         field_id: FieldId,
@@ -650,7 +652,7 @@ impl SettingsChangeWordDocidsExtractors {
                         PatternMatch::Match
                     // If any old or new field is searchable then we need to iterate over all fields
                     // else if any field matches we need to iterate over all fields
-                    } else if old_searchable.zip(new_searchable).map_or(true, |(old, new)| {
+                    } else if old_searchable.zip(new_searchable).is_none_or(|(old, new)| {
                         old.iter().chain(new).any(|attr| {
                             match_field_legacy(attr, field_name) == PatternMatch::Parent
                         })
@@ -663,7 +665,7 @@ impl SettingsChangeWordDocidsExtractors {
                 ActionToOperate::IndexAddedFields => {
                     let has_searchable_children =
                         |field_name: &str, searchable: Option<&Vec<String>>| {
-                            searchable.map_or(true, |fields| {
+                            searchable.is_none_or(|fields| {
                                 fields.iter().any(|attr| {
                                     match_field_legacy(attr, field_name) != PatternMatch::Parent
                                 })
