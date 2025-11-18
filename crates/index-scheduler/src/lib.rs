@@ -68,7 +68,7 @@ use meilisearch_types::milli::vector::{
 };
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::task_view::TaskView;
-use meilisearch_types::tasks::enterprise_edition::network::{ImportData, TaskNetwork};
+use meilisearch_types::tasks::enterprise_edition::network::{DbTaskNetwork, TaskNetwork};
 use meilisearch_types::tasks::{KindWithContent, Task};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};
 use milli::vector::db::IndexEmbeddingConfig;
@@ -701,7 +701,7 @@ impl IndexScheduler {
         self.queue.get_task_ids_from_authorized_indexes(&rtxn, query, filters, processing)
     }
 
-    pub fn set_task_network(&self, task_id: TaskId, network: TaskNetwork) -> Result<Task> {
+    pub fn set_task_network(&self, task_id: TaskId, network: DbTaskNetwork) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
         let mut task =
             self.queue.tasks.get_task(&wtxn, task_id)?.ok_or(Error::TaskNotFound(task_id))?;
@@ -792,13 +792,74 @@ impl IndexScheduler {
         }
 
         let mut wtxn = self.env.write_txn()?;
+
+        if let Some(TaskNetwork::Import { import_from, network_change, metadata }) = &task_network {
+            let mut network_tasks = self
+                .queue
+                .tasks
+                .get_kind(&wtxn, meilisearch_types::tasks::Kind::NetworkTopologyChange)?;
+            if network_tasks.is_empty() {
+                return Err(Error::ImportTaskWithoutNetworkTask);
+            }
+
+            let network_task = {
+                let processing = self.runtime_tasks.read().unwrap().processing.processing.clone();
+                if processing.is_disjoint(&network_tasks) {
+                    let enqueued = self
+                        .queue
+                        .tasks
+                        .get_status(&wtxn, meilisearch_types::tasks::Status::Enqueued)?;
+
+                    network_tasks &= enqueued;
+                    if let Some(network_task) = network_tasks.into_iter().next() {
+                        network_task
+                    } else {
+                        return Err(Error::ImportTaskWithoutNetworkTask);
+                    }
+                } else {
+                    network_tasks &= &*processing;
+                    network_tasks.into_iter().next().unwrap()
+                }
+            };
+
+            let mut network_task = self.queue.tasks.get_task(&wtxn, network_task)?.unwrap();
+            let network_task_version = network_task
+                .network
+                .as_ref()
+                .map(|network| network.network_version())
+                .unwrap_or_default();
+            if network_task_version != network_change.network_version {
+                return Err(Error::NetworkVersionMismatch {
+                    network_task: network_task_version,
+                    import_task: network_change.network_version,
+                });
+            }
+
+            let KindWithContent::NetworkTopologyChange(network_topology_change) =
+                &mut network_task.kind
+            else {
+                return Err(Error::CorruptedTaskQueue);
+            };
+
+            network_topology_change.receive_remote_task(
+                &import_from.remote_name,
+                &import_from.index_name,
+                metadata.task_key,
+                import_from.document_count,
+                metadata.index_count,
+                metadata.total_index_documents,
+            )?;
+
+            self.queue.tasks.update_task(&mut wtxn, &mut network_task)?;
+        }
+
         let task = self.queue.register(
             &mut wtxn,
             &kind,
             task_id,
             custom_metadata,
             dry_run,
-            task_network,
+            task_network.map(DbTaskNetwork::from),
         )?;
 
         // If the registered task is a task cancelation

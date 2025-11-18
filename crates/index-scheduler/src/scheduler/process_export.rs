@@ -7,6 +7,7 @@ use backoff::ExponentialBackoff;
 use byte_unit::Byte;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use meilisearch_types::error::Code;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
@@ -15,7 +16,9 @@ use meilisearch_types::milli::update::{request_threads, Setting};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self, obkv_to_json, Filter, InternalError};
 use meilisearch_types::settings::{self, SecretPolicy};
-use meilisearch_types::tasks::enterprise_edition::network::{headers, ImportData, Origin};
+use meilisearch_types::tasks::enterprise_edition::network::{
+    headers, ImportData, ImportMetadata, Origin,
+};
 use meilisearch_types::tasks::{DetailsExportIndexSettings, ExportIndexSettings};
 use roaring::RoaringBitmap;
 use serde::Deserialize;
@@ -126,7 +129,11 @@ impl IndexScheduler {
         });
         let index_exists = match response {
             Ok(response) => response.status() == 200,
-            Err(Error::FromRemoteWhenExporting { code, .. }) if code == "index_not_found" => false,
+            Err(Error::FromRemoteWhenExporting { code, .. })
+                if code == Code::IndexNotFound.name() =>
+            {
+                false
+            }
             Err(e) => return Err(e),
         };
         let primary_key =
@@ -199,10 +206,14 @@ impl IndexScheduler {
                         ImportData {
                             remote_name: export_old_remote_name.to_string(),
                             index_name: options.index_uid.to_string(),
-                            first_docid: 0,
                             document_count: 0,
                         },
                         network_change_origin.clone(),
+                        ImportMetadata {
+                            index_count,
+                            task_key: 0,
+                            total_index_documents: ctx.universe.len(),
+                        },
                     ))
                 } else {
                     None
@@ -217,9 +228,9 @@ impl IndexScheduler {
                     if i % broadcast.num_threads() != broadcast.index() {
                         continue;
                     }
-                    if let Some((import_data, _)) = &mut task_network {
+                    if let Some((import_data, _, metadata)) = &mut task_network {
                         import_data.document_count += 1;
-                        import_data.first_docid = docid;
+                        metadata.task_key = docid;
                     }
 
                     let document = ctx.index.document(&index_rtxn, docid).map_err(err)?;
@@ -294,23 +305,48 @@ impl IndexScheduler {
                         encoder.write_all(&buffer).map_err(milli::Error::from).map_err(err)?;
                         encoder.finish().map_err(milli::Error::from).map_err(err)?;
 
-                        retry(ctx.must_stop_processing, || {
+                        match retry(ctx.must_stop_processing, || {
                             let mut request = ctx.agent.post(&documents_url);
                             request = request.set("Content-Type", "application/x-ndjson");
                             request = request.set("Content-Encoding", "gzip");
                             if let Some(bearer) = &bearer {
                                 request = request.set("Authorization", bearer);
                             }
-                            if let Some((import_data, origin)) = &task_network {
-                                request = set_network_ureq_headers(request, import_data, origin);
+                            if let Some((import_data, origin, metadata)) = &task_network {
+                                request = set_network_ureq_headers(
+                                    request,
+                                    import_data,
+                                    origin,
+                                    metadata,
+                                );
                             }
                             request.send_bytes(&compressed_buffer).map_err(into_backoff_error)
-                        })?;
+                        }) {
+                            Ok(_response) => {}
+                            Err(Error::FromRemoteWhenExporting { code, .. })
+                                if code == Code::ImportTaskAlreadyReceived.name() =>
+                            {
+                                continue;
+                            }
+                            Err(Error::FromRemoteWhenExporting { code, message, .. })
+                                if code == Code::ImportTaskUnknownRemote.name() =>
+                            {
+                                tracing::warn!("remote answered with: {message}");
+                                break;
+                            }
+                            Err(Error::FromRemoteWhenExporting { code, message, .. })
+                                if code == Code::ImportTaskWithoutNetworkTask.name() =>
+                            {
+                                tracing::warn!("remote answered with: {message}");
+                                break;
+                            }
+                            Err(e) => return Err(e),
+                        }
                         buffer.clear();
                         compressed_buffer.clear();
-                        if let Some((import_data, _)) = &mut task_network {
+                        if let Some((import_data, _, metadata)) = &mut task_network {
                             import_data.document_count = 0;
-                            import_data.first_docid = 0;
+                            metadata.task_key = 0;
                         }
                     }
                     buffer.extend_from_slice(&tmp_buffer);
@@ -323,8 +359,8 @@ impl IndexScheduler {
                 retry(ctx.must_stop_processing, || {
                     let mut request = ctx.agent.post(&documents_url);
                     request = request.set("Content-Type", "application/x-ndjson");
-                    if let Some((import_data, origin)) = &task_network {
-                        request = set_network_ureq_headers(request, import_data, origin);
+                    if let Some((import_data, origin, metadata)) = &task_network {
+                        request = set_network_ureq_headers(request, import_data, origin, metadata);
                     }
                     if let Some(bearer) = &bearer {
                         request = request.set("Authorization", bearer);
@@ -347,6 +383,7 @@ fn set_network_ureq_headers(
     request: ureq::Request,
     import_data: &ImportData,
     origin: &Origin,
+    metadata: &ImportMetadata,
 ) -> ureq::Request {
     request
         .set(headers::PROXY_ORIGIN_REMOTE_HEADER, &origin.remote_name)
@@ -357,8 +394,13 @@ fn set_network_ureq_headers(
         )
         .set(headers::PROXY_IMPORT_REMOTE_HEADER, &import_data.remote_name)
         .set(headers::PROXY_IMPORT_INDEX_HEADER, &import_data.index_name)
-        .set(headers::PROXY_IMPORT_FIRST_DOC_HEADER, &import_data.first_docid.to_string())
+        .set(headers::PROXY_IMPORT_TASK_KEY_HEADER, &metadata.task_key.to_string())
         .set(headers::PROXY_IMPORT_DOCS_HEADER, &import_data.document_count.to_string())
+        .set(headers::PROXY_IMPORT_INDEX_COUNT_HEADER, &metadata.index_count.to_string())
+        .set(
+            headers::PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+            &metadata.total_index_documents.to_string(),
+        )
 }
 
 fn retry<F>(must_stop_processing: &MustStopProcessing, send_request: F) -> Result<ureq::Response>
@@ -443,6 +485,7 @@ pub(super) enum ExportMode<'a> {
     ExportRoute,
     NetworkBalancing {
         index_count: u64,
+
         export_old_remote_name: &'a str,
         network_change_origin: &'a Origin,
     },

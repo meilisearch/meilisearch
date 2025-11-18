@@ -679,7 +679,6 @@ impl IndexScheduler {
                         index_uid,
                         payload_size: None,
                         override_settings: false,
-                        /// TODO: index count and max docs nb
                         export_mode: super::process_export::ExportMode::NetworkBalancing {
                             index_count,
                             export_old_remote_name: out_name,

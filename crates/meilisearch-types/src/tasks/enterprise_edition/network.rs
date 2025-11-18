@@ -16,7 +16,8 @@ use crate::tasks::{Details, TaskId};
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(untagged, rename_all = "camelCase")]
-pub enum TaskNetwork {
+// This type is used in the database, care should be taken when modifying it.
+pub enum DbTaskNetwork {
     /// Tasks that were duplicated from `origin`
     Origin { origin: Origin },
     /// Tasks that were duplicated as `remote_tasks`
@@ -29,12 +30,12 @@ pub enum TaskNetwork {
     Import { import_from: ImportData, network_change: Origin },
 }
 
-impl TaskNetwork {
+impl DbTaskNetwork {
     pub fn network_version(&self) -> Uuid {
         match self {
-            TaskNetwork::Origin { origin } => origin.network_version,
-            TaskNetwork::Remotes { remote_tasks: _, network_version } => *network_version,
-            TaskNetwork::Import { import_from: _, network_change } => {
+            DbTaskNetwork::Origin { origin } => origin.network_version,
+            DbTaskNetwork::Remotes { remote_tasks: _, network_version } => *network_version,
+            DbTaskNetwork::Import { import_from: _, network_change } => {
                 network_change.network_version
             }
         }
@@ -42,16 +43,40 @@ impl TaskNetwork {
 
     pub fn import_data(&self) -> Option<&ImportData> {
         match self {
-            TaskNetwork::Origin { .. } | TaskNetwork::Remotes { .. } => None,
-            TaskNetwork::Import { import_from, .. } => Some(import_from),
+            DbTaskNetwork::Origin { .. } | DbTaskNetwork::Remotes { .. } => None,
+            DbTaskNetwork::Import { import_from, .. } => Some(import_from),
         }
     }
 
     pub fn origin(&self) -> Option<&Origin> {
         match self {
-            TaskNetwork::Origin { origin } => Some(origin),
-            TaskNetwork::Remotes { .. } => None,
-            TaskNetwork::Import { network_change, .. } => Some(network_change),
+            DbTaskNetwork::Origin { origin } => Some(origin),
+            DbTaskNetwork::Remotes { .. } => None,
+            DbTaskNetwork::Import { network_change, .. } => Some(network_change),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum TaskNetwork {
+    /// Tasks that were duplicated from `origin`
+    Origin { origin: Origin },
+    /// Tasks that were duplicated as `remote_tasks`
+    Remotes { remote_tasks: BTreeMap<String, RemoteTask>, network_version: Uuid },
+    /// Document import tasks sent in the context of `network_change`
+    Import { import_from: ImportData, network_change: Origin, metadata: ImportMetadata },
+}
+
+impl From<TaskNetwork> for DbTaskNetwork {
+    fn from(value: TaskNetwork) -> Self {
+        match value {
+            TaskNetwork::Origin { origin } => DbTaskNetwork::Origin { origin },
+            TaskNetwork::Remotes { remote_tasks, network_version } => {
+                DbTaskNetwork::Remotes { remote_tasks, network_version }
+            }
+            TaskNetwork::Import { import_from, network_change, metadata: _ } => {
+                DbTaskNetwork::Import { import_from, network_change }
+            }
         }
     }
 }
@@ -64,13 +89,26 @@ pub struct Origin {
     pub network_version: Uuid,
 }
 
+/// Import data stored in a task
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportData {
     pub remote_name: String,
     pub index_name: String,
-    pub first_docid: DocumentId,
     pub document_count: u64,
+}
+
+/// Import metadata associated with a task but not stored in the task
+#[derive(Debug, PartialEq, Clone)]
+pub struct ImportMetadata {
+    /// Total number of indexes to import from this host
+    pub index_count: u64,
+    /// Key unique to this (network_change, index, host, key).
+    ///
+    /// In practice, an internal document id of one of the documents to import.
+    pub task_key: DocumentId,
+    /// Total number of documents to import for this index from this host.
+    pub total_index_documents: u64,
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
@@ -201,7 +239,7 @@ impl NetworkTopologyChange {
         &mut self,
         remote_name: &str,
         index_name: &str,
-        first_docid: DocumentId,
+        task_key: DocumentId,
         document_count: u64,
         total_indexes: u64,
         total_index_documents: u64,
@@ -218,7 +256,7 @@ impl NetworkTopologyChange {
                     ImportIndexState::Ongoing {
                         total_documents: total_index_documents,
                         received_documents: document_count,
-                        first_docids: vec![first_docid],
+                        task_keys: vec![task_key],
                         processed_documents: 0,
                     },
                 );
@@ -233,17 +271,17 @@ impl NetworkTopologyChange {
                             total_documents,
                             received_documents: previously_received,
                             processed_documents,
-                            mut first_docids,
+                            mut task_keys,
                         } => {
-                            if first_docids.contains(&first_docid) {
-                                return Err(ReceiveTaskError::DuplicateTask(first_docid));
+                            if task_keys.contains(&task_key) {
+                                return Err(ReceiveTaskError::DuplicateTask(task_key));
                             }
-                            first_docids.push(first_docid);
+                            task_keys.push(task_key);
                             ImportIndexState::Ongoing {
                                 total_documents,
                                 received_documents: previously_received + document_count,
                                 processed_documents,
-                                first_docids,
+                                task_keys,
                             }
                         }
                         ImportIndexState::Finished { total_documents } => {
@@ -256,7 +294,7 @@ impl NetworkTopologyChange {
                         total_documents: total_index_documents,
                         received_documents: document_count,
                         processed_documents: 0,
-                        first_docids: vec![first_docid],
+                        task_keys: vec![task_key],
                     };
                     import_index_state.insert(index_name.to_string(), state);
                 }
@@ -287,7 +325,7 @@ impl NetworkTopologyChange {
                         total_documents,
                         received_documents,
                         processed_documents: previously_processed,
-                        first_docids,
+                        task_keys,
                     } => {
                         let newly_processed_documents = previously_processed + document_count;
                         if newly_processed_documents >= total_documents {
@@ -297,7 +335,7 @@ impl NetworkTopologyChange {
                                 total_documents,
                                 received_documents,
                                 processed_documents: newly_processed_documents,
-                                first_docids,
+                                task_keys,
                             }
                         }
                     }
@@ -366,7 +404,7 @@ impl NetworkTopologyChange {
                                         total_documents,
                                         processed_documents,
                                         received_documents,
-                                        first_docids: _,
+                                        task_keys: _,
                                     } => {
                                         ongoing_total_documents += total_documents;
                                         ongoing_processed_documents += processed_documents;
@@ -493,7 +531,7 @@ enum ImportIndexState {
         total_documents: u64,
         received_documents: u64,
         processed_documents: u64,
-        first_docids: Vec<DocumentId>,
+        task_keys: Vec<DocumentId>,
     },
     Finished {
         total_documents: u64,
@@ -518,7 +556,9 @@ pub mod headers {
     pub const PROXY_ORIGIN_TASK_UID_HEADER: &str = "Meili-Proxy-Origin-TaskUid";
     pub const PROXY_ORIGIN_NETWORK_VERSION_HEADER: &str = "Meili-Proxy-Origin-Network-Version";
     pub const PROXY_IMPORT_REMOTE_HEADER: &str = "Meili-Proxy-Import-Remote";
+    pub const PROXY_IMPORT_INDEX_COUNT_HEADER: &str = "Meili-Proxy-Import-Index-Count";
     pub const PROXY_IMPORT_INDEX_HEADER: &str = "Meili-Proxy-Import-Index";
-    pub const PROXY_IMPORT_FIRST_DOC_HEADER: &str = "Meili-Proxy-Import-First-Doc";
+    pub const PROXY_IMPORT_TASK_KEY_HEADER: &str = "Meili-Proxy-Import-Task-Key";
     pub const PROXY_IMPORT_DOCS_HEADER: &str = "Meili-Proxy-Import-Docs";
+    pub const PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER: &str = "Meili-Proxy-Import-Total-Index-Docs";
 }

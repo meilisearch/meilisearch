@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 use crate::batches::BatchId;
 use crate::error::ResponseError;
 use crate::settings::{Settings, Unchecked};
-use crate::tasks::enterprise_edition::network::TaskNetwork;
+use crate::tasks::enterprise_edition::network::DbTaskNetwork;
 use crate::tasks::{
     serialize_duration, Details, DetailsExportIndexSettings, IndexSwap, Kind, Status, Task, TaskId,
 };
@@ -54,7 +54,7 @@ pub struct TaskView {
     pub finished_at: Option<OffsetDateTime>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub network: Option<TaskNetwork>,
+    pub network: Option<DbTaskNetwork>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_metadata: Option<String>,

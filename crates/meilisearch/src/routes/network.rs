@@ -16,7 +16,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::tasks::enterprise_edition::network::{
-    NetworkTopologyChange, Origin, TaskNetwork,
+    NetworkTopologyChange, Origin, DbTaskNetwork,
 };
 use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
@@ -290,7 +290,7 @@ async fn patch_network_without_origin(
         &index_scheduler,
         None,
         &req,
-        TaskNetwork::Remotes {
+        DbTaskNetwork::Remotes {
             remote_tasks: Default::default(),
             network_version: merged_network.version,
         },
@@ -379,7 +379,7 @@ async fn patch_network_with_origin(
         tokio::task::spawn_blocking(move || index_scheduler.register(task, None, false)).await??
     };
 
-    index_scheduler.set_task_network(task.uid, TaskNetwork::Origin { origin })?;
+    index_scheduler.set_task_network(task.uid, DbTaskNetwork::Origin { origin })?;
 
     let task: SummarizedTaskView = task.into();
     debug!("returns: {:?}", task);

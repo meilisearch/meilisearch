@@ -46,7 +46,7 @@ pub struct Task {
     pub kind: KindWithContent,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub network: Option<enterprise_edition::network::TaskNetwork>,
+    pub network: Option<enterprise_edition::network::DbTaskNetwork>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_metadata: Option<String>,

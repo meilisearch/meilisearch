@@ -9,7 +9,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
-use meilisearch_types::tasks::enterprise_edition::network::{NetworkTopologyChange, TaskNetwork};
+use meilisearch_types::tasks::enterprise_edition::network::{NetworkTopologyChange, DbTaskNetwork};
 use meilisearch_types::tasks::{
     Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
 };
@@ -96,7 +96,7 @@ pub struct TaskDump {
     )]
     pub finished_at: Option<OffsetDateTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub network: Option<TaskNetwork>,
+    pub network: Option<DbTaskNetwork>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_metadata: Option<String>,
 }

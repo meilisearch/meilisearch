@@ -15,7 +15,7 @@ use file_store::FileStore;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::enterprise_edition::network::TaskNetwork;
+use meilisearch_types::tasks::enterprise_edition::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use time::format_description::well_known::Rfc3339;
@@ -260,7 +260,7 @@ impl Queue {
         task_id: Option<TaskId>,
         custom_metadata: Option<String>,
         dry_run: bool,
-        network: Option<TaskNetwork>,
+        network: Option<DbTaskNetwork>,
     ) -> Result<Task> {
         let next_task_id = self.tasks.next_task_id(wtxn)?;
 

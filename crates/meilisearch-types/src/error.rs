@@ -156,7 +156,7 @@ macro_rules! make_error_codes {
             }
 
             /// return error name, used as error code
-            fn name(&self) -> String {
+            pub fn name(&self) -> String {
                 match self {
                     $(
                         Code::$code_ident => stringify!($code_ident).to_case(convert_case::Case::Snake)
@@ -214,6 +214,9 @@ ImmutableApiKeyUid                             , InvalidRequest       , BAD_REQU
 ImmutableApiKeyUpdatedAt                       , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexCreatedAt                        , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexUpdatedAt                        , InvalidRequest       , BAD_REQUEST;
+ImportTaskAlreadyReceived                      , InvalidRequest       , PRECONDITION_FAILED;
+ImportTaskUnknownRemote                        , InvalidRequest       , PRECONDITION_FAILED;
+ImportTaskWithoutNetworkTask                   , InvalidRequest       , SERVICE_UNAVAILABLE;
 IndexAlreadyExists                             , InvalidRequest       , CONFLICT ;
 IndexCreationFailed                            , Internal             , INTERNAL_SERVER_ERROR;
 IndexNotFound                                  , InvalidRequest       , NOT_FOUND;
@@ -377,6 +380,7 @@ MissingPayload                                 , InvalidRequest       , BAD_REQU
 MissingSearchHybrid                            , InvalidRequest       , BAD_REQUEST ;
 MissingSwapIndexes                             , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                             , InvalidRequest       , BAD_REQUEST ;
+NetworkVersionMismatch                         , InvalidRequest       , PRECONDITION_FAILED ;
 NoSpaceLeftOnDevice                            , System               , UNPROCESSABLE_ENTITY;
 NotLeader                                      , InvalidRequest       , BAD_REQUEST ;
 PayloadTooLarge                                , InvalidRequest       , PAYLOAD_TOO_LARGE ;

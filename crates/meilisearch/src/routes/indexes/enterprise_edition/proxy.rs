@@ -15,11 +15,13 @@ use meilisearch_types::enterprise_edition::network::Remote;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::DocumentId;
 use meilisearch_types::tasks::enterprise_edition::network::headers::{
-    PROXY_IMPORT_DOCS_HEADER, PROXY_IMPORT_FIRST_DOC_HEADER, PROXY_IMPORT_INDEX_HEADER,
-    PROXY_IMPORT_REMOTE_HEADER, PROXY_ORIGIN_NETWORK_VERSION_HEADER, PROXY_ORIGIN_REMOTE_HEADER,
-    PROXY_ORIGIN_TASK_UID_HEADER,
+    PROXY_IMPORT_DOCS_HEADER, PROXY_IMPORT_INDEX_COUNT_HEADER, PROXY_IMPORT_INDEX_HEADER,
+    PROXY_IMPORT_REMOTE_HEADER, PROXY_IMPORT_TASK_KEY_HEADER, PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+    PROXY_ORIGIN_NETWORK_VERSION_HEADER, PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER,
 };
-use meilisearch_types::tasks::enterprise_edition::network::{ImportData, Origin, TaskNetwork};
+use meilisearch_types::tasks::enterprise_edition::network::{
+    DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,
+};
 use meilisearch_types::tasks::Task;
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
@@ -125,13 +127,12 @@ pub fn task_network_and_check_leader(
     req: &HttpRequest,
     network: &meilisearch_types::enterprise_edition::network::Network,
 ) -> Result<Option<TaskNetwork>, MeilisearchHttpError> {
-    match (origin_from_req(req)?, import_from_req(req)?) {
-        (Some(network_change), Some(import_from)) => {
-            Ok(Some(TaskNetwork::Import { import_from, network_change }))
+    match (origin_from_req(req)?, import_data_from_req(req)?, import_metadata_from_req(req)?) {
+        (Some(network_change), Some(import_from), Some(metadata)) => {
+            Ok(Some(TaskNetwork::Import { import_from, network_change, metadata }))
         }
-        (Some(origin), None) => Ok(Some(TaskNetwork::Origin { origin })),
-        (None, Some(_)) => Err(MeilisearchHttpError::MissingOriginHeaders),
-        (None, None) => {
+        (Some(origin), None, None) => Ok(Some(TaskNetwork::Origin { origin })),
+        (None, None, None) => {
             match (network.leader.as_deref(), network.local.as_deref()) {
                 // 1. Always allowed if there is no leader
                 (None, _) => return Ok(None),
@@ -149,6 +150,14 @@ pub fn task_network_and_check_leader(
                 remote_tasks: Default::default(),
                 network_version: network.version,
             }))
+        }
+        // all good cases were matched, so this is always an error
+        (origin, import_from, metadata) => {
+            Err(MeilisearchHttpError::InconsistentTaskNetworkHeaders {
+                is_missing_origin: origin.is_none(),
+                is_missing_import: import_from.is_none(),
+                is_missing_import_metadata: metadata.is_none(),
+            })
         }
     }
 }
@@ -171,7 +180,7 @@ pub async fn proxy<T, F>(
     index_scheduler: &IndexScheduler,
     index_uid: Option<&str>,
     req: &HttpRequest,
-    mut task_network: TaskNetwork,
+    mut task_network: DbTaskNetwork,
     network: meilisearch_types::enterprise_edition::network::Network,
     body: Body<T, F>,
     task: &meilisearch_types::tasks::Task,
@@ -180,7 +189,7 @@ where
     T: serde::Serialize,
     F: FnMut(&str, &Remote, &mut T),
 {
-    if let TaskNetwork::Remotes { remote_tasks, network_version: _ } = &mut task_network {
+    if let DbTaskNetwork::Remotes { remote_tasks, network_version: _ } = &mut task_network {
         let this = network
             .local
             .as_deref()
@@ -551,15 +560,14 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
     Ok(Some(Origin { remote_name: remote_name.into_owned(), task_uid, network_version }))
 }
 
-pub fn import_from_req(req: &HttpRequest) -> Result<Option<ImportData>, MeilisearchHttpError> {
-    let (remote_name, index_name, last_documents, documents) = match (
+pub fn import_data_from_req(req: &HttpRequest) -> Result<Option<ImportData>, MeilisearchHttpError> {
+    let (remote_name, index_name, documents) = match (
         req.headers().get(PROXY_IMPORT_REMOTE_HEADER),
         req.headers().get(PROXY_IMPORT_INDEX_HEADER),
-        req.headers().get(PROXY_IMPORT_FIRST_DOC_HEADER),
         req.headers().get(PROXY_IMPORT_DOCS_HEADER),
     ) {
-        (None, None, None, None) => return Ok(None),
-        (Some(remote_name), Some(index_name), Some(last_documents), Some(documents)) => {
+        (None, None, None) => return Ok(None),
+        (Some(remote_name), Some(index_name), Some(documents)) => {
             let remote_name = urlencoding::decode(remote_name.to_str().map_err(|err| {
                 MeilisearchHttpError::InvalidHeaderValue {
                     header_name: PROXY_IMPORT_REMOTE_HEADER,
@@ -582,17 +590,6 @@ pub fn import_from_req(req: &HttpRequest) -> Result<Option<ImportData>, Meilisea
                 msg: format!("while URL-decoding import index name: {err}"),
             })?;
 
-            let last_documents = urlencoding::decode(last_documents.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_FIRST_DOC_HEADER,
-                    msg: format!("while parsing last documents as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_FIRST_DOC_HEADER,
-                msg: format!("while URL-decoding last documents: {err}"),
-            })?;
-
             let documents = urlencoding::decode(documents.to_str().map_err(|err| {
                 MeilisearchHttpError::InvalidHeaderValue {
                     header_name: PROXY_IMPORT_DOCS_HEADER,
@@ -603,24 +600,17 @@ pub fn import_from_req(req: &HttpRequest) -> Result<Option<ImportData>, Meilisea
                 header_name: PROXY_IMPORT_DOCS_HEADER,
                 msg: format!("while URL-decoding documents: {err}"),
             })?;
-            (remote_name, index_name, last_documents, documents)
+            (remote_name, index_name, documents)
         }
         // catch-all pattern that has to contain an inconsistency since we already matched (None, None, None) and (Some, Some, Some)
-        (remote_name, index_name, last_documents, documents) => {
+        (remote_name, index_name, documents) => {
             return Err(MeilisearchHttpError::InconsistentImportHeaders {
                 is_remote_missing: remote_name.is_none(),
                 is_index_missing: index_name.is_none(),
-                is_last_docs_missing: last_documents.is_none(),
                 is_docs_missing: documents.is_none(),
             })
         }
     };
-
-    let first_docid: DocumentId =
-        last_documents.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-            header_name: PROXY_IMPORT_FIRST_DOC_HEADER,
-            msg: format!("while parsing the last documents as an integer: {err}"),
-        })?;
 
     let document_count: u64 =
         documents.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
@@ -631,7 +621,82 @@ pub fn import_from_req(req: &HttpRequest) -> Result<Option<ImportData>, Meilisea
     Ok(Some(ImportData {
         remote_name: remote_name.to_string(),
         index_name: index_name.to_string(),
-        first_docid,
         document_count,
     }))
+}
+
+pub fn import_metadata_from_req(
+    req: &HttpRequest,
+) -> Result<Option<ImportMetadata>, MeilisearchHttpError> {
+    let (index_count, task_key, total_index_documents) = match (
+        req.headers().get(PROXY_IMPORT_INDEX_COUNT_HEADER),
+        req.headers().get(PROXY_IMPORT_TASK_KEY_HEADER),
+        req.headers().get(PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER),
+    ) {
+        (None, None, None) => return Ok(None),
+        (Some(index_count), Some(task_key), Some(total_index_documents)) => {
+            let index_count = urlencoding::decode(index_count.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_REMOTE_HEADER,
+                    msg: format!("while parsing import index count as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_INDEX_COUNT_HEADER,
+                msg: format!("while URL-decoding import index count: {err}"),
+            })?;
+
+            let task_key = urlencoding::decode(task_key.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_TASK_KEY_HEADER,
+                    msg: format!("while parsing import task key as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_TASK_KEY_HEADER,
+                msg: format!("while URL-decoding import task key: {err}"),
+            })?;
+
+            let total_index_documents =
+                urlencoding::decode(total_index_documents.to_str().map_err(|err| {
+                    MeilisearchHttpError::InvalidHeaderValue {
+                        header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+                        msg: format!("while parsing total index documents as UTF-8: {err}"),
+                    }
+                })?)
+                .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+                    msg: format!("while URL-decoding total index documents: {err}"),
+                })?;
+            (index_count, task_key, total_index_documents)
+        }
+        // catch-all pattern that has to contain an inconsistency since we already matched (None, None, None) and (Some, Some, Some)
+        (index_count, task_key, total_index_documents) => {
+            return Err(MeilisearchHttpError::InconsistentImportMetadataHeaders {
+                is_index_count_missing: index_count.is_none(),
+                is_task_key_missing: task_key.is_none(),
+                is_total_index_documents_missing: total_index_documents.is_none(),
+            })
+        }
+    };
+
+    let index_count: u64 =
+        index_count.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+            header_name: PROXY_IMPORT_INDEX_COUNT_HEADER,
+            msg: format!("while parsing the index count as an integer: {err}"),
+        })?;
+
+    let task_key: DocumentId =
+        task_key.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+            header_name: PROXY_IMPORT_TASK_KEY_HEADER,
+            msg: format!("while parsing import task key as an integer: {err}"),
+        })?;
+
+    let total_index_documents: u64 =
+        total_index_documents.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+            header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+            msg: format!("while parsing the total index documents as an integer: {err}"),
+        })?;
+
+    Ok(Some(ImportMetadata { index_count, task_key, total_index_documents }))
 }
