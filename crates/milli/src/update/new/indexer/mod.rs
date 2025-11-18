@@ -509,8 +509,9 @@ where
         let new_searchable_attributes = settings_delta.new_searchable_attributes().as_ref();
         old_searchable_attributes.zip(new_searchable_attributes).map(|(old, new)| {
             old.iter()
-                .filter(|field_name| !new.contains(field_name))
-                .map(|field_name| fields_ids_map.id(field_name).unwrap())
+                // Ignore the field if it is not searchable anymore
+                // or if it was never referenced in any document
+                .filter_map(|name| if new.contains(name) { None } else { fields_ids_map.id(name) })
                 .collect()
         })
     };
