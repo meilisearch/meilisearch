@@ -2582,6 +2582,7 @@ fn deserialize_sub_embedder(
 /// Implement this trait for the settings delta type.
 /// This is used in the new settings update flow and will allow to easily replace the old settings delta type: `InnerIndexSettingsDiff`.
 pub trait SettingsDelta {
+    fn old_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
     fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
 
     fn old_searchable_attributes(&self) -> &Option<Vec<String>>;
@@ -2609,6 +2610,9 @@ pub struct FragmentDiff<'a> {
 }
 
 impl SettingsDelta for InnerIndexSettingsDiff {
+    fn old_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
+        &self.old.fields_ids_map
+    }
     fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
         &self.new.fields_ids_map
     }
@@ -2616,7 +2620,6 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     fn old_searchable_attributes(&self) -> &Option<Vec<String>> {
         &self.old.user_defined_searchable_attributes
     }
-
     fn new_searchable_attributes(&self) -> &Option<Vec<String>> {
         &self.new.user_defined_searchable_attributes
     }
@@ -2624,27 +2627,23 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms {
         &self.old.disabled_typos_terms
     }
-
     fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms {
         &self.new.disabled_typos_terms
-    }
-
-    fn new_embedders(&self) -> &RuntimeEmbedders {
-        &self.new.runtime_embedders
     }
 
     fn old_embedders(&self) -> &RuntimeEmbedders {
         &self.old.runtime_embedders
     }
+    fn new_embedders(&self) -> &RuntimeEmbedders {
+        &self.new.runtime_embedders
+    }
 
     fn new_embedder_category_id(&self) -> &HashMap<String, u8> {
         &self.new.embedder_category_id
     }
-
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction> {
         &self.embedding_config_updates
     }
-
     fn try_for_each_fragment_diff<F, E>(
         &self,
         embedder_name: &str,
