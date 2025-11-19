@@ -15,7 +15,17 @@ on:
 
 jobs:
   docker:
-    runs-on: docker
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      matrix:
+        platform: [amd64, arm64]
+        include:
+          - platform: amd64
+            runner: ubuntu-24.04
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+
     permissions:
       id-token: write # This is needed to use Cosign in keyless mode
     steps:
@@ -58,11 +68,11 @@ jobs:
 
           echo "date=$commit_date" >> $GITHUB_OUTPUT
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/${{ matrix.platform }}
+          install: true
 
       - name: Install cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # tag=v3.10.0
@@ -93,7 +103,7 @@ jobs:
         id: build-and-push
         with:
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/${{ matrix.platform }}
           tags: ${{ steps.meta.outputs.tags }}
           build-args: |
             COMMIT_SHA=${{ github.sha }}
