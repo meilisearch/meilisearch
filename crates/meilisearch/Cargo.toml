@@ -78,8 +78,8 @@ serde_json = { version = "1.0.145", features = ["preserve_order"] }
 sha2 = "0.10.9"
 siphasher = "1.0.1"
 slice-group-by = "0.3.1"
-static-files = { version = "0.2.5", optional = true }
-sysinfo = "0.35.2"
+static-files = { version = "0.3.1", optional = true }
+sysinfo = "0.37.2"
 tar = "0.4.44"
 tempfile = "3.23.0"
 thiserror = "2.0.17"
@@ -90,7 +90,7 @@ time = { version = "0.3.44", features = [
     "macros",
 ] }
 tokio = { version = "1.48.0", features = ["full"] }
-toml = "0.8.23"
+toml = "0.9.8"
 uuid = { version = "1.18.1", features = ["serde", "v4", "v7"] }
 serde_urlencoded = "0.7.1"
 termcolor = "1.4.1"
@@ -140,9 +140,9 @@ reqwest = { version = "0.12.24", features = [
     "rustls-tls",
 ], default-features = false, optional = true }
 sha-1 = { version = "0.10.1", optional = true }
-static-files = { version = "0.2.5", optional = true }
+static-files = { version = "0.3.1", optional = true }
 tempfile = { version = "3.23.0", optional = true }
-zip = { version = "4.6.1", optional = true }
+zip = { version = "6.0.0", optional = true }
 
 [features]
 default = ["meilisearch-types/all-tokenizations", "mini-dashboard"]

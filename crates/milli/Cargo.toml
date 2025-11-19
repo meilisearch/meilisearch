@@ -21,7 +21,7 @@ byteorder = "1.5.0"
 charabia = { version = "0.9.8", default-features = false }
 cellulite = "0.3.1-nested-rtxns-2"
 concat-arrays = "0.1.2"
-convert_case = "0.8.0"
+convert_case = "0.9.0"
 crossbeam-channel = "0.5.15"
 deserr = "0.6.4"
 either = { version = "1.15.0", features = ["serde"] }
@@ -81,7 +81,7 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
     "online",
 ] }
 safetensors = "0.6.2"
-tiktoken-rs = "0.7.0"
+tiktoken-rs = "0.9.1"
 liquid = "0.26.11"
 rhai = { version = "1.23.6", features = [
     "serde",
@@ -112,7 +112,7 @@ utoipa = { version = "5.4.0", features = [
     "time",
     "openapi_extensions",
 ] }
-lru = "0.14.0"
+lru = "0.16.2"
 twox-hash = { version = "2.1.2", default-features = false, features = [
     "std",
     "xxhash3_64",
@@ -126,7 +126,7 @@ mimalloc = { version = "0.1.48", default-features = false }
 # fixed version due to format breakages in v1.40
 insta = "=1.39.0"
 maplit = "1.0.2"
-md5 = "0.7.0"
+md5 = "0.8.0"
 meili-snap = { path = "../meili-snap" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 

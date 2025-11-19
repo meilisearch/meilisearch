@@ -17,7 +17,7 @@ byte-unit = "5.1.6"
 bytes = "1.11.0"
 bumpalo = "3.19.0"
 bumparaw-collections = "0.1.4"
-convert_case = "0.8.0"
+convert_case = "0.9.0"
 csv = "1.4.0"
 derive_builder = "0.20.2"
 dump = { path = "../dump" }

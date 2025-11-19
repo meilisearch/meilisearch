@@ -16,7 +16,7 @@ anyhow = "1.0.100"
 bumpalo = "3.19.0"
 bumparaw-collections = "0.1.4"
 byte-unit = { version = "5.1.6", features = ["serde"] }
-convert_case = "0.8.0"
+convert_case = "0.9.0"
 csv = "1.4.0"
 deserr = { version = "0.6.4", features = ["actix-web"] }
 either = { version = "1.15.0", features = ["serde"] }
