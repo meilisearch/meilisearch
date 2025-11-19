@@ -18,10 +18,9 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-use crate::search::SearchMetadata;
-
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
+use crate::search::SearchMetadata;
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 

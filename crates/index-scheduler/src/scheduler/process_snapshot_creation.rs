@@ -438,12 +438,15 @@ async fn multipart_stream_to_s3(
     db_name: String,
     reader: std::io::PipeReader,
 ) -> Result<(), Error> {
-    use std::{collections::VecDeque, io, os::fd::OwnedFd, path::PathBuf};
+    use std::collections::VecDeque;
+    use std::io;
+    use std::os::fd::OwnedFd;
+    use std::path::PathBuf;
 
     use bytes::{Bytes, BytesMut};
     use reqwest::{Client, Response};
-    use rusty_s3::S3Action as _;
-    use rusty_s3::{actions::CreateMultipartUpload, Bucket, BucketError, Credentials, UrlStyle};
+    use rusty_s3::actions::CreateMultipartUpload;
+    use rusty_s3::{Bucket, BucketError, Credentials, S3Action as _, UrlStyle};
     use tokio::task::JoinHandle;
 
     let reader = OwnedFd::from(reader);
@@ -579,13 +582,12 @@ async fn multipart_stream_to_s3(
         let body = body.clone();
         async move {
             match client.post(url).body(body).send().await {
-                Ok(resp) if resp.status().is_client_error() => match resp.error_for_status_ref() {
-                    Ok(_) => Ok(resp),
-                    Err(_) => Err(backoff::Error::Permanent(Error::S3Error {
+                Ok(resp) if resp.status().is_client_error() => {
+                    Err(backoff::Error::Permanent(Error::S3Error {
                         status: resp.status(),
                         body: resp.text().await.unwrap_or_default(),
-                    })),
-                },
+                    }))
+                }
                 Ok(resp) => Ok(resp),
                 Err(e) => Err(backoff::Error::transient(Error::S3HttpError(e))),
             }
