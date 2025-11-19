@@ -65,9 +65,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-13, windows-2022]
+        os: [macos-14, windows-2022]
         include:
-          - os: macos-13
+          - os: macos-14
             artifact_name: meilisearch
             asset_name: meilisearch-macos-amd64
           - os: windows-2022
@@ -90,7 +90,7 @@ jobs:
 
   publish-macos-apple-silicon:
     name: Publish binary for macOS silicon
-    runs-on: macos-13
+    runs-on: macos-14
     needs: check-version
     strategy:
       matrix:
