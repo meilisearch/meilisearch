@@ -281,6 +281,9 @@ impl Index {
                 &mut wtxn,
                 (constants::VERSION_MAJOR, constants::VERSION_MINOR, constants::VERSION_PATCH),
             )?;
+            // The database before v1.29 defaulted to using arroy, so we
+            // need to set it explicitly because the new default is hannoy.
+            this.put_vector_store(&mut wtxn, VectorStoreBackend::Hannoy)?;
         }
         wtxn.commit()?;
 
