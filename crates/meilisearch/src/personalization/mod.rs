@@ -1,13 +1,13 @@
-use crate::search::{Personalize, SearchResult};
-use meilisearch_types::{
-    error::{Code, ErrorCode, ResponseError},
-    milli::TimeBudget,
-};
+use std::time::Duration;
+
+use meilisearch_types::error::{Code, ErrorCode, ResponseError};
+use meilisearch_types::milli::TimeBudget;
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 use tracing::{debug, info, warn};
+
+use crate::search::{Personalize, SearchResult};
 
 const COHERE_API_URL: &str = "https://api.cohere.ai/v1/rerank";
 const MAX_RETRIES: u32 = 10;
