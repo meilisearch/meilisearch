@@ -195,7 +195,7 @@ struct Infos {
     experimental_enable_logs_route: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
-    experimental_limit_batched_tasks_total_size: u64,
+    experimental_limit_batched_tasks_total_size: Option<u64>,
     experimental_network: bool,
     experimental_multimodal: bool,
     experimental_chat_completions: bool,
@@ -359,7 +359,7 @@ impl Infos {
             http_payload_size_limit,
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size:
-                experimental_limit_batched_tasks_total_size.into(),
+                experimental_limit_batched_tasks_total_size.map(|size| size.as_u64()),
             task_queue_webhook: task_webhook_url.is_some(),
             task_webhook_authorization_header: task_webhook_authorization_header.is_some(),
             log_level: log_level.to_string(),
