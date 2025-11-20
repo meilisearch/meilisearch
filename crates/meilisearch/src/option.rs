@@ -474,7 +474,8 @@ pub struct Opt {
     pub experimental_max_number_of_batched_tasks: usize,
 
     /// Experimentally controls the maximum total size, in bytes, of tasks that will be processed
-    /// simultaneously. When unspecified, defaults to half of the maximum indexing memory.
+    /// simultaneously. When unspecified, defaults to half of the maximum indexing memory and
+    /// clamped to 10 GiB.
     ///
     /// See: <https://github.com/orgs/meilisearch/discussions/801>
     #[clap(long, env = MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE)]
