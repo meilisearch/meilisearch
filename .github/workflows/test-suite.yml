@@ -143,7 +143,7 @@ jobs:
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-large
     container:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
