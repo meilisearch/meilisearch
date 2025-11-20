@@ -156,6 +156,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.89
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
+      - name: Run df -h
+        run: df -h
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
