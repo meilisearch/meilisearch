@@ -6,6 +6,10 @@ use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
 use meilisearch_types::milli;
 use meilisearch_types::milli::OrderBy;
+use meilisearch_types::tasks::enterprise_edition::network::headers::{
+    PROXY_IMPORT_DOCS_HEADER, PROXY_IMPORT_INDEX_COUNT_HEADER, PROXY_IMPORT_INDEX_HEADER,
+    PROXY_IMPORT_REMOTE_HEADER, PROXY_IMPORT_TASK_KEY_HEADER, PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+};
 use serde_json::Value;
 use tokio::task::JoinError;
 
@@ -93,8 +97,49 @@ pub enum MeilisearchHttpError {
     } else { PROXY_ORIGIN_TASK_UID_HEADER }
 )]
     InconsistentOriginHeaders { is_remote_missing: bool },
+    #[error("Inconsistent `Import` headers: {remote}: {remote_status}, {index}: {index_status}, {docs}: {docs_status}.\n - Hint: either all three headers should be provided, or none of them",
+        remote = PROXY_IMPORT_REMOTE_HEADER,
+        remote_status = if *is_remote_missing { "missing" } else{ "provided" },
+        index = PROXY_IMPORT_INDEX_HEADER,
+        index_status = if *is_index_missing { "missing" } else { "provided" },
+        docs = PROXY_IMPORT_DOCS_HEADER,
+        docs_status = if *is_docs_missing { "missing" } else { "provided" }
+    )]
+    InconsistentImportHeaders {
+        is_remote_missing: bool,
+        is_index_missing: bool,
+        is_docs_missing: bool,
+    },
+    #[error("Inconsistent `Import-Metadata` headers: {index_count}: {index_count_status}, {task_key}: {task_key_status}, {total_index_documents}: {total_index_documents_status}.\n - Hint: either all three headers should be provided, or none of them",
+        index_count = PROXY_IMPORT_INDEX_COUNT_HEADER,
+        index_count_status = if *is_index_count_missing { "missing" } else { "provided"},
+        task_key = PROXY_IMPORT_TASK_KEY_HEADER,
+        task_key_status = if *is_task_key_missing { "missing" } else { "provided"},
+        total_index_documents = PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+        total_index_documents_status = if *is_total_index_documents_missing { "missing" } else { "provided"},
+    )]
+    InconsistentImportMetadataHeaders {
+        is_index_count_missing: bool,
+        is_task_key_missing: bool,
+        is_total_index_documents_missing: bool,
+    },
+
+    #[error(
+        "Inconsistent task network headers: origin headers: {origin_status}, import headers: {import_status}, import metadata: {import_metadata_status}",
+        origin_status =  if *is_missing_origin { "missing"} else { "present" },
+        import_status =  if *is_missing_import { "missing"} else { "present" },
+        import_metadata_status =  if *is_missing_import_metadata { "missing"} else { "present" })]
+    InconsistentTaskNetworkHeaders {
+        is_missing_origin: bool,
+        is_missing_import: bool,
+        is_missing_import_metadata: bool,
+    },
     #[error("Invalid value for header {header_name}: {msg}")]
     InvalidHeaderValue { header_name: &'static str, msg: String },
+    #[error("This remote is not the leader of the network.\n  - Note: only the leader `{leader}` can receive new tasks.")]
+    NotLeader { leader: String },
+    #[error("Unexpected `previousRemotes` in network call.\n  - Note: `previousRemote` is reserved for internal use.")]
+    UnexpectedNetworkPreviousRemotes,
 }
 
 impl MeilisearchHttpError {
@@ -142,10 +187,17 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::PersonalizationInFederatedQuery(_) => {
                 Code::InvalidMultiSearchQueryPersonalization
             }
-            MeilisearchHttpError::InconsistentOriginHeaders { .. } => {
+            MeilisearchHttpError::InconsistentOriginHeaders { .. }
+            | MeilisearchHttpError::InconsistentImportHeaders { .. }
+            | MeilisearchHttpError::InconsistentImportMetadataHeaders { .. }
+            | MeilisearchHttpError::InconsistentTaskNetworkHeaders { .. } => {
                 Code::InconsistentDocumentChangeHeaders
             }
             MeilisearchHttpError::InvalidHeaderValue { .. } => Code::InvalidHeaderValue,
+            MeilisearchHttpError::NotLeader { .. } => Code::NotLeader,
+            MeilisearchHttpError::UnexpectedNetworkPreviousRemotes => {
+                Code::UnexpectedNetworkPreviousRemotes
+            }
         }
     }
 }

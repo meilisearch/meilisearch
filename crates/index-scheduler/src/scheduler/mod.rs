@@ -200,9 +200,10 @@ impl IndexScheduler {
         // We reset the must_stop flag to be sure that we don't stop processing tasks
         self.scheduler.must_stop_processing.reset();
         let progress = self
-            .processing_tasks
+            .runtime_tasks
             .write()
             .unwrap()
+            .processing
             // We can clone the processing batch here because we don't want its modification to affect the view of the processing batches
             .start_processing(processing_batch.clone(), ids.clone());
 
@@ -453,7 +454,7 @@ impl IndexScheduler {
 
         // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
         // and then become « not found » for some time until the commit everything is written and the final commit is made.
-        self.processing_tasks.write().unwrap().stop_processing();
+        self.runtime_tasks.write().unwrap().processing.stop_processing();
 
         // Once the tasks are committed, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
         tracing::debug!("Deleting the update files");

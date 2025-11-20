@@ -68,10 +68,10 @@ use meilisearch_types::milli::vector::{
 };
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::task_view::TaskView;
-use meilisearch_types::tasks::{KindWithContent, Task, TaskNetwork};
+use meilisearch_types::tasks::enterprise_edition::network::{DbTaskNetwork, TaskNetwork};
+use meilisearch_types::tasks::{KindWithContent, Task};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};
 use milli::vector::db::IndexEmbeddingConfig;
-use processing::ProcessingTasks;
 pub use queue::Query;
 use queue::Queue;
 use roaring::RoaringBitmap;
@@ -82,6 +82,7 @@ use uuid::Uuid;
 use versioning::Versioning;
 
 use crate::index_mapper::IndexMapper;
+use crate::processing::RuntimeTasks;
 use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
@@ -163,7 +164,7 @@ pub struct IndexScheduler {
     pub(crate) env: Env<WithoutTls>,
 
     /// The list of tasks currently processing
-    pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
+    pub(crate) runtime_tasks: Arc<RwLock<RuntimeTasks>>,
 
     /// A database containing only the version of the index-scheduler
     pub version: versioning::Versioning,
@@ -225,7 +226,7 @@ impl IndexScheduler {
     fn private_clone(&self) -> IndexScheduler {
         IndexScheduler {
             env: self.env.clone(),
-            processing_tasks: self.processing_tasks.clone(),
+            runtime_tasks: self.runtime_tasks.clone(),
             version: self.version.clone(),
             queue: self.queue.private_clone(),
             scheduler: self.scheduler.private_clone(),
@@ -331,7 +332,7 @@ impl IndexScheduler {
         wtxn.commit()?;
 
         Ok(Self {
-            processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
+            runtime_tasks: Arc::new(RwLock::new(RuntimeTasks::new())),
             version,
             queue,
             scheduler: Scheduler::new(&options, auth_env),
@@ -639,19 +640,19 @@ impl IndexScheduler {
     /// 3. The number of times the properties appeared.
     pub fn get_stats(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let rtxn = self.read_txn()?;
-        self.queue.get_stats(&rtxn, &self.processing_tasks.read().unwrap())
+        self.queue.get_stats(&rtxn, &self.runtime_tasks.read().unwrap().processing)
     }
 
     // Return true if there is at least one task that is processing.
     pub fn is_task_processing(&self) -> Result<bool> {
-        Ok(!self.processing_tasks.read().unwrap().processing.is_empty())
+        Ok(!self.runtime_tasks.read().unwrap().processing.processing.is_empty())
     }
 
     /// Return true iff there is at least one task associated with this index
     /// that is processing.
     pub fn is_index_processing(&self, index: &str) -> Result<bool> {
         let rtxn = self.env.read_txn()?;
-        let processing_tasks = self.processing_tasks.read().unwrap().processing.clone();
+        let processing_tasks = self.runtime_tasks.read().unwrap().processing.processing.clone();
         let index_tasks = self.queue.tasks.index_tasks(&rtxn, index)?;
         let nbr_index_processing_tasks = processing_tasks.intersection_len(&index_tasks);
         Ok(nbr_index_processing_tasks > 0)
@@ -677,8 +678,8 @@ impl IndexScheduler {
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(Vec<Task>, u64)> {
         let rtxn = self.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap();
-        self.queue.get_tasks_from_authorized_indexes(&rtxn, query, filters, &processing)
+        let processing = &self.runtime_tasks.read().unwrap().processing;
+        self.queue.get_tasks_from_authorized_indexes(&rtxn, query, filters, processing)
     }
 
     /// Return the task ids matching the query along with the total number of tasks
@@ -696,18 +697,18 @@ impl IndexScheduler {
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(RoaringBitmap, u64)> {
         let rtxn = self.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap();
-        self.queue.get_task_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
+        let processing = &self.runtime_tasks.read().unwrap().processing;
+        self.queue.get_task_ids_from_authorized_indexes(&rtxn, query, filters, processing)
     }
 
-    pub fn set_task_network(&self, task_id: TaskId, network: TaskNetwork) -> Result<()> {
+    pub fn set_task_network(&self, task_id: TaskId, network: DbTaskNetwork) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
         let mut task =
             self.queue.tasks.get_task(&wtxn, task_id)?.ok_or(Error::TaskNotFound(task_id))?;
         task.network = Some(network);
         self.queue.tasks.all_tasks.put(&mut wtxn, &task_id, &task)?;
         wtxn.commit()?;
-        Ok(())
+        Ok(task)
     }
 
     /// Return the batches matching the query from the user's point of view along
@@ -725,8 +726,8 @@ impl IndexScheduler {
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(Vec<Batch>, u64)> {
         let rtxn = self.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap();
-        self.queue.get_batches_from_authorized_indexes(&rtxn, query, filters, &processing)
+        let processing = &self.runtime_tasks.read().unwrap().processing;
+        self.queue.get_batches_from_authorized_indexes(&rtxn, query, filters, processing)
     }
 
     /// Return the batch ids matching the query along with the total number of batches
@@ -744,8 +745,8 @@ impl IndexScheduler {
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(RoaringBitmap, u64)> {
         let rtxn = self.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap();
-        self.queue.get_batch_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
+        let processing = &self.runtime_tasks.read().unwrap().processing;
+        self.queue.get_batch_ids_from_authorized_indexes(&rtxn, query, filters, processing)
     }
 
     /// Register a new task in the scheduler.
@@ -757,18 +758,30 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
-        self.register_with_custom_metadata(kind, task_id, None, dry_run)
+        self.register_with_custom_metadata(kind, task_id, None, dry_run, None)
     }
 
     /// Register a new task in the scheduler, with metadata.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
+    ///
+    /// # Parameters
+    ///
+    /// - task_network: network of the task to check.
+    ///
+    /// If the task is an import task, only accept it if:
+    ///
+    /// 1. There is an ongoing network topology change task
+    /// 2. The task to register matches the network version of the network topology change task
+    ///
+    /// Always accept the task if it is not an import task.
     pub fn register_with_custom_metadata(
         &self,
         kind: KindWithContent,
         task_id: Option<TaskId>,
         custom_metadata: Option<String>,
         dry_run: bool,
+        task_network: Option<TaskNetwork>,
     ) -> Result<Task> {
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
@@ -779,13 +792,86 @@ impl IndexScheduler {
         }
 
         let mut wtxn = self.env.write_txn()?;
-        let task = self.queue.register(&mut wtxn, &kind, task_id, custom_metadata, dry_run)?;
+
+        if let Some(TaskNetwork::Import { import_from, network_change, metadata }) = &task_network {
+            let mut network_tasks = self
+                .queue
+                .tasks
+                .get_kind(&wtxn, meilisearch_types::tasks::Kind::NetworkTopologyChange)?;
+            if network_tasks.is_empty() {
+                return Err(Error::ImportTaskWithoutNetworkTask);
+            }
+
+            let network_task = {
+                let processing = self.runtime_tasks.read().unwrap().processing.processing.clone();
+                if processing.is_disjoint(&network_tasks) {
+                    let enqueued = self
+                        .queue
+                        .tasks
+                        .get_status(&wtxn, meilisearch_types::tasks::Status::Enqueued)?;
+
+                    network_tasks &= enqueued;
+                    if let Some(network_task) = network_tasks.into_iter().next() {
+                        network_task
+                    } else {
+                        return Err(Error::ImportTaskWithoutNetworkTask);
+                    }
+                } else {
+                    network_tasks &= &*processing;
+                    network_tasks.into_iter().next().unwrap()
+                }
+            };
+
+            let mut network_task = self.queue.tasks.get_task(&wtxn, network_task)?.unwrap();
+            let network_task_version = network_task
+                .network
+                .as_ref()
+                .map(|network| network.network_version())
+                .unwrap_or_default();
+            if network_task_version != network_change.network_version {
+                return Err(Error::NetworkVersionMismatch {
+                    network_task: network_task_version,
+                    import_task: network_change.network_version,
+                });
+            }
+
+            let KindWithContent::NetworkTopologyChange(network_topology_change) =
+                &mut network_task.kind
+            else {
+                return Err(Error::CorruptedTaskQueue);
+            };
+
+            network_topology_change.receive_remote_task(
+                &import_from.remote_name,
+                &import_from.index_name,
+                metadata.task_key,
+                import_from.document_count,
+                metadata.index_count,
+                metadata.total_index_documents,
+            )?;
+
+            self.queue.tasks.update_task(&mut wtxn, &mut network_task)?;
+        }
+
+        let task = self.queue.register(
+            &mut wtxn,
+            &kind,
+            task_id,
+            custom_metadata,
+            dry_run,
+            task_network.map(DbTaskNetwork::from),
+        )?;
 
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).
         if let KindWithContent::TaskCancelation { tasks, .. } = kind {
             let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
-            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks_to_cancel)
+            if self
+                .runtime_tasks
+                .read()
+                .unwrap()
+                .processing
+                .must_cancel_processing_tasks(&tasks_to_cancel)
             {
                 self.scheduler.must_stop_processing.must_stop();
             }

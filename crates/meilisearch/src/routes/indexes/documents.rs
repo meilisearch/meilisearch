@@ -45,7 +45,9 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::enterprise_edition::proxy::{proxy, Body};
+use crate::routes::indexes::enterprise_edition::proxy::{
+    proxy, task_network_and_check_leader, Body,
+};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
@@ -342,6 +344,7 @@ pub async fn delete_document(
     let DocumentParam { index_uid, document_id } = path.into_inner();
     let index_uid = IndexUid::try_from(index_uid)?;
     let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader(&req, &network)?;
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -359,16 +362,23 @@ pub async fn delete_document(
     };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
-    let task = {
+    let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+            index_scheduler.register_with_custom_metadata(
+                task,
+                uid,
+                custom_metadata,
+                dry_run,
+                task_network,
+            )
         })
         .await??
     };
 
-    if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::none(), &task).await?;
+    if let Some(task_network) = task.network.take() {
+        proxy(&index_scheduler, Some(&index_uid), &req, task_network, network, Body::none(), &task)
+            .await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -967,6 +977,7 @@ async fn document_addition(
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
     let mime_type = extract_mime_type(req)?;
     let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader(&req, &network)?;
 
     let format = match (
         mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())),
@@ -1085,9 +1096,16 @@ async fn document_addition(
         index_uid: index_uid.to_string(),
     };
 
+    /// FIXME: not new to this PR, but _any_ error here will cause the payload to unduly persist
     let scheduler = index_scheduler.clone();
-    let task = match tokio::task::spawn_blocking(move || {
-        scheduler.register_with_custom_metadata(task, task_id, custom_metadata, dry_run)
+    let mut task = match tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(
+            task,
+            task_id,
+            custom_metadata,
+            dry_run,
+            task_network,
+        )
     })
     .await?
     {
@@ -1098,12 +1116,13 @@ async fn document_addition(
         }
     };
 
-    if network.sharding {
+    if let Some(task_network) = task.network.take() {
         if let Some(file) = file {
             proxy(
                 &index_scheduler,
-                &index_uid,
+                Some(&index_uid),
                 req,
+                task_network,
                 network,
                 Body::with_ndjson_payload(file),
                 &task,
@@ -1194,6 +1213,7 @@ pub async fn delete_documents_batch(
 
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader(&req, &network)?;
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -1214,16 +1234,31 @@ pub async fn delete_documents_batch(
         KindWithContent::DocumentDeletion { index_uid: index_uid.to_string(), documents_ids: ids };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
-    let task = {
+    let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+            index_scheduler.register_with_custom_metadata(
+                task,
+                uid,
+                custom_metadata,
+                dry_run,
+                task_network,
+            )
         })
         .await??
     };
 
-    if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(body), &task).await?;
+    if let Some(task_network) = task.network.take() {
+        proxy(
+            &index_scheduler,
+            Some(&index_uid),
+            &req,
+            task_network,
+            network,
+            Body::inline(body),
+            &task,
+        )
+        .await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -1286,6 +1321,7 @@ pub async fn delete_documents_by_filter(
     let index_uid = index_uid.into_inner();
     let filter = body.into_inner();
     let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader(&req, &network)?;
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -1312,16 +1348,31 @@ pub async fn delete_documents_by_filter(
 
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
-    let task = {
+    let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+            index_scheduler.register_with_custom_metadata(
+                task,
+                uid,
+                custom_metadata,
+                dry_run,
+                task_network,
+            )
         })
         .await??
     };
 
-    if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(filter), &task).await?;
+    if let Some(task_network) = task.network.take() {
+        proxy(
+            &index_scheduler,
+            Some(&index_uid),
+            &req,
+            task_network,
+            network,
+            Body::inline(filter),
+            &task,
+        )
+        .await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -1421,6 +1472,7 @@ pub async fn edit_documents_by_function(
         .check_edit_documents_by_function("Using the documents edit route")?;
 
     let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader(&req, &network)?;
 
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let index_uid = index_uid.into_inner();
@@ -1467,16 +1519,31 @@ pub async fn edit_documents_by_function(
 
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
-    let task = {
+    let mut task = {
         let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+            index_scheduler.register_with_custom_metadata(
+                task,
+                uid,
+                custom_metadata,
+                dry_run,
+                task_network,
+            )
         })
         .await??
     };
 
-    if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(body), &task).await?;
+    if let Some(task_network) = task.network.take() {
+        proxy(
+            &index_scheduler,
+            Some(&index_uid),
+            &req,
+            task_network,
+            network,
+            Body::inline(body),
+            &task,
+        )
+        .await?;
     }
 
     let task: SummarizedTaskView = task.into();
@@ -1525,6 +1592,7 @@ pub async fn clear_all_documents(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let network = index_scheduler.network();
     let CustomMetadataQuery { custom_metadata } = params.into_inner();
+    let task_network = task_network_and_check_leader(&req, &network)?;
 
     analytics.publish(
         DocumentsDeletionAggregator {
@@ -1540,17 +1608,24 @@ pub async fn clear_all_documents(
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
 
-    let task = {
+    let mut task = {
         let index_scheduler = index_scheduler.clone();
 
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(task, uid, custom_metadata, dry_run)
+            index_scheduler.register_with_custom_metadata(
+                task,
+                uid,
+                custom_metadata,
+                dry_run,
+                task_network,
+            )
         })
         .await??
     };
 
-    if network.sharding && !dry_run {
-        proxy(&index_scheduler, &index_uid, &req, network, Body::none(), &task).await?;
+    if let Some(task_network) = task.network.take() {
+        proxy(&index_scheduler, Some(&index_uid), &req, task_network, network, Body::none(), &task)
+            .await?;
     }
 
     let task: SummarizedTaskView = task.into();

@@ -361,6 +361,11 @@ impl IndexMapper {
         Ok(())
     }
 
+    /// The number of indexes in the database
+    pub fn index_count(&self, rtxn: &RoTxn) -> Result<u64> {
+        Ok(self.index_mapping.len(rtxn)?)
+    }
+
     /// Return an index, may open it if it wasn't already opened.
     pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
         if let Some((current_name, current_index)) =

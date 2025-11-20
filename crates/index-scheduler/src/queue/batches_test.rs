@@ -26,7 +26,7 @@ fn query_batches_from_and_limit() {
     handle.advance_n_successful_batches(3);
     snapshot!(snapshot_index_scheduler(&index_scheduler), name: "processed_all_tasks");
 
-    let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+    let proc = index_scheduler.runtime_tasks.read().unwrap().processing.clone();
     let rtxn = index_scheduler.env.read_txn().unwrap();
     let query = Query { limit: Some(0), ..Default::default() };
     let (batches, _) = index_scheduler
@@ -359,7 +359,7 @@ fn query_batches_special_rules() {
     handle.advance_till([Start, BatchCreated]);
 
     let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap().clone();
+    let proc = index_scheduler.runtime_tasks.read().unwrap().processing.clone();
 
     let query = Query { index_uids: Some(vec!["catto".to_owned()]), ..Default::default() };
     let (batches, _) = index_scheduler
