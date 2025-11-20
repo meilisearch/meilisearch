@@ -180,9 +180,9 @@ jobs:
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
 
-      - name: Inspect image
+      - name: Inspect image to fetch digest to sign
         run: |
-          digest=$(docker buildx imagetools inspect --raw ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }} | jq -r '.manifests[0].digest')
+          digest=$(docker buildx imagetools inspect --format='{{ json .Manifest }}' ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }} | jq -r '.digest')
           echo "DIGEST=${digest}" >> $GITHUB_ENV
 
       - name: Sign the images with GitHub OIDC Token
