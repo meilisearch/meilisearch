@@ -16,7 +16,10 @@ env:
 jobs:
   test-linux:
     name: Tests on ubuntu-22.04
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     container:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
