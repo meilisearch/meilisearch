@@ -186,8 +186,8 @@ pub async fn get_metrics(
         &Query { statuses: Some(vec![Status::Succeeded, Status::Failed]), ..Query::default() },
         auth_filters,
     )?;
-    // ...and get the last three batches only.
-    for batch in batches.into_iter().take(3) {
+    // ...and get the last batch only.
+    if let Some(batch) = batches.into_iter().next() {
         let batch_uid = batch.uid.to_string();
         for (step_name, duration_str) in batch.stats.progress_trace {
             let Some(duration_str) = duration_str.as_str() else { continue };
