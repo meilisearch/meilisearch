@@ -143,7 +143,7 @@ jobs:
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-large
     container:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
@@ -154,8 +154,8 @@ jobs:
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
       - uses: dtolnay/rust-toolchain@1.89
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+      - name: Run df -h
+        run: df -h
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:

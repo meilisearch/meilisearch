@@ -11,8 +11,8 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-time = { version = "0.3.41", features = ["parsing"] }
+time = { version = "0.3.44", features = ["parsing"] }
 
 [build-dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.100"
 vergen-git2 = "1.0.7"
