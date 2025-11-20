@@ -13,8 +13,11 @@ on:
     - cron: '0 23 * * *' # Every day at 11:00pm
   workflow_dispatch:
 
+env:
+  REGISTRY_IMAGE: getmeili/meilisearch
+
 jobs:
-  docker:
+  build:
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -26,8 +29,77 @@ jobs:
           - platform: arm64
             runner: ubuntu-24.04-arm
 
+    permissions: {}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Prepare
+        run: |
+          platform=linux/${{ matrix.platform }}
+          echo "PLATFORM_PAIR=${platform//\//-}" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          platforms: linux/${{ matrix.platform }}
+          install: true
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          # Prevent `latest` to be updated for each new tag pushed.
+          # We need latest and `vX.Y` tags to only be pushed for the stable Meilisearch releases.
+          flavor: latest=false
+          tags: |
+            type=ref,event=tag
+            type=raw,value=nightly,enable=${{ github.event_name != 'push' }}
+            type=semver,pattern=v{{major}}.{{minor}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
+            type=semver,pattern=v{{major}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
+            type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
+
+      - name: Build and push by digest
+        uses: docker/build-push-action@v6
+        id: build-and-push
+        with:
+          platforms: linux/${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.REGISTRY_IMAGE }}
+          outputs: type=image,push-by-digest=true,name-canonical=true,push=true
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            COMMIT_DATE=${{ steps.build-metadata.outputs.date }}
+            GIT_TAG=${{ github.ref_name }}
+
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build-and-push.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+
     permissions:
       id-token: write # This is needed to use Cosign in keyless mode
+
     steps:
       - uses: actions/checkout@v5
 
@@ -68,14 +140,15 @@ jobs:
 
           echo "date=$commit_date" >> $GITHUB_OUTPUT
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/${{ matrix.platform }}
-          install: true
-
       - name: Install cosign
         uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # tag=v3.10.0
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -83,11 +156,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: getmeili/meilisearch
+          images: ${{ env.REGISTRY_IMAGE }}
           # Prevent `latest` to be updated for each new tag pushed.
           # We need latest and `vX.Y` tags to only be pushed for the stable Meilisearch releases.
           flavor: latest=false
@@ -98,26 +174,24 @@ jobs:
             type=semver,pattern=v{{major}},enable=${{ steps.check-tag-format.outputs.stable == 'true' }}
             type=raw,value=latest,enable=${{ steps.check-tag-format.outputs.stable == 'true' && steps.check-tag-format.outputs.latest == 'true' }}
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        id: build-and-push
-        with:
-          push: true
-          platforms: linux/${{ matrix.platform }}
-          tags: ${{ steps.meta.outputs.tags }}
-          build-args: |
-            COMMIT_SHA=${{ github.sha }}
-            COMMIT_DATE=${{ steps.build-metadata.outputs.date }}
-            GIT_TAG=${{ github.ref_name }}
+      - name: Create manifest list and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY_IMAGE }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          digest=$(docker buildx imagetools inspect ${{ env.REGISTRY_IMAGE }}:${{ steps.meta.outputs.version }})
+          echo "DIGEST=${platform}" >> $GITHUB_ENV
 
       - name: Sign the images with GitHub OIDC Token
         env:
-          DIGEST: ${{ steps.build-and-push.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           images=""
           for tag in ${TAGS}; do
-            images+="${tag}@${DIGEST} "
+            images+="${tag}@${{ env.DIGEST }} "
           done
           cosign sign --yes ${images}
 
