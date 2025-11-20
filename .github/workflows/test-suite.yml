@@ -15,8 +15,11 @@ env:
 
 jobs:
   test-linux:
-    name: Tests on ubuntu-22.04
-    runs-on: ubuntu-latest
+    name: Tests on Ubuntu
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     container:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
@@ -66,7 +69,10 @@ jobs:
 
   test-all-features:
     name: Tests almost all features
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     container:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
@@ -87,7 +93,10 @@ jobs:
 
   ollama-ubuntu:
     name: Test with Ollama
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     env:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
@@ -119,7 +128,10 @@ jobs:
 
   test-disabled-tokenization:
     name: Test disabled tokenization
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     container:
       image: ubuntu:22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -143,7 +155,10 @@ jobs:
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     container:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
@@ -164,7 +179,10 @@ jobs:
 
   clippy:
     name: Run Clippy
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
@@ -181,7 +199,10 @@ jobs:
 
   fmt:
     name: Run Rustfmt
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
