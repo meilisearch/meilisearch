@@ -28,6 +28,8 @@ make_enum_progress! {
         ChangingVectorStore,
         UsingStableIndexer,
         UsingExperimentalIndexer,
+        DeletingOldWordFidDocids,
+        DeletingOldFidWordCountDocids,
     }
 }
 
