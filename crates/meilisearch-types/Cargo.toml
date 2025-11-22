@@ -14,7 +14,7 @@ license.workspace = true
 actix-web = { version = "4.11.0", default-features = false }
 anyhow = "1.0.98"
 bumpalo = "3.18.1"
-bumparaw-collections = "0.1.4"
+bumparaw-collections = { git = "https://github.com/luusl/bumparaw-collections.git", branch = "Add-ARMv7-support" }
 byte-unit = { version = "5.1.6", features = ["serde"] }
 convert_case = "0.8.0"
 csv = "1.3.1"
