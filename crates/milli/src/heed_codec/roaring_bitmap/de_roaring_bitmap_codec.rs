@@ -1,5 +1,5 @@
 use std::io::{self, ErrorKind};
-use std::mem::{size_of, size_of_val};
+use std::mem::{self, size_of, size_of_val};
 
 use bitpacking::{BitPacker, BitPacker1x, BitPacker4x, BitPacker8x};
 use roaring::RoaringBitmap;
@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 /// The magic header for our custom encoding format
 const MAGIC_HEADER: u16 = 36869;
 
-pub struct DeBitmapCodec;
+pub struct DeRoaringBitmapCodec;
 
 // TODO reintroduce:
 //  - serialized_size?
@@ -15,8 +15,75 @@ pub struct DeBitmapCodec;
 //  - intersection_with_serialized
 //  - merge_into
 //  - merge_deladd_into
-impl DeBitmapCodec {
-    /// Returns the delta-encoded compressed version of the given roaring bitmap.
+impl DeRoaringBitmapCodec {
+    /// Returns the serialized size of the given roaring bitmap with the delta encoding format.
+    pub fn serialized_size_with_tmp_buffer(
+        bitmap: &RoaringBitmap,
+        tmp_buffer: &mut Vec<u32>,
+    ) -> usize {
+        let mut size = 2; // u16 magic header
+
+        let bitpacker8x = BitPacker8x::new();
+        let bitpacker4x = BitPacker4x::new();
+        let bitpacker1x = BitPacker1x::new();
+
+        // This temporary buffer is used to store each chunk of decompressed u32s.
+        tmp_buffer.resize(BitPacker8x::BLOCK_LEN, 0u32);
+        let decompressed = &mut tmp_buffer[..];
+
+        let mut buffer_index = 0;
+        let mut initial = None;
+        // We initially collect all the integers into a flat buffer of the size
+        // of the largest bitpacker. We encode them with it until we don't have
+        // enough of them...
+        for n in bitmap {
+            decompressed[buffer_index] = n;
+            buffer_index += 1;
+            if buffer_index == BitPacker8x::BLOCK_LEN {
+                let num_bits = bitpacker8x.num_bits_strictly_sorted(initial, decompressed);
+                let compressed_len = BitPacker8x::compressed_block_size(num_bits);
+                size += 1; // u8 chunk header
+                size += compressed_len; // compressed data length
+                initial = Some(n);
+                buffer_index = 0;
+            }
+        }
+
+        // ...We then switch to a smaller bitpacker to encode the remaining chunks...
+        let decompressed = &decompressed[..buffer_index];
+        let mut chunks = decompressed.chunks_exact(BitPacker4x::BLOCK_LEN);
+        for decompressed in chunks.by_ref() {
+            let num_bits = bitpacker4x.num_bits_strictly_sorted(initial, decompressed);
+            let compressed_len = BitPacker4x::compressed_block_size(num_bits);
+            size += 1; // u8 chunk header
+            size += compressed_len; // compressed data length
+            initial = decompressed.iter().last().copied();
+        }
+
+        // ...And so on...
+        let decompressed = chunks.remainder();
+        let mut chunks = decompressed.chunks_exact(BitPacker1x::BLOCK_LEN);
+        for decompressed in chunks.by_ref() {
+            let num_bits = bitpacker1x.num_bits_strictly_sorted(initial, decompressed);
+            let compressed_len = BitPacker1x::compressed_block_size(num_bits);
+            size += 1; // u8 chunk header
+            size += compressed_len; // compressed data length
+            initial = decompressed.iter().last().copied();
+        }
+
+        // ...Until we don't have any small enough bitpacker. We put them raw
+        // at the end of out buffer with a header indicating the matter.
+        let decompressed = chunks.remainder();
+        if !decompressed.is_empty() {
+            size += 1; // u8 chunk header
+            size += decompressed.len() * mem::size_of::<u32>(); // remaining uncompressed u32s
+        }
+
+        size
+    }
+
+    /// Writes the delta-encoded compressed version of
+    /// the given roaring bitmap into the provided writer.
     pub fn serialize_into<W: io::Write>(bitmap: &RoaringBitmap, writer: W) -> io::Result<()> {
         let mut tmp_buffer = Vec::new();
         Self::serialize_into_with_tmp_buffer(bitmap, writer, &mut tmp_buffer)
@@ -285,15 +352,26 @@ mod tests {
     use quickcheck::quickcheck;
     use roaring::RoaringBitmap;
 
-    use crate::heed_codec::de_bitmap::DeBitmapCodec;
+    use super::DeRoaringBitmapCodec;
 
     quickcheck! {
         fn qc_random(xs: Vec<u32>) -> bool {
             let bitmap = RoaringBitmap::from_iter(xs);
             let mut compressed = Vec::new();
-            DeBitmapCodec::serialize_into(&bitmap, &mut compressed).unwrap();
-            let decompressed = DeBitmapCodec::deserialize_from(&compressed[..]).unwrap();
+            DeRoaringBitmapCodec::serialize_into(&bitmap, &mut compressed).unwrap();
+            let decompressed = DeRoaringBitmapCodec::deserialize_from(&compressed[..]).unwrap();
             decompressed == bitmap
+        }
+    }
+
+    quickcheck! {
+        fn qc_random_check_serialized_size(xs: Vec<u32>) -> bool {
+            let bitmap = RoaringBitmap::from_iter(xs);
+            let mut compressed = Vec::new();
+            let mut tmp_buffer = Vec::new();
+            DeRoaringBitmapCodec::serialize_into(&bitmap, &mut compressed).unwrap();
+            let expected_len = DeRoaringBitmapCodec::serialized_size_with_tmp_buffer(&bitmap, &mut tmp_buffer);
+            compressed.len() == expected_len
         }
     }
 }
