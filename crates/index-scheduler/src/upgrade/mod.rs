@@ -50,6 +50,7 @@ pub fn upgrade_index_scheduler(
         (1, 24, _) => 0,
         (1, 25, _) => 0,
         (1, 26, _) => 0,
+        (1, 27, _) => 0,
         (major, minor, patch) => {
             if major > current_major
                 || (major == current_major && minor > current_minor)
