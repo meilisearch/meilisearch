@@ -181,6 +181,9 @@ enum IndexPart {
 enum RoaringBasedIndexPart {
     WordDocids,
     WordPrefixDocids,
+    WordPairProximityDocids,
+    WordPrefixFidDocids,
+    WordPrefixPositionDocids,
 }
 
 impl RoaringBasedIndexPart {
@@ -189,6 +192,9 @@ impl RoaringBasedIndexPart {
         match self {
             WordDocids => index.word_docids.remap_key_type(),
             WordPrefixDocids => index.word_prefix_docids.remap_key_type(),
+            WordPairProximityDocids => index.word_pair_proximity_docids.remap_key_type(),
+            WordPrefixFidDocids => index.word_prefix_fid_docids.remap_key_type(),
+            WordPrefixPositionDocids => index.word_prefix_position_docids.remap_key_type(),
         }
     }
 }
@@ -199,6 +205,9 @@ impl fmt::Display for RoaringBasedIndexPart {
         match self {
             WordDocids => write!(f, "word-docids"),
             WordPrefixDocids => write!(f, "word-prefix-docids"),
+            WordPairProximityDocids => write!(f, "word-pair-proximity-docids"),
+            WordPrefixFidDocids => write!(f, "word-prefix-fid-docids"),
+            WordPrefixPositionDocids => write!(f, "word-prefix-position-docids"),
         }
     }
 }
