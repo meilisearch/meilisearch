@@ -609,7 +609,7 @@ impl SettingsChangeWordDocidsExtractors {
             &mut |field_name| {
                 let fid = new_fields_ids_map.id(field_name).expect("All fields IDs must exist");
 
-                // If the document must be reindexed, early return NoMatch to stop the scanning process. 
+                // If the document must be reindexed, early return NoMatch to stop the scanning process.
                 if action == ActionToOperate::ReindexAllFields {
                     return Ok((fid, PatternMatch::NoMatch));
                 }
@@ -680,10 +680,8 @@ impl SettingsChangeWordDocidsExtractors {
                     // Was not searchable but now is
                     if !old_field_metadata.is_searchable() && new_field_metadata.is_searchable() {
                         PatternMatch::Match
-                    // If the field was not a parent of a searchable before and is now
-                    } else if !has_searchable_children(field_name, old_searchable)
-                        && has_searchable_children(field_name, new_searchable)
-                    {
+                    // If the field is now a parent of a searchable field
+                    } else if has_searchable_children(field_name, new_searchable) {
                         PatternMatch::Parent
                     } else {
                         PatternMatch::NoMatch
