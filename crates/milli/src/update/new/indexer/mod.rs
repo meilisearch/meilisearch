@@ -9,7 +9,7 @@ pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
 use heed::types::DecodeIgnore;
-use heed::{RoTxn, RwTxn};
+use heed::{BytesDecode, Database, RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
 pub use post_processing::recompute_word_fst_from_word_docids_database;
 pub use settings_changes::settings_change_extract;
@@ -22,7 +22,9 @@ use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
+use crate::heed_codec::StrBEU16Codec;
 use crate::progress::{EmbedderStats, Progress};
+use crate::proximity::ProximityPrecision;
 use crate::update::new::steps::SettingsIndexerStep;
 use crate::update::new::FacetFieldIdsDelta;
 use crate::update::settings::SettingsDelta;
@@ -250,8 +252,16 @@ where
     delete_old_embedders_and_fragments(wtxn, index, settings_delta)?;
     delete_old_fid_based_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
 
+    // Clear word_pair_proximity if byWord to byAttribute
+    let old_proximity_precision = settings_delta.old_proximity_precision();
+    let new_proximity_precision = settings_delta.new_proximity_precision();
+    if *old_proximity_precision == ProximityPrecision::ByWord
+        && *new_proximity_precision == ProximityPrecision::ByAttribute
+    {
+        index.word_pair_proximity_docids.clear(wtxn)?;
+    }
+
     // TODO delete useless searchable databases
-    //      - Clear word_pair_proximity if byWord to byAttribute
     //      - Clear fid_prefix_* in the post processing
     //      - clear the prefix + fid_prefix if setting `PrefixSearch` is enabled
 
@@ -522,24 +532,33 @@ where
     };
 
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
-    delete_old_word_fid_docids(wtxn, index, must_stop_processing, &fids_to_delete)?;
+    delete_old_word_fid_docids(wtxn, index.word_fid_docids, must_stop_processing, &fids_to_delete)?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldFidWordCountDocids);
-    delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, fids_to_delete)?;
+    delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, &fids_to_delete)?;
+
+    progress.update_progress(SettingsIndexerStep::DeletingOldWordPrefixFidDocids);
+    delete_old_word_fid_docids(
+        wtxn,
+        index.word_prefix_fid_docids,
+        must_stop_processing,
+        &fids_to_delete,
+    )?;
 
     Ok(())
 }
 
-fn delete_old_word_fid_docids<MSP>(
-    wtxn: &mut RwTxn<'_>,
-    index: &Index,
+fn delete_old_word_fid_docids<'txn, MSP, DC>(
+    wtxn: &mut RwTxn<'txn>,
+    database: Database<StrBEU16Codec, DC>,
     must_stop_processing: &MSP,
     fids_to_delete: &BTreeSet<u16>,
 ) -> Result<(), Error>
 where
     MSP: Fn() -> bool + Sync,
+    DC: BytesDecode<'txn>,
 {
-    let mut iter = index.word_fid_docids.iter_mut(wtxn)?.remap_data_type::<DecodeIgnore>();
+    let mut iter = database.iter_mut(wtxn)?.remap_data_type::<DecodeIgnore>();
     while let Some(((_word, fid), ())) = iter.next().transpose()? {
         // TODO should I call it that often?
         if must_stop_processing() {
@@ -559,13 +578,13 @@ fn delete_old_fid_word_count_docids<MSP>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     must_stop_processing: &MSP,
-    fids_to_delete: BTreeSet<u16>,
+    fids_to_delete: &BTreeSet<u16>,
 ) -> Result<(), Error>
 where
     MSP: Fn() -> bool + Sync,
 {
     let db = index.field_id_word_count_docids.remap_data_type::<DecodeIgnore>();
-    for fid_to_delete in fids_to_delete {
+    for &fid_to_delete in fids_to_delete {
         if must_stop_processing() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }

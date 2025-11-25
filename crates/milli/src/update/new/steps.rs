@@ -30,6 +30,7 @@ make_enum_progress! {
         UsingExperimentalIndexer,
         DeletingOldWordFidDocids,
         DeletingOldFidWordCountDocids,
+        DeletingOldWordPrefixFidDocids,
     }
 }
 
