@@ -8,11 +8,11 @@ use bumpalo::Bump;
 
 use super::match_searchable_field;
 use super::tokenize_document::{tokenizer_builder, DocumentTokenizer};
-use crate::attribute_patterns::match_field_legacy;
 use crate::fields_ids_map::metadata::Metadata;
 use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::cache::BalancedCaches;
 use crate::update::new::extract::perm_json_p::contained_in;
+use crate::update::new::extract::searchable::has_searchable_children;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
 };
@@ -752,16 +752,4 @@ impl SettingsChangeWordDocidsExtractors {
 
         Ok(())
     }
-}
-
-fn has_searchable_children<I, A>(field_name: &str, searchable: Option<I>) -> bool
-where
-    I: IntoIterator<Item = A>,
-    A: AsRef<str>,
-{
-    searchable.is_none_or(|fields| {
-        fields
-            .into_iter()
-            .any(|attr| match_field_legacy(attr.as_ref(), field_name) != PatternMatch::Parent)
-    })
 }
