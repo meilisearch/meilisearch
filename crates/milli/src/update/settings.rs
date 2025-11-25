@@ -1609,7 +1609,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             max_values_per_facet: Setting::NotSet,
             sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
-            proximity_precision: Setting::NotSet,
+            proximity_precision: _,
             embedder_settings: _,
             search_cutoff: Setting::NotSet,
             localized_attributes_rules: Setting::NotSet, // TODO to start with
