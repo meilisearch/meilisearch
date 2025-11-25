@@ -609,6 +609,7 @@ impl SettingsChangeWordDocidsExtractors {
             &mut |field_name| {
                 let fid = new_fields_ids_map.id(field_name).expect("All fields IDs must exist");
 
+                // If the document must be reindexed, early return NoMatch to stop the scanning process. 
                 if action == ActionToOperate::ReindexAllFields {
                     return Ok((fid, PatternMatch::NoMatch));
                 }
@@ -617,15 +618,19 @@ impl SettingsChangeWordDocidsExtractors {
                 let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
 
                 action = match (old_field_metadata, new_field_metadata) {
+                    // At least one field is added or removed from the exact fields => ReindexAllFields
                     (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. })
                         if old_exact != new_exact =>
                     {
                         ActionToOperate::ReindexAllFields
                     }
+                    // At least one field is removed from the searchable fields => ReindexAllFields
                     (Metadata { searchable: Some(_), .. }, Metadata { searchable: None, .. }) => {
                         ActionToOperate::ReindexAllFields
                     }
+                    // At least one field is added in the searchable fields => IndexAddedFields
                     (Metadata { searchable: None, .. }, Metadata { searchable: Some(_), .. }) => {
+                        // We can safely overwrite the action, because we early return when action is ReindexAllFields.
                         ActionToOperate::IndexAddedFields
                     }
                     _ => action,
