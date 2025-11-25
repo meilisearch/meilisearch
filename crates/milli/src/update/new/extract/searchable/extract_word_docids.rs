@@ -657,26 +657,16 @@ impl SettingsChangeWordDocidsExtractors {
                         PatternMatch::Match
                     // If any old or new field is searchable then we need to iterate over all fields
                     // else if any field matches we need to iterate over all fields
-                    } else if old_searchable.zip(new_searchable).is_none_or(|(old, new)| {
-                        old.iter().chain(new).any(|attr| {
-                            match_field_legacy(attr, field_name) == PatternMatch::Parent
-                        })
-                    }) {
+                    } else if has_searchable_children(
+                        field_name,
+                        old_searchable.zip(new_searchable).map(|(old, new)| old.iter().chain(new)),
+                    ) {
                         PatternMatch::Parent
                     } else {
                         PatternMatch::NoMatch
                     }
                 }
                 ActionToOperate::IndexAddedFields => {
-                    let has_searchable_children =
-                        |field_name: &str, searchable: Option<&Vec<String>>| {
-                            searchable.is_none_or(|fields| {
-                                fields.iter().any(|attr| {
-                                    match_field_legacy(attr, field_name) != PatternMatch::Parent
-                                })
-                            })
-                        };
-
                     // Was not searchable but now is
                     if !old_field_metadata.is_searchable() && new_field_metadata.is_searchable() {
                         PatternMatch::Match
@@ -763,4 +753,16 @@ impl SettingsChangeWordDocidsExtractors {
 
         Ok(())
     }
+}
+
+fn has_searchable_children<I, A>(field_name: &str, searchable: Option<I>) -> bool
+where
+    I: IntoIterator<Item = A>,
+    A: AsRef<str>,
+{
+    searchable.is_none_or(|fields| {
+        fields
+            .into_iter()
+            .any(|attr| match_field_legacy(attr.as_ref(), field_name) != PatternMatch::Parent)
+    })
 }
