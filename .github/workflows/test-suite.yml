@@ -143,16 +143,9 @@ jobs:
   # We run tests in debug also, to make sure that the debug_assertions are hit
   test-debug:
     name: Run tests in debug
-    runs-on: ubuntu-latest
-    container:
-      # Use ubuntu-22.04 to compile with glibc 2.35
-      image: ubuntu:22.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
-      - name: Install needed dependencies
-        run: |
-          apt-get update && apt-get install -y curl
-          apt-get install build-essential -y
       - uses: dtolnay/rust-toolchain@1.89
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
