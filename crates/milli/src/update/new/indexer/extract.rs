@@ -390,7 +390,7 @@ where
         extractor_allocs,
     )?;
 
-    '_word_docids: {
+    {
         let WordDocidsCaches {
             word_docids,
             word_fid_docids,
@@ -484,7 +484,38 @@ where
                 &indexing_context.must_stop_processing,
             )?;
         }
-    };
+    }
+
+    // Run the proximity extraction only if the precision is ByWord.
+    let new_proximity_precision = settings_delta.new_proximity_precision();
+    if *new_proximity_precision == ProximityPrecision::ByWord {
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
+            let _entered = span.enter();
+
+            SettingsChangeWordPairProximityDocidsExtractors::run_extraction(
+                settings_delta,
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::ExtractingWordProximity,
+            )?
+        };
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", "word_pair_proximity_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(IndexingStep::MergingWordProximity);
+
+            merge_and_send_docids(
+                caches,
+                index.word_pair_proximity_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordPairProximityDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+    }
 
     'vectors: {
         if settings_delta.embedder_actions().is_empty() {

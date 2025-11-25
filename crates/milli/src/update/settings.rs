@@ -2591,6 +2591,9 @@ pub trait SettingsDelta {
     fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms;
     fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms;
 
+    fn old_proximity_precision(&self) -> &ProximityPrecision;
+    fn new_proximity_precision(&self) -> &ProximityPrecision;
+
     fn old_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
@@ -2629,6 +2632,13 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms {
         &self.new.disabled_typos_terms
+    }
+
+    fn old_proximity_precision(&self) -> &ProximityPrecision {
+        &self.old.proximity_precision
+    }
+    fn new_proximity_precision(&self) -> &ProximityPrecision {
+        &self.new.proximity_precision
     }
 
     fn old_embedders(&self) -> &RuntimeEmbedders {
