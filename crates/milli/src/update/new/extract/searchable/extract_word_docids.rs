@@ -492,7 +492,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
     ) -> crate::Result<()> {
         for document in documents {
             let document = document?;
-            SettingsChangeWordDocidsExtractors::extract_settings_change(
+            SettingsChangeWordDocidsExtractors::extract_document_from_settings_change(
                 document,
                 context,
                 &self.tokenizer,
@@ -569,9 +569,8 @@ impl SettingsChangeWordDocidsExtractors {
         Ok(merger)
     }
 
-    // TODO find a better name (extract_document_change?)
-    //      and document this method.
-    fn extract_settings_change<SD: SettingsDelta>(
+    /// Extracts document words from a settings change.
+    fn extract_document_from_settings_change<SD: SettingsDelta>(
         document: DocumentIdentifiers<'_>,
         context: &DocumentContext<RefCell<Option<WordDocidsBalancedCaches>>>,
         document_tokenizer: &DocumentTokenizer,
