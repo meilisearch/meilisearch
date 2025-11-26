@@ -50,3 +50,5 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.roaring]
 opt-level = 3
+[profile.dev.package.gemm-f16]
+opt-level = 3
