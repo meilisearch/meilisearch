@@ -40,11 +40,13 @@ impl IndexScheduler {
             let Some(import) = network.import_data() else {
                 continue;
             };
-            network_topology_change.process_remote_tasks(
-                &import.remote_name,
-                &import.index_name,
-                import.document_count,
-            );
+            if let Some(index_name) = import.index_name.as_deref() {
+                network_topology_change.process_remote_tasks(
+                    &import.remote_name,
+                    index_name,
+                    import.document_count,
+                );
+            }
         }
         network_task.details = Some(network_topology_change.to_details());
 
@@ -82,14 +84,14 @@ impl IndexScheduler {
         };
 
         if let Some((remotes, out_name)) = network_topology_change.export_to_process() {
-            self.balance_documents(
+            network_topology_change.set_moved(self.balance_documents(
                 remotes,
                 out_name,
                 network_topology_change.in_name(),
                 origin,
                 &progress,
                 &self.scheduler.must_stop_processing,
-            )?;
+            )?);
         }
         network_topology_change.update_state();
         if network_topology_change.state() == NetworkTopologyState::Finished {
@@ -108,7 +110,7 @@ impl IndexScheduler {
         network_change_origin: &Origin,
         progress: &Progress,
         must_stop_processing: &crate::scheduler::MustStopProcessing,
-    ) -> crate::Result<()> {
+    ) -> crate::Result<u64> {
         let new_shards = Shards::from_remotes_local(
             remotes.keys().map(String::as_str).chain(in_name.into_iter()),
             in_name,
@@ -123,28 +125,36 @@ impl IndexScheduler {
 
         let index_count = self.index_mapper.index_count(&scheduler_rtxn)?;
 
-        // when the instance is empty, we still need to that to remotes, as they cannot know of that fact.
+        // when the instance is empty, we still need to tell that to remotes, as they cannot know of that fact and will be waiting for
+        // data
         if index_count == 0 {
-            for remote in remotes.values() {
+            for (remote_name, remote) in remotes {
                 let target = TargetInstance {
                     base_url: &remote.url,
                     api_key: remote.write_api_key.as_deref(),
                 };
 
-                self.export_no_index(
+                let res = self.export_no_index(
                     target,
                     out_name,
                     network_change_origin,
                     &agent,
                     must_stop_processing,
-                )?;
+                );
+
+                match res {
+                    Ok(_) => {}
+                    Err(err) => {
+                        tracing::warn!("Could not signal not to wait documents to `{remote_name}` due to error: {err}");
+                    }
+                }
             }
-            return Ok(());
+            return Ok(0);
         }
 
-        let _: Vec<()> = self.index_mapper.try_for_each_index(
+        let moved_documents: Vec<u64> = self.index_mapper.try_for_each_index(
             &scheduler_rtxn,
-            |index_uid, index| -> crate::Result<()> {
+            |index_uid, index| -> crate::Result<u64> {
                 indexer_alloc.reset();
                 let err = |err| Error::from_milli(err, Some(index_uid.to_string()));
                 let index_rtxn = index.read_txn()?;
@@ -208,8 +218,10 @@ impl IndexScheduler {
                 }
 
                 if documents_to_delete.is_empty() {
-                    return Ok(());
+                    return Ok(0);
                 }
+
+                let moved_count = documents_to_delete.len();
 
                 let mut new_fields_ids_map = fields_ids_map.clone();
 
@@ -260,9 +272,12 @@ impl IndexScheduler {
                 // update stats after committing changes to index
                 mapper_wtxn.commit()?;
 
-                Ok(())
+                Ok(moved_count)
             },
         )?;
-        Ok(())
+
+        let moved_documents: u64 = moved_documents.into_iter().sum();
+
+        Ok(moved_documents)
     }
 }

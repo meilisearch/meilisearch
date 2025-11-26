@@ -616,7 +616,31 @@ pub fn import_data_from_req(req: &HttpRequest) -> Result<Option<ImportData>, Mei
                 header_name: PROXY_IMPORT_DOCS_HEADER,
                 msg: format!("while URL-decoding documents: {err}"),
             })?;
-            (remote_name, index_name, documents)
+            (remote_name, Some(index_name), documents)
+        }
+        (Some(remote_name), None, Some(documents)) => {
+            let remote_name = urlencoding::decode(remote_name.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_REMOTE_HEADER,
+                    msg: format!("while parsing import remote name as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_REMOTE_HEADER,
+                msg: format!("while URL-decoding import remote name: {err}"),
+            })?;
+
+            let documents = urlencoding::decode(documents.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_DOCS_HEADER,
+                    msg: format!("while parsing documents as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_DOCS_HEADER,
+                msg: format!("while URL-decoding documents: {err}"),
+            })?;
+            (remote_name, None, documents)
         }
         // catch-all pattern that has to contain an inconsistency since we already matched (None, None, None) and (Some, Some, Some)
         (remote_name, index_name, documents) => {
@@ -636,7 +660,7 @@ pub fn import_data_from_req(req: &HttpRequest) -> Result<Option<ImportData>, Mei
 
     Ok(Some(ImportData {
         remote_name: remote_name.to_string(),
-        index_name: index_name.to_string(),
+        index_name: index_name.map(|index_name| index_name.to_string()),
         document_count,
     }))
 }
@@ -684,7 +708,32 @@ pub fn import_metadata_from_req(
                     header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
                     msg: format!("while URL-decoding total index documents: {err}"),
                 })?;
-            (index_count, task_key, total_index_documents)
+            (index_count, Some(task_key), total_index_documents)
+        }
+        (Some(index_count), None, Some(total_index_documents)) => {
+            let index_count = urlencoding::decode(index_count.to_str().map_err(|err| {
+                MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_REMOTE_HEADER,
+                    msg: format!("while parsing import index count as UTF-8: {err}"),
+                }
+            })?)
+            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_IMPORT_INDEX_COUNT_HEADER,
+                msg: format!("while URL-decoding import index count: {err}"),
+            })?;
+
+            let total_index_documents =
+                urlencoding::decode(total_index_documents.to_str().map_err(|err| {
+                    MeilisearchHttpError::InvalidHeaderValue {
+                        header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+                        msg: format!("while parsing total index documents as UTF-8: {err}"),
+                    }
+                })?)
+                .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+                    msg: format!("while URL-decoding total index documents: {err}"),
+                })?;
+            (index_count, None, total_index_documents)
         }
         // catch-all pattern that has to contain an inconsistency since we already matched (None, None, None) and (Some, Some, Some)
         (index_count, task_key, total_index_documents) => {
@@ -702,11 +751,16 @@ pub fn import_metadata_from_req(
             msg: format!("while parsing the index count as an integer: {err}"),
         })?;
 
-    let task_key: DocumentId =
-        task_key.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-            header_name: PROXY_IMPORT_TASK_KEY_HEADER,
-            msg: format!("while parsing import task key as an integer: {err}"),
-        })?;
+    let task_key = task_key
+        .map(|task_key| {
+            let task_key: Result<DocumentId, _> =
+                task_key.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
+                    header_name: PROXY_IMPORT_TASK_KEY_HEADER,
+                    msg: format!("while parsing import task key as an integer: {err}"),
+                });
+            task_key
+        })
+        .transpose()?;
 
     let total_index_documents: u64 =
         total_index_documents.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {

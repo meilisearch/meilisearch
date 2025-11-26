@@ -113,6 +113,8 @@ impl IndexScheduler {
         ctx: ExportContext<'_>,
     ) -> Result<u64, Error> {
         let err = |err| Error::from_milli(err, Some(options.index_uid.to_string()));
+        let total_index_documents = ctx.universe.len();
+        let task_network = options.task_network(total_index_documents);
 
         let bearer = target.api_key.map(|api_key| format!("Bearer {api_key}"));
         let url = format!(
@@ -161,7 +163,6 @@ impl IndexScheduler {
             })?;
         }
         if !index_exists || options.override_settings {
-            /// TODO: attach a version to the settings
             let mut settings =
                 settings::settings(&ctx.index, &ctx.index_rtxn, SecretPolicy::RevealSecrets)
                     .map_err(err)?;
@@ -175,13 +176,19 @@ impl IndexScheduler {
                 base_url = target.base_url,
                 index_uid = options.index_uid
             );
-            retry(ctx.must_stop_processing, || {
+
+            let _ = handle_response(retry(ctx.must_stop_processing, || {
                 let mut request = ctx.agent.patch(&url);
+
+                if let Some((import_data, origin, metadata)) = &task_network {
+                    request = set_network_ureq_headers(request, import_data, origin, metadata);
+                }
+
                 if let Some(bearer) = bearer.as_ref() {
                     request = request.set("Authorization", bearer);
                 }
                 request.send_json(settings.clone()).map_err(into_backoff_error)
-            })?;
+            }))?;
         }
 
         let fields_ids_map = ctx.index.fields_ids_map(&ctx.index_rtxn)?;
@@ -199,12 +206,7 @@ impl IndexScheduler {
 
         // no document to send, but we must still send a task when performing network balancing
         if ctx.universe.is_empty() {
-            if let ExportMode::NetworkBalancing {
-                index_count,
-                export_old_remote_name,
-                network_change_origin,
-            } = options.export_mode
-            {
+            if let Some((import_data, network_change_origin, metadata)) = task_network {
                 let mut compressed_buffer = Vec::new();
                 // ignore control flow, we're returning anyway
                 let _ = send_buffer(
@@ -214,19 +216,7 @@ impl IndexScheduler {
                     ctx.agent,
                     &documents_url,
                     bearer.as_deref(),
-                    Some(&(
-                        ImportData {
-                            remote_name: export_old_remote_name.to_string(),
-                            index_name: options.index_uid.to_string(),
-                            document_count: 0,
-                        },
-                        network_change_origin.clone(),
-                        ImportMetadata {
-                            index_count,
-                            task_key: 0,
-                            total_index_documents: ctx.universe.len(),
-                        },
-                    )),
+                    Some(&(import_data, network_change_origin.clone(), metadata)),
                     &err,
                 )?;
             }
@@ -235,28 +225,7 @@ impl IndexScheduler {
 
         let results = request_threads()
             .broadcast(|broadcast| {
-                let mut task_network = if let ExportMode::NetworkBalancing {
-                    index_count,
-                    export_old_remote_name,
-                    network_change_origin,
-                } = options.export_mode
-                {
-                    Some((
-                        ImportData {
-                            remote_name: export_old_remote_name.to_string(),
-                            index_name: options.index_uid.to_string(),
-                            document_count: 0,
-                        },
-                        network_change_origin.clone(),
-                        ImportMetadata {
-                            index_count,
-                            task_key: 0,
-                            total_index_documents: ctx.universe.len(),
-                        },
-                    ))
-                } else {
-                    None
-                };
+                let mut task_network = options.task_network(total_index_documents);
 
                 let index_rtxn = ctx.index.read_txn().map_err(milli::Error::from).map_err(err)?;
 
@@ -269,7 +238,7 @@ impl IndexScheduler {
                     }
                     if let Some((import_data, _, metadata)) = &mut task_network {
                         import_data.document_count += 1;
-                        metadata.task_key = docid;
+                        metadata.task_key = Some(docid);
                     }
 
                     let document = ctx.index.document(&index_rtxn, docid).map_err(err)?;
@@ -352,7 +321,7 @@ impl IndexScheduler {
                         compressed_buffer.clear();
                         if let Some((import_data, _, metadata)) = &mut task_network {
                             import_data.document_count = 0;
-                            metadata.task_key = 0;
+                            metadata.task_key = None;
                         }
                         if control_flow.is_break() {
                             return Ok(());
@@ -408,11 +377,11 @@ impl IndexScheduler {
                     request,
                     &ImportData {
                         remote_name: export_old_remote_name.to_string(),
-                        index_name: "null".to_string(),
+                        index_name: None,
                         document_count: 0,
                     },
                     &network_change_origin,
-                    &ImportMetadata { index_count: 0, task_key: 0, total_index_documents: 0 },
+                    &ImportMetadata { index_count: 0, task_key: None, total_index_documents: 0 },
                 );
                 request = request.set("Content-Type", "application/json");
                 if let Some(bearer) = &bearer {
@@ -437,19 +406,28 @@ fn set_network_ureq_headers(
     origin: &Origin,
     metadata: &ImportMetadata,
 ) -> ureq::Request {
-    request
+    let request = request
         .set(headers::PROXY_ORIGIN_REMOTE_HEADER, &origin.remote_name)
         .set(headers::PROXY_ORIGIN_TASK_UID_HEADER, &origin.task_uid.to_string())
         .set(headers::PROXY_ORIGIN_NETWORK_VERSION_HEADER, &origin.network_version.to_string())
         .set(headers::PROXY_IMPORT_REMOTE_HEADER, &import_data.remote_name)
-        .set(headers::PROXY_IMPORT_INDEX_HEADER, &import_data.index_name)
-        .set(headers::PROXY_IMPORT_TASK_KEY_HEADER, &metadata.task_key.to_string())
         .set(headers::PROXY_IMPORT_DOCS_HEADER, &import_data.document_count.to_string())
         .set(headers::PROXY_IMPORT_INDEX_COUNT_HEADER, &metadata.index_count.to_string())
         .set(
             headers::PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
             &metadata.total_index_documents.to_string(),
-        )
+        );
+    let request = if let Some(index_name) = import_data.index_name.as_deref() {
+        request.set(headers::PROXY_IMPORT_INDEX_HEADER, index_name)
+    } else {
+        request
+    };
+    let request = if let Some(task_key) = metadata.task_key {
+        request.set(headers::PROXY_IMPORT_TASK_KEY_HEADER, &task_key.to_string())
+    } else {
+        request
+    };
+    request
 }
 
 fn send_buffer<'a, 'b>(
@@ -579,6 +557,32 @@ pub(super) struct ExportOptions<'a> {
     pub(super) payload_size: Option<&'a Byte>,
     pub(super) override_settings: bool,
     pub(super) export_mode: ExportMode<'a>,
+}
+
+impl ExportOptions<'_> {
+    fn task_network(
+        &self,
+        total_index_documents: u64,
+    ) -> Option<(ImportData, Origin, ImportMetadata)> {
+        if let ExportMode::NetworkBalancing {
+            index_count,
+            export_old_remote_name,
+            network_change_origin,
+        } = self.export_mode
+        {
+            Some((
+                ImportData {
+                    remote_name: export_old_remote_name.to_string(),
+                    index_name: Some(self.index_uid.to_string()),
+                    document_count: 0,
+                },
+                network_change_origin.clone(),
+                ImportMetadata { index_count, task_key: None, total_index_documents },
+            ))
+        } else {
+            None
+        }
+    }
 }
 
 pub(super) struct ExportContext<'a> {

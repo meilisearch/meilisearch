@@ -680,7 +680,6 @@ impl crate::IndexScheduler {
                     }
                     Details::NetworkTopologyChange {
                         moved_documents: _,
-                        received_documents: _,
                         message: _,
                     } => {
                         assert_eq!(kind.as_kind(), Kind::NetworkTopologyChange);

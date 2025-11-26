@@ -115,14 +115,15 @@ impl TaskQueue {
     /// - CorruptedTaskQueue: The task doesn't exist in the database
     pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &mut Task) -> Result<()> {
         let old_task = self.get_task(wtxn, task.uid)?.ok_or(Error::CorruptedTaskQueue)?;
-        let reprocessing = old_task.status != Status::Enqueued;
+        // network topology tasks may be processed multiple times.
+        let maybe_reprocessing = old_task.status != Status::Enqueued || task.kind.as_kind() == Kind::NetworkTopologyChange;
 
         debug_assert!(old_task != *task);
         debug_assert_eq!(old_task.uid, task.uid);
 
         // If we're processing a task that failed it may already contains a batch_uid
         debug_assert!(
-            reprocessing || (old_task.batch_uid.is_none() && task.batch_uid.is_some()),
+            maybe_reprocessing || (old_task.batch_uid.is_none() && task.batch_uid.is_some()),
             "\n==> old: {old_task:?}\n==> new: {task:?}"
         );
 
@@ -161,7 +162,7 @@ impl TaskQueue {
         );
         if old_task.started_at != task.started_at {
             assert!(
-                reprocessing || old_task.started_at.is_none(),
+                maybe_reprocessing || old_task.started_at.is_none(),
                 "Cannot update a task's started_at time"
             );
             if let Some(started_at) = old_task.started_at {
@@ -173,7 +174,7 @@ impl TaskQueue {
         }
         if old_task.finished_at != task.finished_at {
             assert!(
-                reprocessing || old_task.finished_at.is_none(),
+                maybe_reprocessing || old_task.finished_at.is_none(),
                 "Cannot update a task's finished_at time"
             );
             if let Some(finished_at) = old_task.finished_at {

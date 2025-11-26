@@ -349,7 +349,6 @@ impl KindWithContent {
             }),
             KindWithContent::NetworkTopologyChange { .. } => Some(Details::NetworkTopologyChange {
                 moved_documents: 0,
-                received_documents: 0,
                 message: "processing tasks for previous network versions".into(),
             }),
         }
@@ -798,7 +797,6 @@ pub enum Details {
     },
     NetworkTopologyChange {
         moved_documents: u64,
-        received_documents: u64,
         message: String,
     },
 }
@@ -843,7 +841,7 @@ impl Details {
             | Self::Export { .. }
             | Self::UpgradeDatabase { .. }
             | Self::IndexSwap { .. } => (),
-            Self::NetworkTopologyChange { moved_documents: _, received_documents: _, message } => {
+            Self::NetworkTopologyChange { moved_documents: _, message } => {
                 *message = format!("Failed. Previous status: {}", message);
             }
         }

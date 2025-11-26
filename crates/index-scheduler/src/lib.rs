@@ -841,9 +841,9 @@ impl IndexScheduler {
 
         self.update_network_task(
             &mut wtxn,
-            &ImportData { remote_name, index_name: "null".into(), document_count: 0 },
+            &ImportData { remote_name, index_name: None, document_count: 0 },
             &origin,
-            &ImportMetadata { index_count: 0, task_key: 0, total_index_documents: 0 },
+            &ImportMetadata { index_count: 0, task_key: None, total_index_documents: 0 },
         )?;
 
         wtxn.commit()?;
@@ -907,7 +907,7 @@ impl IndexScheduler {
         };
         network_topology_change.receive_remote_task(
             &import_from.remote_name,
-            &import_from.index_name,
+            import_from.index_name.as_deref(),
             metadata.task_key,
             import_from.document_count,
             metadata.index_count,
