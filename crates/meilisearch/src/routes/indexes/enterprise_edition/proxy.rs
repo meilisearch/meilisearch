@@ -108,6 +108,29 @@ where
         };
         Ok(either::Left(std::iter::repeat(bytes).zip(remotes)))
     }
+
+    pub fn into_bytes(
+        self,
+        remote_name: &str,
+        remote: &Remote,
+    ) -> Result<Option<Bytes>, meilisearch_types::milli::Error> {
+        Ok(match self {
+            Body::NdJsonPayload(file) => {
+                Some(Bytes::from_owner(unsafe { memmap2::Mmap::map(&file)? }))
+            }
+
+            Body::Inline(payload) => {
+                Some(Bytes::copy_from_slice(&serde_json::to_vec(&payload).unwrap()))
+            }
+
+            Body::None => None,
+
+            Body::Generated(mut initial, mut f) => {
+                f(remote_name, &remote, &mut initial);
+                Some(Bytes::copy_from_slice(&serde_json::to_vec(&initial).unwrap()))
+            }
+        })
+    }
 }
 
 /// Parses the header to determine if this task is a duplicate and originates with a remote.
@@ -320,6 +343,122 @@ where
     }
 
     Ok(index_scheduler.set_task_network(task.uid, task_network)?)
+}
+
+pub async fn send_request<T, F, U>(
+    path_and_query: &str,
+    method: reqwest::Method,
+    content_type: Option<String>,
+    body: Body<T, F>,
+    remote_name: &str,
+    remote: &Remote,
+) -> Result<U, ResponseError>
+where
+    T: serde::Serialize,
+    F: FnMut(&str, &Remote, &mut T),
+    U: DeserializeOwned,
+{
+    let content_type = match &body {
+        // for file bodies, force x-ndjson
+        Body::NdJsonPayload(_) => Some("application/x-ndjson".into()),
+        // otherwise get content type from request
+        _ => content_type,
+    };
+
+    let body = body.into_bytes(remote_name, remote)?;
+
+    let client = reqwest::ClientBuilder::new()
+        .connect_timeout(std::time::Duration::from_secs(3))
+        .build()
+        .unwrap();
+
+    let url = format!("{}{}", remote.url, path_and_query);
+
+    // send payload to remote
+    tracing::trace!(remote_name, "sending request to remote");
+    let api_key = remote.write_api_key.clone();
+
+    let backoff = backoff::ExponentialBackoffBuilder::new()
+        .with_max_elapsed_time(Some(std::time::Duration::from_secs(25)))
+        .build();
+
+    backoff::future::retry(backoff, move || {
+        let url = url.clone();
+        let client = client.clone();
+        let content_type = content_type.clone();
+
+        let body = body.clone();
+        let api_key = api_key.clone();
+        let method = method.clone();
+
+        async move {
+            let request = client.request(method, url).timeout(std::time::Duration::from_secs(30));
+            let request = if let Some(body) = body { request.body(body) } else { request };
+            let request =
+                if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
+            let request = if let Some(content_type) = content_type {
+                request.header(CONTENT_TYPE.as_str(), content_type)
+            } else {
+                request
+            };
+
+            let response = request.send().await;
+            let response = match response {
+                Ok(response) => response,
+                Err(error) if error.is_timeout() => {
+                    return Err(backoff::Error::transient(ProxyDocumentChangeError::Timeout))
+                }
+                Err(error) => {
+                    return Err(backoff::Error::transient(
+                        ProxyDocumentChangeError::CouldNotSendRequest(ReqwestErrorWithoutUrl::new(
+                            error,
+                        )),
+                    ))
+                }
+            };
+
+            match response.status() {
+                status_code if status_code.is_success() => (),
+                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+                    return Err(backoff::Error::Permanent(
+                        ProxyDocumentChangeError::AuthenticationError,
+                    ))
+                }
+                status_code if status_code.is_client_error() => {
+                    let response = parse_error(response).await;
+                    return Err(backoff::Error::Permanent(ProxyDocumentChangeError::BadRequest {
+                        status_code,
+                        response,
+                    }));
+                }
+                status_code if status_code.is_server_error() => {
+                    let response = parse_error(response).await;
+                    return Err(backoff::Error::transient(ProxyDocumentChangeError::RemoteError {
+                        status_code,
+                        response,
+                    }));
+                }
+                status_code => {
+                    tracing::warn!(
+                        status_code = status_code.as_u16(),
+                        "remote replied with unexpected status code"
+                    );
+                }
+            }
+
+            let response: U = match parse_response(response).await {
+                Ok(response) => response,
+                Err(response) => {
+                    return Err(backoff::Error::transient(
+                        ProxyDocumentChangeError::CouldNotParseResponse { response },
+                    ))
+                }
+            };
+            Ok(response)
+        }
+    })
+    .await
+    .map_err(|err| err.as_response_error())
 }
 
 fn from_old_http_method(method: &actix_http::Method) -> reqwest::Method {

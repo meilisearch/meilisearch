@@ -358,7 +358,6 @@ impl NetworkTopologyChange {
         index_name: &str,
         document_count: u64,
     ) {
-        /// FIXME: unwraps and panics
         let remote = self.in_remotes.get_mut(remote_name).unwrap();
         remote.import_state = match std::mem::take(&mut remote.import_state) {
             ImportState::WaitingForInitialTask => panic!("no task received yet one processed"),

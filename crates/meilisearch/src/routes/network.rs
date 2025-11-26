@@ -13,6 +13,7 @@ use meilisearch_types::error::deserr_codes::{
     InvalidNetworkUrl, InvalidNetworkWriteApiKey,
 };
 use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::tasks::enterprise_edition::network::{
@@ -29,6 +30,7 @@ use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::enterprise_edition::proxy::{self, proxy, Body};
+use crate::routes::tasks::AllTasks;
 use crate::routes::SummarizedTaskView;
 
 #[derive(OpenApi)]
@@ -276,7 +278,6 @@ async fn patch_network_without_origin(
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    /// FIXME: check network tasks from all nodes to detect already enqueued/processing network tasks
     let new_network = new_network.0;
     let old_network = index_scheduler.network();
     debug!(parameters = ?new_network, "Patch network");
@@ -286,6 +287,51 @@ async fn patch_network_without_origin(
     }
 
     let merged_network = merge_networks(old_network.clone(), new_network)?;
+
+    if merged_network.leader.is_some() {
+        for eob in old_network
+            .remotes
+            .iter()
+            .merge_join_by(merged_network.remotes.iter(), |(left, _), (right, _)| left.cmp(right))
+        {
+            match eob {
+                EitherOrBoth::Both(_, (remote_name, remote))
+                | EitherOrBoth::Left((remote_name, remote))
+                | EitherOrBoth::Right((remote_name, remote)) => {
+                    // 1. check that the experimental feature is enabled
+                    let remote_features: RuntimeTogglableFeatures = proxy::send_request(
+                        "/experimental-features",
+                        reqwest::Method::GET,
+                        None,
+                        Body::none(),
+                        remote_name,
+                        remote,
+                    )
+                    .await?;
+                    if !remote_features.network {
+                        /// TODO: clean error!
+                        panic!("boom")
+                    }
+                    // 2. check whether there are any unfinished network task
+                    let network_tasks: AllTasks = proxy::send_request(
+                        "/tasks?types=networkTopologyChanges&statuses=enqueued,processing&limit=1",
+                        reqwest::Method::GET,
+                        None,
+                        Body::none(),
+                        remote_name,
+                        remote,
+                    )
+                    .await?;
+
+                    if network_tasks.total != 0 {
+                        /// TODO: clean error!
+                        panic!("boom")
+                    }
+                }
+            }
+        }
+    }
+
     index_scheduler.put_network(merged_network.clone())?;
 
     analytics.publish(
