@@ -1633,6 +1633,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             let embedding_config_updates = self.update_embedding_configs()?;
             self.update_user_defined_searchable_attributes()?;
             self.update_exact_attributes()?;
+            self.update_proximity_precision()?;
 
             // Note that we don't need to update the searchables here,
             // as it will be done after the settings update.
