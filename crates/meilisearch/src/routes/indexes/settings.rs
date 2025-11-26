@@ -636,6 +636,7 @@ pub async fn update_all(
     };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
+    /// TODO: make sure to proxy all settings tasks
     let task: SummarizedTaskView =
         tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
             .await??

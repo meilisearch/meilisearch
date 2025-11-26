@@ -3,7 +3,8 @@ use std::ops::{Bound, RangeBounds};
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::{Kind, Status, Task};
+use meilisearch_types::tasks::enterprise_edition::network::DbTaskNetwork;
+use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
 
@@ -143,6 +144,17 @@ impl TaskQueue {
             })?;
         }
 
+        // Avoids rewriting part of the network topology change because of TOCTOU errors
+        if let (
+            KindWithContent::NetworkTopologyChange(old_state),
+            KindWithContent::NetworkTopologyChange(new_state),
+        ) = (old_task.kind, &mut task.kind)
+        {
+            new_state.merge(old_state);
+            // the state possibly just changed, rewrite the details
+            task.details = Some(new_state.to_details());
+        }
+
         assert_eq!(
             old_task.enqueued_at, task.enqueued_at,
             "Cannot update a task's enqueued_at time"
@@ -175,7 +187,16 @@ impl TaskQueue {
         task.network = match (old_task.network, task.network.take()) {
             (None, None) => None,
             (None, Some(network)) | (Some(network), None) => Some(network),
-            (Some(_), Some(network)) => Some(network),
+            (Some(left), Some(right)) => Some(match (left, right) {
+                (
+                    DbTaskNetwork::Remotes { remote_tasks: mut left, network_version: _ },
+                    DbTaskNetwork::Remotes { remote_tasks: mut right, network_version },
+                ) => {
+                    left.append(&mut right);
+                    DbTaskNetwork::Remotes { remote_tasks: left, network_version }
+                }
+                (_, right) => right,
+            }),
         };
 
         self.all_tasks.put(wtxn, &task.uid, task)?;
