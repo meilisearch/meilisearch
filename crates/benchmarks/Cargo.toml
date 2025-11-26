@@ -11,27 +11,27 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.98"
-bumpalo = "3.18.1"
-csv = "1.3.1"
-memmap2 = "0.9.7"
+anyhow = "1.0.100"
+bumpalo = "3.19.0"
+csv = "1.4.0"
+memmap2 = "0.9.9"
 milli = { path = "../milli" }
-mimalloc = { version = "0.1.47", default-features = false }
-serde_json = { version = "1.0.140", features = ["preserve_order"] }
-tempfile = "3.20.0"
+mimalloc = { version = "0.1.48", default-features = false }
+serde_json = { version = "1.0.145", features = ["preserve_order"] }
+tempfile = "3.23.0"
 
 [dev-dependencies]
-criterion = { version = "0.6.0", features = ["html_reports"] }
+criterion = { version = "0.7.0", features = ["html_reports"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 roaring = "0.10.12"
 
 [build-dependencies]
-anyhow = "1.0.98"
-bytes = "1.10.1"
-convert_case = "0.8.0"
-flate2 = "1.1.2"
-reqwest = { version = "0.12.20", features = ["blocking", "rustls-tls"], default-features = false }
+anyhow = "1.0.100"
+bytes = "1.11.0"
+convert_case = "0.9.0"
+flate2 = "1.1.5"
+reqwest = { version = "0.12.24", features = ["blocking", "rustls-tls"], default-features = false }
 
 [features]
 default = ["milli/all-tokenizations"]

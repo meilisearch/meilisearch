@@ -11,33 +11,33 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.98"
+anyhow = "1.0.100"
 bincode = "1.3.3"
 byte-unit = "5.1.6"
-bytes = "1.10.1"
-bumpalo = "3.18.1"
+bytes = "1.11.0"
+bumpalo = "3.19.0"
 bumparaw-collections = "0.1.4"
-convert_case = "0.8.0"
-csv = "1.3.1"
+convert_case = "0.9.0"
+csv = "1.4.0"
 derive_builder = "0.20.2"
 dump = { path = "../dump" }
-enum-iterator = "2.1.0"
+enum-iterator = "2.3.0"
 file-store = { path = "../file-store" }
-flate2 = "1.1.2"
-indexmap = "2.9.0"
+flate2 = "1.1.5"
+indexmap = "2.12.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
-memmap2 = "0.9.7"
+memmap2 = "0.9.9"
 page_size = "0.6.0"
-rayon = "1.10.0"
+rayon = "1.11.0"
 roaring = { version = "0.10.12", features = ["serde"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140", features = ["preserve_order"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.145", features = ["preserve_order"] }
 tar = "0.4.44"
 synchronoise = "1.0.1"
-tempfile = "3.20.0"
-thiserror = "2.0.12"
-time = { version = "0.3.41", features = [
+tempfile = "3.23.0"
+thiserror = "2.0.17"
+time = { version = "0.3.44", features = [
     "serde-well-known",
     "formatting",
     "parsing",
@@ -45,11 +45,11 @@ time = { version = "0.3.41", features = [
 ] }
 tracing = "0.1.41"
 ureq = "2.12.1"
-uuid = { version = "1.17.0", features = ["serde", "v4"] }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
 backoff = "0.4.0"
-reqwest = { version = "0.12.23", features = ["rustls-tls", "http2"], default-features = false }
+reqwest = { version = "0.12.24", features = ["rustls-tls", "http2"], default-features = false }
 rusty-s3 = "0.8.1"
-tokio = { version = "1.47.1", features = ["full"] }
+tokio = { version = "1.48.0", features = ["full"] }
 
 [dev-dependencies]
 big_s = "1.0.2"

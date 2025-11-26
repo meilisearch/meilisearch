@@ -15,15 +15,15 @@ license.workspace = true
 big_s = "1.0.2"
 bimap = { version = "0.6.3", features = ["serde"] }
 bincode = "1.3.3"
-bstr = "1.12.0"
-bytemuck = { version = "1.23.1", features = ["extern_crate_alloc"] }
+bstr = "1.12.1"
+bytemuck = { version = "1.24.0", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.9.8", default-features = false }
 cellulite = "0.3.1-nested-rtxns-2"
 concat-arrays = "0.1.2"
-convert_case = "0.8.0"
+convert_case = "0.9.0"
 crossbeam-channel = "0.5.15"
-deserr = "0.6.3"
+deserr = "0.6.4"
 either = { version = "1.15.0", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
 fst = "0.4.7"
@@ -38,39 +38,39 @@ heed = { version = "0.22.1-nested-rtxns-6", default-features = false, features =
     "serde-json",
     "serde-bincode",
 ] }
-indexmap = { version = "2.9.0", features = ["serde"] }
+indexmap = { version = "2.12.0", features = ["serde"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
-memchr = "2.7.5"
-memmap2 = "0.9.7"
+memchr = "2.7.6"
+memmap2 = "0.9.9"
 obkv = "0.3.0"
 once_cell = "1.21.3"
-ordered-float = "5.0.0"
-rayon = "1.10.0"
+ordered-float = "5.1.0"
+rayon = "1.11.0"
 roaring = { version = "0.10.12", features = ["serde"] }
 rstar = { version = "0.12.2", features = ["serde"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = { version = "1.0.140", features = ["preserve_order", "raw_value"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.145", features = ["preserve_order", "raw_value"] }
 slice-group-by = "0.3.1"
-smallstr = { version = "0.3.0", features = ["serde"] }
+smallstr = { version = "0.3.1", features = ["serde"] }
 smallvec = "1.15.1"
 smartstring = "1.0.1"
-tempfile = "3.20.0"
-thiserror = "2.0.12"
-time = { version = "0.3.41", features = [
+tempfile = "3.23.0"
+thiserror = "2.0.17"
+time = { version = "0.3.44", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-uuid = { version = "1.17.0", features = ["v4"] }
+uuid = { version = "1.18.1", features = ["v4"] }
 
 filter-parser = { path = "../filter-parser" }
 
 # documents words self-join
 itertools = "0.14.0"
 
-csv = "1.3.1"
+csv = "1.4.0"
 candle-core = { version = "0.9.1" }
 candle-transformers = { version = "0.9.1" }
 candle-nn = { version = "0.9.1" }
@@ -81,9 +81,9 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
     "online",
 ] }
 safetensors = "0.6.2"
-tiktoken-rs = "0.7.0"
+tiktoken-rs = "0.9.1"
 liquid = "0.26.11"
-rhai = { version = "1.22.2", features = [
+rhai = { version = "1.23.6", features = [
     "serde",
     "no_module",
     "no_custom_syntax",
@@ -95,14 +95,14 @@ hannoy = { version = "0.0.9-nested-rtxns-2", features = ["arroy"] }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
-url = "2.5.4"
-hashbrown = "0.15.4"
-bumpalo = "3.18.1"
+url = "2.5.7"
+hashbrown = "0.15.5"
+bumpalo = "3.19.0"
 bumparaw-collections = "0.1.4"
 steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.9"
 rustc-hash = "2.1.1"
-enum-iterator = "2.1.0"
+enum-iterator = "2.3.0"
 bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
 flume = { version = "0.11.1", default-features = false }
 utoipa = { version = "5.4.0", features = [
@@ -112,21 +112,21 @@ utoipa = { version = "5.4.0", features = [
     "time",
     "openapi_extensions",
 ] }
-lru = "0.14.0"
-twox-hash = { version = "2.1.1", default-features = false, features = [
+lru = "0.16.2"
+twox-hash = { version = "2.1.2", default-features = false, features = [
     "std",
     "xxhash3_64",
     "xxhash64",
 ] }
-geo-types = "0.7.16"
+geo-types = "0.7.17"
 zerometry = "0.3.0"
 
 [dev-dependencies]
-mimalloc = { version = "0.1.47", default-features = false }
+mimalloc = { version = "0.1.48", default-features = false }
 # fixed version due to format breakages in v1.40
 insta = "=1.39.0"
 maplit = "1.0.2"
-md5 = "0.7.0"
+md5 = "0.8.0"
 meili-snap = { path = "../meili-snap" }
 rand = { version = "0.8.5", features = ["small_rng"] }
 

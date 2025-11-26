@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 color-spantrace = "0.3.0"
 fxprof-processed-profile = "0.7.0"
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
 tracing = "0.1.41"
 tracing-error = "0.2.1"
 tracing-subscriber = "0.3.20"
@@ -18,7 +18,7 @@ byte-unit = { version = "5.1.6", default-features = false, features = [
     "byte",
     "serde",
 ] }
-tokio = { version = "1.45.1", features = ["sync"] }
+tokio = { version = "1.48.0", features = ["sync"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-libproc = "0.14.10"
+libproc = "0.14.11"
