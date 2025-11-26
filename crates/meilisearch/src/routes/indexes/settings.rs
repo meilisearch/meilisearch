@@ -531,6 +531,17 @@ make_setting_routes!(
         camelcase_attr: "vectorStore",
         analytics: VectorStoreAnalytics
     },
+    {
+        route: "/foreign-keys",
+        update_verb: put,
+        value_type: Vec<meilisearch_types::milli::ForeignKey>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsForeignKeys,
+        >,
+        attr: foreign_keys,
+        camelcase_attr: "foreignKeys",
+        analytics: ForeignKeysAnalytics
+    },
 );
 
 #[utoipa::path(
@@ -595,6 +606,7 @@ pub async fn update_all(
             filterable_attributes: FilterableAttributesAnalytics::new(
                 new_settings.filterable_attributes.as_ref().set(),
             ),
+            foreign_keys: ForeignKeysAnalytics::new(new_settings.foreign_keys.as_ref().set()),
             distinct_attribute: DistinctAttributeAnalytics::new(
                 new_settings.distinct_attribute.as_ref().set(),
             ),

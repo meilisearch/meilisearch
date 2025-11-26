@@ -45,7 +45,8 @@ use crate::vector::{
     VectorStoreBackend,
 };
 use crate::{
-    ChannelCongestion, FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result,
+    ChannelCongestion, FieldId, FilterableAttributesRule, ForeignKey, Index,
+    LocalizedAttributesRule, Result,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -176,6 +177,7 @@ pub struct Settings<'a, 't, 'i> {
     displayed_fields: Setting<Vec<String>>,
     filterable_fields: Setting<Vec<FilterableAttributesRule>>,
     sortable_fields: Setting<HashSet<String>>,
+    foreign_keys: Setting<Vec<ForeignKey>>,
     criteria: Setting<Vec<Criterion>>,
     stop_words: Setting<BTreeSet<String>>,
     non_separator_tokens: Setting<BTreeSet<String>>,
@@ -217,6 +219,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             displayed_fields: Setting::NotSet,
             filterable_fields: Setting::NotSet,
             sortable_fields: Setting::NotSet,
+            foreign_keys: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
             non_separator_tokens: Setting::NotSet,
@@ -276,6 +279,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_sortable_fields(&mut self) {
         self.sortable_fields = Setting::Reset;
+    }
+
+    pub fn set_foreign_keys(&mut self, keys: Vec<ForeignKey>) {
+        self.foreign_keys = Setting::Set(keys);
+    }
+
+    pub fn reset_foreign_keys(&mut self) {
+        self.foreign_keys = Setting::Reset;
     }
 
     pub fn reset_criteria(&mut self) {
@@ -816,6 +827,19 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             }
             Setting::Reset => {
                 self.index.delete_sortable_fields(self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
+        Ok(())
+    }
+
+    fn update_foreign_keys(&mut self) -> Result<()> {
+        match self.foreign_keys {
+            Setting::Set(ref keys) => {
+                self.index.put_foreign_keys(self.wtxn, keys)?;
+            }
+            Setting::Reset => {
+                self.index.delete_foreign_keys(self.wtxn)?;
             }
             Setting::NotSet => (),
         }
@@ -1455,6 +1479,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_sort_facet_values_by()?;
         self.update_pagination_max_total_hits()?;
         self.update_search_cutoff()?;
+        self.update_foreign_keys()?;
 
         // could trigger re-indexing
         self.update_filterable()?;
@@ -1593,6 +1618,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             displayed_fields: Setting::NotSet,
             filterable_fields: Setting::NotSet,
             sortable_fields: Setting::NotSet,
+            foreign_keys: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
             non_separator_tokens: Setting::NotSet,

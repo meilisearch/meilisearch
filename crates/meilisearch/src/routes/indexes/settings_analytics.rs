@@ -9,7 +9,7 @@ use meilisearch_types::facet_values_sort::FacetValuesSort;
 use meilisearch_types::locales::{Locale, LocalizedAttributesRuleView};
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::vector::VectorStoreBackend;
-use meilisearch_types::milli::FilterableAttributesRule;
+use meilisearch_types::milli::{FilterableAttributesRule, ForeignKey};
 use meilisearch_types::settings::{
     ChatSettings, FacetingSettings, PaginationSettings, PrefixSearchSettings,
     ProximityPrecisionView, RankingRuleView, SettingEmbeddingSettings, TypoSettings,
@@ -25,6 +25,7 @@ pub struct SettingsAnalytics {
     pub displayed_attributes: DisplayedAttributesAnalytics,
     pub sortable_attributes: SortableAttributesAnalytics,
     pub filterable_attributes: FilterableAttributesAnalytics,
+    pub foreign_keys: ForeignKeysAnalytics,
     pub distinct_attribute: DistinctAttributeAnalytics,
     pub proximity_precision: ProximityPrecisionAnalytics,
     pub typo_tolerance: TypoToleranceAnalytics,
@@ -97,6 +98,10 @@ impl Aggregate for SettingsAnalytics {
                     .filterable_attributes
                     .has_patterns
                     .or(self.filterable_attributes.has_patterns),
+            },
+            foreign_keys: ForeignKeysAnalytics {
+                set: new.foreign_keys.set | self.foreign_keys.set,
+                total: new.foreign_keys.total.or(self.foreign_keys.total),
             },
             distinct_attribute: DistinctAttributeAnalytics {
                 set: self.distinct_attribute.set | new.distinct_attribute.set,
@@ -359,6 +364,22 @@ impl FilterableAttributesAnalytics {
 
     pub fn into_settings(self) -> SettingsAnalytics {
         SettingsAnalytics { filterable_attributes: self, ..Default::default() }
+    }
+}
+
+#[derive(Serialize, Default)]
+pub struct ForeignKeysAnalytics {
+    pub set: bool,
+    pub total: Option<usize>,
+}
+
+impl ForeignKeysAnalytics {
+    pub fn new(settings: Option<&Vec<ForeignKey>>) -> Self {
+        Self { set: settings.is_some(), total: settings.as_ref().map(|s| s.len()) }
+    }
+
+    pub fn into_settings(self) -> SettingsAnalytics {
+        SettingsAnalytics { foreign_keys: self, ..Default::default() }
     }
 }
 

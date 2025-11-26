@@ -317,6 +317,7 @@ pub(crate) mod test {
                 FilterableAttributesRule::Field(S("race")),
                 FilterableAttributesRule::Field(S("age")),
             ]),
+            foreign_keys: Setting::NotSet,
             sortable_attributes: Setting::Set(btreeset! { S("age") }),
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
