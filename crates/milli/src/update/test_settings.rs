@@ -867,6 +867,7 @@ fn test_correct_settings_init() {
                 displayed_fields,
                 filterable_fields,
                 sortable_fields,
+                foreign_keys,
                 criteria,
                 stop_words,
                 non_separator_tokens,
@@ -897,6 +898,7 @@ fn test_correct_settings_init() {
             assert!(matches!(displayed_fields, Setting::NotSet));
             assert!(matches!(filterable_fields, Setting::NotSet));
             assert!(matches!(sortable_fields, Setting::NotSet));
+            assert!(matches!(foreign_keys, Setting::NotSet));
             assert!(matches!(criteria, Setting::NotSet));
             assert!(matches!(stop_words, Setting::NotSet));
             assert!(matches!(non_separator_tokens, Setting::NotSet));

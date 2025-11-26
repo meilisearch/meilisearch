@@ -237,6 +237,7 @@ async fn import_dump_v1_movie_with_settings() {
       "sortableAttributes": [
         "genres"
       ],
+      "foreignKeys": [],
       "rankingRules": [
         "typo",
         "words",
@@ -411,6 +412,7 @@ async fn import_dump_v1_rubygems_with_settings() {
       "sortableAttributes": [
         "version"
       ],
+      "foreignKeys": [],
       "rankingRules": [
         "typo",
         "words",
@@ -740,6 +742,7 @@ async fn import_dump_v2_movie_with_settings() {
         "genres"
       ],
       "sortableAttributes": [],
+      "foreignKeys": [],
       "rankingRules": [
         "words",
         "typo",
@@ -911,6 +914,7 @@ async fn import_dump_v2_rubygems_with_settings() {
         "version"
       ],
       "sortableAttributes": [],
+      "foreignKeys": [],
       "rankingRules": [
         "typo",
         "words",
@@ -1240,6 +1244,7 @@ async fn import_dump_v3_movie_with_settings() {
         "genres"
       ],
       "sortableAttributes": [],
+      "foreignKeys": [],
       "rankingRules": [
         "words",
         "typo",
@@ -1411,6 +1416,7 @@ async fn import_dump_v3_rubygems_with_settings() {
         "version"
       ],
       "sortableAttributes": [],
+      "foreignKeys": [],
       "rankingRules": [
         "typo",
         "words",
@@ -1740,6 +1746,7 @@ async fn import_dump_v4_movie_with_settings() {
         "genres"
       ],
       "sortableAttributes": [],
+      "foreignKeys": [],
       "rankingRules": [
         "words",
         "typo",
@@ -1911,6 +1918,7 @@ async fn import_dump_v4_rubygems_with_settings() {
         "version"
       ],
       "sortableAttributes": [],
+      "foreignKeys": [],
       "rankingRules": [
         "typo",
         "words",
