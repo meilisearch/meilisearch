@@ -141,6 +141,8 @@ lmdb-posix-sem = ["heed/posix-sem"]
 chinese = ["charabia/chinese"]
 chinese-pinyin = ["chinese", "charabia/chinese-normalization-pinyin"]
 
+enterprise = []
+
 # allow hebrew specialized tokenization
 hebrew = ["charabia/hebrew"]
 

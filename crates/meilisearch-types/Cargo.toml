@@ -56,6 +56,9 @@ all-tokenizations = ["milli/all-tokenizations"]
 # chinese specialized tokenization
 chinese = ["milli/chinese"]
 chinese-pinyin = ["milli/chinese-pinyin"]
+
+enterprise = ["milli/enterprise"]
+
 # hebrew specialized tokenization
 hebrew = ["milli/hebrew"]
 # japanese specialized tokenization

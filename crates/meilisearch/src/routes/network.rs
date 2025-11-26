@@ -7,7 +7,6 @@ use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use itertools::{EitherOrBoth, Itertools};
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::enterprise_edition::network::{Network as DbNetwork, Remote as DbRemote};
 use meilisearch_types::error::deserr_codes::{
     InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf, InvalidNetworkSharding,
     InvalidNetworkUrl, InvalidNetworkWriteApiKey,
@@ -15,6 +14,7 @@ use meilisearch_types::error::deserr_codes::{
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::network::{Network as DbNetwork, Remote as DbRemote};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
@@ -211,6 +211,16 @@ async fn patch_network(
     let old_network = index_scheduler.network();
     debug!(parameters = ?new_network, "Patch network");
 
+    #[cfg(not(feature = "enterprise"))]
+    if new_network.sharding.set().is_some() {
+        use meilisearch_types::error::Code;
+
+        return Err(ResponseError::from_msg(
+            "Meilisearch Enterprise Edition is required to set `network.sharding`".into(),
+            Code::RequiresEnterpriseEdition,
+        ));
+    }
+
     let merged_self = match new_network.local {
         Setting::Set(new_self) => Some(new_self),
         Setting::Reset => None,
@@ -312,6 +322,7 @@ async fn patch_network(
 
     let merged_network =
         DbNetwork { local: merged_self, remotes: merged_remotes, sharding: merged_sharding };
+
     index_scheduler.put_network(merged_network.clone())?;
     debug!(returns = ?merged_network, "Patch network");
     Ok(HttpResponse::Ok().json(merged_network))

@@ -52,7 +52,7 @@ pub async fn proxy<T: serde::Serialize>(
     index_scheduler: &IndexScheduler,
     index_uid: &str,
     req: &HttpRequest,
-    network: meilisearch_types::enterprise_edition::network::Network,
+    network: meilisearch_types::network::Network,
     body: Body<T>,
     task: &meilisearch_types::tasks::Task,
 ) -> Result<(), MeilisearchHttpError> {

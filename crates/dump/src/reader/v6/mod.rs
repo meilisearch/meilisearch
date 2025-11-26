@@ -24,7 +24,7 @@ pub type Batch = meilisearch_types::batches::Batch;
 pub type Key = meilisearch_types::keys::Key;
 pub type ChatCompletionSettings = meilisearch_types::features::ChatCompletionSettings;
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
-pub type Network = meilisearch_types::enterprise_edition::network::Network;
+pub type Network = meilisearch_types::network::Network;
 pub type Webhooks = meilisearch_types::webhooks::WebhooksDumpView;
 
 // ===== Other types to clarify the code of the compat module

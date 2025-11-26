@@ -45,7 +45,7 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::enterprise_edition::proxy::{proxy, Body};
+use crate::routes::indexes::current_edition::proxy::{proxy, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
@@ -367,7 +367,7 @@ pub async fn delete_document(
         .await??
     };
 
-    if network.sharding && !dry_run {
+    if network.sharding() && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::none(), &task).await?;
     }
 
@@ -1098,7 +1098,7 @@ async fn document_addition(
         }
     };
 
-    if network.sharding {
+    if network.sharding() {
         if let Some(file) = file {
             proxy(
                 &index_scheduler,
@@ -1222,7 +1222,7 @@ pub async fn delete_documents_batch(
         .await??
     };
 
-    if network.sharding && !dry_run {
+    if network.sharding() && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(body), &task).await?;
     }
 
@@ -1320,7 +1320,7 @@ pub async fn delete_documents_by_filter(
         .await??
     };
 
-    if network.sharding && !dry_run {
+    if network.sharding() && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(filter), &task).await?;
     }
 
@@ -1475,7 +1475,7 @@ pub async fn edit_documents_by_function(
         .await??
     };
 
-    if network.sharding && !dry_run {
+    if network.sharding() && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::Inline(body), &task).await?;
     }
 
@@ -1549,7 +1549,7 @@ pub async fn clear_all_documents(
         .await??
     };
 
-    if network.sharding && !dry_run {
+    if network.sharding() && !dry_run {
         proxy(&index_scheduler, &index_uid, &req, network, Body::none(), &task).await?;
     }
 
