@@ -526,9 +526,8 @@ where
         })
     };
 
-    let fids_to_delete = match fids_to_delete {
-        Some(fids) => fids,
-        None => return Ok(()),
+    let Some(fids_to_delete) = fids_to_delete else {
+        return Ok(());
     };
 
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
