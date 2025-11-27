@@ -254,7 +254,7 @@ async fn patch_network(
                 })
                 .await
                 .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
-                Ok(HttpResponse::Accepted().finish())
+                Ok(HttpResponse::Ok().finish())
             } else {
                 Err(MeilisearchHttpError::InvalidHeaderValue {
                     header_name: headers::PROXY_IMPORT_INDEX_COUNT_HEADER,
@@ -363,7 +363,7 @@ async fn patch_network_without_origin(
 
                             // 2. check whether there are any unfinished network task
                             let network_tasks: AllTasks = match proxy::send_request(
-                        "/tasks?types=networkTopologyChanges&statuses=enqueued,processing&limit=1",
+                        "/tasks?types=networkTopologyChange&statuses=enqueued,processing&limit=1",
                                 reqwest::Method::GET,
                                 None,
                                 Body::none(),
@@ -475,7 +475,7 @@ async fn patch_network_without_origin(
         debug!("returns: {:?}", task);
         Ok(HttpResponse::Accepted().json(task))
     } else {
-        Ok(HttpResponse::Accepted().json(merged_network))
+        Ok(HttpResponse::Ok().json(merged_network))
     }
 }
 

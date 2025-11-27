@@ -602,7 +602,7 @@ impl IndexScheduler {
                 let is_task_from_the_future = task
                     .network
                     .as_ref()
-                    .map(|task_network| task_network.network_version() >= network.version)
+                    .map(|task_network| task_network.network_version() > network.version)
                     // tasks without versions are not from the future
                     .unwrap_or_default();
 
