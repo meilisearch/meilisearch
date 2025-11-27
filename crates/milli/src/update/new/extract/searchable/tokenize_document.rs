@@ -27,16 +27,21 @@ impl DocumentTokenizer<'_> {
         token_fn: &mut impl FnMut(&str, FieldId, u16, &str) -> Result<()>,
     ) -> Result<()> {
         let mut field_position = HashMap::new();
-        let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
-            let (field_id, pattern_match) = should_tokenize(field_name)?;
-            if pattern_match == PatternMatch::Match {
-                self.tokenize_field(field_id, field_name, value, token_fn, &mut field_position)?;
-            }
-            Ok(pattern_match)
-        };
-
         for entry in document.iter_top_level_fields() {
             let (field_name, value) = entry?;
+
+            if let (_, PatternMatch::NoMatch) = should_tokenize(field_name)? {
+                continue;
+            }
+
+            let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
+                let (fid, pattern_match) = should_tokenize(field_name)?;
+                if pattern_match == PatternMatch::Match {
+                    self.tokenize_field(fid, field_name, value, token_fn, &mut field_position)?;
+                }
+                Ok(pattern_match)
+            };
+
             // parse json.
             match serde_json::to_value(value).map_err(InternalError::SerdeJson)? {
                 Value::Object(object) => seek_leaf_values_in_object(
