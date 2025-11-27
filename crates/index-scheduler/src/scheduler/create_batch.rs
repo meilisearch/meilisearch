@@ -60,6 +60,7 @@ pub(crate) enum Batch {
         index_uid: String,
         task: Task,
     },
+    #[allow(clippy::enum_variant_names)] // warranted because we are executing an inner index batch
     NetworkIndexBatch {
         network_task: Task,
         inner_batch: Box<Batch>,
@@ -597,7 +598,7 @@ impl IndexScheduler {
 
         // 8. We make a batch from the unprioritised tasks.
         let (batch, current_batch) =
-            self.create_next_batch_unprioritized(rtxn, &enqueued, current_batch, |task| {
+            self.create_next_batch_unprioritized(rtxn, enqueued, current_batch, |task| {
                 let is_task_from_the_future = task
                     .network
                     .as_ref()
@@ -628,8 +629,7 @@ impl IndexScheduler {
             let Some(task_id) = enqueued_it.next() else {
                 return Ok((None, current_batch));
             };
-            task =
-                self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            task = self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
             if skip_if(&task) {
                 continue;
@@ -719,15 +719,13 @@ impl IndexScheduler {
             autobatcher::autobatch(enqueued, index_already_exists, primary_key.as_deref())
         {
             current_batch.reason(autobatch_stop_reason.unwrap_or(stop_reason));
-            let batch = self
-                .create_next_batch_index(
-                    rtxn,
-                    index_name.to_string(),
-                    batchkind,
-                    &mut current_batch,
-                    create_index,
-                )?
-                .map(|batch| batch);
+            let batch = self.create_next_batch_index(
+                rtxn,
+                index_name.to_string(),
+                batchkind,
+                &mut current_batch,
+                create_index,
+            )?;
             return Ok((batch, current_batch));
         }
 
@@ -791,7 +789,7 @@ impl IndexScheduler {
                 }
 
                 let res =
-                    self.create_next_batch_unprioritized(rtxn, &enqueued, current_batch, |task| {
+                    self.create_next_batch_unprioritized(rtxn, enqueued, current_batch, |task| {
                         let has_index = task.index_uid().is_some();
 
                         if !has_index {

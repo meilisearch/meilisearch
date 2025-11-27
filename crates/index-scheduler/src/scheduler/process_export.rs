@@ -98,7 +98,7 @@ impl IndexScheduler {
                 IndexUidPattern::new_unchecked(uid.clone()),
                 DetailsExportIndexSettings {
                     settings: (*export_settings).clone(),
-                    matched_documents: Some(total_documents as u64),
+                    matched_documents: Some(total_documents),
                 },
             );
         }
@@ -140,7 +140,7 @@ impl IndexScheduler {
             Err(e) => return Err(e),
         };
         let primary_key =
-            ctx.index.primary_key(&ctx.index_rtxn).map_err(milli::Error::from).map_err(err)?;
+            ctx.index.primary_key(ctx.index_rtxn).map_err(milli::Error::from).map_err(err)?;
         if !index_exists {
             let url = format!("{base_url}/indexes", base_url = target.base_url);
             retry(ctx.must_stop_processing, || {
@@ -164,7 +164,7 @@ impl IndexScheduler {
         }
         if !index_exists || options.override_settings {
             let mut settings =
-                settings::settings(&ctx.index, &ctx.index_rtxn, SecretPolicy::RevealSecrets)
+                settings::settings(ctx.index, ctx.index_rtxn, SecretPolicy::RevealSecrets)
                     .map_err(err)?;
             // Remove the experimental chat setting if not enabled
             if self.features().check_chat_completions("exporting chat settings").is_err() {
@@ -191,7 +191,7 @@ impl IndexScheduler {
             }))?;
         }
 
-        let fields_ids_map = ctx.index.fields_ids_map(&ctx.index_rtxn)?;
+        let fields_ids_map = ctx.index.fields_ids_map(ctx.index_rtxn)?;
         let all_fields: Vec<_> = fields_ids_map.iter().map(|(id, _)| id).collect();
         let total_documents = ctx.universe.len() as u32;
         let (step, progress_step) = AtomicDocumentStep::new(total_documents);
@@ -210,7 +210,7 @@ impl IndexScheduler {
                 let mut compressed_buffer = Vec::new();
                 // ignore control flow, we're returning anyway
                 let _ = send_buffer(
-                    &[b' '], // needs something otherwise meili complains about missing payload
+                    b" ", // needs something otherwise meili complains about missing payload
                     &mut compressed_buffer,
                     ctx.must_stop_processing,
                     ctx.agent,
@@ -310,8 +310,8 @@ impl IndexScheduler {
                         let control_flow = send_buffer(
                             &buffer,
                             &mut compressed_buffer,
-                            &ctx.must_stop_processing,
-                            &ctx.agent,
+                            ctx.must_stop_processing,
+                            ctx.agent,
                             &documents_url,
                             bearer.as_deref(),
                             task_network.as_ref(),
@@ -380,7 +380,7 @@ impl IndexScheduler {
                         index_name: None,
                         document_count: 0,
                     },
-                    &network_change_origin,
+                    network_change_origin,
                     &ImportMetadata { index_count: 0, task_key: None, total_index_documents: 0 },
                 );
                 request = request.set("Content-Type", "application/json");
@@ -422,15 +422,15 @@ fn set_network_ureq_headers(
     } else {
         request
     };
-    let request = if let Some(task_key) = metadata.task_key {
+    if let Some(task_key) = metadata.task_key {
         request.set(headers::PROXY_IMPORT_TASK_KEY_HEADER, &task_key.to_string())
     } else {
         request
-    };
-    request
+    }
 }
 
-fn send_buffer<'a, 'b>(
+#[allow(clippy::too_many_arguments)]
+fn send_buffer<'a>(
     buffer: &'a [u8],
     mut compressed_buffer: &'a mut Vec<u8>,
     must_stop_processing: &MustStopProcessing,
@@ -443,7 +443,7 @@ fn send_buffer<'a, 'b>(
     // We compress the documents before sending them
     let mut encoder: GzEncoder<&mut &mut Vec<u8>> =
         GzEncoder::new(&mut compressed_buffer, Compression::default());
-    encoder.write_all(&buffer).map_err(milli::Error::from).map_err(err)?;
+    encoder.write_all(buffer).map_err(milli::Error::from).map_err(err)?;
     encoder.finish().map_err(milli::Error::from).map_err(err)?;
 
     let res = retry(must_stop_processing, || {
@@ -456,7 +456,7 @@ fn send_buffer<'a, 'b>(
         if let Some((import_data, origin, metadata)) = task_network {
             request = set_network_ureq_headers(request, import_data, origin, metadata);
         }
-        request.send_bytes(&compressed_buffer).map_err(into_backoff_error)
+        request.send_bytes(compressed_buffer).map_err(into_backoff_error)
     });
 
     handle_response(res)
@@ -485,7 +485,7 @@ fn handle_response(res: Result<Response>) -> Result<ControlFlow<()>> {
         }
         Err(e) => {
             tracing::warn!("error while exporting: {e}");
-            return Err(e);
+            Err(e)
         }
     }
 }

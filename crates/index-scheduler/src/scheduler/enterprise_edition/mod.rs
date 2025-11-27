@@ -112,7 +112,7 @@ impl IndexScheduler {
         must_stop_processing: &crate::scheduler::MustStopProcessing,
     ) -> crate::Result<u64> {
         let new_shards = Shards::from_remotes_local(
-            remotes.keys().map(String::as_str).chain(in_name.into_iter()),
+            remotes.keys().map(String::as_str).chain(in_name),
             in_name,
         );
 
@@ -257,7 +257,7 @@ impl IndexScheduler {
                     &document_changes,
                     embedders,
                     &|| must_stop_processing.get(),
-                    &progress,
+                    progress,
                     &EmbedderStats::default(),
                 )
                 .map_err(err)?;
@@ -265,7 +265,7 @@ impl IndexScheduler {
                 // update stats
                 let mut mapper_wtxn = self.env.write_txn()?;
                 let stats =
-                    crate::index_mapper::IndexStats::new(&index, &index_wtxn).map_err(err)?;
+                    crate::index_mapper::IndexStats::new(index, &index_wtxn).map_err(err)?;
                 self.index_mapper.store_stats_of(&mut mapper_wtxn, index_uid, &stats)?;
 
                 index_wtxn.commit()?;

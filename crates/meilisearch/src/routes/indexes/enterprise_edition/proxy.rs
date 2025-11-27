@@ -126,7 +126,7 @@ where
             Body::None => None,
 
             Body::Generated(mut initial, mut f) => {
-                f(remote_name, &remote, &mut initial);
+                f(remote_name, remote, &mut initial);
                 Some(Bytes::copy_from_slice(&serde_json::to_vec(&initial).unwrap()))
             }
         })
@@ -165,9 +165,7 @@ pub fn task_network_and_check_leader_and_version(
                     (Some(leader), Some(this)) if leader == this => (),
                     // 3. Any other change is disallowed
                     (Some(leader), _) => {
-                        return Err(
-                            MeilisearchHttpError::NotLeader { leader: leader.to_string() }.into()
-                        )
+                        return Err(MeilisearchHttpError::NotLeader { leader: leader.to_string() })
                     }
                 }
 
@@ -365,7 +363,7 @@ where
         _ => content_type,
     };
 
-    let body = body.into_bytes(remote_name, remote)?;
+    let body = body.into_bytes(remote_name, remote).map_err(Box::new)?;
 
     let client = reqwest::ClientBuilder::new()
         .connect_timeout(std::time::Duration::from_secs(3))
@@ -599,7 +597,7 @@ mod error {
         #[error("error while preparing the request: {error}")]
         Milli {
             #[from]
-            error: meilisearch_types::milli::Error,
+            error: Box<meilisearch_types::milli::Error>,
         },
     }
 

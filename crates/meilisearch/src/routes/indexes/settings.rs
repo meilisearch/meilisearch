@@ -626,8 +626,8 @@ async fn register_new_settings(
         is_deletion,
         allow_index_creation,
     };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
+    let uid = get_task_id(req, &opt)?;
+    let dry_run = is_dry_run(req, &opt)?;
 
     let scheduler = index_scheduler.clone();
     let mut task = tokio::task::spawn_blocking(move || {
@@ -639,7 +639,7 @@ async fn register_new_settings(
         proxy(
             &index_scheduler,
             Some(&index_uid),
-            &req,
+            req,
             task_network,
             network,
             Body::inline(new_settings),

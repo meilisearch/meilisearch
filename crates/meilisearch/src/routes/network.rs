@@ -264,7 +264,7 @@ async fn patch_network(
             }
         }
         (origin, import_data, metadata) => {
-            return Err(MeilisearchHttpError::InconsistentTaskNetworkHeaders {
+            Err(MeilisearchHttpError::InconsistentTaskNetworkHeaders {
                 is_missing_origin: origin.is_none(),
                 is_missing_import: import_data.is_none(),
                 is_missing_import_metadata: metadata.is_none(),

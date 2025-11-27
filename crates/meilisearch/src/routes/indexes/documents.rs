@@ -977,7 +977,7 @@ async fn document_addition(
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
     let mime_type = extract_mime_type(req)?;
     let network = index_scheduler.network();
-    let task_network = task_network_and_check_leader_and_version(&req, &network)?;
+    let task_network = task_network_and_check_leader_and_version(req, &network)?;
 
     let format = match (
         mime_type.as_ref().map(|m| (m.type_().as_str(), m.subtype().as_str())),

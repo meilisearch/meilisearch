@@ -152,7 +152,7 @@ impl From<Result<TaskId, ResponseError>> for RemoteTask {
 /// A network topology task has 4 states:
 ///
 /// 1. Processing any task that was meant for an earlier version of the network. This is necessary to know that we have the right version of
-/// documents.
+///    documents.
 /// 2. Sending all documents that must be moved to other remotes.
 /// 3. Processing any task coming from the remotes.
 /// 4. Finished.
@@ -340,7 +340,7 @@ impl NetworkTopologyChange {
                         };
                         import_index_state.insert(index_name.to_string(), state);
                     }
-                    ImportState::Ongoing { import_index_state, total_indexes: total_indexes }
+                    ImportState::Ongoing { import_index_state, total_indexes }
                 } else {
                     ImportState::Ongoing { import_index_state, total_indexes }
                 }
@@ -547,7 +547,7 @@ impl NetworkTopologyChange {
 }
 
 fn merge_import_index_state(left: ImportIndexState, right: ImportIndexState) -> ImportIndexState {
-    let newer = match (left, right) {
+    match (left, right) {
         (_, newer @ ImportIndexState::Finished { .. }) => newer,
         (newer @ ImportIndexState::Finished { .. }, _) => newer,
         (
@@ -577,8 +577,7 @@ fn merge_import_index_state(left: ImportIndexState, right: ImportIndexState) -> 
                 task_keys,
             }
         }
-    };
-    newer
+    }
 }
 
 pub enum ReceiveTaskError {
@@ -615,6 +614,12 @@ impl InRemote {
 
     pub fn is_finished(&self) -> bool {
         matches!(self.import_state, ImportState::Finished { .. })
+    }
+}
+
+impl Default for InRemote {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
