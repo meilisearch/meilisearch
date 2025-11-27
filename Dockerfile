@@ -14,9 +14,6 @@ ENV     RUSTFLAGS="-C target-feature=-crt-static"
 COPY    . .
 RUN     set -eux; \
         apkArch="$(apk --print-arch)"; \
-        if [ "$apkArch" = "aarch64" ]; then \
-            export JEMALLOC_SYS_WITH_LG_PAGE=16; \
-        fi && \
         cargo build --release -p meilisearch -p meilitool
 
 # Run
