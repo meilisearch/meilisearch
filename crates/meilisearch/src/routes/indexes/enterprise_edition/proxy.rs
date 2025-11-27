@@ -29,8 +29,8 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
-use crate::routes::indexes::enterprise_edition::proxy::error::{
-    ProxyDocumentChangeError, ReqwestErrorWithoutUrl,
+pub use crate::routes::indexes::enterprise_edition::proxy::error::{
+    ProxyError, ReqwestErrorWithoutUrl,
 };
 use crate::routes::SummarizedTaskView;
 
@@ -352,7 +352,7 @@ pub async fn send_request<T, F, U>(
     body: Body<T, F>,
     remote_name: &str,
     remote: &Remote,
-) -> Result<U, ResponseError>
+) -> Result<U, ProxyError>
 where
     T: serde::Serialize,
     F: FnMut(&str, &Remote, &mut T),
@@ -406,34 +406,30 @@ where
             let response = match response {
                 Ok(response) => response,
                 Err(error) if error.is_timeout() => {
-                    return Err(backoff::Error::transient(ProxyDocumentChangeError::Timeout))
+                    return Err(backoff::Error::transient(ProxyError::Timeout))
                 }
                 Err(error) => {
-                    return Err(backoff::Error::transient(
-                        ProxyDocumentChangeError::CouldNotSendRequest(ReqwestErrorWithoutUrl::new(
-                            error,
-                        )),
-                    ))
+                    return Err(backoff::Error::transient(ProxyError::CouldNotSendRequest(
+                        ReqwestErrorWithoutUrl::new(error),
+                    )))
                 }
             };
 
             match response.status() {
                 status_code if status_code.is_success() => (),
                 StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                    return Err(backoff::Error::Permanent(
-                        ProxyDocumentChangeError::AuthenticationError,
-                    ))
+                    return Err(backoff::Error::Permanent(ProxyError::AuthenticationError))
                 }
                 status_code if status_code.is_client_error() => {
                     let response = parse_error(response).await;
-                    return Err(backoff::Error::Permanent(ProxyDocumentChangeError::BadRequest {
+                    return Err(backoff::Error::Permanent(ProxyError::BadRequest {
                         status_code,
                         response,
                     }));
                 }
                 status_code if status_code.is_server_error() => {
                     let response = parse_error(response).await;
-                    return Err(backoff::Error::transient(ProxyDocumentChangeError::RemoteError {
+                    return Err(backoff::Error::transient(ProxyError::RemoteError {
                         status_code,
                         response,
                     }));
@@ -449,16 +445,15 @@ where
             let response: U = match parse_response(response).await {
                 Ok(response) => response,
                 Err(response) => {
-                    return Err(backoff::Error::transient(
-                        ProxyDocumentChangeError::CouldNotParseResponse { response },
-                    ))
+                    return Err(backoff::Error::transient(ProxyError::CouldNotParseResponse {
+                        response,
+                    }))
                 }
             };
             Ok(response)
         }
     })
     .await
-    .map_err(|err| err.as_response_error())
 }
 
 fn from_old_http_method(method: &actix_http::Method) -> reqwest::Method {
@@ -487,7 +482,7 @@ async fn try_proxy(
     url_encoded_this: &str,
     url_encoded_task_uid: &str,
     body: Option<Bytes>,
-) -> Result<SummarizedTaskView, backoff::Error<ProxyDocumentChangeError>> {
+) -> Result<SummarizedTaskView, backoff::Error<ProxyError>> {
     let request = client.request(method, url).timeout(std::time::Duration::from_secs(30));
     let request = if let Some(body) = body { request.body(body) } else { request };
     let request = if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
@@ -504,10 +499,10 @@ async fn try_proxy(
     let response = match response {
         Ok(response) => response,
         Err(error) if error.is_timeout() => {
-            return Err(backoff::Error::transient(ProxyDocumentChangeError::Timeout))
+            return Err(backoff::Error::transient(ProxyError::Timeout))
         }
         Err(error) => {
-            return Err(backoff::Error::transient(ProxyDocumentChangeError::CouldNotSendRequest(
+            return Err(backoff::Error::transient(ProxyError::CouldNotSendRequest(
                 ReqwestErrorWithoutUrl::new(error),
             )))
         }
@@ -516,18 +511,18 @@ async fn try_proxy(
     match response.status() {
         status_code if status_code.is_success() => (),
         StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-            return Err(backoff::Error::Permanent(ProxyDocumentChangeError::AuthenticationError))
+            return Err(backoff::Error::Permanent(ProxyError::AuthenticationError))
         }
         status_code if status_code.is_client_error() => {
             let response = parse_error(response).await;
-            return Err(backoff::Error::Permanent(ProxyDocumentChangeError::BadRequest {
+            return Err(backoff::Error::Permanent(ProxyError::BadRequest {
                 status_code,
                 response,
             }));
         }
         status_code if status_code.is_server_error() => {
             let response = parse_error(response).await;
-            return Err(backoff::Error::transient(ProxyDocumentChangeError::RemoteError {
+            return Err(backoff::Error::transient(ProxyError::RemoteError {
                 status_code,
                 response,
             }));
@@ -543,9 +538,7 @@ async fn try_proxy(
     let response = match parse_response(response).await {
         Ok(response) => response,
         Err(response) => {
-            return Err(backoff::Error::transient(
-                ProxyDocumentChangeError::CouldNotParseResponse { response },
-            ))
+            return Err(backoff::Error::transient(ProxyError::CouldNotParseResponse { response }))
         }
     };
 
@@ -583,11 +576,11 @@ async fn parse_response<T: DeserializeOwned>(
 }
 
 mod error {
-    use meilisearch_types::error::ResponseError;
+    use meilisearch_types::error::{ErrorCode as _, ResponseError};
     use reqwest::StatusCode;
 
     #[derive(Debug, thiserror::Error)]
-    pub enum ProxyDocumentChangeError {
+    pub enum ProxyError {
         #[error("{0}")]
         CouldNotSendRequest(ReqwestErrorWithoutUrl),
         #[error("could not authenticate against the remote host\n  - hint: check that the remote instance was registered with a valid API key having the `documents.add` action")]
@@ -603,19 +596,25 @@ mod error {
         Timeout,
         #[error("remote host responded with code {}{}", status_code.as_u16(), response_from_remote(response))]
         RemoteError { status_code: StatusCode, response: Result<String, ReqwestErrorWithoutUrl> },
+        #[error("error while preparing the request: {error}")]
+        Milli {
+            #[from]
+            error: meilisearch_types::milli::Error,
+        },
     }
 
-    impl ProxyDocumentChangeError {
+    impl ProxyError {
         pub fn as_response_error(&self) -> ResponseError {
             use meilisearch_types::error::Code;
             let message = self.to_string();
             let code = match self {
-                ProxyDocumentChangeError::CouldNotSendRequest(_) => Code::RemoteCouldNotSendRequest,
-                ProxyDocumentChangeError::AuthenticationError => Code::RemoteInvalidApiKey,
-                ProxyDocumentChangeError::BadRequest { .. } => Code::RemoteBadRequest,
-                ProxyDocumentChangeError::Timeout => Code::RemoteTimeout,
-                ProxyDocumentChangeError::RemoteError { .. } => Code::RemoteRemoteError,
-                ProxyDocumentChangeError::CouldNotParseResponse { .. } => Code::RemoteBadResponse,
+                ProxyError::CouldNotSendRequest(_) => Code::RemoteCouldNotSendRequest,
+                ProxyError::AuthenticationError => Code::RemoteInvalidApiKey,
+                ProxyError::BadRequest { .. } => Code::RemoteBadRequest,
+                ProxyError::Timeout => Code::RemoteTimeout,
+                ProxyError::RemoteError { .. } => Code::RemoteRemoteError,
+                ProxyError::CouldNotParseResponse { .. } => Code::RemoteBadResponse,
+                ProxyError::Milli { error } => error.error_code(),
             };
             ResponseError::from_msg(message, code)
         }

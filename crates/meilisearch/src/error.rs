@@ -1,7 +1,6 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use byte_unit::{Byte, UnitType};
-use index_scheduler::error::FeatureNotEnabledError;
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};

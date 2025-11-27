@@ -4,6 +4,7 @@ use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
+use futures::TryStreamExt;
 use index_scheduler::{IndexScheduler, Query, RoFeatures};
 use itertools::{EitherOrBoth, Itertools};
 use meilisearch_auth::AuthFilter;
@@ -30,7 +31,7 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::enterprise_edition::proxy::{self, proxy, Body};
+use crate::routes::indexes::enterprise_edition::proxy::{self, proxy, Body, ProxyError};
 use crate::routes::tasks::AllTasks;
 use crate::routes::SummarizedTaskView;
 
@@ -316,54 +317,82 @@ async fn patch_network_without_origin(
             .into());
         }
 
-        for eob in old_network
-            .remotes
-            .iter()
-            .merge_join_by(merged_network.remotes.iter(), |(left, _), (right, _)| left.cmp(right))
-        {
-            match eob {
-                EitherOrBoth::Both(_, (remote_name, remote))
-                | EitherOrBoth::Left((remote_name, remote))
-                | EitherOrBoth::Right((remote_name, remote)) => {
-                    // 1. check that the experimental feature is enabled
-                    let remote_features: RuntimeTogglableFeatures = proxy::send_request(
-                        "/experimental-features",
-                        reqwest::Method::GET,
-                        None,
-                        Body::none(),
-                        remote_name,
-                        remote,
-                    )
-                    .await?;
-                    let remote_features = RoFeatures::from_runtime_features(remote_features);
-                    remote_features.check_network("receiving a proxied network task").map_err(
-                        |error| MeilisearchHttpError::RemoteIndexScheduler {
-                            remote: remote_name.to_owned(),
-                            error,
-                        },
-                    )?;
+        futures::stream::iter(
+            old_network
+                .remotes
+                .iter()
+                .merge_join_by(merged_network.remotes.iter(), |(left, _), (right, _)| {
+                    left.cmp(right)
+                })
+                .map(|eob| -> Result<_, ResponseError> {
+                    Ok(async move {
+                        let (remote_name, remote, allow_unreachable) = match eob {
+                            EitherOrBoth::Both(_, (remote_name, remote))
+                            | EitherOrBoth::Right((remote_name, remote)) => {
+                                (remote_name, remote, false)
+                            }
+                            EitherOrBoth::Left((remote_name, remote)) => {
+                                (remote_name, remote, true)
+                            }
+                        };
+                        {
+                            // 1. check that the experimental feature is enabled
+                            let remote_features: RuntimeTogglableFeatures = match proxy::send_request(
+                                "/experimental-features",
+                                reqwest::Method::GET,
+                                None,
+                                Body::none(),
+                                remote_name,
+                                remote,
+                            )
+                            .await {
+                                Ok(remote_features) => remote_features,
+                                Err(ProxyError::Timeout | ProxyError::CouldNotSendRequest(_)) if allow_unreachable => {
+                                    return Ok(())
+                                },
+                                Err(err) => return Err(err.as_response_error()),
+                            };
+                            let remote_features =
+                                RoFeatures::from_runtime_features(remote_features);
+                            remote_features
+                                .check_network("receiving a proxied network task")
+                                .map_err(|error| MeilisearchHttpError::RemoteIndexScheduler {
+                                    remote: remote_name.to_owned(),
+                                    error,
+                                })?;
 
-                    // 2. check whether there are any unfinished network task
-                    let network_tasks: AllTasks = proxy::send_request(
+                            // 2. check whether there are any unfinished network task
+                            let network_tasks: AllTasks = match proxy::send_request(
                         "/tasks?types=networkTopologyChanges&statuses=enqueued,processing&limit=1",
-                        reqwest::Method::GET,
-                        None,
-                        Body::none(),
-                        remote_name,
-                        remote,
-                    )
-                    .await?;
+                                reqwest::Method::GET,
+                                None,
+                                Body::none(),
+                                remote_name,
+                                remote).await {
+                                    Ok(network_tasks) => network_tasks,
+                                Err(ProxyError::Timeout | ProxyError::CouldNotSendRequest(_)) if allow_unreachable => {
+                                    return Ok(())
+                                },
+                                Err(err) => return Err(err.as_response_error()),
+                                };
 
-                    if let [first, ..] = network_tasks.results.as_slice() {
-                        return Err(MeilisearchHttpError::UnprocessedNetworkTask {
-                            remote: Some(remote_name.to_owned()),
-                            task_uid: first.uid,
+                            if let [first, ..] = network_tasks.results.as_slice() {
+                                return Err(ResponseError::from(
+                                    MeilisearchHttpError::UnprocessedNetworkTask {
+                                        remote: Some(remote_name.to_owned()),
+                                        task_uid: first.uid,
+                                    },
+                                ));
+                            }
                         }
-                        .into());
-                    }
-                }
-            }
-        }
+
+                        Ok(())
+                    })
+                }),
+        )
+        .try_buffer_unordered(40)
+        .try_collect::<()>()
+        .await?;
     }
 
     index_scheduler.put_network(merged_network.clone())?;

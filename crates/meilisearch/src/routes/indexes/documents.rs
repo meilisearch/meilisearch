@@ -1096,7 +1096,7 @@ async fn document_addition(
         index_uid: index_uid.to_string(),
     };
 
-    /// FIXME: not new to this PR, but _any_ error here will cause the payload to unduly persist
+    // FIXME: not new to #6000, but _any_ error here will cause the payload to unduly persist
     let scheduler = index_scheduler.clone();
     let mut task = match tokio::task::spawn_blocking(move || {
         scheduler.register_with_custom_metadata(
