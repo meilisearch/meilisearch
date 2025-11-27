@@ -32,3 +32,6 @@ big_s = "1.0.2"
 maplit = "1.0.2"
 meili-snap = { path = "../meili-snap" }
 meilisearch-types = { path = "../meilisearch-types" }
+
+[features]
+enterprise = ["meilisearch-types/enterprise"]

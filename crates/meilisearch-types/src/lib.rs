@@ -2,10 +2,17 @@
 
 pub mod batch_view;
 pub mod batches;
+#[cfg(not(feature = "enterprise"))]
+pub mod community_edition;
 pub mod compression;
 pub mod deserr;
 pub mod document_formats;
+#[cfg(feature = "enterprise")]
 pub mod enterprise_edition;
+#[cfg(not(feature = "enterprise"))]
+pub use community_edition as current_edition;
+#[cfg(feature = "enterprise")]
+pub use enterprise_edition as current_edition;
 pub mod error;
 pub mod facet_values_sort;
 pub mod features;
@@ -13,6 +20,7 @@ pub mod index_uid;
 pub mod index_uid_pattern;
 pub mod keys;
 pub mod locales;
+pub mod network;
 pub mod settings;
 pub mod star_or;
 pub mod task_view;

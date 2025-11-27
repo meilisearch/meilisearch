@@ -20,6 +20,7 @@ jobs:
     strategy:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        features: ["", "--features enterprise"]
     container:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
@@ -42,7 +43,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --locked --release --all
+          args: --locked --release --all ${{ matrix.features }}
 
   test-others:
     name: Tests on ${{ matrix.os }}
@@ -51,6 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-14, windows-2022]
+        features: ["", "--features enterprise"]
     steps:
       - uses: actions/checkout@v5
       - name: Cache dependencies
@@ -65,7 +67,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --locked --release --all
+          args: --locked --release --all ${{ matrix.features }}
 
   test-all-features:
     name: Tests almost all features
@@ -91,6 +93,9 @@ jobs:
   ollama-ubuntu:
     name: Test with Ollama
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: ["", "--features enterprise"]
     env:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
@@ -118,7 +123,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --locked --release --all --features test-ollama ollama
+          args: --locked --release --all --features test-ollama ollama ${{ matrix.features }}
 
   test-disabled-tokenization:
     name: Test disabled tokenization
@@ -147,6 +152,9 @@ jobs:
   test-debug:
     name: Run tests in debug
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        features: ["", "--features enterprise"]
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
@@ -156,11 +164,14 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --locked --all
+          args: --locked --all ${{ matrix.features }}
 
   clippy:
     name: Run Clippy
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: ["", "--features enterprise"]
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
@@ -173,7 +184,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets -- --deny warnings
+          args: --all-targets ${{ matrix.features }} -- --deny warnings
 
   fmt:
     name: Run Rustfmt

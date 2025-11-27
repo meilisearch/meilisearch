@@ -32,157 +32,61 @@ jobs:
         if: github.event_name == 'release' && steps.check-tag-format.outputs.stable == 'true'
         run: bash .github/scripts/check-release.sh
 
-  publish-linux:
-    name: Publish binary for Linux
-    runs-on: ubuntu-latest
-    needs: check-version
-    container:
-      # Use ubuntu-22.04 to compile with glibc 2.35
-      image: ubuntu:22.04
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install needed dependencies
-        run: |
-          apt-get update && apt-get install -y curl
-          apt-get install build-essential -y
-      - uses: dtolnay/rust-toolchain@1.89
-      - name: Build
-        run: cargo build --release --locked
-      # No need to upload binaries for dry run (cron or workflow_dispatch)
-      - name: Upload binaries to release
-        if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@2.11.2
-        with:
-          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-          file: target/release/meilisearch
-          asset_name: meilisearch-linux-amd64
-          tag: ${{ github.ref }}
-
-  publish-macos-windows:
-    name: Publish binary for ${{ matrix.os }}
+  publish-binaries:
+    name: Publish binary for ${{ matrix.release }} ${{ matrix.edition }} edition
     runs-on: ${{ matrix.os }}
-    needs: check-version
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-2022]
+        edition: [community, enterprise]
+        release:
+          [macos-amd64, macos-aarch64, windows, linux-amd64, linux-aarch64]
         include:
-          - os: macos-14
-            artifact_name: meilisearch
-            asset_name: meilisearch-macos-amd64
-          - os: windows-2022
-            artifact_name: meilisearch.exe
-            asset_name: meilisearch-windows-amd64.exe
+          - edition: "community"
+            feature-flag: ""
+            edition-suffix: ""
+          - edition: "enterprise"
+            feature-flag: "--features enterprise"
+            edition-suffix: "enterprise-"
+          - release: macos-amd64
+            os: macos-15-intel
+            binary_path: release/meilisearch
+            asset_name: macos-amd64
+            extra-args: ""
+          - release: macos-aarch64
+            os: macos-14
+            binary_path: aarch64-apple-darwin/release/meilisearch
+            asset_name: macos-apple-silicon
+            extra-args: "--target aarch64-apple-darwin"
+          - release: windows
+            os: windows-2022
+            binary_path: release/meilisearch.exe
+            asset_name: windows-amd64.exe
+            extra-args: ""
+          - release: linux-amd64
+            os: ubuntu-22.04
+            binary_path: release/meilisearch
+            asset_name: linux-amd64
+            extra-args: "--target x86_64-unknown-linux-gnu"
+          - release: linux-aarch64
+            os: ubuntu-22.04-arm
+            binary_path: aarch64-unknown-linux-gnu/release/meilisearch
+            asset_name: linux-aarch64
+            extra-args: "--target aarch64-unknown-linux-gnu"
+    needs: check-version
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
       - name: Build
-        run: cargo build --release --locked
+        run: cargo build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
       # No need to upload binaries for dry run (cron or workflow_dispatch)
       - name: Upload binaries to release
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@2.11.2
         with:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-          file: target/release/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.asset_name }}
-          tag: ${{ github.ref }}
-
-  publish-macos-apple-silicon:
-    name: Publish binary for macOS silicon
-    runs-on: macos-14
-    needs: check-version
-    strategy:
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            asset_name: meilisearch-macos-apple-silicon
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-      - name: Installing Rust toolchain
-        uses: dtolnay/rust-toolchain@1.89
-        with:
-          profile: minimal
-          target: ${{ matrix.target }}
-      - name: Cargo build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --target ${{ matrix.target }}
-      - name: Upload the binary to release
-        # No need to upload binaries for dry run (cron or workflow_dispatch)
-        if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@2.11.2
-        with:
-          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-          file: target/${{ matrix.target }}/release/meilisearch
-          asset_name: ${{ matrix.asset_name }}
-          tag: ${{ github.ref }}
-
-  publish-aarch64:
-    name: Publish binary for aarch64
-    runs-on: ubuntu-latest
-    needs: check-version
-    env:
-      DEBIAN_FRONTEND: noninteractive
-    container:
-      # Use ubuntu-22.04 to compile with glibc 2.35
-      image: ubuntu:22.04
-    strategy:
-      matrix:
-        include:
-          - target: aarch64-unknown-linux-gnu
-            asset_name: meilisearch-linux-aarch64
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-      - name: Install needed dependencies
-        run: |
-          apt-get update -y && apt upgrade -y
-          apt-get install -y curl build-essential gcc-aarch64-linux-gnu
-      - name: Set up Docker for cross compilation
-        run: |
-          apt-get install -y curl apt-transport-https ca-certificates software-properties-common
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
-          add-apt-repository "deb [arch=$(dpkg --print-architecture)] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
-          apt-get update -y && apt-get install -y docker-ce
-      - name: Installing Rust toolchain
-        uses: dtolnay/rust-toolchain@1.89
-        with:
-          profile: minimal
-          target: ${{ matrix.target }}
-      - name: Configure target aarch64 GNU
-        ## Environment variable is not passed using env:
-        ## LD gold won't work with MUSL
-        # env:
-        #   JEMALLOC_SYS_WITH_LG_PAGE: 16
-        #   RUSTFLAGS: '-Clink-arg=-fuse-ld=gold'
-        run: |
-          echo '[target.aarch64-unknown-linux-gnu]' >> ~/.cargo/config
-          echo 'linker = "aarch64-linux-gnu-gcc"' >> ~/.cargo/config
-          echo 'JEMALLOC_SYS_WITH_LG_PAGE=16' >> $GITHUB_ENV
-      - name: Install a default toolchain that will be used to build cargo cross
-        run: |
-          rustup default stable
-      - name: Cargo build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          use-cross: true
-          args: --release --target ${{ matrix.target }}
-        env:
-          CROSS_DOCKER_IN_DOCKER: true
-      - name: List target output files
-        run: ls -lR ./target
-      - name: Upload the binary to release
-        # No need to upload binaries for dry run (cron or workflow_dispatch)
-        if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@2.11.2
-        with:
-          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-          file: target/${{ matrix.target }}/release/meilisearch
-          asset_name: ${{ matrix.asset_name }}
+          file: target/${{ matrix.binary_path }}
+          asset_name: meilisearch-${{ matrix.edition-suffix }}${{ matrix.asset_name }}
           tag: ${{ github.ref }}
 
   publish-openapi-file:

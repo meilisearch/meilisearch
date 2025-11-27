@@ -3142,6 +3142,7 @@ fn fail(override_response_body: Option<&str>) -> ResponseTemplate {
     }
 }
 
+#[cfg(feature = "enterprise")]
 #[actix_rt::test]
 async fn remote_auto_sharding() {
     let ms0 = Server::new().await;
@@ -3161,7 +3162,6 @@ async fn remote_auto_sharding() {
     snapshot!(json_string!(response["network"]), @"true");
 
     // set self & sharding
-
     let (response, code) = ms0.set_network(json!({"self": "ms0", "sharding": true})).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response), @r###"
@@ -3462,6 +3462,30 @@ async fn remote_auto_sharding() {
     "###);
 }
 
+#[cfg(not(feature = "enterprise"))]
+#[actix_rt::test]
+async fn sharding_not_enterprise() {
+    let ms0 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    let (response, code) = ms0.set_network(json!({"self": "ms0", "sharding": true})).await;
+    snapshot!(code, @"451 Unavailable For Legal Reasons");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Meilisearch Enterprise Edition is required to set `network.sharding`",
+      "code": "requires_enterprise_edition",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#requires_enterprise_edition"
+    }
+    "###);
+}
+
+#[cfg(feature = "enterprise")]
 #[actix_rt::test]
 async fn remote_auto_sharding_with_custom_metadata() {
     let ms0 = Server::new().await;
