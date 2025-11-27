@@ -44,34 +44,34 @@ jobs:
         include:
           - edition: "community"
             feature-flag: ""
-            suffix-name: ""
+            edition-suffix: ""
           - edition: "enterprise"
             feature-flag: "--features enterprise"
-            suffix-name: "-ee"
+            edition-suffix: "enterprise-"
           - release: macos-amd64
             os: macos-15-intel
             binary_path: release/meilisearch
-            asset_name: meilisearch-macos-amd64
+            asset_name: macos-amd64
             extra-args: ""
           - release: macos-aarch64
             os: macos-14
             binary_path: aarch64-apple-darwin/release/meilisearch
-            asset_name: meilisearch-macos-apple-silicon
+            asset_name: macos-apple-silicon
             extra-args: "--target aarch64-apple-darwin"
           - release: windows
             os: windows-2022
             binary_path: release/meilisearch.exe
-            asset_name: meilisearch-windows-amd64.exe
+            asset_name: windows-amd64.exe
             extra-args: ""
           - release: linux-amd64
             os: ubuntu-22.04
             binary_path: release/meilisearch
-            asset_name: meilisearch-linux-amd64
+            asset_name: linux-amd64
             extra-args: "--target x86_64-unknown-linux-gnu"
           - release: linux-aarch64
             os: ubuntu-22.04-arm
             binary_path: aarch64-unknown-linux-gnu/release/meilisearch
-            asset_name: meilisearch-linux-aarch64
+            asset_name: linux-aarch64
             extra-args: "--target aarch64-unknown-linux-gnu"
     needs: check-version
     steps:
@@ -86,7 +86,7 @@ jobs:
         with:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: target/${{ matrix.binary_path }}
-          asset_name: ${{ matrix.asset_name }}${{ matrix.suffix-name }}
+          asset_name: meilisearch-${{ matrix.edition-suffix }}${{ matrix.asset_name }}
           tag: ${{ github.ref }}
 
   publish-openapi-file:
