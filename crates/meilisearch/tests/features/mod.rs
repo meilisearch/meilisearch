@@ -26,7 +26,8 @@ async fn experimental_features() {
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
@@ -43,7 +44,8 @@ async fn experimental_features() {
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
@@ -60,7 +62,8 @@ async fn experimental_features() {
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
@@ -78,7 +81,8 @@ async fn experimental_features() {
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
@@ -96,7 +100,8 @@ async fn experimental_features() {
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 }
@@ -121,7 +126,8 @@ async fn experimental_feature_metrics() {
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
@@ -168,7 +174,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"

@@ -2197,7 +2197,8 @@ async fn import_dump_v6_containing_experimental_features() {
       "getTaskDocumentsRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
