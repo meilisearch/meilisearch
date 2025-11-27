@@ -398,6 +398,7 @@ TooManyOpenFiles                               , System               , UNPROCES
 TooManyVectors                                 , InvalidRequest       , BAD_REQUEST ;
 UnexpectedNetworkPreviousRemotes               , InvalidRequest       , BAD_REQUEST ;
 NetworkVersionTooOld                           , InvalidRequest       , BAD_REQUEST ;
+UnprocessedNetworkTask                         , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                          , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                         , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                           , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;

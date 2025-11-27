@@ -4,8 +4,9 @@ use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, Query, RoFeatures};
 use itertools::{EitherOrBoth, Itertools};
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::enterprise_edition::network::{Network as DbNetwork, Remote as DbRemote};
 use meilisearch_types::error::deserr_codes::{
@@ -288,7 +289,33 @@ async fn patch_network_without_origin(
 
     let merged_network = merge_networks(old_network.clone(), new_network)?;
 
+    // When a network task must be created, perform some sanity checks against common errors:
+    // - missing experimental feature on an host from the network
+    // - a network task is already enqueued
+    //
+    // These checks are by no mean perfect (they are not atomic since the network is involved), but they should
+    // help preventing a bad situation.
     if merged_network.leader.is_some() {
+        let query = Query {
+            statuses: Some(vec![
+                meilisearch_types::tasks::Status::Enqueued,
+                meilisearch_types::tasks::Status::Processing,
+            ]),
+            types: Some(vec![meilisearch_types::tasks::Kind::NetworkTopologyChange]),
+            ..Default::default()
+        };
+
+        let filters = AuthFilter::default();
+        let (tasks, _) = index_scheduler.get_task_ids_from_authorized_indexes(&query, &filters)?;
+
+        if let Some(first) = tasks.min() {
+            return Err(MeilisearchHttpError::UnprocessedNetworkTask {
+                remote: None,
+                task_uid: first,
+            }
+            .into());
+        }
+
         for eob in old_network
             .remotes
             .iter()
@@ -308,10 +335,14 @@ async fn patch_network_without_origin(
                         remote,
                     )
                     .await?;
-                    if !remote_features.network {
-                        /// TODO: clean error!
-                        panic!("boom")
-                    }
+                    let remote_features = RoFeatures::from_runtime_features(remote_features);
+                    remote_features.check_network("receiving a proxied network task").map_err(
+                        |error| MeilisearchHttpError::RemoteIndexScheduler {
+                            remote: remote_name.to_owned(),
+                            error,
+                        },
+                    )?;
+
                     // 2. check whether there are any unfinished network task
                     let network_tasks: AllTasks = proxy::send_request(
                         "/tasks?types=networkTopologyChanges&statuses=enqueued,processing&limit=1",
@@ -323,9 +354,12 @@ async fn patch_network_without_origin(
                     )
                     .await?;
 
-                    if network_tasks.total != 0 {
-                        /// TODO: clean error!
-                        panic!("boom")
+                    if let [first, ..] = network_tasks.results.as_slice() {
+                        return Err(MeilisearchHttpError::UnprocessedNetworkTask {
+                            remote: Some(remote_name.to_owned()),
+                            task_uid: first.uid,
+                        }
+                        .into());
                     }
                 }
             }

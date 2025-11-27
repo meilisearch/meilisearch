@@ -38,6 +38,10 @@ impl RoFeatures {
         Self { runtime }
     }
 
+    pub fn from_runtime_features(features: RuntimeTogglableFeatures) -> Self {
+        Self { runtime: features }
+    }
+
     pub fn runtime_features(&self) -> RuntimeTogglableFeatures {
         self.runtime
     }

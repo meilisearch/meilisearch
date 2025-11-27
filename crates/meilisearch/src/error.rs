@@ -1,6 +1,7 @@
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use byte_unit::{Byte, UnitType};
+use index_scheduler::error::FeatureNotEnabledError;
 use meilisearch_types::document_formats::{DocumentFormatError, PayloadType};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
@@ -143,6 +144,13 @@ pub enum MeilisearchHttpError {
     UnexpectedNetworkPreviousRemotes,
     #[error("The network version in request is too old.\n  - Received: {received}\n  - Expected at least: {expected_at_least}")]
     NetworkVersionTooOld { received: Uuid, expected_at_least: Uuid },
+    #[error("Remote `{remote}` encountered an error: {error}")]
+    RemoteIndexScheduler { remote: String, error: index_scheduler::Error },
+    #[error("{if_remote}Already has a pending network task with uid {task_uid}.\n  - Note: No network task can be registered while any previous network task is not done processing.\n  - Hint: Wait for task {task_uid} to complete or cancel it.",
+if_remote=if let Some(remote) = remote {
+    format!("Remote `{remote}` encountered an error: ")
+} else {"".into()} )]
+    UnprocessedNetworkTask { remote: Option<String>, task_uid: meilisearch_types::tasks::TaskId },
 }
 
 impl MeilisearchHttpError {
@@ -170,6 +178,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
             MeilisearchHttpError::HeedError(_) => Code::Internal,
             MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
+            MeilisearchHttpError::RemoteIndexScheduler { error, .. } => error.error_code(),
             MeilisearchHttpError::Milli { error, .. } => error.error_code(),
             MeilisearchHttpError::Payload(e) => e.error_code(),
             MeilisearchHttpError::FileStore(_) => Code::Internal,
@@ -202,6 +211,7 @@ impl ErrorCode for MeilisearchHttpError {
                 Code::UnexpectedNetworkPreviousRemotes
             }
             MeilisearchHttpError::NetworkVersionTooOld { .. } => Code::NetworkVersionTooOld,
+            MeilisearchHttpError::UnprocessedNetworkTask { .. } => Code::UnprocessedNetworkTask,
         }
     }
 }
