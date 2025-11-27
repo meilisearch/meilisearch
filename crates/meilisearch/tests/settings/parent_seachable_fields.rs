@@ -94,4 +94,21 @@ async fn nested_field_becomes_searchable() {
             "###);
         })
         .await;
+
+    let (response, code) = index
+        .update_settings(json!({
+            "searchableAttributes": ["meta.title"]
+        }))
+        .await;
+    assert_eq!("202", code.as_str(), "{response:?}");
+    server.wait_task(response.uid()).await.succeeded();
+
+    // We expect no documents when searching for
+    // a nested non-searchable field
+    index
+        .search(json!({"q": "many fish"}), |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r###"[]"###);
+        })
+        .await;
 }
