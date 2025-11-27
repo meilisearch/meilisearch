@@ -467,13 +467,11 @@ impl From<Details> for DetailsView {
                     ..Default::default()
                 }
             }
-            Details::NetworkTopologyChange { moved_documents, message } => {
-                DetailsView {
-                    moved_documents: Some(moved_documents),
-                    message: Some(message),
-                    ..Default::default()
-                }
-            }
+            Details::NetworkTopologyChange { moved_documents, message } => DetailsView {
+                moved_documents: Some(moved_documents),
+                message: Some(message),
+                ..Default::default()
+            },
         }
     }
 }

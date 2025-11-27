@@ -111,10 +111,8 @@ impl IndexScheduler {
         progress: &Progress,
         must_stop_processing: &crate::scheduler::MustStopProcessing,
     ) -> crate::Result<u64> {
-        let new_shards = Shards::from_remotes_local(
-            remotes.keys().map(String::as_str).chain(in_name),
-            in_name,
-        );
+        let new_shards =
+            Shards::from_remotes_local(remotes.keys().map(String::as_str).chain(in_name), in_name);
 
         // TECHDEBT: this spawns a `ureq` agent additionally to `reqwest`. We probably want to harmonize all of this.
         let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(5)).build();

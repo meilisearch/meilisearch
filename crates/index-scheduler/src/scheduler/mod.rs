@@ -2,13 +2,13 @@ mod autobatcher;
 #[cfg(test)]
 mod autobatcher_test;
 mod create_batch;
+mod enterprise_edition;
 mod process_batch;
 mod process_dump_creation;
 mod process_export;
 mod process_index_operation;
 mod process_snapshot_creation;
 mod process_upgrade;
-mod enterprise_edition;
 #[cfg(test)]
 mod test;
 #[cfg(test)]
@@ -178,8 +178,7 @@ impl IndexScheduler {
             self.breakpoint(crate::test_utils::Breakpoint::Start);
         }
 
-        let previous_processing_batch =
-            self.processing_tasks.write().unwrap().stop_processing();
+        let previous_processing_batch = self.processing_tasks.write().unwrap().stop_processing();
 
         if self.cleanup_enabled {
             let mut wtxn = self.env.write_txn()?;

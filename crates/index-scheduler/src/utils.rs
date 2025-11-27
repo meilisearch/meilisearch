@@ -678,10 +678,7 @@ impl crate::IndexScheduler {
                     } => {
                         assert_eq!(kind.as_kind(), Kind::IndexCompaction);
                     }
-                    Details::NetworkTopologyChange {
-                        moved_documents: _,
-                        message: _,
-                    } => {
+                    Details::NetworkTopologyChange { moved_documents: _, message: _ } => {
                         assert_eq!(kind.as_kind(), Kind::NetworkTopologyChange);
                     }
                 }

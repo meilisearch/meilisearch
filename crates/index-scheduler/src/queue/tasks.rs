@@ -116,7 +116,8 @@ impl TaskQueue {
     pub(crate) fn update_task(&self, wtxn: &mut RwTxn, task: &mut Task) -> Result<()> {
         let old_task = self.get_task(wtxn, task.uid)?.ok_or(Error::CorruptedTaskQueue)?;
         // network topology tasks may be processed multiple times.
-        let maybe_reprocessing = old_task.status != Status::Enqueued || task.kind.as_kind() == Kind::NetworkTopologyChange;
+        let maybe_reprocessing = old_task.status != Status::Enqueued
+            || task.kind.as_kind() == Kind::NetworkTopologyChange;
 
         debug_assert!(old_task != *task);
         debug_assert_eq!(old_task.uid, task.uid);
