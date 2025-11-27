@@ -32,6 +32,8 @@ pub fn match_searchable_field(
     selection
 }
 
+/// return `true` if the provided `field_name` is a parent of at least one of the fields contained in `searchable`,
+/// or if `searchable` is `None`.
 fn has_searchable_children<I, A>(field_name: &str, searchable: Option<I>) -> bool
 where
     I: IntoIterator<Item = A>,
@@ -40,6 +42,6 @@ where
     searchable.is_none_or(|fields| {
         fields
             .into_iter()
-            .any(|attr| match_field_legacy(attr.as_ref(), field_name) != PatternMatch::Parent)
+            .any(|attr| match_field_legacy(attr.as_ref(), field_name) == PatternMatch::Parent)
     })
 }
