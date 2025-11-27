@@ -2198,7 +2198,8 @@ async fn import_dump_v6_containing_experimental_features() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "vectorStoreSetting": false
+      "vectorStoreSetting": false,
+      "foreignKeys": false
     }
     "###);
 

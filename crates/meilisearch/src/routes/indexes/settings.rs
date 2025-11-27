@@ -705,6 +705,10 @@ pub async fn get_all(
         new_settings.vector_store = Setting::NotSet;
     }
 
+    if features.check_foreign_keys_setting("showing index `foreignKeys` settings").is_err() {
+        new_settings.foreign_keys = Setting::NotSet;
+    }
+
     debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }
@@ -796,6 +800,10 @@ fn validate_settings(
 
     if let Setting::Set(_) = &settings.vector_store {
         features.check_vector_store_setting("setting `vectorStore` in the index settings")?;
+    }
+
+    if let Setting::Set(_) = &settings.foreign_keys {
+        features.check_foreign_keys_setting("setting `foreignKeys` in the index settings")?;
     }
 
     Ok(settings.validate()?)
