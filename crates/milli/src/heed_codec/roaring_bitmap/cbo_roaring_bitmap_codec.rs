@@ -19,8 +19,19 @@ pub const THRESHOLD: usize = 7;
 pub struct CboRoaringBitmapCodec;
 
 impl CboRoaringBitmapCodec {
+    /// If the number of items (u32s) to encode is less than or equal to the threshold
+    /// it means that it would weigh the same or less than the RoaringBitmap
+    /// header, so we directly encode them using ByteOrder instead.
+    pub fn bitmap_serialize_as_raw_u32s(roaring: &RoaringBitmap) -> bool {
+        roaring.len() <= THRESHOLD as u64
+    }
+
+    pub fn bytes_deserialize_as_raw_u32s(bytes: &[u8]) -> bool {
+        bytes.len() <= THRESHOLD * size_of::<u32>()
+    }
+
     pub fn serialized_size(roaring: &RoaringBitmap) -> usize {
-        if roaring.len() <= THRESHOLD as u64 {
+        if Self::bitmap_serialize_as_raw_u32s(roaring) {
             roaring.len() as usize * size_of::<u32>()
         } else {
             roaring.serialized_size()
@@ -35,10 +46,7 @@ impl CboRoaringBitmapCodec {
         roaring: &RoaringBitmap,
         mut writer: W,
     ) -> io::Result<()> {
-        if roaring.len() <= THRESHOLD as u64 {
-            // If the number of items (u32s) to encode is less than or equal to the threshold
-            // it means that it would weigh the same or less than the RoaringBitmap
-            // header, so we directly encode them using ByteOrder instead.
+        if Self::bitmap_serialize_as_raw_u32s(roaring) {
             for integer in roaring {
                 writer.write_u32::<NativeEndian>(integer)?;
             }
@@ -51,7 +59,7 @@ impl CboRoaringBitmapCodec {
     }
 
     pub fn deserialize_from(mut bytes: &[u8]) -> io::Result<RoaringBitmap> {
-        if bytes.len() <= THRESHOLD * size_of::<u32>() {
+        if Self::bytes_deserialize_as_raw_u32s(bytes) {
             // If there is threshold or less than threshold integers that can fit into this array
             // of bytes it means that we used the ByteOrder codec serializer.
             let mut bitmap = RoaringBitmap::new();
@@ -71,7 +79,7 @@ impl CboRoaringBitmapCodec {
         other: &RoaringBitmap,
     ) -> io::Result<RoaringBitmap> {
         // See above `deserialize_from` method for implementation details.
-        if bytes.len() <= THRESHOLD * size_of::<u32>() {
+        if Self::bytes_deserialize_as_raw_u32s(bytes) {
             let mut bitmap = RoaringBitmap::new();
             while let Ok(integer) = bytes.read_u32::<NativeEndian>() {
                 if other.contains(integer) {
@@ -98,7 +106,7 @@ impl CboRoaringBitmapCodec {
         let mut vec = Vec::new();
 
         for bytes in slices {
-            if bytes.as_ref().len() <= THRESHOLD * size_of::<u32>() {
+            if Self::bytes_deserialize_as_raw_u32s(bytes.as_ref()) {
                 let mut reader = bytes.as_ref();
                 while let Ok(integer) = reader.read_u32::<NativeEndian>() {
                     vec.push(integer);
@@ -112,6 +120,8 @@ impl CboRoaringBitmapCodec {
             vec.sort_unstable();
             vec.dedup();
 
+            // Be careful when modifying this condition,
+            // the rule must be the same everywhere
             if vec.len() <= THRESHOLD {
                 for integer in vec {
                     buffer.extend_from_slice(&integer.to_ne_bytes());
