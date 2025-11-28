@@ -1453,3 +1453,153 @@ async fn test_fetch_documents_pagination_with_sorting() {
     ]
     "###);
 }
+
+// <https://github.com/meilisearch/meilisearch/issues/5998>
+#[actix_rt::test]
+async fn get_document_sort_field_not_in_any_document() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_sortable_attributes(json!(["created_at"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!([
+        { "id": 1, "name": "Document 1" },
+        { "id": 2, "name": "Document 2" }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["created_at:asc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "name": "Document 1"
+        },
+        {
+          "id": 2,
+          "name": "Document 2"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn get_document_sort_includes_docs_without_field() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_sortable_attributes(json!(["created_at"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!([
+        { "id": 1, "name": "Doc without created_at" },
+        { "id": 2, "name": "Doc with created_at", "created_at": "2025-01-15" },
+        { "id": 3, "name": "Another doc without created_at" },
+        { "id": 4, "name": "Another doc with created_at", "created_at": "2025-01-10" }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["created_at:asc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 4,
+          "name": "Another doc with created_at",
+          "created_at": "2025-01-10"
+        },
+        {
+          "id": 2,
+          "name": "Doc with created_at",
+          "created_at": "2025-01-15"
+        },
+        {
+          "id": 1,
+          "name": "Doc without created_at"
+        },
+        {
+          "id": 3,
+          "name": "Another doc without created_at"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn get_document_sort_desc_includes_docs_without_field() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_sortable_attributes(json!(["priority"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!([
+        { "id": 1, "name": "Low priority", "priority": 1 },
+        { "id": 2, "name": "No priority" },
+        { "id": 3, "name": "High priority", "priority": 10 }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["priority:desc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 3,
+          "name": "High priority",
+          "priority": 10
+        },
+        {
+          "id": 1,
+          "name": "Low priority",
+          "priority": 1
+        },
+        {
+          "id": 2,
+          "name": "No priority"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 3
+    }
+    "###);
+}
+
