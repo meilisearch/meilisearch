@@ -372,11 +372,10 @@ where
     SD: SettingsDelta + Sync,
 {
     // Create the list of document ids to extract
-    let rtxn = indexing_context.index.read_txn()?;
-    let all_document_ids =
-        indexing_context.index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
-    let primary_key =
-        primary_key_from_db(indexing_context.index, &rtxn, &indexing_context.db_fields_ids_map)?;
+    let index = indexing_context.index;
+    let rtxn = index.read_txn()?;
+    let all_document_ids = index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
+    let primary_key = primary_key_from_db(index, &rtxn, &indexing_context.db_fields_ids_map)?;
     let documents = DocumentsIndentifiers::new(&all_document_ids, primary_key);
 
     let span =
@@ -390,6 +389,133 @@ where
         settings_delta,
         extractor_allocs,
     )?;
+
+    {
+        let WordDocidsCaches {
+            word_docids,
+            word_fid_docids,
+            exact_word_docids,
+            word_position_docids,
+            fid_word_count_docids,
+        } = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
+            let _entered = span.enter();
+            SettingsChangeWordDocidsExtractors::run_extraction(
+                settings_delta,
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::ExtractingWords,
+            )?
+        };
+
+        indexing_context.progress.update_progress(IndexingStep::MergingWordCaches);
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::WordDocids);
+
+            merge_and_send_docids(
+                word_docids,
+                index.word_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::WordFieldIdDocids);
+
+            merge_and_send_docids(
+                word_fid_docids,
+                index.word_fid_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordFidDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::ExactWordDocids);
+
+            merge_and_send_docids(
+                exact_word_docids,
+                index.exact_word_docids.remap_types(),
+                index,
+                extractor_sender.docids::<ExactWordDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::WordPositionDocids);
+
+            merge_and_send_docids(
+                word_position_docids,
+                index.word_position_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordPositionDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::FieldIdWordCountDocids);
+
+            merge_and_send_docids(
+                fid_word_count_docids,
+                index.field_id_word_count_docids.remap_types(),
+                index,
+                extractor_sender.docids::<FidWordCountDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+    }
+
+    // Run the proximity extraction only if the precision is ByWord.
+    let new_proximity_precision = settings_delta.new_proximity_precision();
+    if *new_proximity_precision == ProximityPrecision::ByWord {
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
+            let _entered = span.enter();
+
+            SettingsChangeWordPairProximityDocidsExtractors::run_extraction(
+                settings_delta,
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::ExtractingWordProximity,
+            )?
+        };
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", "word_pair_proximity_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(IndexingStep::MergingWordProximity);
+
+            merge_and_send_docids(
+                caches,
+                index.word_pair_proximity_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordPairProximityDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+    }
 
     'vectors: {
         if settings_delta.embedder_actions().is_empty() {
