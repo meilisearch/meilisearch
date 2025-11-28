@@ -27,10 +27,10 @@ const HANNOY_M0: usize = 32;
     utoipa::ToSchema,
 )]
 pub enum VectorStoreBackend {
-    #[default]
     #[deserr(rename = "stable")]
     #[serde(rename = "stable")]
     Arroy,
+    #[default]
     #[deserr(rename = "experimental")]
     #[serde(rename = "experimental")]
     Hannoy,

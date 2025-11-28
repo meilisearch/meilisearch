@@ -104,8 +104,8 @@ async fn binary_quantize_before_sending_documents() {
             "manual": {
               "embeddings": [
                 [
-                  -1.0,
-                  -1.0,
+                  0.0,
+                  0.0,
                   1.0
                 ]
               ],
@@ -122,7 +122,7 @@ async fn binary_quantize_before_sending_documents() {
                 [
                   1.0,
                   1.0,
-                  -1.0
+                  0.0
                 ]
               ],
               "regenerate": false
@@ -191,8 +191,8 @@ async fn binary_quantize_after_sending_documents() {
             "manual": {
               "embeddings": [
                 [
-                  -1.0,
-                  -1.0,
+                  0.0,
+                  0.0,
                   1.0
                 ]
               ],
@@ -209,7 +209,7 @@ async fn binary_quantize_after_sending_documents() {
                 [
                   1.0,
                   1.0,
-                  -1.0
+                  0.0
                 ]
               ],
               "regenerate": false
