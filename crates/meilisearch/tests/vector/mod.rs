@@ -5,6 +5,7 @@ mod ollama;
 mod openai;
 mod rest;
 mod settings;
+mod huggingface;
 
 use std::collections::HashMap;
 use std::str::FromStr;
