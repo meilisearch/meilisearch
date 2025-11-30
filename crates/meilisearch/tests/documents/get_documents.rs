@@ -1602,4 +1602,3 @@ async fn get_document_sort_desc_includes_docs_without_field() {
     }
     "###);
 }
-

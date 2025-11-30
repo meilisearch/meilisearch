@@ -258,8 +258,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         } else {
             let number_iter =
                 descending_facet_sort(rtxn, number_db, field_id, faceted_candidates.clone())?;
-            let string_iter =
-                descending_facet_sort(rtxn, string_db, field_id, faceted_candidates)?;
+            let string_iter = descending_facet_sort(rtxn, string_db, field_id, faceted_candidates)?;
 
             (itertools::Either::Right(number_iter), itertools::Either::Right(string_iter))
         };
