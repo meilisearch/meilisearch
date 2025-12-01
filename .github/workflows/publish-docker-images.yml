@@ -211,7 +211,7 @@ jobs:
       # /!\ Don't touch this without checking with Cloud team
       - name: Send CI information to Cloud team
         # Do not send if nightly build (i.e. 'schedule' or 'workflow_dispatch' event)
-        if: github.event_name == 'push'
+        if: ${{ (github.event_name == 'push') && (matrix.edition == 'enterprise') }}
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ secrets.MEILI_BOT_GH_PAT }}
