@@ -65,7 +65,7 @@ jobs:
             extra-args: ""
           - release: linux-amd64
             os: ubuntu-22.04
-            binary_path: release/meilisearch
+            binary_path: x86_64-unknown-linux-gnu/release/meilisearch
             asset_name: linux-amd64
             extra-args: "--target x86_64-unknown-linux-gnu"
           - release: linux-aarch64
