@@ -1,11 +1,11 @@
 mod binary_quantized;
 mod fragments;
+mod huggingface;
 #[cfg(feature = "test-ollama")]
 mod ollama;
 mod openai;
 mod rest;
 mod settings;
-mod huggingface;
 
 use std::collections::HashMap;
 use std::str::FromStr;

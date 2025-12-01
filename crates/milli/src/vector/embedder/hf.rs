@@ -344,15 +344,14 @@ impl Embedder {
             })?;
             ModelKind::Modern(ModernBert::load(vb, &config).map_err(NewEmbedderError::load_model)?)
         } else if is_xlm_roberta {
-            let config: XlmRobertaConfig =
-                serde_json::from_str(&config_str).map_err(|inner| {
-                    NewEmbedderError::deserialize_config(
-                        options.model.clone(),
-                        config_str.clone(),
-                        config_filename.clone(),
-                        inner,
-                    )
-                })?;
+            let config: XlmRobertaConfig = serde_json::from_str(&config_str).map_err(|inner| {
+                NewEmbedderError::deserialize_config(
+                    options.model.clone(),
+                    config_str.clone(),
+                    config_filename.clone(),
+                    inner,
+                )
+            })?;
             ModelKind::XlmRoberta(
                 XLMRobertaModel::new(&config, vb).map_err(NewEmbedderError::load_model)?,
             )
