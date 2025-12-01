@@ -1,27 +1,19 @@
+use std::collections::{BTreeMap, HashMap};
+use std::io::Write;
+use std::sync::Arc;
+
 use anyhow::Context;
 use cargo_metadata::semver::Version;
-use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::{BTreeMap, HashMap},
-    io::Write,
-    sync::Arc,
-};
 
-use crate::{
-    common::{
-        assets::{fetch_assets, Asset},
-        client::Client,
-        command::{run_commands, Command},
-        process::{self, delete_db, kill_meili},
-        workload::Workload,
-    },
-    test::{
-        versions::{expand_assets_with_versions, VersionOrLatest},
-        TestDeriveArgs,
-    },
-};
+use crate::common::assets::{fetch_assets, Asset};
+use crate::common::client::Client;
+use crate::common::command::{run_commands, Command};
+use crate::common::process::{self, delete_db, kill_meili};
+use crate::common::workload::Workload;
+use crate::test::versions::{expand_assets_with_versions, VersionOrLatest};
+use crate::test::TestDeriveArgs;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
@@ -40,7 +32,12 @@ fn produce_reference_value(value: &mut Value) {
     match value {
         Value::Null | Value::Bool(_) | Value::Number(_) => (),
         Value::String(string) => {
-            if DateTime::parse_from_rfc3339(string.as_str()).is_ok() {
+            if time::OffsetDateTime::parse(
+                string.as_str(),
+                &time::format_description::well_known::Rfc3339,
+            )
+            .is_ok()
+            {
                 *string = String::from("[timestamp]");
             } else if uuid::Uuid::parse_str(string).is_ok() {
                 *string = String::from("[uuid]");
