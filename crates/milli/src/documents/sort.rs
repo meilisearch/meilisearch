@@ -240,15 +240,25 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     ) -> crate::Result<SortedDocumentsIterator<'ctx>> {
         let size = candidates.len() as usize;
 
+        // Get documents that have this facet field
+        let faceted_candidates = index.exists_faceted_documents_ids(rtxn, field_id)?;
+        // Documents that don't have this facet field should be returned at the end
+        let not_faceted_candidates = &candidates - &faceted_candidates;
+        // Only sort candidates that have the facet field
+        let faceted_candidates = candidates & faceted_candidates;
+        let mut not_faceted_candidates = Some(not_faceted_candidates);
+
         // Perform the sort on the first field
         let (number_iter, string_iter) = if ascending {
-            let number_iter = ascending_facet_sort(rtxn, number_db, field_id, candidates.clone())?;
-            let string_iter = ascending_facet_sort(rtxn, string_db, field_id, candidates)?;
+            let number_iter =
+                ascending_facet_sort(rtxn, number_db, field_id, faceted_candidates.clone())?;
+            let string_iter = ascending_facet_sort(rtxn, string_db, field_id, faceted_candidates)?;
 
             (itertools::Either::Left(number_iter), itertools::Either::Left(string_iter))
         } else {
-            let number_iter = descending_facet_sort(rtxn, number_db, field_id, candidates.clone())?;
-            let string_iter = descending_facet_sort(rtxn, string_db, field_id, candidates)?;
+            let number_iter =
+                descending_facet_sort(rtxn, number_db, field_id, faceted_candidates.clone())?;
+            let string_iter = descending_facet_sort(rtxn, string_db, field_id, faceted_candidates)?;
 
             (itertools::Either::Right(number_iter), itertools::Either::Right(string_iter))
         };
@@ -256,17 +266,37 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         // Create builders for the next level of the tree
         let number_iter = number_iter.map(|r| r.map(|(d, _)| d));
         let string_iter = string_iter.map(|r| r.map(|(d, _)| d));
-        let next_children = number_iter.chain(string_iter).map(move |r| {
-            Ok(SortedDocumentsIteratorBuilder {
-                index,
-                rtxn,
-                number_db,
-                string_db,
-                fields: next_fields,
-                candidates: r?,
-                geo_candidates,
+        // Chain faceted documents with non-faceted documents at the end
+        let next_children = number_iter
+            .chain(string_iter)
+            .map(move |r| {
+                Ok(SortedDocumentsIteratorBuilder {
+                    index,
+                    rtxn,
+                    number_db,
+                    string_db,
+                    fields: next_fields,
+                    candidates: r?,
+                    geo_candidates,
+                })
             })
-        });
+            .chain(std::iter::from_fn(move || {
+                // Once all faceted candidates have been processed, return the non-faceted ones
+                if let Some(not_faceted) = not_faceted_candidates.take() {
+                    if !not_faceted.is_empty() {
+                        return Some(Ok(SortedDocumentsIteratorBuilder {
+                            index,
+                            rtxn,
+                            number_db,
+                            string_db,
+                            fields: next_fields,
+                            candidates: not_faceted,
+                            geo_candidates,
+                        }));
+                    }
+                }
+                None
+            }));
 
         Ok(SortedDocumentsIterator::Branch {
             current_child: None,
@@ -398,10 +428,14 @@ pub fn recursive_sort<'ctx>(
         };
         if let Some((field, ascending)) = field {
             if is_faceted(&field, &sortable_fields) {
+                // The field may be in sortable_fields but not in fields_ids_map if no document
+                // has ever contained this field. In that case, we just skip this sort criterion
+                // since there are no values to sort by. Documents will be returned in their
+                // default order for this field.
                 if let Some(field_id) = fields_ids_map.id(&field) {
                     fields.push(AscDescId::Facet { field_id, ascending });
-                    continue;
                 }
+                continue;
             }
             return Err(UserError::InvalidDocumentSortableAttribute {
                 field: field.to_string(),
