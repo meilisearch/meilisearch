@@ -64,12 +64,11 @@ async fn build() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tracing::instrument(skip(client, master_key), fields(workload = _workload))]
+#[tracing::instrument(skip(client, master_key))]
 pub async fn start_meili(
     client: &Client,
     master_key: Option<&str>,
     extra_cli_args: &[String],
-    _workload: &str,
     binary_path: Option<&Path>,
 ) -> anyhow::Result<tokio::process::Child> {
     let mut command = match binary_path {

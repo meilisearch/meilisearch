@@ -4,12 +4,11 @@ use crate::{
     common::{
         args::CommonArgs, client::Client, command::SyncMode, logs::setup_logs, workload::Workload,
     },
-    test::workload::CommandOrUpgrade,
+    test::workload::CommandOrBinary,
 };
 use anyhow::{bail, Context};
 use clap::Parser;
 
-mod versions;
 mod workload;
 
 pub use workload::TestWorkload;
@@ -68,10 +67,10 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
         };
 
         let has_upgrade =
-            workload.commands.iter().any(|c| matches!(c, CommandOrUpgrade::Upgrade { .. }));
+            workload.commands.iter().any(|c| matches!(c, CommandOrBinary::Binary { .. }));
 
         let has_faulty_register = workload.commands.iter().any(|c| {
-            matches!(c, CommandOrUpgrade::Command(cmd) if cmd.synchronous == SyncMode::DontWait && !cmd.register.is_empty())
+            matches!(c, CommandOrBinary::Command(cmd) if cmd.synchronous == SyncMode::DontWait && !cmd.register.is_empty())
         });
         if has_faulty_register {
             bail!("workload {} contains commands that register values but are marked as --dont-wait. This is not supported because we cannot guarantee the value will be registered before the next command runs.", workload.name);

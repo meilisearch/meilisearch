@@ -150,7 +150,6 @@ async fn execute_run(
         meili_client,
         master_key,
         &workload.extra_cli_args,
-        &workload.name,
         binary_path,
     )
     .await?;

@@ -3,29 +3,28 @@ use std::io::Write;
 use std::sync::Arc;
 
 use anyhow::Context;
-use cargo_metadata::semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::common::assets::{fetch_assets, Asset};
+use crate::common::assets::{Asset, fetch_assets};
 use crate::common::client::Client;
-use crate::common::command::{run_commands, Command};
+use crate::common::command::{Command, run_commands};
+use crate::common::instance::Binary;
 use crate::common::process::{self, delete_db, kill_meili};
 use crate::common::workload::Workload;
-use crate::test::versions::{expand_assets_with_versions, VersionOrLatest};
 use crate::test::TestDeriveArgs;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 #[allow(clippy::large_enum_variant)]
-pub enum CommandOrUpgrade {
+pub enum CommandOrBinary {
     Command(Command),
-    Upgrade { upgrade: VersionOrLatest },
+    Binary { binary: Binary },
 }
 
-enum CommandOrUpgradeVec<'a> {
+enum CommandOrBinaryVec<'a> {
     Commands(Vec<&'a mut Command>),
-    Upgrade(VersionOrLatest),
+    Binary(Binary),
 }
 
 fn produce_reference_value(value: &mut Value) {
@@ -68,13 +67,13 @@ fn produce_reference_value(value: &mut Value) {
 #[serde(rename_all = "camelCase")]
 pub struct TestWorkload {
     pub name: String,
-    pub initial_version: Version,
+    pub binary: Binary,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub master_key: Option<String>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub assets: BTreeMap<String, Asset>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub commands: Vec<CommandOrUpgrade>,
+    pub commands: Vec<CommandOrBinary>,
 }
 
 impl TestWorkload {
@@ -86,41 +85,43 @@ impl TestWorkload {
         asset_folder: &'static str,
     ) -> anyhow::Result<()> {
         // Group commands between upgrades
-        let mut commands_or_upgrade = Vec::new();
+        let mut commands_or_instance = Vec::new();
         let mut current_commands = Vec::new();
-        let mut all_versions = vec![self.initial_version.clone()];
+        let mut all_releases = Vec::new();
+
+        if let Some(release) = self.binary.as_release() {
+            all_releases.push(release);
+        }
         for command_or_upgrade in &mut self.commands {
             match command_or_upgrade {
-                CommandOrUpgrade::Command(command) => current_commands.push(command),
-                CommandOrUpgrade::Upgrade { upgrade } => {
+                CommandOrBinary::Command(command) => current_commands.push(command),
+                CommandOrBinary::Binary { binary: instance } => {
                     if !current_commands.is_empty() {
-                        commands_or_upgrade.push(CommandOrUpgradeVec::Commands(current_commands));
+                        commands_or_instance.push(CommandOrBinaryVec::Commands(current_commands));
                         current_commands = Vec::new();
                     }
-                    commands_or_upgrade.push(CommandOrUpgradeVec::Upgrade(upgrade.clone()));
-                    if let VersionOrLatest::Version(upgrade) = upgrade {
-                        all_versions.push(upgrade.clone());
+                    commands_or_instance.push(CommandOrBinaryVec::Binary(instance.clone()));
+                    if let Some(release) = instance.as_release() {
+                        all_releases.push(release);
                     }
                 }
             }
         }
         if !current_commands.is_empty() {
-            commands_or_upgrade.push(CommandOrUpgradeVec::Commands(current_commands));
+            commands_or_instance.push(CommandOrBinaryVec::Commands(current_commands));
         }
 
         // Fetch assets
-        expand_assets_with_versions(&mut self.assets, &all_versions).await?;
+        crate::common::instance::add_releases_to_assets(&mut self.assets, all_releases).await?;
         fetch_assets(assets_client, &self.assets, &args.common.asset_folder).await?;
 
         // Run server
         delete_db().await;
-        let binary_path = VersionOrLatest::Version(self.initial_version.clone())
-            .binary_path(&args.common.asset_folder)?;
+        let binary_path = self.binary.binary_path(&args.common.asset_folder)?;
         let mut process = process::start_meili(
             meili_client,
             Some("masterKey"),
-            &[],
-            &self.name,
+            &self.binary.extra_cli_args,
             binary_path.as_deref(),
         )
         .await?;
@@ -128,9 +129,9 @@ impl TestWorkload {
         let assets = Arc::new(self.assets.clone());
         let return_responses = dbg!(args.add_missing_responses || args.update_responses);
         let mut registered = HashMap::new();
-        for command_or_upgrade in commands_or_upgrade {
+        for command_or_upgrade in commands_or_instance {
             match command_or_upgrade {
-                CommandOrUpgradeVec::Commands(commands) => {
+                CommandOrBinaryVec::Commands(commands) => {
                     let cloned: Vec<_> = commands.iter().map(|c| (*c).clone()).collect();
                     let responses = run_commands(
                         meili_client,
@@ -156,18 +157,17 @@ impl TestWorkload {
                         }
                     }
                 }
-                CommandOrUpgradeVec::Upgrade(version) => {
+                CommandOrBinaryVec::Binary(binary) => {
                     kill_meili(process).await;
-                    let binary_path = version.binary_path(&args.common.asset_folder)?;
+                    let binary_path = binary.binary_path(&args.common.asset_folder)?;
                     process = process::start_meili(
                         meili_client,
                         Some("masterKey"),
-                        &[String::from("--experimental-dumpless-upgrade")],
-                        &self.name,
+                        &binary.extra_cli_args,
                         binary_path.as_deref(),
                     )
                     .await?;
-                    tracing::info!("Upgraded to {version}");
+                    tracing::info!("Restarted instance with {binary}");
                 }
             }
         }
