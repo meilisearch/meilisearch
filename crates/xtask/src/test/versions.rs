@@ -105,43 +105,41 @@ async fn get_sha256(version: &Version, asset_name: &str) -> anyhow::Result<Strin
 }
 
 pub fn get_arch() -> anyhow::Result<&'static str> {
-    let arch;
-
     // linux-aarch64
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     {
-        arch = "linux-aarch64";
+        return Ok("linux-aarch64");
     }
 
     // linux-amd64
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
-        arch = "linux-amd64";
+        return Ok("linux-amd64");
     }
 
     // macos-amd64
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     {
-        arch = "macos-amd64";
+        return Ok("macos-amd64");
     }
 
     // macos-apple-silicon
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        arch = "macos-apple-silicon";
+        return Ok("macos-apple-silicon");
     }
 
     // windows-amd64
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     {
-        arch = "windows-amd64";
+        return Ok("windows-amd64");
     }
 
-    if arch.is_empty() {
-        anyhow::bail!("unsupported platform");
-    }
-
-    Ok(arch)
+    #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
+    #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
+    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+    #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    anyhow::bail!("unsupported platform")
 }
 
 async fn add_asset(assets: &mut BTreeMap<String, Asset>, version: &Version) -> anyhow::Result<()> {
