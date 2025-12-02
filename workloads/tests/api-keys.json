@@ -164,7 +164,8 @@
         "limit": 20,
         "offset": 0,
         "processingTimeMs": "[duration]",
-        "query": "shazam"
+        "query": "shazam",
+        "requestUid": "[uid]"
       },
       "apiKeyVariable": "key",
       "synchronous": "WaitForResponse"
@@ -207,7 +208,8 @@
         "limit": 20,
         "offset": 0,
         "processingTimeMs": "[duration]",
-        "query": "shazam"
+        "query": "shazam",
+        "requestUid": "[uid]"
       },
       "apiKeyVariable": "key",
       "synchronous": "WaitForResponse"
@@ -275,7 +277,8 @@
         "limit": 20,
         "offset": 0,
         "processingTimeMs": "[duration]",
-        "query": "shaza"
+        "query": "shaza",
+        "requestUid": "[uid]"
       },
       "apiKeyVariable": "key",
       "synchronous": "WaitForResponse"
@@ -284,6 +287,82 @@
       "route": "tasks",
       "method": "GET",
       "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "from": 3,
+        "limit": 20,
+        "next": null,
+        "results": [
+          {
+            "batchUid": 3,
+            "canceledBy": null,
+            "details": {
+              "indexedDocuments": 1,
+              "receivedDocuments": 1
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": "movies",
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "documentAdditionOrUpdate",
+            "uid": 3
+          },
+          {
+            "batchUid": 2,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.12.0",
+              "upgradeTo": "[latest]"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": null,
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "upgradeDatabase",
+            "uid": 2
+          },
+          {
+            "batchUid": 1,
+            "canceledBy": null,
+            "details": {
+              "indexedDocuments": 1,
+              "receivedDocuments": 1
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": "movies",
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "documentAdditionOrUpdate",
+            "uid": 1
+          },
+          {
+            "batchUid": 0,
+            "canceledBy": null,
+            "details": {
+              "primaryKey": "id"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": "movies",
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "indexCreation",
+            "uid": 0
+          }
+        ],
+        "total": 4
+      },
       "synchronous": "WaitForResponse"
     }
   ]
