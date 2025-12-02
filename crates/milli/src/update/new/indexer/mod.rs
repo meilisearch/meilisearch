@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Once, RwLock};
 use std::thread::{self, Builder};
@@ -8,9 +8,11 @@ use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{DocumentOperation, PayloadStats};
 use hashbrown::HashMap;
-use heed::{RoTxn, RwTxn};
+use heed::types::DecodeIgnore;
+use heed::{BytesDecode, Database, RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
 pub use post_processing::recompute_word_fst_from_word_docids_database;
+pub use settings_changes::settings_change_extract;
 pub use update_by_function::UpdateByFunction;
 pub use write::ChannelCongestion;
 use write::{build_vectors, update_index, write_to_db};
@@ -20,12 +22,18 @@ use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
+use crate::heed_codec::StrBEU16Codec;
 use crate::progress::{EmbedderStats, Progress};
+use crate::proximity::ProximityPrecision;
+use crate::update::new::steps::SettingsIndexerStep;
+use crate::update::new::FacetFieldIdsDelta;
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
-use crate::{FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort};
+use crate::{
+    Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
+};
 
 #[cfg(not(feature = "enterprise"))]
 pub mod community_edition;
@@ -242,6 +250,20 @@ where
     SD: SettingsDelta + Sync,
 {
     delete_old_embedders_and_fragments(wtxn, index, settings_delta)?;
+    delete_old_fid_based_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
+
+    // Clear word_pair_proximity if byWord to byAttribute
+    let old_proximity_precision = settings_delta.old_proximity_precision();
+    let new_proximity_precision = settings_delta.new_proximity_precision();
+    if *old_proximity_precision == ProximityPrecision::ByWord
+        && *new_proximity_precision == ProximityPrecision::ByAttribute
+    {
+        index.word_pair_proximity_docids.clear(wtxn)?;
+    }
+
+    // TODO delete useless searchable databases
+    //      - Clear fid_prefix_* in the post processing
+    //      - clear the prefix + fid_prefix if setting `PrefixSearch` is enabled
 
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);
@@ -300,6 +322,8 @@ where
                 .unwrap()
             })?;
 
+        let global_fields_ids_map = GlobalFieldsIdsMap::new(&new_fields_ids_map);
+
         let new_embedders = settings_delta.new_embedders();
         let embedder_actions = settings_delta.embedder_actions();
         let index_embedder_category_ids = settings_delta.new_embedder_category_id();
@@ -330,6 +354,18 @@ where
                 &mut vector_stores,
                 Some(embedder_actions),
                 &indexing_context.must_stop_processing,
+            )
+        })
+        .unwrap()?;
+
+        pool.install(|| {
+            // WARN When implementing the facets don't forget this
+            let facet_field_ids_delta = FacetFieldIdsDelta::new(0, 0);
+            post_processing::post_process(
+                indexing_context,
+                wtxn,
+                global_fields_ids_map,
+                facet_field_ids_delta,
             )
         })
         .unwrap()?;
@@ -457,6 +493,106 @@ where
             for to_delete in to_delete {
                 arroy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
             }
+        }
+    }
+
+    Ok(())
+}
+
+/// Deletes entries refering the provided
+/// fids from the fid-based databases.
+fn delete_old_fid_based_databases<SD, MSP>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    settings_delta: &SD,
+    must_stop_processing: &MSP,
+    progress: &Progress,
+) -> Result<()>
+where
+    SD: SettingsDelta + Sync,
+    MSP: Fn() -> bool + Sync,
+{
+    let fids_to_delete: Option<BTreeSet<_>> = {
+        let rtxn = index.read_txn()?;
+        let fields_ids_map = index.fields_ids_map(&rtxn)?;
+        let old_searchable_attributes = settings_delta.old_searchable_attributes().as_ref();
+        let new_searchable_attributes = settings_delta.new_searchable_attributes().as_ref();
+        old_searchable_attributes.zip(new_searchable_attributes).map(|(old, new)| {
+            old.iter()
+                // Ignore the field if it is not searchable anymore
+                // or if it was never referenced in any document
+                .filter_map(|name| if new.contains(name) { None } else { fields_ids_map.id(name) })
+                .collect()
+        })
+    };
+
+    let Some(fids_to_delete) = fids_to_delete else {
+        return Ok(());
+    };
+
+    progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
+    delete_old_word_fid_docids(wtxn, index.word_fid_docids, must_stop_processing, &fids_to_delete)?;
+
+    progress.update_progress(SettingsIndexerStep::DeletingOldFidWordCountDocids);
+    delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, &fids_to_delete)?;
+
+    progress.update_progress(SettingsIndexerStep::DeletingOldWordPrefixFidDocids);
+    delete_old_word_fid_docids(
+        wtxn,
+        index.word_prefix_fid_docids,
+        must_stop_processing,
+        &fids_to_delete,
+    )?;
+
+    Ok(())
+}
+
+fn delete_old_word_fid_docids<'txn, MSP, DC>(
+    wtxn: &mut RwTxn<'txn>,
+    database: Database<StrBEU16Codec, DC>,
+    must_stop_processing: &MSP,
+    fids_to_delete: &BTreeSet<u16>,
+) -> Result<(), Error>
+where
+    MSP: Fn() -> bool + Sync,
+    DC: BytesDecode<'txn>,
+{
+    let mut iter = database.iter_mut(wtxn)?.remap_data_type::<DecodeIgnore>();
+    while let Some(((_word, fid), ())) = iter.next().transpose()? {
+        // TODO should I call it that often?
+        if must_stop_processing() {
+            return Err(Error::InternalError(InternalError::AbortedIndexation));
+        }
+
+        if fids_to_delete.contains(&fid) {
+            // safety: We don't keep any references to the data.
+            unsafe { iter.del_current()? };
+        }
+    }
+
+    Ok(())
+}
+
+fn delete_old_fid_word_count_docids<MSP>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    must_stop_processing: &MSP,
+    fids_to_delete: &BTreeSet<u16>,
+) -> Result<(), Error>
+where
+    MSP: Fn() -> bool + Sync,
+{
+    let db = index.field_id_word_count_docids.remap_data_type::<DecodeIgnore>();
+    for &fid_to_delete in fids_to_delete {
+        if must_stop_processing() {
+            return Err(Error::InternalError(InternalError::AbortedIndexation));
+        }
+
+        let mut iter = db.prefix_iter_mut(wtxn, &(fid_to_delete, 0))?;
+        while let Some(((fid, _word_count), ())) = iter.next().transpose()? {
+            debug_assert_eq!(fid, fid_to_delete);
+            // safety: We don't keep any references to the data.
+            unsafe { iter.del_current()? };
         }
     }
 

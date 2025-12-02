@@ -18,6 +18,8 @@ use crate::{
 pub struct Metadata {
     /// The weight as defined in the FieldidsWeightsMap of the searchable attribute if it is searchable.
     pub searchable: Option<Weight>,
+    /// The field is part of the exact attributes.
+    pub exact: bool,
     /// The field is part of the sortable attributes.
     pub sortable: bool,
     /// The field is defined as the distinct attribute.
@@ -209,6 +211,7 @@ impl Metadata {
 #[derive(Debug, Clone)]
 pub struct MetadataBuilder {
     searchable_attributes: Option<Vec<String>>,
+    exact_searchable_attributes: Vec<String>,
     filterable_attributes: Vec<FilterableAttributesRule>,
     sortable_attributes: HashSet<String>,
     localized_attributes: Option<Vec<LocalizedAttributesRule>>,
@@ -220,15 +223,18 @@ impl MetadataBuilder {
     pub fn from_index(index: &Index, rtxn: &RoTxn) -> Result<Self> {
         let searchable_attributes = index
             .user_defined_searchable_fields(rtxn)?
-            .map(|fields| fields.into_iter().map(|s| s.to_string()).collect());
+            .map(|fields| fields.into_iter().map(String::from).collect());
+        let exact_searchable_attributes =
+            index.exact_attributes(rtxn)?.into_iter().map(String::from).collect();
         let filterable_attributes = index.filterable_attributes_rules(rtxn)?;
         let sortable_attributes = index.sortable_fields(rtxn)?;
         let localized_attributes = index.localized_attributes_rules(rtxn)?;
-        let distinct_attribute = index.distinct_field(rtxn)?.map(|s| s.to_string());
+        let distinct_attribute = index.distinct_field(rtxn)?.map(String::from);
         let asc_desc_attributes = index.asc_desc_fields(rtxn)?;
 
         Ok(Self::new(
             searchable_attributes,
+            exact_searchable_attributes,
             filterable_attributes,
             sortable_attributes,
             localized_attributes,
@@ -242,6 +248,7 @@ impl MetadataBuilder {
     /// This is used for testing, prefer using `MetadataBuilder::from_index` instead.
     pub fn new(
         searchable_attributes: Option<Vec<String>>,
+        exact_searchable_attributes: Vec<String>,
         filterable_attributes: Vec<FilterableAttributesRule>,
         sortable_attributes: HashSet<String>,
         localized_attributes: Option<Vec<LocalizedAttributesRule>>,
@@ -256,6 +263,7 @@ impl MetadataBuilder {
 
         Self {
             searchable_attributes,
+            exact_searchable_attributes,
             filterable_attributes,
             sortable_attributes,
             localized_attributes,
@@ -269,6 +277,7 @@ impl MetadataBuilder {
             // Vectors fields are not searchable, filterable, distinct or asc_desc
             return Metadata {
                 searchable: None,
+                exact: false,
                 sortable: false,
                 distinct: false,
                 asc_desc: false,
@@ -296,6 +305,7 @@ impl MetadataBuilder {
             // Geo fields are not searchable, distinct or asc_desc
             return Metadata {
                 searchable: None,
+                exact: false,
                 sortable,
                 distinct: false,
                 asc_desc: false,
@@ -309,6 +319,7 @@ impl MetadataBuilder {
             debug_assert!(!sortable, "geojson fields should not be sortable");
             return Metadata {
                 searchable: None,
+                exact: false,
                 sortable,
                 distinct: false,
                 asc_desc: false,
@@ -329,6 +340,8 @@ impl MetadataBuilder {
             None => Some(0),
         };
 
+        let exact = self.exact_searchable_attributes.iter().any(|attr| is_faceted_by(field, attr));
+
         let distinct =
             self.distinct_attribute.as_ref().is_some_and(|distinct_field| field == distinct_field);
         let asc_desc = self.asc_desc_attributes.contains(field);
@@ -343,6 +356,7 @@ impl MetadataBuilder {
 
         Metadata {
             searchable,
+            exact,
             sortable,
             distinct,
             asc_desc,

@@ -1589,33 +1589,33 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         // only use the new indexer when only the embedder possibly changed
         if let Self {
-            searchable_fields: Setting::NotSet,
+            searchable_fields: _,
             displayed_fields: Setting::NotSet,
             filterable_fields: Setting::NotSet,
             sortable_fields: Setting::NotSet,
             criteria: Setting::NotSet,
-            stop_words: Setting::NotSet,
-            non_separator_tokens: Setting::NotSet,
-            separator_tokens: Setting::NotSet,
-            dictionary: Setting::NotSet,
+            stop_words: Setting::NotSet, // TODO (require force reindexing of searchables)
+            non_separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
+            separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
+            dictionary: Setting::NotSet, // TODO (require force reindexing of searchables)
             distinct_field: Setting::NotSet,
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
             min_word_len_two_typos: Setting::NotSet,
             min_word_len_one_typo: Setting::NotSet,
-            exact_words: Setting::NotSet,
-            exact_attributes: Setting::NotSet,
+            exact_words: Setting::NotSet, // TODO (require force reindexing of searchables)
+            exact_attributes: _,
             max_values_per_facet: Setting::NotSet,
             sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
-            proximity_precision: Setting::NotSet,
+            proximity_precision: _,
             embedder_settings: _,
             search_cutoff: Setting::NotSet,
-            localized_attributes_rules: Setting::NotSet,
-            prefix_search: Setting::NotSet,
+            localized_attributes_rules: Setting::NotSet, // TODO to start with
+            prefix_search: Setting::NotSet,              // TODO continue with this
             facet_search: Setting::NotSet,
-            disable_on_numbers: Setting::NotSet,
+            disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
             chat: Setting::NotSet,
             vector_store: Setting::NotSet,
             wtxn: _,
@@ -1632,10 +1632,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             // Update index settings
             let embedding_config_updates = self.update_embedding_configs()?;
             self.update_user_defined_searchable_attributes()?;
+            self.update_exact_attributes()?;
+            self.update_proximity_precision()?;
 
-            let mut new_inner_settings =
-                InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
-            new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
+            // Note that we don't need to update the searchables here,
+            // as it will be done after the settings update.
+            let new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
 
             let primary_key_id = self
                 .index
@@ -2062,9 +2064,12 @@ impl InnerIndexSettings {
         let sortable_fields = index.sortable_fields(rtxn)?;
         let asc_desc_fields = index.asc_desc_fields(rtxn)?;
         let distinct_field = index.distinct_field(rtxn)?.map(|f| f.to_string());
-        let user_defined_searchable_attributes = index
-            .user_defined_searchable_fields(rtxn)?
-            .map(|fields| fields.into_iter().map(|f| f.to_string()).collect());
+        let user_defined_searchable_attributes = match index.user_defined_searchable_fields(rtxn)? {
+            Some(fields) if fields.contains(&"*") => None,
+            Some(fields) => Some(fields.into_iter().map(|f| f.to_string()).collect()),
+            None => None,
+        };
+
         let builder = MetadataBuilder::from_index(index, rtxn)?;
         let fields_ids_map = FieldIdMapWithMetadata::new(fields_ids_map, builder);
         let disabled_typos_terms = index.disabled_typos_terms(rtxn)?;
@@ -2578,8 +2583,20 @@ fn deserialize_sub_embedder(
 /// Implement this trait for the settings delta type.
 /// This is used in the new settings update flow and will allow to easily replace the old settings delta type: `InnerIndexSettingsDiff`.
 pub trait SettingsDelta {
-    fn new_embedders(&self) -> &RuntimeEmbedders;
+    fn old_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
+
+    fn old_searchable_attributes(&self) -> &Option<Vec<String>>;
+    fn new_searchable_attributes(&self) -> &Option<Vec<String>>;
+
+    fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms;
+    fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms;
+
+    fn old_proximity_precision(&self) -> &ProximityPrecision;
+    fn new_proximity_precision(&self) -> &ProximityPrecision;
+
     fn old_embedders(&self) -> &RuntimeEmbedders;
+    fn new_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction>;
     fn try_for_each_fragment_diff<F, E>(
@@ -2589,7 +2606,6 @@ pub trait SettingsDelta {
     ) -> std::result::Result<(), E>
     where
         F: FnMut(FragmentDiff) -> std::result::Result<(), E>;
-    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
 }
 
 pub struct FragmentDiff<'a> {
@@ -2598,26 +2614,47 @@ pub struct FragmentDiff<'a> {
 }
 
 impl SettingsDelta for InnerIndexSettingsDiff {
-    fn new_embedders(&self) -> &RuntimeEmbedders {
-        &self.new.runtime_embedders
+    fn old_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
+        &self.old.fields_ids_map
+    }
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
+        &self.new.fields_ids_map
+    }
+
+    fn old_searchable_attributes(&self) -> &Option<Vec<String>> {
+        &self.old.user_defined_searchable_attributes
+    }
+    fn new_searchable_attributes(&self) -> &Option<Vec<String>> {
+        &self.new.user_defined_searchable_attributes
+    }
+
+    fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms {
+        &self.old.disabled_typos_terms
+    }
+    fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms {
+        &self.new.disabled_typos_terms
+    }
+
+    fn old_proximity_precision(&self) -> &ProximityPrecision {
+        &self.old.proximity_precision
+    }
+    fn new_proximity_precision(&self) -> &ProximityPrecision {
+        &self.new.proximity_precision
     }
 
     fn old_embedders(&self) -> &RuntimeEmbedders {
         &self.old.runtime_embedders
     }
+    fn new_embedders(&self) -> &RuntimeEmbedders {
+        &self.new.runtime_embedders
+    }
 
     fn new_embedder_category_id(&self) -> &HashMap<String, u8> {
         &self.new.embedder_category_id
     }
-
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction> {
         &self.embedding_config_updates
     }
-
-    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
-        &self.new.fields_ids_map
-    }
-
     fn try_for_each_fragment_diff<F, E>(
         &self,
         embedder_name: &str,
