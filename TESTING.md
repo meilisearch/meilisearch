@@ -1,18 +1,22 @@
-# Declarative upgrade tests
+# Declarative tests
 
-Declarative upgrade tests ensure that Meilisearch features remain stable across versions.
+Declarative tests ensure that Meilisearch features remain stable across versions.
 
 While we already have unit tests, those are run against **temporary databases** that are created fresh each time and therefore never risk corruption.
 
-Upgrade tests instead **simulate the lifetime of a database**: they chain together commands and version upgrades, verifying that database state and API responses remain consistent.
+Declarative tests instead **simulate the lifetime of a database**: they chain together commands and requests to change the binary, verifying that database state and API responses remain consistent.
 
 ## Basic example
 
-```json
+```jsonc
 {
   "type": "test",
   "name": "api-keys",
-  "initialVersion": "1.19.0", // the first command will run on a brand new database of this version
+  "binary": { // the first command will run on the binary following this specification.
+    "source": "release", // get the binary as a release from GitHub
+    "version": "1.19.0", // version to fetch
+    "edition": "community" // edition to fetch
+  },
   "commands": []
 }
 ```
@@ -31,7 +35,7 @@ Commands represent API requests sent to Meilisearch endpoints during a test.
 
 They are executed sequentially, and their responses can be validated to ensure consistent behavior across upgrades.
 
-```json
+```jsonc
 
 {
   "route": "keys",
@@ -58,11 +62,15 @@ To keep tests concise and reusable, you can define **assets** at the root of the
 
 Assets are external data sources (such as datasets) that are cached between runs, making tests faster and easier to read.
 
-```json
+```jsonc
 {
   "type": "test",
   "name": "movies",
-  "initialVersion": "1.12.0",
+  "binary": {
+    "source": "release",
+    "version": "1.19.0",
+    "edition": "community"
+  },
   "assets": {
     "movies.json": {
       "local_location": null,
@@ -89,11 +97,13 @@ In this example:
 
 This makes the test much cleaner than inlining a large dataset directly into the command.
 
+For asset handling, please refer to the [declarative benchmarks documentation](/BENCHMARKS.md#adding-new-assets).
+
 ### Asserting responses
 
 Commands can specify both the **expected status code** and the **expected response body**.
 
-```json
+```jsonc
 {
   "route": "indexes/movies/documents",
   "method": "POST",
@@ -132,72 +142,123 @@ This workflow is recommended:
 2. Run it with `--add-missing-responses` to capture the actual responses.
 3. Review and commit the generated expectations.
 
-## Upgrade commands
+## Changing binary
 
-Upgrade commands allow you to switch the Meilisearch instance from one version to another during a test.
+It is possible to insert an instruction to change the current Meilisearch instance from one binary specification to another during a test.
 
-When executed, an upgrade command will:
-1. Stop the current Meilisearch server.
-2. Upgrade the database to the specified version.
-3. Restart the server with the new specified version.
+When executed, such an instruction will:
+1. Stop the current Meilisearch instance.
+2. Fetch the binary specified by the instruction.
+3. Restart the server with the specified binary on the same database.
+
+```jsonc
+{
+  "type": "test",
+  "name": "movies",
+  "binary": {
+    "source": "release",
+    "version": "1.19.0", // start with version v1.19.0
+    "edition": "community"
+  },
+  "assets": {
+    "movies.json": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies.json",
+      "sha256": "5b6e4cb660bc20327776e8a33ea197b43d9ec84856710ead1cc87ab24df77de1"
+    }
+  },
+  "commands": [
+    // setup some data
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "movies.json"
+      }
+    },
+    // switch binary to v1.24.0
+    {
+      "binary": {
+        "source": "release",
+        "version": "1.24.0",
+        "edition": "community"
+      }
+    }
+  ]
+}
+```
 
 ### Typical Usage
 
-In most cases, you will:
+In most cases, the change binary instruction will be used to update a database.
 
 - **Set up** some data using commands on an older version.
 - **Upgrade** to the latest version.
 - **Assert** that the data and API behavior remain correct after the upgrade.
 
-```json
+To properly test the dumpless upgrade, one should typically:
+
+1. Open the database without processing the update task: Use a `binary` instruction to switch to the desired version, passing `--experimental-dumpless-upgrade` and `--experimental-max-number-of-batched-tasks=0` as extra CLI arguments
+2. Check that the search, stats and task queue still work.
+3. Open the database and process the update task: Use a `binary` instruction to switch to the desired version, passing `--experimental-dumpless-upgrade` as the extra CLI argument. Use a `health` command to wait for the upgrade task to finish.
+4. Check that the indexing, search, stats, and task queue still work.
+
+```jsonc
 {
   "type": "test",
   "name": "movies",
-  "initialVersion": "1.12.0", // An older version to start with
+  "binary": {
+    "source": "release",
+    "version": "1.12.0",
+    "edition": "community"
+  },
   "commands": [
-    // Commands to populate the database
+    // 0. Run commands to populate the database
     {
-      "upgrade": "latest" // Will build meilisearch locally and run it
+      // ..
     },
-    // Commands to check the state of the database
+    // 1. Open the database with new MS without processing the update task
+    {
+      "binary": {
+        "source": "build", // build the binary from the sources in the current git repository
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade", // allows to open with a newer MS
+          "--experimental-max-number-of-batched-tasks=0" // prevent processing of the update task
+        ]
+      }
+    },
+    // 2. Check the search etc.
+    {
+      // ..
+    },
+    // 3. Open the database with new MS and processing the update task
+    {
+      "binary": {
+        "source": "build", // build the binary from the sources in the current git repository
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade" // allows to open with a newer MS
+          // no `--experimental-max-number-of-batched-tasks=0`
+        ]
+      }
+    },
+    // 4. Check the indexing, search, etc.
+    {
+      // ..
+    }
   ]
 }
 ```
 
 This ensures backward compatibility: databases created with older Meilisearch versions should remain functional and consistent after an upgrade.
 
-### Advanced usage
-
-As time goes on, tests may grow more complex as they evolve alongside new features and schema changes.
-A single test can chain together multiple upgrades, interleaving data population, API checks, and version transitions.
-
-For example:
-
-```json
-{
-  "type": "test",
-  "name": "movies",
-  "initialVersion": "1.12.0",
-  "commands": [
-    // Commands to populate the database
-    {
-      "upgrade": "1.17.0"
-    },
-    // Commands on endpoints that were removed after 1.17
-    {
-      "upgrade": "latest"
-    },
-    // Check the state
-  ]
-}
-```
-
 ## Variables
 
 Sometimes a command needs to use a value returned by a **previous response**.
 These values can be captured and reused using the register field.
 
-```json
+```jsonc
 {
   "route": "keys",
   "method": "POST",
@@ -231,7 +292,7 @@ Registered variables can be referenced by wrapping their name in double curly br
 
 In the route/path:
 
-```json
+```jsonc
 {
   "route": "tasks/{{ task_id }}",
   "method": "GET"
@@ -240,7 +301,7 @@ In the route/path:
 
 In the request body:
 
-```json
+```jsonc
 {
   "route": "indexes/movies/documents",
   "method": "PATCH",
@@ -253,13 +314,13 @@ In the request body:
 }
 ```
 
-As an API-key:
+Or they can be referenced by their name (**without curly braces**) as an API key:
 
-```json
+```jsonc
 {
   "route": "indexes/movies/documents",
   "method": "POST",
   "body": { /* ... */ },
-  "apiKeyVariable": "key" // The content of the key variable will be used as an API key
+  "apiKeyVariable": "key" // The **content** of the key variable will be used as an API key
 }
 ```
