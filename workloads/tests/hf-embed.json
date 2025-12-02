@@ -1,0 +1,159 @@
+{
+    "type": "test",
+    "name": "hf-embed",
+    "binary": {
+        "source": "release",
+        "edition": "community",
+        "version": "1.14.0"
+    },
+    "assets": {
+        "movies-100.json": {
+            "local_location": null,
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies-100.json",
+            "sha256": "d215e395e4240f12f03b8f1f68901eac82d9e7ded5b462cbf4a6b8efde76c6c6"
+        }
+    },
+    "commands": [
+        {
+            "route": "indexes/movies/settings",
+            "method": "PATCH",
+            "body": {
+                "inline": {
+                    "searchableAttributes": [
+                        "title",
+                        "overview"
+                    ],
+                    "filterableAttributes": [
+                        "genres",
+                        "release_date"
+                    ],
+                    "sortableAttributes": [
+                        "release_date"
+                    ]
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings",
+            "method": "PATCH",
+            "body": {
+                "inline": {
+                    "embedders": {
+                        "default": {
+                            "source": "huggingFace"
+                        }
+                    }
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "movies-100.json"
+            },
+            "synchronous": "WaitForTask"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "q": "toto",
+                    "hybrid": {
+                        "embedder": "default",
+                        "semanticRatio": 1.0
+                    }
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings/embedders",
+            "method": "GET",
+            "body": null,
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "binary": {
+                "source": "build",
+                "extraCliArgs": [
+                    "--experimental-dumpless-upgrade",
+                    "--experimental-max-number-of-batched-tasks=0"
+                ]
+            }
+        },
+        {
+            "route": "experimental-features",
+            "method": "PATCH",
+            "body": {
+                "inline": {
+                    "vectorStoreSetting": "true"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "q": "toto",
+                    "hybrid": {
+                        "embedder": "default",
+                        "semanticRatio": 1.0
+                    }
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings/embedders",
+            "method": "GET",
+            "body": null,
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "binary": {
+                "source": "build",
+                "extraCliArgs": [
+                    "--experimental-dumpless-upgrade"
+                ]
+            }
+        },
+        {
+            "route": "health",
+            "method": "GET",
+            "body": null,
+            "synchronous": "WaitForTask"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "q": "toto",
+                    "hybrid": {
+                        "embedder": "default",
+                        "semanticRatio": 1.0
+                    }
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings/embedders",
+            "method": "GET",
+            "body": null,
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "tasks",
+            "method": "GET",
+            "body": null,
+            "synchronous": "WaitForResponse"
+        }
+    ]
+}

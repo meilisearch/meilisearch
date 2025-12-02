@@ -1,7 +1,11 @@
 {
   "type": "test",
   "name": "api-keys",
-  "initialVersion": "1.12.0",
+  "binary": {
+    "source": "release",
+    "edition": "community",
+    "version": "1.12.0"
+  },
   "commands": [
     {
       "route": "keys",
@@ -16,7 +20,8 @@
           "expiresAt": null,
           "indexes": [
             "movies"
-          ]
+          ],
+          "uid": "9e053497-b180-4b9f-bf10-a4a6fc4ca1b2"
         }
       },
       "expectedStatus": 201,
@@ -31,9 +36,9 @@
         "indexes": [
           "movies"
         ],
-        "key": "c6f64630bad2996b1f675007c8800168e14adf5d6a7bb1a400a6d2b158050eaf",
+        "key": "b387a8dabdc80d4d2069718ca43bad8bcb1ce5d8bb85b31af17a5ea6348317dc",
         "name": null,
-        "uid": "[uuid]",
+        "uid": "9e053497-b180-4b9f-bf10-a4a6fc4ca1b2",
         "updatedAt": "[timestamp]"
       },
       "register": {
@@ -57,7 +62,7 @@
         "indexes": [
           "movies"
         ],
-        "key": "c6f64630bad2996b1f675007c8800168e14adf5d6a7bb1a400a6d2b158050eaf",
+        "key": "b387a8dabdc80d4d2069718ca43bad8bcb1ce5d8bb85b31af17a5ea6348317dc",
         "name": null,
         "uid": "[uuid]",
         "updatedAt": "[timestamp]"
@@ -104,7 +109,7 @@
         "type": "documentAdditionOrUpdate"
       },
       "apiKeyVariable": "key",
-      "synchronous": "WaitForResponse"
+      "synchronous": "WaitForTask"
     },
     {
       "route": "indexes/movies/search?q=shazam",
@@ -112,8 +117,16 @@
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
-        "estimatedTotalHits": 0,
-        "hits": [],
+        "estimatedTotalHits": 1,
+        "hits": [
+          {
+            "id": 287947,
+            "overview": "A boy is given the ability to become an adult superhero in times of need with a single magic word.",
+            "poster": "https://image.tmdb.org/t/p/w1280/xnopI5Xtky18MPhK40cZAGAOVeV.jpg",
+            "release_date": "2019-03-23",
+            "title": "Shazam"
+          }
+        ],
         "limit": 20,
         "offset": 0,
         "processingTimeMs": "[duration]",
@@ -123,7 +136,57 @@
       "synchronous": "WaitForResponse"
     },
     {
-      "upgrade": "latest"
+      "binary": {
+        "source": "build",
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade",
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
+      "route": "indexes/movies/search?q=shazam",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 1,
+        "hits": [
+          {
+            "id": 287947,
+            "overview": "A boy is given the ability to become an adult superhero in times of need with a single magic word.",
+            "poster": "https://image.tmdb.org/t/p/w1280/xnopI5Xtky18MPhK40cZAGAOVeV.jpg",
+            "release_date": "2019-03-23",
+            "title": "Shazam"
+          }
+        ],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "shazam"
+      },
+      "apiKeyVariable": "key",
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade"
+        ]
+      }
+    },
+    {
+      "route": "health",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "status": "available"
+      },
+      "synchronous": "WaitForTask"
     },
     {
       "route": "indexes/movies/search?q=shazam",
@@ -215,6 +278,12 @@
         "query": "shaza"
       },
       "apiKeyVariable": "key",
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "tasks",
+      "method": "GET",
+      "body": null,
       "synchronous": "WaitForResponse"
     }
   ]
