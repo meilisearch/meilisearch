@@ -50,6 +50,7 @@ async fn run_workload_commands(
     run_commands(
         meili_client,
         &workload.precommands,
+        0,
         &assets,
         asset_folder,
         &mut HashMap::new(),
@@ -68,6 +69,7 @@ async fn run_workload_commands(
     run_commands(
         meili_client,
         &workload.commands,
+        0,
         &assets,
         asset_folder,
         &mut HashMap::new(),

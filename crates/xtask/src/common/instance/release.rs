@@ -10,7 +10,9 @@ use super::Edition;
 use crate::common::assets::{Asset, AssetFormat};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Release {
+    #[serde(default)]
     pub edition: Edition,
     pub version: Version,
 }

@@ -1,13 +1,15 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
-use crate::{
-    common::{
-        args::CommonArgs, client::Client, command::SyncMode, logs::setup_logs, workload::Workload,
-    },
-    test::workload::CommandOrBinary,
-};
 use anyhow::{bail, Context};
 use clap::Parser;
+
+use crate::common::args::CommonArgs;
+use crate::common::client::Client;
+use crate::common::command::SyncMode;
+use crate::common::logs::setup_logs;
+use crate::common::workload::Workload;
+use crate::test::workload::CommandOrBinary;
 
 mod workload;
 
@@ -66,9 +68,6 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
             bail!("workload file {} is not a test workload", workload_file.display());
         };
 
-        let has_upgrade =
-            workload.commands.iter().any(|c| matches!(c, CommandOrBinary::Binary { .. }));
-
         let has_faulty_register = workload.commands.iter().any(|c| {
             matches!(c, CommandOrBinary::Command(cmd) if cmd.synchronous == SyncMode::DontWait && !cmd.register.is_empty())
         });
@@ -78,15 +77,10 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
 
         let name = workload.name.clone();
         match workload.run(&args, &assets_client, &meili_client, asset_folder).await {
-            Ok(_) => {
-                match args.update_responses {
-                    true => println!("🛠️ Workload {name} was updated"),
-                    false => println!("✅ Workload {name} passed"),
-                }
-                if !has_upgrade {
-                    println!("⚠️ Warning: this workload doesn't contain an upgrade. The whole point of these tests is to test upgrades! Please add one.");
-                }
-            }
+            Ok(_) => match args.update_responses {
+                true => println!("🛠️ Workload {name} was updated"),
+                false => println!("✅ Workload {name} passed"),
+            },
             Err(error) => {
                 println!("❌ Workload {name} failed: {error}");
                 println!("💡 Is this intentional? If so, rerun with --update-responses to update the workload files.");

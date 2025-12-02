@@ -13,12 +13,15 @@ pub use release::{add_releases_to_assets, Release};
 ///   is selected by the runner.
 /// - The database will be temporary, cleaned before use, and will be selected by the runner.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Binary {
     /// Describes how this binary should be instantiated
+    #[serde(flatten)]
     pub source: BinarySource,
     /// Extra CLI arguments to pass to the binary.
     ///
     /// Should be Meilisearch CLI options.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra_cli_args: Vec<String>,
 }
 
@@ -47,10 +50,14 @@ impl Binary {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields, tag = "source")]
 /// Description of how to get a binary to instantiate.
 pub enum BinarySource {
     /// Compile and run the binary from the current repository.=
-    CompileFromSource { edition: Edition },
+    Build {
+        #[serde(default)]
+        edition: Edition,
+    },
     /// Get a release from GitHub
     Release(Release),
     /// Run the binary from the specified local path.
@@ -60,10 +67,10 @@ pub enum BinarySource {
 impl Display for BinarySource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BinarySource::CompileFromSource { edition: Edition::Community } => {
+            BinarySource::Build { edition: Edition::Community } => {
                 f.write_str("git with community edition")
             }
-            BinarySource::CompileFromSource { edition: Edition::Enterprise } => {
+            BinarySource::Build { edition: Edition::Enterprise } => {
                 f.write_str("git with enterprise edition")
             }
             BinarySource::Release(release) => write!(f, "{release}"),
@@ -74,7 +81,7 @@ impl Display for BinarySource {
 
 impl Default for BinarySource {
     fn default() -> Self {
-        Self::CompileFromSource { edition: Default::default() }
+        Self::Build { edition: Default::default() }
     }
 }
 
@@ -82,13 +89,14 @@ impl BinarySource {
     fn binary_path(&self, asset_folder: &str) -> anyhow::Result<Option<PathBuf>> {
         Ok(match self {
             Self::Release(release) => Some(release.binary_path(asset_folder)?),
-            Self::CompileFromSource { .. } => None,
+            Self::Build { .. } => None,
             Self::Path(path) => Some(path.clone()),
         })
     }
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub enum Edition {
     #[default]
     Community,

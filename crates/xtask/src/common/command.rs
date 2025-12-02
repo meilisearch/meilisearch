@@ -118,6 +118,7 @@ pub enum SyncMode {
 async fn run_batch(
     client: &Arc<Client>,
     batch: &[Command],
+    first_command_index: usize,
     assets: &Arc<BTreeMap<String, Asset>>,
     asset_folder: &'static str,
     registered: &mut HashMap<String, Value>,
@@ -128,13 +129,22 @@ async fn run_batch(
     let batch_len = batch.len();
 
     let mut tasks = Vec::with_capacity(batch.len());
-    for command in batch.iter().cloned() {
+    for (index, command) in batch.iter().cloned().enumerate() {
         let client2 = Arc::clone(client);
         let assets2 = Arc::clone(assets);
         let needs_response = return_response || !command.register.is_empty();
         let registered2 = registered.clone(); // FIXME: cloning the whole map for each command is inefficient
         tasks.push(tokio::spawn(async move {
-            run(&client2, &command, &assets2, registered2, asset_folder, needs_response).await
+            run(
+                &client2,
+                &command,
+                first_command_index + index,
+                &assets2,
+                registered2,
+                asset_folder,
+                needs_response,
+            )
+            .await
         }));
     }
 
@@ -249,6 +259,7 @@ fn json_eq_ignore(reference: &Value, value: &Value) -> bool {
 pub async fn run(
     client: &Client,
     command: &Command,
+    command_index: usize,
     assets: &BTreeMap<String, Asset>,
     registered: HashMap<String, Value>,
     asset_folder: &str,
@@ -350,7 +361,7 @@ pub async fn run(
             let response_pretty = serde_json::to_string_pretty(&response)
                 .context("serializing response as pretty JSON")?;
             let diff = SimpleDiff::from_str(&expected_pretty, &response_pretty, "expected", "got");
-            bail!("unexpected response:\n{diff}");
+            bail!("command #{command_index} unexpected response:\n{diff}");
         }
     } else if return_value {
         let response: serde_json::Value = response
@@ -367,6 +378,7 @@ pub async fn run(
 pub async fn run_commands(
     client: &Arc<Client>,
     commands: &[Command],
+    mut first_command_index: usize,
     assets: &Arc<BTreeMap<String, Asset>>,
     asset_folder: &'static str,
     registered: &mut HashMap<String, Value>,
@@ -376,9 +388,19 @@ pub async fn run_commands(
     for batch in
         commands.split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
     {
-        let mut new_responses =
-            run_batch(client, batch, assets, asset_folder, registered, return_response).await?;
+        let mut new_responses = run_batch(
+            client,
+            batch,
+            first_command_index,
+            assets,
+            asset_folder,
+            registered,
+            return_response,
+        )
+        .await?;
         responses.append(&mut new_responses);
+
+        first_command_index += batch.len();
     }
 
     Ok(responses)

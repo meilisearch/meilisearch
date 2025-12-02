@@ -127,8 +127,9 @@ impl TestWorkload {
         .await?;
 
         let assets = Arc::new(self.assets.clone());
-        let return_responses = dbg!(args.add_missing_responses || args.update_responses);
+        let return_responses = args.add_missing_responses || args.update_responses;
         let mut registered = HashMap::new();
+        let mut first_command_index = 0;
         for command_or_upgrade in commands_or_instance {
             match command_or_upgrade {
                 CommandOrBinaryVec::Commands(commands) => {
@@ -136,12 +137,14 @@ impl TestWorkload {
                     let responses = run_commands(
                         meili_client,
                         &cloned,
+                        first_command_index,
                         &assets,
                         asset_folder,
                         &mut registered,
                         return_responses,
                     )
                     .await?;
+                    first_command_index += cloned.len();
                     if return_responses {
                         assert_eq!(responses.len(), cloned.len());
                         for (command, (mut response, status)) in commands.into_iter().zip(responses)
