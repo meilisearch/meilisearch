@@ -20,18 +20,22 @@ These make us iterate fast before stabilizing it for the current release.
 
 ### Release steps
 
-The prototype name must follow this convention: `prototype-v<version>.<name>-<number>` where
+The prototype name must [follow this convention](https://semver.org/#spec-item-11): `prototype-v<version>-<name>.<number>` where
 - `version` is the version of Meilisearch on which the prototype is based.
-- `name` is the feature name formatted in `kebab-case`. It should not end with a single number.
-- `Y` is the version of the prototype, starting from `0`.
+- `name` is the feature name formatted in `kebab-case`.
+- `number` is the iteration of the prototype, starting from `0`.
 
-✅ Example: `prototype-v1.23.0.search-personalization-0`. </br>
+✅ Example: `prototype-v1.23.0-search-personalization.1`. </br>
+❌ Bad example: `prototype-v1.23.0-search-personalization-0`: a dash separates the name and version. </br>
+❌ Bad example: `prototype-v1.23.0.search-personalization.0`: a dot separates the version and name. </br>
 ❌ Bad example: `prototype-search-personalization-0`: version is missing.</br>
-❌ Bad example: `v1.23.0.auto-resize-0`: lacks the `prototype` prefix. </br>
-❌ Bad example: `prototype-v1.23.0.auto-resize`: lacks the version suffix. </br>
-❌ Bad example: `prototype-v1.23.0.auto-resize-0-0`: feature name ends with a single number.
+❌ Bad example: `v1.23.0-auto-resize-0`: lacks the `prototype` prefix. </br>
+❌ Bad example: `prototype-v1.23.0-auto-resize`: lacks the version suffix. </br>
+❌ Bad example: `prototype-v1.23.0-auto-resize.0-0`: feature name ends with two numbers.
 
 Steps to create a prototype:
+
+
 
 1. In your terminal, go to the last commit of your branch (the one you want to provide as a prototype).
 2. Create a tag following the convention: `git tag prototype-X-Y`
