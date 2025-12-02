@@ -119,12 +119,11 @@ impl TestWorkload {
 
         // Run server
         delete_db().await;
-        let binary_path = self.binary.binary_path(&args.common.asset_folder)?;
         let mut process = process::start_meili(
             meili_client,
             Some("masterKey"),
-            &self.binary.extra_cli_args,
-            binary_path.as_deref(),
+            &self.binary,
+            &args.common.asset_folder,
         )
         .await?;
 
@@ -164,12 +163,11 @@ impl TestWorkload {
                 }
                 CommandOrBinaryVec::Binary(binary) => {
                     kill_meili(process).await;
-                    let binary_path = binary.binary_path(&args.common.asset_folder)?;
                     process = process::start_meili(
                         meili_client,
                         Some("masterKey"),
-                        &binary.extra_cli_args,
-                        binary_path.as_deref(),
+                        &binary,
+                        &args.common.asset_folder,
                     )
                     .await?;
                     tracing::info!("Restarted instance with {binary}");

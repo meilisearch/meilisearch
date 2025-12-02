@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, HashMap};
-use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{bail, Context as _};
@@ -8,6 +7,7 @@ use tokio::time;
 
 use crate::common::client::Client;
 use crate::common::command::{health_command, run as run_command};
+use crate::common::instance::{Binary, BinarySource, Edition};
 
 pub async fn kill_meili(mut meilisearch: tokio::process::Child) {
     let Some(id) = meilisearch.id() else { return };
@@ -49,9 +49,12 @@ pub async fn kill_meili(mut meilisearch: tokio::process::Child) {
 }
 
 #[tracing::instrument]
-async fn build() -> anyhow::Result<()> {
+async fn build(edition: Edition) -> anyhow::Result<()> {
     let mut command = TokioCommand::new("cargo");
     command.arg("build").arg("--release").arg("-p").arg("meilisearch");
+    if let Edition::Enterprise = edition {
+        command.arg("--features=enterprise");
+    }
 
     command.kill_on_drop(true);
 
@@ -68,24 +71,32 @@ async fn build() -> anyhow::Result<()> {
 pub async fn start_meili(
     client: &Client,
     master_key: Option<&str>,
-    extra_cli_args: &[String],
-    binary_path: Option<&Path>,
+    binary: &Binary,
+    asset_folder: &str,
 ) -> anyhow::Result<tokio::process::Child> {
-    let mut command = match binary_path {
-        Some(binary_path) => tokio::process::Command::new(binary_path),
-        None => {
-            build().await?;
+    let mut command = match &binary.source {
+        BinarySource::Build { edition } => {
+            build(*edition).await?;
             let mut command = tokio::process::Command::new("cargo");
+
             command
                 .arg("run")
                 .arg("--release")
                 .arg("-p")
                 .arg("meilisearch")
                 .arg("--bin")
-                .arg("meilisearch")
-                .arg("--");
+                .arg("meilisearch");
+            if let Edition::Enterprise = *edition {
+                command.arg("--features=enterprise");
+            }
+            command.arg("--");
             command
         }
+        BinarySource::Release(release) => {
+            let binary_path = release.binary_path(asset_folder)?;
+            tokio::process::Command::new(binary_path)
+        }
+        BinarySource::Path(binary_path) => tokio::process::Command::new(binary_path),
     };
 
     command.arg("--db-path").arg("./_xtask_benchmark.ms");
@@ -94,7 +105,7 @@ pub async fn start_meili(
     }
     command.arg("--experimental-enable-logs-route");
 
-    for extra_arg in extra_cli_args.iter() {
+    for extra_arg in binary.extra_cli_args.iter() {
         command.arg(extra_arg);
     }
 
@@ -103,13 +114,13 @@ pub async fn start_meili(
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        if let Some(binary_path) = binary_path {
-            let mut perms = tokio::fs::metadata(binary_path)
+        if let Some(binary_path) = binary.binary_path(asset_folder)? {
+            let mut perms = tokio::fs::metadata(&binary_path)
                 .await
                 .with_context(|| format!("could not get metadata for {binary_path:?}"))?
                 .permissions();
             perms.set_mode(perms.mode() | 0o111);
-            tokio::fs::set_permissions(binary_path, perms)
+            tokio::fs::set_permissions(&binary_path, perms)
                 .await
                 .with_context(|| format!("could not set permissions for {binary_path:?}"))?;
         }
