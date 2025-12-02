@@ -20,33 +20,33 @@ These make us iterate fast before stabilizing it for the current release.
 
 ### Release steps
 
-The prototype name must [follow this convention](https://semver.org/#spec-item-11): `prototype-v<version>-<name>.<number>` where
+The prototype name must [follow this convention](https://semver.org/#spec-item-11): `prototype-v<version>-<name>.<iteration>` where
 - `version` is the version of Meilisearch on which the prototype is based.
 - `name` is the feature name formatted in `kebab-case`.
-- `number` is the iteration of the prototype, starting from `0`.
+- `iteration` is the iteration of the prototype, starting from `0`.
 
 ✅ Example: `prototype-v1.23.0-search-personalization.1`. </br>
 ❌ Bad example: `prototype-v1.23.0-search-personalization-0`: a dash separates the name and version. </br>
 ❌ Bad example: `prototype-v1.23.0.search-personalization.0`: a dot separates the version and name. </br>
 ❌ Bad example: `prototype-search-personalization-0`: version is missing.</br>
-❌ Bad example: `v1.23.0-auto-resize-0`: lacks the `prototype` prefix. </br>
+❌ Bad example: `v1.23.0-auto-resize-0`: lacks the `prototype-` prefix. </br>
 ❌ Bad example: `prototype-v1.23.0-auto-resize`: lacks the version suffix. </br>
-❌ Bad example: `prototype-v1.23.0-auto-resize.0-0`: feature name ends with two numbers.
+❌ Bad example: `prototype-v1.23.0-auto-resize.0-0`: feature name ends with something else than a number.
 
 Steps to create a prototype:
 
-
-
 1. In your terminal, go to the last commit of your branch (the one you want to provide as a prototype).
-2. Create a tag following the convention: `git tag prototype-X-Y`
-3. Run Meilisearch and check that its launch summary features a line: `Prototype: prototype-X-Y` (you may need to switch branches and back after tagging for this to work).
-3. Push the tag: `git push origin prototype-X-Y`
-4. Check the [Docker CI](https://github.com/meilisearch/meilisearch/actions/workflows/publish-docker-images.yml) is now running.
+2. Use the `cargo xtask generate-prototype` command to generate the prototype name.
+3. Create the tag using the `git tag` command.
+4. Checkout the tag, run Meilisearch and check that it launches summary features a line: `Prototype: prototype-v<version>-<name>.<iteration>`.
+5. Checkout back to your branch: `git checkout -`.
+6. Push the tag: `git push origin prototype-v<version>-<name>.<iteration>`
+7. Check that the [Docker CI](https://github.com/meilisearch/meilisearch/actions/workflows/publish-docker-images.yml) is now running.
 
-🐳 Once the CI has finished to run (~1h30), a Docker image named `prototype-X-Y` will be available on [DockerHub](https://hub.docker.com/repository/docker/getmeili/meilisearch/general). People can use it with the following command: `docker run -p 7700:7700 -v $(pwd)/meili_data:/meili_data getmeili/meilisearch:prototype-X-Y`. <br>
+🐳 Once the CI has finished to run, a Docker image named `prototype-v<version>-<name>.<iteration>` will be available on [DockerHub](https://hub.docker.com/repository/docker/getmeili/meilisearch/general). People can use it with the following command: `docker run -p 7700:7700 -v $(pwd)/meili_data:/meili_data getmeili/meilisearch:prototype-v<version>-<name>.<iteration>`. <br>
 More information about [how to run Meilisearch with Docker](https://docs.meilisearch.com/learn/cookbooks/docker.html#download-meilisearch-with-docker).
 
-⚠️ However, no binaries will be created. If the users do not use Docker, they can go to the `prototype-X-Y` tag in the Meilisearch repository and compile it from the source code.
+⚠️ However, no binaries will be created. If the users do not use Docker, they can go to the `prototype-v<version>-<name>.<iteration>` tag in the Meilisearch repository and compile it from the source code.
 
 ### Communication
 
@@ -67,7 +67,7 @@ Here is an example of messages to share on GitHub:
 > How to run the prototype?
 > You need to start from a fresh new database (remove the previous used `data.ms`) and use the following Docker image:
 > ```bash
-> docker run -it --rm -p 7700:7700 -v $(pwd)/meili_data:/meili_data getmeili/meilisearch:prototype-X-Y
+> docker run -it --rm -p 7700:7700 -v $(pwd)/meili_data:/meili_data getmeili/meilisearch:prototype-v<version>-<name>.<iteration>
 > ```
 >
 > You can use the feature this way:
