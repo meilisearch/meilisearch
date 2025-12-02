@@ -12,7 +12,7 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use super::dashboard::DashboardClient;
-use super::BenchDeriveArgs;
+use super::BenchArgs;
 use crate::common::assets::{self, Asset};
 use crate::common::client::Client;
 use crate::common::command::{run_commands, Command};
@@ -40,7 +40,7 @@ async fn run_workload_commands(
     meili_client: &Arc<Client>,
     workload_uuid: Uuid,
     workload: &BenchWorkload,
-    args: &BenchDeriveArgs,
+    args: &BenchArgs,
     run_number: u16,
 ) -> anyhow::Result<JoinHandle<anyhow::Result<File>>> {
     let report_folder = &args.report_folder;
@@ -95,7 +95,7 @@ pub async fn execute(
     invocation_uuid: Uuid,
     master_key: Option<&str>,
     workload: BenchWorkload,
-    args: &BenchDeriveArgs,
+    args: &BenchArgs,
     binary_path: Option<&Path>,
 ) -> anyhow::Result<()> {
     assets::fetch_assets(assets_client, &workload.assets, &args.common.asset_folder).await?;
@@ -143,7 +143,7 @@ async fn execute_run(
     workload_uuid: Uuid,
     master_key: Option<&str>,
     workload: &BenchWorkload,
-    args: &BenchDeriveArgs,
+    args: &BenchArgs,
     binary_path: Option<&Path>,
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {

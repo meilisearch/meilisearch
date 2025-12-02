@@ -17,7 +17,7 @@ pub use workload::TestWorkload;
 
 /// Run tests from a workload
 #[derive(Parser, Debug)]
-pub struct TestDeriveArgs {
+pub struct TestArgs {
     /// Common arguments shared with other commands
     #[command(flatten)]
     common: CommonArgs,
@@ -31,7 +31,7 @@ pub struct TestDeriveArgs {
     pub add_missing_responses: bool,
 }
 
-pub fn run(args: TestDeriveArgs) -> anyhow::Result<()> {
+pub fn run(args: TestArgs) -> anyhow::Result<()> {
     let rt = tokio::runtime::Builder::new_current_thread().enable_io().enable_time().build()?;
     let _scope = rt.enter();
 
@@ -40,7 +40,7 @@ pub fn run(args: TestDeriveArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
+async fn run_inner(args: TestArgs) -> anyhow::Result<()> {
     setup_logs(&args.common.log_filter)?;
 
     // setup clients

@@ -22,6 +22,7 @@ reqwest = { version = "0.12.24", features = [
     "json",
     "rustls-tls",
 ], default-features = false }
+semver = "1.0.27"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"

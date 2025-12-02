@@ -12,7 +12,7 @@ use crate::common::command::{run_commands, Command};
 use crate::common::instance::Binary;
 use crate::common::process::{self, delete_db, kill_meili};
 use crate::common::workload::Workload;
-use crate::test::TestDeriveArgs;
+use crate::test::TestArgs;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
@@ -81,7 +81,7 @@ pub struct TestWorkload {
 impl TestWorkload {
     pub async fn run(
         mut self,
-        args: &TestDeriveArgs,
+        args: &TestArgs,
         assets_client: &Client,
         meili_client: &Arc<Client>,
         asset_folder: &'static str,
