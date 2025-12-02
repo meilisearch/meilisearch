@@ -6,9 +6,9 @@ use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::common::assets::{Asset, fetch_assets};
+use crate::common::assets::{fetch_assets, Asset};
 use crate::common::client::Client;
-use crate::common::command::{Command, run_commands};
+use crate::common::command::{run_commands, Command};
 use crate::common::instance::Binary;
 use crate::common::process::{self, delete_db, kill_meili};
 use crate::common::workload::Workload;

@@ -146,13 +146,8 @@ async fn execute_run(
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
     delete_db().await;
 
-    let meilisearch = start_meili(
-        meili_client,
-        master_key,
-        &workload.extra_cli_args,
-        binary_path,
-    )
-    .await?;
+    let meilisearch =
+        start_meili(meili_client, master_key, &workload.extra_cli_args, binary_path).await?;
 
     let processor = run_workload_commands(
         dashboard_client,

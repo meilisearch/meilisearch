@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 mod release;
 
-pub use release::{Release, add_releases_to_assets};
+pub use release::{add_releases_to_assets, Release};
 
 /// A binary to execute on a temporary DB.
 ///
@@ -34,7 +34,11 @@ impl Display for Binary {
 
 impl Binary {
     pub fn as_release(&self) -> Option<&Release> {
-        if let BinarySource::Release(release) = &self.source { Some(release) } else { None }
+        if let BinarySource::Release(release) = &self.source {
+            Some(release)
+        } else {
+            None
+        }
     }
 
     pub fn binary_path(&self, asset_folder: &str) -> anyhow::Result<Option<PathBuf>> {
