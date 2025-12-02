@@ -142,31 +142,31 @@ pub fn get_arch() -> anyhow::Result<&'static str> {
     // linux-aarch64
     #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     {
-        return Ok("linux-aarch64");
+        Ok("linux-aarch64")
     }
 
     // linux-amd64
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     {
-        return Ok("linux-amd64");
+        Ok("linux-amd64")
     }
 
     // macos-amd64
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     {
-        return Ok("macos-amd64");
+        Ok("macos-amd64")
     }
 
     // macos-apple-silicon
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        return Ok("macos-apple-silicon");
+        Ok("macos-apple-silicon")
     }
 
     // windows-amd64
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     {
-        return Ok("windows-amd64");
+        Ok("windows-amd64")
     }
 
     #[cfg(not(all(target_os = "windows", target_arch = "x86_64")))]
