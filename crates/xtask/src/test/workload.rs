@@ -50,9 +50,11 @@ fn produce_reference_value(value: &mut Value) {
         Value::Object(map) => {
             for (key, value) in map.iter_mut() {
                 match key.as_str() {
+                    "duration" => {
+                        *value = Value::String(String::from("[duration]"));
+                    }
                     "processingTimeMs" => {
                         *value = Value::String(String::from("[duration]"));
-                        continue;
                     }
                     _ => produce_reference_value(value),
                 }

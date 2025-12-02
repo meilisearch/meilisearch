@@ -77,8 +77,10 @@ async fn run_inner(args: TestDeriveArgs) -> anyhow::Result<()> {
 
         let name = workload.name.clone();
         match workload.run(&args, &assets_client, &meili_client, asset_folder).await {
-            Ok(_) => match args.update_responses {
-                true => println!("🛠️ Workload {name} was updated"),
+            Ok(_) => match args.update_responses || args.add_missing_responses {
+                true => println!(
+                    "🛠️ Workload {name} was updated, please check the output and restart the test"
+                ),
                 false => println!("✅ Workload {name} passed"),
             },
             Err(error) => {
