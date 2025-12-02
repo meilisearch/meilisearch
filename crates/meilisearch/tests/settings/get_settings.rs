@@ -197,7 +197,7 @@ test_setting_routes!(
     {
       setting: vector_store,
       update_verb: patch,
-      default_value: null
+      default_value: "experimental"
     },
 );
 
