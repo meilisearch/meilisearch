@@ -40,6 +40,8 @@ jobs:
         uses: dtolnay/rust-toolchain@1.89
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
+        with:
+          key: ${{ matrix.features }}
       - name: Run cargo build without any default features
         uses: actions-rs/cargo@v1
         with:
