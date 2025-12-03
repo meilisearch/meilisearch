@@ -25,8 +25,6 @@ jobs:
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.89
-        with:
-          profile: minimal
       - name: Install sd
         run: cargo install sd
       - name: Update Cargo.toml file

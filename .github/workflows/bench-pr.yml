@@ -67,8 +67,6 @@ jobs:
           ref: ${{ steps.comment-branch.outputs.head_ref }}
 
       - uses: dtolnay/rust-toolchain@1.89
-        with:
-          profile: minimal
 
       - name: Run benchmarks on PR ${{ github.event.issue.id }}
         run: |

@@ -221,7 +221,6 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.89
         with:
-          profile: minimal
           components: clippy
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
@@ -244,9 +243,6 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.89
         with:
-          profile: minimal
-          toolchain: nightly-2024-07-09
-          override: true
           components: rustfmt
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
