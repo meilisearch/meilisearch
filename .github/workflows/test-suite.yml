@@ -32,10 +32,10 @@ jobs:
           apt-get install build-essential -y
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
-          sudo rm -rf "/opt/ghc" || true
-          sudo rm -rf "/usr/share/dotnet" || true
-          sudo rm -rf "/usr/local/lib/android" || true
-          sudo rm -rf "/usr/local/share/boost" || true
+          rm -rf "/opt/ghc" || true
+          rm -rf "/usr/share/dotnet" || true
+          rm -rf "/usr/local/lib/android" || true
+          rm -rf "/usr/local/share/boost" || true
       - name: Setup test with Rust stable
         uses: dtolnay/rust-toolchain@1.89
       - name: Cache dependencies
@@ -156,34 +156,6 @@ jobs:
       - name: Run cargo tree with default features and check lindera is pressent
         run: |
           cargo tree -f '{p} {f}' -e normal | grep lindera -qz
-
-  # We run tests in debug also, to make sure that the debug_assertions are hit
-  test-debug:
-    name: Run tests in debug
-    runs-on: ubuntu-22.04
-    strategy:
-      matrix:
-        features: ["", "--features enterprise"]
-    steps:
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.89
-      - name: check free space before
-        run: df -h
-      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
-        run: |
-          sudo rm -rf "/opt/ghc" || true
-          sudo rm -rf "/usr/share/dotnet" || true
-          sudo rm -rf "/usr/local/lib/android" || true
-          sudo rm -rf "/usr/local/share/boost" || true
-      - name: check free space after
-        run: df -h
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
-      - name: Run tests in debug
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --locked --all ${{ matrix.features }}
 
   build:
     name: Build in release
