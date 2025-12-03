@@ -9,12 +9,7 @@ use crate::{Index, InternalError, Result};
 pub(super) struct SwitchToMultimodal();
 
 impl UpgradeIndex for SwitchToMultimodal {
-    fn upgrade(
-        &self,
-        wtxn: &mut RwTxn,
-        index: &Index,
-        _progress: Progress,
-    ) -> Result<bool> {
+    fn upgrade(&self, wtxn: &mut RwTxn, index: &Index, _progress: Progress) -> Result<bool> {
         let v1_15_indexing_configs = index
             .main
             .remap_types::<Str, SerdeJson<Vec<super::v1_15::IndexEmbeddingConfig>>>()
