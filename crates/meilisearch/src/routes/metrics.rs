@@ -183,7 +183,11 @@ pub async fn get_metrics(
     crate::metrics::MEILISEARCH_LAST_FINISHED_BATCHES_PROGRESS_TRACE_MS.reset();
     let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
         // Fetch the finished batches...
-        &Query { statuses: Some(vec![Status::Succeeded, Status::Failed]), ..Query::default() },
+        &Query {
+            statuses: Some(vec![Status::Succeeded, Status::Failed]),
+            limit: Some(1),
+            ..Query::default()
+        },
         auth_filters,
     )?;
     // ...and get the last batch only.
