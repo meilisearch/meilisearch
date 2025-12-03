@@ -78,10 +78,7 @@ jobs:
 
   test-all-features:
     name: Tests almost all features
-    runs-on: ubuntu-latest
-    container:
-      # Use ubuntu-22.04 to compile with glibc 2.35
-      image: ubuntu:22.04
+    runs-on: ubuntu-22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
@@ -91,24 +88,17 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - name: Install needed dependencies
-        run: |
-          apt-get update
-          apt-get install --assume-yes build-essential curl
       - uses: dtolnay/rust-toolchain@1.89
       - name: Run cargo build with almost all features
         run: |
-          cargo build --workspace --locked --release --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
+          cargo build --workspace --locked --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
       - name: Run cargo test with almost all features
         run: |
           cargo test --workspace --locked --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
 
   ollama-ubuntu:
     name: Test with Ollama
-    runs-on: ubuntu-latest
-    container:
-      # Use ubuntu-22.04 to compile with glibc 2.35
-      image: ubuntu:22.04
+    runs-on: ubuntu-22.04
     env:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
@@ -146,9 +136,7 @@ jobs:
 
   test-disabled-tokenization:
     name: Test disabled tokenization
-    runs-on: ubuntu-latest
-    container:
-      image: ubuntu:22.04
+    runs-on: ubuntu-22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
@@ -158,10 +146,6 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - name: Install needed dependencies
-        run: |
-          apt-get update
-          apt-get install --assume-yes build-essential curl
       - uses: dtolnay/rust-toolchain@1.89
       - name: Run cargo tree without default features and check lindera is not present
         run: |
@@ -203,7 +187,7 @@ jobs:
 
   build:
     name: Build in release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
@@ -223,7 +207,7 @@ jobs:
 
   clippy:
     name: Run Clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         features: ["", "--features enterprise"]
@@ -249,7 +233,7 @@ jobs:
 
   fmt:
     name: Run Rustfmt
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
