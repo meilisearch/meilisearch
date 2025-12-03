@@ -8,10 +8,7 @@ use crate::update::new::document::Document;
 use crate::update::new::extract::perm_json_p::{
     seek_leaf_values_in_array, seek_leaf_values_in_object, Depth,
 };
-use crate::{
-    FieldId, GlobalFieldsIdsMap, InternalError, LocalizedAttributesRule, Result, UserError,
-    MAX_WORD_LENGTH,
-};
+use crate::{FieldId, InternalError, LocalizedAttributesRule, Result, MAX_WORD_LENGTH};
 
 // todo: should be crate::proximity::MAX_DISTANCE but it has been forgotten
 const MAX_DISTANCE: u32 = 8;
@@ -26,26 +23,25 @@ impl DocumentTokenizer<'_> {
     pub fn tokenize_document<'doc>(
         &self,
         document: impl Document<'doc>,
-        field_id_map: &mut GlobalFieldsIdsMap,
+        should_tokenize: &mut impl FnMut(&str) -> Result<(FieldId, PatternMatch)>,
         token_fn: &mut impl FnMut(&str, FieldId, u16, &str) -> Result<()>,
     ) -> Result<()> {
         let mut field_position = HashMap::new();
-        let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
-            let Some((field_id, meta)) = field_id_map.id_with_metadata_or_insert(field_name) else {
-                return Err(UserError::AttributeLimitReached.into());
-            };
-
-            if meta.is_searchable() {
-                self.tokenize_field(field_id, field_name, value, token_fn, &mut field_position)?;
-            }
-
-            // todo: should be a match on the field_name using `match_field_legacy` function,
-            // but for legacy reasons we iterate over all the fields to fill the field_id_map.
-            Ok(PatternMatch::Match)
-        };
-
         for entry in document.iter_top_level_fields() {
             let (field_name, value) = entry?;
+
+            if let (_, PatternMatch::NoMatch) = should_tokenize(field_name)? {
+                continue;
+            }
+
+            let mut tokenize_field = |field_name: &str, _depth, value: &Value| {
+                let (fid, pattern_match) = should_tokenize(field_name)?;
+                if pattern_match == PatternMatch::Match {
+                    self.tokenize_field(fid, field_name, value, token_fn, &mut field_position)?;
+                }
+                Ok(pattern_match)
+            };
+
             // parse json.
             match serde_json::to_value(value).map_err(InternalError::SerdeJson)? {
                 Value::Object(object) => seek_leaf_values_in_object(
@@ -192,7 +188,7 @@ mod test {
     use super::*;
     use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
     use crate::update::new::document::{DocumentFromVersions, Versions};
-    use crate::FieldsIdsMap;
+    use crate::{FieldsIdsMap, GlobalFieldsIdsMap, UserError};
 
     #[test]
     fn test_tokenize_document() {
@@ -231,6 +227,7 @@ mod test {
                 Default::default(),
                 Default::default(),
                 Default::default(),
+                Default::default(),
                 None,
                 None,
                 Default::default(),
@@ -251,15 +248,19 @@ mod test {
         let document = Versions::single(document);
         let document = DocumentFromVersions::new(&document);
 
+        let mut should_tokenize = |field_name: &str| {
+            let Some(field_id) = global_fields_ids_map.id_or_insert(field_name) else {
+                return Err(UserError::AttributeLimitReached.into());
+            };
+
+            Ok((field_id, PatternMatch::Match))
+        };
+
         document_tokenizer
-            .tokenize_document(
-                document,
-                &mut global_fields_ids_map,
-                &mut |_fname, fid, pos, word| {
-                    words.insert([fid, pos], word.to_string());
-                    Ok(())
-                },
-            )
+            .tokenize_document(document, &mut should_tokenize, &mut |_fname, fid, pos, word| {
+                words.insert([fid, pos], word.to_string());
+                Ok(())
+            })
             .unwrap();
 
         snapshot!(format!("{:#?}", words), @r###"

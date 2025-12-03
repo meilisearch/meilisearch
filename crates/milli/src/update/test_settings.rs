@@ -14,27 +14,20 @@ fn set_and_reset_searchable_fields() {
     let index = TempIndex::new();
 
     // First we send 3 documents with ids from 1 to 3.
-    let mut wtxn = index.write_txn().unwrap();
-
     index
-        .add_documents_using_wtxn(
-            &mut wtxn,
-            documents!([
-                { "id": 1, "name": "kevin", "age": 23 },
-                { "id": 2, "name": "kevina", "age": 21},
-                { "id": 3, "name": "benoit", "age": 34 }
-            ]),
-        )
+        .add_documents(documents!([
+            { "id": 1, "name": "kevin", "age": 23 },
+            { "id": 2, "name": "kevina", "age": 21},
+            { "id": 3, "name": "benoit", "age": 34 }
+        ]))
         .unwrap();
 
     // We change the searchable fields to be the "name" field only.
     index
-        .update_settings_using_wtxn(&mut wtxn, |settings| {
+        .update_settings(|settings| {
             settings.set_searchable_fields(vec!["name".into()]);
         })
         .unwrap();
-
-    wtxn.commit().unwrap();
 
     db_snap!(index, fields_ids_map, @r###"
     0   id               |

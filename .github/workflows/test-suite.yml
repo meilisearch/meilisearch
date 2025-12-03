@@ -53,6 +53,7 @@ jobs:
       matrix:
         os: [macos-14, windows-2022]
         features: ["", "--features enterprise"]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v5
       - name: Cache dependencies
@@ -158,8 +159,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
