@@ -3,6 +3,14 @@
 //! This module provides functionality to fetch content from URLs during embedding extraction.
 //! The fetched content is converted to base64 and made available as virtual fields for
 //! template rendering, without being persisted in the database.
+//!
+//! ## Nested Path Support
+//!
+//! The `input` field supports nested JSON paths:
+//! - Simple field: `imageUrl`
+//! - Nested field: `media.image.url`
+//! - Array index: `images[0].url`
+//! - Array wildcard: `images[].url` - fetches URLs from ALL array elements
 
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -16,6 +24,136 @@ use base64::Engine;
 use super::settings::{FetchOptions, FetchOutputFormat, FetchUrlMapping};
 use crate::progress::UrlFetcherStats;
 use crate::vector::error::EmbedError;
+
+/// A segment of a JSON path.
+#[derive(Debug, Clone, PartialEq)]
+enum PathSegment {
+    /// A field name, e.g., "images" in "images.url"
+    Field(String),
+    /// A specific array index, e.g., [0] in "images[0].url"
+    ArrayIndex(usize),
+    /// Array wildcard, e.g., [] in "images[].url" - matches all elements
+    ArrayWildcard,
+}
+
+/// Parse a path string into segments.
+///
+/// Supported formats:
+/// - `field` -> [Field("field")]
+/// - `field.subfield` -> [Field("field"), Field("subfield")]
+/// - `field[0].subfield` -> [Field("field"), ArrayIndex(0), Field("subfield")]
+/// - `field[].subfield` -> [Field("field"), ArrayWildcard, Field("subfield")]
+fn parse_path(path: &str) -> Vec<PathSegment> {
+    let mut segments = Vec::new();
+    let mut current = String::new();
+    let mut chars = path.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        match c {
+            '.' => {
+                if !current.is_empty() {
+                    segments.push(PathSegment::Field(current.clone()));
+                    current.clear();
+                }
+            }
+            '[' => {
+                if !current.is_empty() {
+                    segments.push(PathSegment::Field(current.clone()));
+                    current.clear();
+                }
+                // Parse array index or wildcard
+                let mut index_str = String::new();
+                while let Some(&next_c) = chars.peek() {
+                    if next_c == ']' {
+                        chars.next();
+                        break;
+                    }
+                    index_str.push(chars.next().unwrap());
+                }
+                if index_str.is_empty() {
+                    segments.push(PathSegment::ArrayWildcard);
+                } else if let Ok(index) = index_str.parse::<usize>() {
+                    segments.push(PathSegment::ArrayIndex(index));
+                }
+            }
+            _ => {
+                current.push(c);
+            }
+        }
+    }
+
+    if !current.is_empty() {
+        segments.push(PathSegment::Field(current));
+    }
+
+    segments
+}
+
+/// Extract values from a JSON document using a parsed path.
+/// Returns a vector of values (multiple if array wildcard is used).
+fn extract_values<'a>(
+    value: &'a serde_json::Value,
+    segments: &[PathSegment],
+) -> Vec<&'a serde_json::Value> {
+    if segments.is_empty() {
+        return vec![value];
+    }
+
+    let (segment, rest) = segments.split_first().unwrap();
+
+    match segment {
+        PathSegment::Field(name) => {
+            if let Some(child) = value.get(name) {
+                extract_values(child, rest)
+            } else {
+                vec![]
+            }
+        }
+        PathSegment::ArrayIndex(index) => {
+            if let Some(child) = value.get(index) {
+                extract_values(child, rest)
+            } else {
+                vec![]
+            }
+        }
+        PathSegment::ArrayWildcard => {
+            if let Some(arr) = value.as_array() {
+                arr.iter().flat_map(|item| extract_values(item, rest)).collect()
+            } else {
+                vec![]
+            }
+        }
+    }
+}
+
+/// Extract string URLs from a document using a path expression.
+/// Returns multiple URLs if array wildcards are used.
+///
+/// # Examples
+///
+/// ```ignore
+/// // Simple field
+/// extract_urls(&doc, "imageUrl") // -> ["https://..."]
+///
+/// // Nested field
+/// extract_urls(&doc, "media.image.url") // -> ["https://..."]
+///
+/// // Array with index
+/// extract_urls(&doc, "images[0].url") // -> ["https://..."]
+///
+/// // Array wildcard (all elements)
+/// extract_urls(&doc, "images[].url") // -> ["https://...", "https://...", ...]
+/// ```
+pub fn extract_urls(document: &serde_json::Value, path: &str) -> Vec<String> {
+    let segments = parse_path(path);
+    let values = extract_values(document, &segments);
+    values.into_iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect()
+}
+
+/// Check if a path contains an array wildcard.
+pub fn path_has_array_wildcard(path: &str) -> bool {
+    parse_path(path).iter().any(|s| matches!(s, PathSegment::ArrayWildcard))
+}
 
 /// Default timeout in milliseconds.
 const DEFAULT_TIMEOUT_MS: u64 = 10_000;
@@ -461,5 +599,180 @@ mod tests {
         assert_eq!(guess_mime_type("https://example.com/image.PNG"), "image/png");
         assert_eq!(guess_mime_type("https://example.com/image.jpg?width=100"), "image/jpeg");
         assert_eq!(guess_mime_type("https://example.com/unknown"), "application/octet-stream");
+    }
+
+    // Path parsing tests
+    #[test]
+    fn test_parse_path_simple() {
+        let segments = parse_path("imageUrl");
+        assert_eq!(segments, vec![PathSegment::Field("imageUrl".to_string())]);
+    }
+
+    #[test]
+    fn test_parse_path_nested() {
+        let segments = parse_path("media.image.url");
+        assert_eq!(
+            segments,
+            vec![
+                PathSegment::Field("media".to_string()),
+                PathSegment::Field("image".to_string()),
+                PathSegment::Field("url".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_path_array_index() {
+        let segments = parse_path("images[0].url");
+        assert_eq!(
+            segments,
+            vec![
+                PathSegment::Field("images".to_string()),
+                PathSegment::ArrayIndex(0),
+                PathSegment::Field("url".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_path_array_wildcard() {
+        let segments = parse_path("images[].url");
+        assert_eq!(
+            segments,
+            vec![
+                PathSegment::Field("images".to_string()),
+                PathSegment::ArrayWildcard,
+                PathSegment::Field("url".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_path_complex() {
+        let segments = parse_path("data.items[].nested[0].value");
+        assert_eq!(
+            segments,
+            vec![
+                PathSegment::Field("data".to_string()),
+                PathSegment::Field("items".to_string()),
+                PathSegment::ArrayWildcard,
+                PathSegment::Field("nested".to_string()),
+                PathSegment::ArrayIndex(0),
+                PathSegment::Field("value".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_extract_urls_simple() {
+        let doc = serde_json::json!({
+            "imageUrl": "https://example.com/image.jpg"
+        });
+        let urls = extract_urls(&doc, "imageUrl");
+        assert_eq!(urls, vec!["https://example.com/image.jpg"]);
+    }
+
+    #[test]
+    fn test_extract_urls_nested() {
+        let doc = serde_json::json!({
+            "media": {
+                "image": {
+                    "url": "https://example.com/nested.jpg"
+                }
+            }
+        });
+        let urls = extract_urls(&doc, "media.image.url");
+        assert_eq!(urls, vec!["https://example.com/nested.jpg"]);
+    }
+
+    #[test]
+    fn test_extract_urls_array_index() {
+        let doc = serde_json::json!({
+            "images": [
+                { "url": "https://example.com/img0.jpg" },
+                { "url": "https://example.com/img1.jpg" }
+            ]
+        });
+        let urls = extract_urls(&doc, "images[0].url");
+        assert_eq!(urls, vec!["https://example.com/img0.jpg"]);
+
+        let urls = extract_urls(&doc, "images[1].url");
+        assert_eq!(urls, vec!["https://example.com/img1.jpg"]);
+    }
+
+    #[test]
+    fn test_extract_urls_array_wildcard() {
+        let doc = serde_json::json!({
+            "images": [
+                { "url": "https://example.com/img0.jpg" },
+                { "url": "https://example.com/img1.jpg" },
+                { "url": "https://example.com/img2.jpg" }
+            ]
+        });
+        let urls = extract_urls(&doc, "images[].url");
+        assert_eq!(
+            urls,
+            vec![
+                "https://example.com/img0.jpg",
+                "https://example.com/img1.jpg",
+                "https://example.com/img2.jpg"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_extract_urls_real_world_example() {
+        // This matches the user's actual use case with Images[].Filename
+        let doc = serde_json::json!({
+            "Id": 4501,
+            "TitleEn": "Product Name",
+            "Images": [
+                {
+                    "Filename": "https://cdn.example.com/product/image1.jpg",
+                    "MediaType": 0,
+                    "IsThumbnail": true
+                },
+                {
+                    "Filename": "https://cdn.example.com/product/image2.jpg",
+                    "MediaType": 0,
+                    "IsThumbnail": false
+                }
+            ]
+        });
+        let urls = extract_urls(&doc, "Images[].Filename");
+        assert_eq!(
+            urls,
+            vec![
+                "https://cdn.example.com/product/image1.jpg",
+                "https://cdn.example.com/product/image2.jpg"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_extract_urls_missing_field() {
+        let doc = serde_json::json!({
+            "name": "test"
+        });
+        let urls = extract_urls(&doc, "imageUrl");
+        assert!(urls.is_empty());
+    }
+
+    #[test]
+    fn test_extract_urls_empty_array() {
+        let doc = serde_json::json!({
+            "images": []
+        });
+        let urls = extract_urls(&doc, "images[].url");
+        assert!(urls.is_empty());
+    }
+
+    #[test]
+    fn test_path_has_array_wildcard() {
+        assert!(!path_has_array_wildcard("imageUrl"));
+        assert!(!path_has_array_wildcard("media.image.url"));
+        assert!(!path_has_array_wildcard("images[0].url"));
+        assert!(path_has_array_wildcard("images[].url"));
+        assert!(path_has_array_wildcard("data.items[].nested.value"));
     }
 }

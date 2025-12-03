@@ -236,6 +236,12 @@ impl<'a> UrlFetchingFragmentExtractor<'a> {
     }
 
     /// Extract URLs from document, fetch them, and return virtual fields.
+    ///
+    /// Supports nested paths like:
+    /// - `imageUrl` - simple top-level field
+    /// - `media.image.url` - nested field
+    /// - `images[0].url` - array index
+    /// - `images[].url` - array wildcard (fetches all URLs, outputs as `output_0`, `output_1`, etc.)
     fn fetch_virtual_fields<'d, D: Document<'d> + Debug>(
         &self,
         doc: &D,
@@ -250,27 +256,58 @@ impl<'a> UrlFetchingFragmentExtractor<'a> {
             return virtual_fields;
         }
 
-        // Convert document to JSON to extract URL values
+        // Build a JSON object from the document's top-level fields
+        let doc_json = self.build_document_json(doc);
+
         for mapping in self.fetch_mappings {
-            // Try to get the URL field from the document
-            if let Ok(Some(raw_value)) = doc.top_level_field(&mapping.input) {
-                // Parse the raw JSON value to get the URL string
-                if let Ok(url) = serde_json::from_str::<String>(raw_value.get()) {
-                    if !url.is_empty() {
-                        // Fetch the URL content
-                        match url_fetcher.fetch_as_base64(&url, mapping) {
-                            Ok(base64_content) => {
-                                virtual_fields.insert(mapping.output.clone(), base64_content);
-                            }
-                            Err(e) => {
-                                // Log error but continue - the virtual field just won't be set
-                                tracing::warn!(
-                                    "Failed to fetch URL '{}' for field '{}': {}",
-                                    url,
-                                    mapping.input,
-                                    e
-                                );
-                            }
+            // Extract URLs using the path (supports nested paths and array wildcards)
+            let urls = crate::vector::url_fetcher::extract_urls(&doc_json, &mapping.input);
+
+            if urls.is_empty() {
+                continue;
+            }
+
+            // Check if this is an array wildcard path (produces multiple outputs)
+            let is_array_wildcard =
+                crate::vector::url_fetcher::path_has_array_wildcard(&mapping.input);
+
+            if is_array_wildcard && urls.len() > 1 {
+                // Multiple URLs - create indexed outputs: output_0, output_1, etc.
+                for (idx, url) in urls.iter().enumerate() {
+                    if url.is_empty() {
+                        continue;
+                    }
+                    match url_fetcher.fetch_as_base64(url, mapping) {
+                        Ok(base64_content) => {
+                            let output_name = format!("{}_{}", mapping.output, idx);
+                            virtual_fields.insert(output_name, base64_content);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to fetch URL '{}' for field '{}[{}]': {}",
+                                url,
+                                mapping.input,
+                                idx,
+                                e
+                            );
+                        }
+                    }
+                }
+            } else {
+                // Single URL (or first URL if somehow multiple without wildcard)
+                let url = &urls[0];
+                if !url.is_empty() {
+                    match url_fetcher.fetch_as_base64(url, mapping) {
+                        Ok(base64_content) => {
+                            virtual_fields.insert(mapping.output.clone(), base64_content);
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to fetch URL '{}' for field '{}': {}",
+                                url,
+                                mapping.input,
+                                e
+                            );
                         }
                     }
                 }
@@ -278,6 +315,22 @@ impl<'a> UrlFetchingFragmentExtractor<'a> {
         }
 
         virtual_fields
+    }
+
+    /// Build a JSON object from the document's top-level fields.
+    fn build_document_json<'d, D: Document<'d> + Debug>(
+        &self,
+        doc: &D,
+    ) -> serde_json::Value {
+        let mut obj = serde_json::Map::new();
+
+        for (field_name, raw_value) in doc.iter_top_level_fields().flatten() {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(raw_value.get()) {
+                obj.insert(field_name.to_string(), value);
+            }
+        }
+
+        serde_json::Value::Object(obj)
     }
 }
 
