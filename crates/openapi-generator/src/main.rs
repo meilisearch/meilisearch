@@ -62,8 +62,6 @@ fn main() -> Result<()> {
 
 /// Fetch and parse code samples from the documentation repository
 fn fetch_code_samples() -> Result<HashMap<String, String>> {
-    println!("Fetching code samples from documentation...");
-
     let response = reqwest::blocking::get(CODE_SAMPLES_URL)
         .context("Failed to fetch code samples")?
         .text()
@@ -155,7 +153,6 @@ fn parse_code_samples_yaml(content: &str) -> Result<HashMap<String, String>> {
         }
     }
 
-    println!("Parsed {} code samples", samples.len());
     Ok(samples)
 }
 
@@ -221,16 +218,13 @@ fn add_code_samples_to_openapi(
         .and_then(|p| p.as_object_mut())
         .context("OpenAPI spec missing 'paths' object")?;
 
-    let mut added_count = 0;
-
     for (path, path_item) in paths.iter_mut() {
         let path_item = match path_item.as_object_mut() {
             Some(p) => p,
             None => continue,
         };
 
-        // HTTP methods we care about
-        let methods = ["get", "post", "put", "patch", "delete", "head", "options"];
+        let methods = ["get", "post", "put", "patch", "delete"];
 
         for method in methods {
             if let Some(operation) = path_item.get_mut(method) {
@@ -247,13 +241,11 @@ fn add_code_samples_to_openapi(
                         .as_object_mut()
                         .map(|op| op.insert("x-codeSamples".to_string(), code_sample));
 
-                    added_count += 1;
                 }
             }
         }
     }
 
-    println!("Added code samples to {} operations", added_count);
     Ok(())
 }
 
