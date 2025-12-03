@@ -171,8 +171,8 @@ fn check_sha256(name: &str, asset: &Asset, mut file: std::fs::File) -> anyhow::R
             }
         }
         None => {
-            let msg = match name.starts_with("meilisearch-v") {
-                true => "Please add it to xtask/src/test/versions.rs",
+            let msg = match name.starts_with("meilisearch-") {
+                true => "Please add it to crates/xtask/src/common/instance/release.rs",
                 false => "Please add it to workload file",
             };
             tracing::warn!(

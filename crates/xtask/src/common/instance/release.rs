@@ -111,9 +111,12 @@ impl Release {
         // We hardcode some values to speed up tests and avoid hitting Github
         // Also, versions prior to 1.15 don't have sha256 available anyway
         let sha256 = match local_filename.as_str() {
-            "meilisearch-1.12.0-macos-apple-silicon" => Some(String::from(
-                "3b384707a5df9edf66f9157f0ddb70dcd3ac84d4887149169cf93067d06717b7",
-            )),
+            "meilisearch-1.12.0-macos-apple-silicon" => {
+                Some("3b384707a5df9edf66f9157f0ddb70dcd3ac84d4887149169cf93067d06717b7".into())
+            }
+            "meilisearch-1.12.0-linux-amd64" => {
+                Some("865a3fc222e3b3bd1f4b64346cb114b9669af691aae28d71fa68dbf39427abcf".into())
+            }
             _ => match self.fetch_sha256().await {
                 Ok(sha256) => Some(sha256),
                 Err(err) => {
