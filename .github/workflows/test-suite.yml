@@ -59,7 +59,7 @@ jobs:
       matrix:
         os: [macos-14, windows-2022]
         features: ["", "--features enterprise"]
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
       - name: Cache dependencies
