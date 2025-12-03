@@ -94,7 +94,8 @@
                         "semanticRatio": 1.0
                     },
                     "limit": 5,
-                    "q": "Police"
+                    "q": "Police",
+                    "showRankingScore": true
                 }
             },
             "expectedStatus": 200,
@@ -102,22 +103,27 @@
                 "estimatedTotalHits": 99,
                 "hits": [
                     {
+                        "_rankingScore": 0.2991647720336914,
                         "overview": "A hard-nosed cop reluctantly teams up with a wise-cracking criminal temporarily paroled to him, in order to track down a killer.",
                         "title": "48 Hrs."
                     },
                     {
+                        "_rankingScore": 0.20632648468017575,
                         "overview": "Young Treasury Agent Elliot Ness arrives in Chicago and is determined to take down Al Capone, but it is not going to be easy because Capone has the police in his pocket. Ness meets Jimmy Malone, a veteran patrolman and probably the most honorable one on the force. He asks Malone to help him get Capone, but Malone warns him that if he goes after Capone, he is going to war.",
                         "title": "The Untouchables"
                     },
                     {
+                        "_rankingScore": 0.1864612102508545,
                         "overview": "Axel heads for the land of sunshine and palm trees to find out who shot police Captain Andrew Bogomil. Thanks to a couple of old friends, Axel is investigation uncovers a series of robberies masterminded by a heartless weapons kingpin—and the chase is on.",
                         "title": "Beverly Hills Cop II"
                     },
                     {
+                        "_rankingScore": 0.18349123001098633,
                         "overview": "An average family is thrust into the spotlight after the father commits a seemingly self-defense murder at his diner.",
                         "title": "A History of Violence"
                     },
                     {
+                        "_rankingScore": 0.1784205436706543,
                         "overview": "One man defeated three assassins who sought to murder the most powerful warlord in pre-unified China.",
                         "title": "Hero"
                     }
@@ -194,7 +200,8 @@
                         "semanticRatio": 1.0
                     },
                     "limit": 5,
-                    "q": "Police"
+                    "q": "Police",
+                    "showRankingScore": true
                 }
             },
             "expectedStatus": 200,
@@ -202,22 +209,27 @@
                 "estimatedTotalHits": 99,
                 "hits": [
                     {
+                        "_rankingScore": 0.2991647720336914,
                         "overview": "A hard-nosed cop reluctantly teams up with a wise-cracking criminal temporarily paroled to him, in order to track down a killer.",
                         "title": "48 Hrs."
                     },
                     {
+                        "_rankingScore": 0.20632648468017575,
                         "overview": "Young Treasury Agent Elliot Ness arrives in Chicago and is determined to take down Al Capone, but it is not going to be easy because Capone has the police in his pocket. Ness meets Jimmy Malone, a veteran patrolman and probably the most honorable one on the force. He asks Malone to help him get Capone, but Malone warns him that if he goes after Capone, he is going to war.",
                         "title": "The Untouchables"
                     },
                     {
+                        "_rankingScore": 0.1864612102508545,
                         "overview": "Axel heads for the land of sunshine and palm trees to find out who shot police Captain Andrew Bogomil. Thanks to a couple of old friends, Axel is investigation uncovers a series of robberies masterminded by a heartless weapons kingpin—and the chase is on.",
                         "title": "Beverly Hills Cop II"
                     },
                     {
+                        "_rankingScore": 0.18349123001098633,
                         "overview": "An average family is thrust into the spotlight after the father commits a seemingly self-defense murder at his diner.",
                         "title": "A History of Violence"
                     },
                     {
+                        "_rankingScore": 0.1784205436706543,
                         "overview": "One man defeated three assassins who sought to murder the most powerful warlord in pre-unified China.",
                         "title": "Hero"
                     }
@@ -297,7 +309,8 @@
                         "semanticRatio": 1.0
                     },
                     "limit": 5,
-                    "q": "Police"
+                    "q": "Police",
+                    "showRankingScore": true
                 }
             },
             "expectedStatus": 200,
@@ -305,22 +318,27 @@
                 "estimatedTotalHits": 99,
                 "hits": [
                     {
+                        "_rankingScore": 0.2991647720336914,
                         "overview": "A hard-nosed cop reluctantly teams up with a wise-cracking criminal temporarily paroled to him, in order to track down a killer.",
                         "title": "48 Hrs."
                     },
                     {
+                        "_rankingScore": 0.20632648468017575,
                         "overview": "Young Treasury Agent Elliot Ness arrives in Chicago and is determined to take down Al Capone, but it is not going to be easy because Capone has the police in his pocket. Ness meets Jimmy Malone, a veteran patrolman and probably the most honorable one on the force. He asks Malone to help him get Capone, but Malone warns him that if he goes after Capone, he is going to war.",
                         "title": "The Untouchables"
                     },
                     {
+                        "_rankingScore": 0.1864612102508545,
                         "overview": "Axel heads for the land of sunshine and palm trees to find out who shot police Captain Andrew Bogomil. Thanks to a couple of old friends, Axel is investigation uncovers a series of robberies masterminded by a heartless weapons kingpin—and the chase is on.",
                         "title": "Beverly Hills Cop II"
                     },
                     {
+                        "_rankingScore": 0.18349123001098633,
                         "overview": "An average family is thrust into the spotlight after the father commits a seemingly self-defense murder at his diner.",
                         "title": "A History of Violence"
                     },
                     {
+                        "_rankingScore": 0.1784205436706543,
                         "overview": "One man defeated three assassins who sought to murder the most powerful warlord in pre-unified China.",
                         "title": "Hero"
                     }
