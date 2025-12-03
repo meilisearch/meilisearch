@@ -13,6 +13,12 @@ jobs:
       image: ubuntu:22.04
     steps:
       - uses: actions/checkout@v5
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
       - name: Install needed dependencies
         run: |
           apt-get update && apt-get install -y curl

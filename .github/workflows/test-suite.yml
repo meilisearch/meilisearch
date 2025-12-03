@@ -30,6 +30,12 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
       - name: Setup test with Rust stable
         uses: dtolnay/rust-toolchain@1.89
       - name: Cache dependencies
@@ -79,6 +85,12 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
       - name: Install needed dependencies
         run: |
           apt-get update
@@ -101,6 +113,12 @@ jobs:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
       - uses: actions/checkout@v5
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
       - name: Install Ollama
         run: |
           curl -fsSL https://ollama.com/install.sh | sudo -E sh
@@ -134,6 +152,12 @@ jobs:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v5
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
       - name: Install needed dependencies
         run: |
           apt-get update
@@ -183,6 +207,12 @@ jobs:
         features: ["", "--features enterprise"]
     steps:
       - uses: actions/checkout@v5
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.89
         with:
           profile: minimal
@@ -200,6 +230,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.89
         with:
           profile: minimal
