@@ -7,11 +7,14 @@
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::net::{IpAddr, ToSocketAddrs};
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::Duration;
 
 use base64::Engine;
 
 use super::settings::{FetchOptions, FetchOutputFormat, FetchUrlMapping};
+use crate::progress::UrlFetcherStats;
 use crate::vector::error::EmbedError;
 
 /// Default timeout in milliseconds.
@@ -54,10 +57,8 @@ impl ResolvedFetchMapping {
 
         let retries = mapping.retries.or(defaults.retries).unwrap_or(DEFAULT_RETRIES);
 
-        let output_format = mapping
-            .output_format
-            .or(defaults.output_format)
-            .unwrap_or(FetchOutputFormat::Base64);
+        let output_format =
+            mapping.output_format.or(defaults.output_format).unwrap_or(FetchOutputFormat::Base64);
 
         Self {
             input: mapping.input.clone(),
@@ -129,6 +130,7 @@ fn guess_mime_type(url: &str) -> &'static str {
 pub struct UrlFetcher {
     client: ureq::Agent,
     allowed_domains: Vec<String>,
+    stats: Option<Arc<UrlFetcherStats>>,
 }
 
 impl UrlFetcher {
@@ -142,7 +144,37 @@ impl UrlFetcher {
             .max_idle_connections_per_host(5)
             .build();
 
-        Self { client, allowed_domains: options.allowed_domains.clone() }
+        Self { client, allowed_domains: options.allowed_domains.clone(), stats: None }
+    }
+
+    /// Create a new URL fetcher with the given options and statistics tracking.
+    pub fn with_stats(options: &FetchOptions, stats: Arc<UrlFetcherStats>) -> Self {
+        let timeout = Duration::from_millis(options.timeout.unwrap_or(DEFAULT_TIMEOUT_MS));
+
+        let client = ureq::AgentBuilder::new()
+            .timeout(timeout)
+            .max_idle_connections(10)
+            .max_idle_connections_per_host(5)
+            .build();
+
+        Self { client, allowed_domains: options.allowed_domains.clone(), stats: Some(stats) }
+    }
+
+    /// Record a successful fetch in stats.
+    fn record_success(&self) {
+        if let Some(stats) = &self.stats {
+            stats.total_count.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    /// Record a failed fetch in stats.
+    fn record_error(&self, error_msg: &str) {
+        if let Some(stats) = &self.stats {
+            stats.total_count.fetch_add(1, Ordering::Relaxed);
+            let mut guard = stats.errors.write().unwrap_or_else(|p| p.into_inner());
+            guard.0 = Some(error_msg.to_string());
+            guard.1 += 1;
+        }
     }
 
     /// Check if a URL is allowed based on domain restrictions.
@@ -260,6 +292,7 @@ impl UrlFetcher {
                             format!("data:{};base64,{}", mime_type, base64)
                         }
                     };
+                    self.record_success();
                     return Ok(result);
                 }
                 Err(e) => {
@@ -273,11 +306,18 @@ impl UrlFetcher {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| EmbedError::url_fetch_error("Unknown fetch error")))
+        let error =
+            last_error.unwrap_or_else(|| EmbedError::url_fetch_error("Unknown fetch error"));
+        self.record_error(&error.to_string());
+        Err(error)
     }
 
     /// Perform the actual HTTP fetch. Returns (content, content_type).
-    fn do_fetch(&self, url: &str, max_size: usize) -> Result<(Vec<u8>, Option<String>), EmbedError> {
+    fn do_fetch(
+        &self,
+        url: &str,
+        max_size: usize,
+    ) -> Result<(Vec<u8>, Option<String>), EmbedError> {
         let response = self
             .client
             .get(url)

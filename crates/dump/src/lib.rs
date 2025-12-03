@@ -365,6 +365,7 @@ pub(crate) mod test {
                 internal_database_sizes: Default::default(),
             },
             embedder_stats: Default::default(),
+            url_fetcher_stats: Default::default(),
             enqueued_at: Some(BatchEnqueuedAt {
                 earliest: datetime!(2022-11-11 0:00 UTC),
                 oldest: datetime!(2022-11-11 0:00 UTC),

@@ -64,12 +64,20 @@ impl EmbeddingConfig {
     }
 
     /// Creates a URL fetcher if fetch configuration is present.
-    pub fn url_fetcher(&self) -> Option<crate::vector::url_fetcher::UrlFetcher> {
+    pub fn url_fetcher(
+        &self,
+        stats: Option<std::sync::Arc<crate::progress::UrlFetcherStats>>,
+    ) -> Option<crate::vector::url_fetcher::UrlFetcher> {
         if self.fetch_url.is_empty() {
             return None;
         }
         let fetch_options = self.fetch_options.clone().unwrap_or_default();
-        Some(crate::vector::url_fetcher::UrlFetcher::new(&fetch_options))
+        match stats {
+            Some(stats) => {
+                Some(crate::vector::url_fetcher::UrlFetcher::with_stats(&fetch_options, stats))
+            }
+            None => Some(crate::vector::url_fetcher::UrlFetcher::new(&fetch_options)),
+        }
     }
 
     /// Creates resolved fetch mappings from the configuration.

@@ -14,7 +14,7 @@ use meilisearch_types::tasks::{
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
-use crate::milli::progress::EmbedderStats;
+use crate::milli::progress::{EmbedderStats, UrlFetcherStats};
 use crate::{Error, Result, Task, TaskId, BEI128};
 
 /// This structure contains all the information required to write a batch in the database without reading the tasks.
@@ -30,6 +30,7 @@ pub struct ProcessingBatch {
     pub details: DetailsView,
     pub stats: BatchStats,
     pub embedder_stats: Arc<EmbedderStats>,
+    pub url_fetcher_stats: Arc<UrlFetcherStats>,
 
     pub statuses: HashSet<Status>,
     pub kinds: HashSet<Kind>,
@@ -52,6 +53,7 @@ impl ProcessingBatch {
             details: DetailsView::default(),
             stats: BatchStats::default(),
             embedder_stats: Default::default(),
+            url_fetcher_stats: Default::default(),
 
             statuses,
             kinds: HashSet::default(),
@@ -151,6 +153,7 @@ impl ProcessingBatch {
             details: self.details.clone(),
             stats: self.stats.clone(),
             embedder_stats: self.embedder_stats.as_ref().into(),
+            url_fetcher_stats: self.url_fetcher_stats.as_ref().into(),
             started_at: self.started_at,
             finished_at: self.finished_at,
             enqueued_at: self.enqueued_at,

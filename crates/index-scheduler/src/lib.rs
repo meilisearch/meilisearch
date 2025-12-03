@@ -972,6 +972,7 @@ impl IndexScheduler {
         &self,
         index_uid: String,
         embedding_configs: Vec<IndexEmbeddingConfig>,
+        url_fetcher_stats: Option<Arc<milli::progress::UrlFetcherStats>>,
     ) -> Result<RuntimeEmbedders> {
         let res: Result<_> = embedding_configs
             .into_iter()
@@ -1007,7 +1008,13 @@ impl IndexScheduler {
                     // Create URL fetcher if fetch configuration is present
                     let (url_fetcher, fetch_mappings) = if !fetch_url.is_empty() {
                         let fetch_opts = fetch_options.unwrap_or_default();
-                        let fetcher = milli::vector::url_fetcher::UrlFetcher::new(&fetch_opts);
+                        let fetcher = match url_fetcher_stats.clone() {
+                            Some(stats) => milli::vector::url_fetcher::UrlFetcher::with_stats(
+                                &fetch_opts,
+                                stats,
+                            ),
+                            None => milli::vector::url_fetcher::UrlFetcher::new(&fetch_opts),
+                        };
                         let mappings = milli::vector::url_fetcher::resolve_fetch_mappings(
                             &fetch_url,
                             &fetch_opts,

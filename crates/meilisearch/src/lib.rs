@@ -597,7 +597,7 @@ fn import_dump(
             let reader = DocumentsBatchReader::from_reader(reader)?;
 
             let embedder_configs = index.embedding_configs().embedding_configs(&wtxn)?;
-            let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs)?;
+            let embedders = index_scheduler.embedders(uid.to_string(), embedder_configs, None)?;
 
             let builder = milli::update::IndexDocuments::new(
                 &mut wtxn,
@@ -625,7 +625,7 @@ fn import_dump(
 
             let mut indexer = indexer::DocumentOperation::new();
             let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
-            let embedders = index_scheduler.embedders(uid.clone(), embedders)?;
+            let embedders = index_scheduler.embedders(uid.clone(), embedders, None)?;
 
             let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
 
