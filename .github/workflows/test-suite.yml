@@ -228,6 +228,8 @@ jobs:
   declarative-tests:
     name: Run declarative tests
     runs-on: benchmarks
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
