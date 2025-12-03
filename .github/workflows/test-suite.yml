@@ -193,6 +193,8 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - name: check free space after
         run: df -h
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.8.0
       - name: Run tests in debug
         uses: actions-rs/cargo@v1
         with:
