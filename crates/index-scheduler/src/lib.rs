@@ -978,7 +978,14 @@ impl IndexScheduler {
             .map(
                 |IndexEmbeddingConfig {
                      name,
-                     config: milli::vector::EmbeddingConfig { embedder_options, prompt, quantized },
+                     config:
+                         milli::vector::EmbeddingConfig {
+                             embedder_options,
+                             prompt,
+                             quantized,
+                             fetch_url,
+                             fetch_options,
+                         },
                      fragments,
                  }|
                  -> Result<(String, Arc<RuntimeEmbedder>)> {
@@ -996,6 +1003,20 @@ impl IndexScheduler {
                             RuntimeFragment { name: fragment.name, id: fragment.id, template }
                         })
                         .collect();
+
+                    // Create URL fetcher if fetch configuration is present
+                    let (url_fetcher, fetch_mappings) = if !fetch_url.is_empty() {
+                        let fetch_opts = fetch_options.unwrap_or_default();
+                        let fetcher = milli::vector::url_fetcher::UrlFetcher::new(&fetch_opts);
+                        let mappings = milli::vector::url_fetcher::resolve_fetch_mappings(
+                            &fetch_url,
+                            &fetch_opts,
+                        );
+                        (Some(fetcher), mappings)
+                    } else {
+                        (None, Vec::new())
+                    };
+
                     // optimistically return existing embedder
                     {
                         let embedders = self.embedders.read().unwrap();
@@ -1005,6 +1026,8 @@ impl IndexScheduler {
                                 document_template,
                                 fragments,
                                 quantized.unwrap_or_default(),
+                                url_fetcher.clone(),
+                                fetch_mappings.clone(),
                             ));
 
                             return Ok((name, runtime));
@@ -1029,6 +1052,8 @@ impl IndexScheduler {
                         document_template,
                         fragments,
                         quantized.unwrap_or_default(),
+                        url_fetcher,
+                        fetch_mappings,
                     ));
 
                     Ok((name, runtime))

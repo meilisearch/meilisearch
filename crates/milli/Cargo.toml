@@ -12,6 +12,7 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
+base64 = "0.22"
 big_s = "1.0.2"
 bimap = { version = "0.6.3", features = ["serde"] }
 bincode = "1.3.3"

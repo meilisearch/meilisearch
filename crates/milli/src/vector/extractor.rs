@@ -210,6 +210,106 @@ impl<'doc> Extractor<'doc> for RequestFragmentExtractor<'doc> {
     }
 }
 
+/// Extractor that fetches URLs and includes them as virtual fields during fragment rendering.
+pub struct UrlFetchingFragmentExtractor<'a> {
+    fragment: &'a JsonTemplate,
+    extractor_id: u8,
+    doc_alloc: &'a Bump,
+    url_fetcher: Option<&'a crate::vector::url_fetcher::UrlFetcher>,
+    fetch_mappings: &'a [crate::vector::url_fetcher::ResolvedFetchMapping],
+}
+
+impl<'a> UrlFetchingFragmentExtractor<'a> {
+    pub fn new(
+        fragment: &'a super::RuntimeFragment,
+        doc_alloc: &'a Bump,
+        url_fetcher: Option<&'a crate::vector::url_fetcher::UrlFetcher>,
+        fetch_mappings: &'a [crate::vector::url_fetcher::ResolvedFetchMapping],
+    ) -> Self {
+        Self {
+            fragment: &fragment.template,
+            extractor_id: fragment.id,
+            doc_alloc,
+            url_fetcher,
+            fetch_mappings,
+        }
+    }
+
+    /// Extract URLs from document, fetch them, and return virtual fields.
+    fn fetch_virtual_fields<'d, D: Document<'d> + Debug>(
+        &self,
+        doc: &D,
+    ) -> std::collections::BTreeMap<String, String> {
+        let mut virtual_fields = std::collections::BTreeMap::new();
+
+        let Some(url_fetcher) = self.url_fetcher else {
+            return virtual_fields;
+        };
+
+        if self.fetch_mappings.is_empty() {
+            return virtual_fields;
+        }
+
+        // Convert document to JSON to extract URL values
+        for mapping in self.fetch_mappings {
+            // Try to get the URL field from the document
+            if let Ok(Some(raw_value)) = doc.top_level_field(&mapping.input) {
+                // Parse the raw JSON value to get the URL string
+                if let Ok(url) = serde_json::from_str::<String>(raw_value.get()) {
+                    if !url.is_empty() {
+                        // Fetch the URL content
+                        match url_fetcher.fetch_as_base64(&url, mapping) {
+                            Ok(base64_content) => {
+                                virtual_fields.insert(mapping.output.clone(), base64_content);
+                            }
+                            Err(e) => {
+                                // Log error but continue - the virtual field just won't be set
+                                tracing::warn!(
+                                    "Failed to fetch URL '{}' for field '{}': {}",
+                                    url,
+                                    mapping.input,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        virtual_fields
+    }
+}
+
+impl<'doc> Extractor<'doc> for UrlFetchingFragmentExtractor<'doc> {
+    type DocumentMetadata = ();
+    type Input = Value;
+    type Error = json_template::Error;
+
+    fn extractor_id(&self) -> u8 {
+        self.extractor_id
+    }
+
+    fn extract<'a, D: Document<'a> + Debug>(
+        &self,
+        doc: D,
+        _meta: &Self::DocumentMetadata,
+    ) -> Result<Option<Self::Input>, Self::Error> {
+        // Fetch URLs and get virtual fields
+        let virtual_fields = self.fetch_virtual_fields(&doc);
+
+        // Render the fragment with virtual fields
+        let virtual_fields_ref =
+            if virtual_fields.is_empty() { None } else { Some(&virtual_fields) };
+
+        Ok(Some(self.fragment.render_document_with_virtual_fields(
+            doc,
+            self.doc_alloc,
+            virtual_fields_ref,
+        )?))
+    }
+}
+
 pub struct IgnoreErrorExtractor<E>(E);
 
 impl<'doc, E> Extractor<'doc> for IgnoreErrorExtractor<E>

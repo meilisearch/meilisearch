@@ -10,6 +10,7 @@ mod runtime;
 pub mod session;
 pub mod settings;
 mod store;
+pub mod url_fetcher;
 
 pub use self::error::Error;
 

@@ -27,7 +27,8 @@ async fn experimental_features() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "vectorStoreSetting": false
+      "vectorStoreSetting": false,
+      "embeddingUrlFetching": false
     }
     "###);
 
@@ -45,7 +46,8 @@ async fn experimental_features() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "vectorStoreSetting": false
+      "vectorStoreSetting": false,
+      "embeddingUrlFetching": false
     }
     "###);
 
@@ -63,7 +65,8 @@ async fn experimental_features() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "vectorStoreSetting": false
+      "vectorStoreSetting": false,
+      "embeddingUrlFetching": false
     }
     "###);
 
@@ -82,7 +85,8 @@ async fn experimental_features() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "vectorStoreSetting": false
+      "vectorStoreSetting": false,
+      "embeddingUrlFetching": false
     }
     "###);
 
@@ -101,7 +105,8 @@ async fn experimental_features() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "vectorStoreSetting": false
+      "vectorStoreSetting": false,
+      "embeddingUrlFetching": false
     }
     "###);
 }
@@ -127,7 +132,8 @@ async fn experimental_feature_metrics() {
       "compositeEmbedders": false,
       "chatCompletions": false,
       "multimodal": false,
-      "vectorStoreSetting": false
+      "vectorStoreSetting": false,
+      "embeddingUrlFetching": false
     }
     "###);
 
@@ -174,7 +180,7 @@ async fn errors() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `vectorStoreSetting`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `vectorStoreSetting`, `embeddingUrlFetching`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -248,6 +254,114 @@ async fn search_with_personalization_without_enabling_the_feature() {
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn embedder_with_fetch_url_without_enabling_the_feature() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+
+    // Create the index
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Try to set embedder with fetchUrl without enabling the feature
+    let (response, code) = index
+        .update_settings(json!({
+            "embedders": {
+                "image_embedder": {
+                    "source": "rest",
+                    "url": "http://localhost:8080/embed",
+                    "request": "{{ doc.image }}",
+                    "response": {
+                        "type": "singleEmbedding",
+                        "embedding": "{{ embedding }}"
+                    },
+                    "dimensions": 512,
+                    "fetchUrl": [
+                        { "input": "{{ doc.imageUrl }}", "output": "image" }
+                    ]
+                }
+            }
+        }))
+        .await;
+
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "setting `fetchUrl` requires enabling the `embedding url fetching` experimental feature. See https://github.com/orgs/meilisearch/discussions/",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // Try with fetchOptions instead
+    let (response, code) = index
+        .update_settings(json!({
+            "embedders": {
+                "image_embedder": {
+                    "source": "rest",
+                    "url": "http://localhost:8080/embed",
+                    "request": "{{ doc.image }}",
+                    "response": {
+                        "type": "singleEmbedding",
+                        "embedding": "{{ embedding }}"
+                    },
+                    "dimensions": 512,
+                    "fetchOptions": {
+                        "timeout": 5000
+                    }
+                }
+            }
+        }))
+        .await;
+
+    meili_snap::snapshot!(code, @"400 Bad Request");
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "setting `fetchOptions` requires enabling the `embedding url fetching` experimental feature. See https://github.com/orgs/meilisearch/discussions/",
+      "code": "feature_not_enabled",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+
+    // Now enable the feature and try again
+    let (response, code) = server.set_features(json!({"embeddingUrlFetching": true})).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(response["embeddingUrlFetching"], @"true");
+
+    // With the feature enabled, fetchUrl should no longer cause a feature_not_enabled error
+    // (it may fail for other validation reasons, but not because of the feature gate)
+    let (response, code) = index
+        .update_settings(json!({
+            "embedders": {
+                "image_embedder": {
+                    "source": "rest",
+                    "url": "http://localhost:8080/embed",
+                    "request": "{{ doc.image }}",
+                    "response": {
+                        "type": "singleEmbedding",
+                        "embedding": "{{ embedding }}"
+                    },
+                    "dimensions": 512,
+                    "fetchUrl": [
+                        { "input": "{{ doc.imageUrl }}", "output": "image" }
+                    ]
+                }
+            }
+        }))
+        .await;
+
+    // The error should NOT be feature_not_enabled anymore
+    if code.is_client_error() {
+        assert_ne!(
+            response["code"].as_str().unwrap_or(""),
+            "feature_not_enabled",
+            "After enabling embeddingUrlFetching, should not get feature_not_enabled error"
+        );
+    }
 }
 
 #[actix_rt::test]

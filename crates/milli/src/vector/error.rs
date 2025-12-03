@@ -128,6 +128,8 @@ pub enum EmbedErrorKind {
         })
     })]
     RestSearchMatchesNoFragment { q: Option<String>, media: Option<serde_json::Value> },
+    #[error("error fetching URL:\n  - {0}")]
+    UrlFetchError(String),
 }
 
 fn option_info(info: Option<&str>, prefix: &str) -> String {
@@ -274,6 +276,10 @@ impl EmbedError {
             },
             fault: FaultSource::User,
         }
+    }
+
+    pub fn url_fetch_error(message: impl Into<String>) -> EmbedError {
+        Self { kind: EmbedErrorKind::UrlFetchError(message.into()), fault: FaultSource::Runtime }
     }
 }
 

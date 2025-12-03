@@ -49,12 +49,41 @@ pub struct EmbeddingConfig {
     pub prompt: PromptData,
     /// If this embedder is binary quantized
     pub quantized: Option<bool>,
+    /// URL fetch mappings for downloading content during embedding extraction
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fetch_url: Vec<crate::vector::settings::FetchUrlMapping>,
+    /// URL fetch options (timeouts, allowed domains, etc.)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fetch_options: Option<crate::vector::settings::FetchOptions>,
     // TODO: add metrics and anything needed
 }
 
 impl EmbeddingConfig {
     pub fn quantized(&self) -> bool {
         self.quantized.unwrap_or_default()
+    }
+
+    /// Creates a URL fetcher if fetch configuration is present.
+    pub fn url_fetcher(&self) -> Option<crate::vector::url_fetcher::UrlFetcher> {
+        if self.fetch_url.is_empty() {
+            return None;
+        }
+        let fetch_options = self.fetch_options.clone().unwrap_or_default();
+        Some(crate::vector::url_fetcher::UrlFetcher::new(&fetch_options))
+    }
+
+    /// Creates resolved fetch mappings from the configuration.
+    pub fn resolved_fetch_mappings(&self) -> Vec<crate::vector::url_fetcher::ResolvedFetchMapping> {
+        let default_options = self.fetch_options.clone().unwrap_or_default();
+        self.fetch_url
+            .iter()
+            .map(|mapping| {
+                crate::vector::url_fetcher::ResolvedFetchMapping::from_mapping(
+                    mapping,
+                    &default_options,
+                )
+            })
+            .collect()
     }
 }
 

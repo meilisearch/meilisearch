@@ -4174,6 +4174,7 @@ name = "milli"
 version = "1.28.1"
 dependencies = [
  "arroy",
+ "base64 0.22.1",
  "bbqueue",
  "big_s",
  "bimap",

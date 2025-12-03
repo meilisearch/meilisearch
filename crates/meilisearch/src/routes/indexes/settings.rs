@@ -782,6 +782,14 @@ fn validate_settings(
             if matches!(embedder.search_fragments, Setting::Set(_)) {
                 features.check_multimodal("setting `searchFragments`")?;
             }
+
+            if matches!(embedder.fetch_url, Setting::Set(_)) {
+                features.check_embedding_url_fetching("setting `fetchUrl`")?;
+            }
+
+            if matches!(embedder.fetch_options, Setting::Set(_)) {
+                features.check_embedding_url_fetching("setting `fetchOptions`")?;
+            }
         }
     }
 

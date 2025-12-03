@@ -171,6 +171,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_embedding_url_fetching(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.embedding_url_fetching {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "embedding url fetching",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
