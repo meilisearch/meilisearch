@@ -224,3 +224,13 @@ jobs:
         run: |
           echo -ne "\n" > crates/benchmarks/benches/datasets_paths.rs
           cargo fmt --all -- --check
+
+  declarative-tests:
+    name: Run declarative tests
+    runs-on: benchmarks
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@1.89
+      - name: Run declarative tests
+        run: |
+          cargo xtask test workloads/tests/*.json
