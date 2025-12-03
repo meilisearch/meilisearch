@@ -21,6 +21,10 @@ use roaring::RoaringBitmap;
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+fn no_cancel() -> bool {
+    false
+}
+
 const BENCHMARK_ITERATION: usize = 10;
 
 fn setup_dir(path: impl AsRef<Path>) {
@@ -65,7 +69,7 @@ fn setup_settings<'t>(
     let sortable_fields = sortable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_sortable_fields(sortable_fields);
 
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder.execute(&no_cancel, &Progress::default(), Default::default()).unwrap();
 }
 
 fn setup_index_with_settings(
@@ -152,7 +156,7 @@ fn indexing_songs_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -168,7 +172,7 @@ fn indexing_songs_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -220,7 +224,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -236,7 +240,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -266,7 +270,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -282,7 +286,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -336,7 +340,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -352,7 +356,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -414,7 +418,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -430,7 +434,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -460,7 +464,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -476,7 +480,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -502,7 +506,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -518,7 +522,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -571,7 +575,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -587,7 +591,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -639,7 +643,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -655,7 +659,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -707,7 +711,7 @@ fn indexing_wiki(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -723,7 +727,7 @@ fn indexing_wiki(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -774,7 +778,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -790,7 +794,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -820,7 +824,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -836,7 +840,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -889,7 +893,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -905,7 +909,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -967,7 +971,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -983,7 +987,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1014,7 +1018,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1030,7 +1034,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1057,7 +1061,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1073,7 +1077,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1125,7 +1129,7 @@ fn indexing_movies_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1141,7 +1145,7 @@ fn indexing_movies_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1192,7 +1196,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1208,7 +1212,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1238,7 +1242,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1254,7 +1258,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1307,7 +1311,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1323,7 +1327,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1372,7 +1376,7 @@ fn delete_documents_from_ids(index: Index, document_ids_to_delete: Vec<RoaringBi
             Some(primary_key),
             &document_changes,
             RuntimeEmbedders::default(),
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -1422,7 +1426,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1438,7 +1442,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1468,7 +1472,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1484,7 +1488,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1510,7 +1514,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1526,7 +1530,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1601,7 +1605,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1617,7 +1621,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1693,7 +1697,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1709,7 +1713,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1777,7 +1781,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1793,7 +1797,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1845,7 +1849,7 @@ fn indexing_geo(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1861,7 +1865,7 @@ fn indexing_geo(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1912,7 +1916,7 @@ fn reindexing_geo(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1928,7 +1932,7 @@ fn reindexing_geo(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -1958,7 +1962,7 @@ fn reindexing_geo(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -1974,7 +1978,7 @@ fn reindexing_geo(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
@@ -2027,7 +2031,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                         &rtxn,
                         None,
                         &mut new_fields_ids_map,
-                        &|| false,
+                        &no_cancel,
                         Progress::default(),
                         None,
                     )
@@ -2043,7 +2047,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                     primary_key,
                     &document_changes,
                     RuntimeEmbedders::default(),
-                    &|| false,
+                    &no_cancel,
                     &Progress::default(),
                     &Default::default(),
                 )
