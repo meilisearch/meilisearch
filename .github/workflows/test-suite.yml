@@ -106,6 +106,9 @@ jobs:
   ollama-ubuntu:
     name: Test with Ollama
     runs-on: ubuntu-latest
+    container:
+      # Use ubuntu-22.04 to compile with glibc 2.35
+      image: ubuntu:22.04
     env:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
