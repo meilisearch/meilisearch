@@ -6,7 +6,7 @@ use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Details, Kind, Status, Task};
-use meilisearch_types::versioning;
+use meilisearch_types::versioning::{self, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use roaring::RoaringBitmap;
 
 use crate::index_mapper::IndexMapper;
@@ -320,7 +320,11 @@ fn snapshot_details(d: &Details) -> String {
             format!("{{ url: {url:?}, api_key: {api_key:?}, payload_size: {payload_size:?}, indexes: {indexes:?} }}")
         }
         Details::UpgradeDatabase { from, to } => {
-            format!("{{ from: {from:?}, to: {to:?} }}")
+            if to == &(VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) {
+                format!("{{ from: {from:?}, to: [current version] }}")
+            } else {
+                format!("{{ from: {from:?}, to: {to:?} }}")
+            }
         }
         Details::IndexCompaction { index_uid, pre_compaction_size, post_compaction_size } => {
             format!("{{ index_uid: {index_uid:?}, pre_compaction_size: {pre_compaction_size:?}, post_compaction_size: {post_compaction_size:?} }}")
@@ -400,7 +404,21 @@ pub fn snapshot_batch(batch: &Batch) -> String {
 
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
-    snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
+    let details = if let Some(upgrade_to) = &details.upgrade_to {
+        if upgrade_to.as_str()
+            == format!("v{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}").as_str()
+        {
+            let mut details = details.clone();
+
+            details.upgrade_to = Some("[current version]".into());
+            serde_json::to_string(&details).unwrap()
+        } else {
+            serde_json::to_string(details).unwrap()
+        }
+    } else {
+        serde_json::to_string(details).unwrap()
+    };
+    snap.push_str(&format!("details: {details}, "));
     snap.push_str(&format!("stats: {}, ", serde_json::to_string(&stats).unwrap()));
     if !embedder_stats.skip_serializing() {
         snap.push_str(&format!(
