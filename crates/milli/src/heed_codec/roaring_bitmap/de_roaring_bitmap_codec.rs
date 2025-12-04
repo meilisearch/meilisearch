@@ -76,7 +76,7 @@ impl DeRoaringBitmapCodec {
         let decompressed = chunks.remainder();
         if !decompressed.is_empty() {
             size += 1; // u8 chunk header
-            size += decompressed.len() * mem::size_of::<u32>(); // remaining uncompressed u32s
+            size += mem::size_of_val(decompressed); // remaining uncompressed u32s
         }
 
         size
