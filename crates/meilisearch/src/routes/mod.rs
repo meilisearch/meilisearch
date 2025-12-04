@@ -129,6 +129,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/chats").configure(chats::configure))
         .service(web::scope("/webhooks").configure(webhooks::configure));
 
+    #[cfg(feature = "experimental-mcp")]
+    cfg.service(web::scope("/mcp").configure(crate::mcp::configure));
+
     #[cfg(feature = "swagger")]
     {
         use utoipa_scalar::{Scalar, Servable as ScalarServable};

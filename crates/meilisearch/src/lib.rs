@@ -16,6 +16,9 @@ pub mod routes;
 pub mod search;
 pub mod search_queue;
 
+#[cfg(feature = "experimental-mcp")]
+pub mod mcp;
+
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
@@ -689,6 +692,19 @@ fn import_dump(
 }
 
 pub fn configure_data(config: &mut web::ServiceConfig, services: ServicesData, opt: &Opt) {
+    #[cfg(feature = "experimental-mcp")]
+    let ServicesData {
+        index_scheduler,
+        auth,
+        search_queue,
+        personalization_service,
+        logs_route_handle,
+        logs_stderr_handle,
+        analytics,
+        mcp_session_store,
+    } = services;
+
+    #[cfg(not(feature = "experimental-mcp"))]
     let ServicesData {
         index_scheduler,
         auth,
@@ -732,6 +748,10 @@ pub fn configure_data(config: &mut web::ServiceConfig, services: ServicesData, o
         .app_data(
             web::QueryConfig::default().error_handler(|err, _req| PayloadError::from(err).into()),
         );
+
+    // Add MCP session store when experimental-mcp feature is enabled
+    #[cfg(feature = "experimental-mcp")]
+    config.app_data(mcp_session_store);
 }
 
 #[cfg(feature = "mini-dashboard")]
@@ -778,4 +798,6 @@ pub struct ServicesData {
     pub logs_route_handle: Data<LogRouteHandle>,
     pub logs_stderr_handle: Data<LogStderrHandle>,
     pub analytics: Data<Analytics>,
+    #[cfg(feature = "experimental-mcp")]
+    pub mcp_session_store: Data<mcp::McpSessionStore>,
 }

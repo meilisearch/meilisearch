@@ -7,6 +7,8 @@ mod dumps;
 mod features;
 mod index;
 mod logs;
+#[cfg(feature = "experimental-mcp")]
+mod mcp;
 mod network;
 mod search;
 mod settings;
