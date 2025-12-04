@@ -7806,6 +7806,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "reqwest",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

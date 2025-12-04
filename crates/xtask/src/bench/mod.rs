@@ -23,7 +23,7 @@ pub fn default_dashboard_url() -> String {
 
 /// Run benchmarks from a workload
 #[derive(Parser, Debug)]
-pub struct BenchDeriveArgs {
+pub struct BenchArgs {
     /// Common arguments shared with other commands
     #[command(flatten)]
     common: CommonArgs,
@@ -59,7 +59,7 @@ pub struct BenchDeriveArgs {
     binary_path: Option<PathBuf>,
 }
 
-pub fn run(args: BenchDeriveArgs) -> anyhow::Result<()> {
+pub fn run(args: BenchArgs) -> anyhow::Result<()> {
     setup_logs(&args.common.log_filter)?;
 
     // fetch environment and build info
