@@ -170,11 +170,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.89
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
-      - name: Run cargo build in release
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all-targets --release
+      - name: Build
+        run: cargo build --release --locked --target x86_64-unknown-linux-gnu
 
   clippy:
     name: Run Clippy

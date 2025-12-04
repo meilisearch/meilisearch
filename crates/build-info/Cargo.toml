@@ -15,4 +15,4 @@ time = { version = "0.3.44", features = ["parsing"] }
 
 [build-dependencies]
 anyhow = "1.0.100"
-vergen-git2 = "1.0.7"
+vergen-gitcl = "1.0.8"
