@@ -1,5 +1,5 @@
 use hannoy::distances::{Cosine, Hamming};
-use hannoy::ItemId;
+use hannoy::{ItemId, Searched};
 use heed::{RoTxn, RwTxn, Unspecified};
 use ordered_float::OrderedFloat;
 use rand::SeedableRng as _;
@@ -974,7 +974,7 @@ impl VectorStore {
             }
 
             if let Some(mut ret) = searcher.by_item(rtxn, item)? {
-                results.append(&mut ret);
+                results.append(&mut ret.nns);
             }
         }
         results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
@@ -1028,10 +1028,9 @@ impl VectorStore {
                 searcher.candidates(filter);
             }
 
-            let (res, _degraded) =
-                &mut searcher
-                    .by_vector_with_cancellation(rtxn, vector, || time_budget.exceeded())?;
-            results.append(res);
+            let Searched { mut nns, did_cancel: _ } =
+                searcher.by_vector_with_cancellation(rtxn, vector, || time_budget.exceeded())?;
+            results.append(&mut nns);
         }
 
         results.sort_unstable_by_key(|(_, distance)| OrderedFloat(*distance));
