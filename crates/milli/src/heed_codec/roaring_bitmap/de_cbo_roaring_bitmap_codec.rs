@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::io::{self, ErrorKind};
+use std::sync::OnceLock;
 
 use heed::BoxedError;
 use roaring::RoaringBitmap;
@@ -7,6 +8,9 @@ use roaring::RoaringBitmap;
 use super::cbo_roaring_bitmap_codec::CboRoaringBitmapCodec;
 use super::de_roaring_bitmap_codec::DeRoaringBitmapCodec;
 use crate::heed_codec::BytesDecodeOwned;
+
+/// Defines the status of the delta encoding on whether we have enabled it or not.
+pub static DELTA_ENCODING_STATUS: DeltaEncodingStatusLock = DeltaEncodingStatusLock::new();
 
 pub struct DeCboRoaringBitmapCodec;
 
@@ -17,7 +21,9 @@ impl DeCboRoaringBitmapCodec {
     ) -> usize {
         // We are stuck with this format because the CboRoaringBitmapCodec decides to write
         // raw and unencoded u32s, without a header when there is at most THRESHOLD elements.
-        if CboRoaringBitmapCodec::bitmap_serialize_as_raw_u32s(bitmap) {
+        if CboRoaringBitmapCodec::bitmap_serialize_as_raw_u32s(bitmap)
+            && DELTA_ENCODING_STATUS.is_disabled()
+        {
             CboRoaringBitmapCodec::serialized_size(bitmap)
         } else {
             DeRoaringBitmapCodec::serialized_size_with_tmp_buffer(bitmap, tmp_buffer)
@@ -41,7 +47,9 @@ impl DeCboRoaringBitmapCodec {
     ) -> io::Result<()> {
         // We are stuck with this format because the CboRoaringBitmapCodec decides to write
         // raw and unencoded u32s, without a header when there is at most THRESHOLD elements.
-        if CboRoaringBitmapCodec::bitmap_serialize_as_raw_u32s(bitmap) {
+        if CboRoaringBitmapCodec::bitmap_serialize_as_raw_u32s(bitmap)
+            && DELTA_ENCODING_STATUS.is_disabled()
+        {
             CboRoaringBitmapCodec::serialize_into_writer(bitmap, writer)
         } else {
             DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(bitmap, writer, tmp_buffer)
@@ -105,5 +113,41 @@ impl heed::BytesEncode<'_> for DeCboRoaringBitmapCodec {
         let mut output = Vec::with_capacity(capacity);
         Self::serialize_into_with_tmp_buffer(item, &mut output, &mut tmp_buffer)?;
         Ok(Cow::Owned(output))
+    }
+}
+
+/// Manages the global status of the delta encoding.
+///
+/// Whether we must use delta encoding or not when encoding roaring bitmaps.
+pub struct DeltaEncodingStatusLock(OnceLock<DeltaEncodingStatus>);
+
+impl DeltaEncodingStatusLock {
+    pub const fn new() -> Self {
+        Self(OnceLock::new())
+    }
+}
+
+#[derive(Default)]
+enum DeltaEncodingStatus {
+    Enabled,
+    #[default]
+    Disabled,
+}
+
+impl DeltaEncodingStatusLock {
+    pub fn set_to_enabled(&self) -> Result<(), ()> {
+        self.0.set(DeltaEncodingStatus::Enabled).map_err(drop)
+    }
+
+    pub fn set_to_disabled(&self) -> Result<(), ()> {
+        self.0.set(DeltaEncodingStatus::Disabled).map_err(drop)
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        matches!(self.0.get(), Some(DeltaEncodingStatus::Enabled))
+    }
+
+    pub fn is_disabled(&self) -> bool {
+        !self.is_enabled()
     }
 }
