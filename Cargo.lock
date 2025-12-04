@@ -2711,9 +2711,9 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.0.9-nested-rtxns-2"
+version = "0.1.0-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06eda090938d9dcd568c8c2a5de383047ed9191578ebf4a342d2975d16e621f2"
+checksum = "be82bf3f2108ddc8885e3d306fcd7f4692066bfe26065ca8b42ba417f3c26dd1"
 dependencies = [
  "bytemuck",
  "byteorder",
