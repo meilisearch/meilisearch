@@ -286,14 +286,13 @@ async fn get_index_info(
     params: GetIndexInfoParams,
     index_scheduler: Arc<IndexScheduler>,
 ) -> Result<Value, McpError> {
-    let index_uid = IndexUid::try_from(params.index_uid.clone())
+    let index_uid_str = params.index_uid;
+    let index_uid = IndexUid::try_from(index_uid_str.clone())
         .map_err(|_| McpError::InvalidParameter("index_uid".to_string(), "Invalid index UID format".to_string()))?;
 
     let index = index_scheduler
-        .index(&index_uid.to_string())
-        .map_err(|_| {
-            McpError::IndexNotFound(params.index_uid)
-        })?;
+        .index(index_uid.as_ref())
+        .map_err(|_| McpError::IndexNotFound(index_uid_str))?;
 
     let rtxn = index
         .read_txn()
@@ -357,14 +356,14 @@ async fn search(
     params: McpSearchParams,
     index_scheduler: Arc<IndexScheduler>,
 ) -> Result<Value, McpError> {
-    let index_uid_str = params.index_uid.clone();
-    let index_uid = IndexUid::try_from(params.index_uid.clone())
+    let index_uid_str = params.index_uid;
+    let index_uid = IndexUid::try_from(index_uid_str.clone())
         .map_err(|_| McpError::InvalidParameter("index_uid".to_string(), "Invalid index UID format".to_string()))?;
 
     // Get the index
     let index = index_scheduler
-        .index(&index_uid.to_string())
-        .map_err(|_| McpError::IndexNotFound(params.index_uid.clone()))?;
+        .index(index_uid.as_ref())
+        .map_err(|_| McpError::IndexNotFound(index_uid_str.clone()))?;
 
     // Convert MCP search params to Meilisearch SearchQuery
     let search_query = SearchQuery {

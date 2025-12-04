@@ -9,23 +9,11 @@ pub enum McpError {
     #[error("Index '{0}' not found")]
     IndexNotFound(String),
 
-    #[error("Attribute '{0}' is not filterable. Filterable attributes: {1:?}")]
-    AttributeNotFilterable(String, Vec<String>),
-
-    #[error("Attribute '{0}' is not sortable. Sortable attributes: {1:?}")]
-    AttributeNotSortable(String, Vec<String>),
-
-    #[error("Embedder '{0}' not found. Available embedders: {1:?}")]
-    EmbedderNotFound(String, Vec<String>),
-
     #[error("Invalid parameter '{0}': {1}")]
     InvalidParameter(String, String),
 
     #[error("Missing required parameter '{0}'")]
     MissingParameter(String),
-
-    #[error("Search error: {0}")]
-    SearchError(String),
 
     #[error("Internal error: {0}")]
     InternalError(String),
@@ -74,35 +62,6 @@ impl McpError {
                     context: Some(json!({
                         "index_uid": index_uid,
                         "available_indexes": available_indexes.unwrap_or_default(),
-                        "suggestion": suggestion,
-                    })),
-                }
-            }
-            Self::AttributeNotFilterable(attr, available) => McpErrorContext {
-                error_type: "attribute_not_filterable".to_string(),
-                code: "attribute_not_filterable".to_string(),
-                context: Some(json!({
-                    "attempted_attribute": attr,
-                    "filterable_attributes": available,
-                })),
-            },
-            Self::AttributeNotSortable(attr, available) => McpErrorContext {
-                error_type: "attribute_not_sortable".to_string(),
-                code: "attribute_not_sortable".to_string(),
-                context: Some(json!({
-                    "attempted_attribute": attr,
-                    "sortable_attributes": available,
-                })),
-            },
-            Self::EmbedderNotFound(embedder, available) => {
-                let suggestion = find_closest_match(embedder, available);
-
-                McpErrorContext {
-                    error_type: "embedder_not_found".to_string(),
-                    code: "embedder_not_found".to_string(),
-                    context: Some(json!({
-                        "requested_embedder": embedder,
-                        "available_embedders": available,
                         "suggestion": suggestion,
                     })),
                 }
