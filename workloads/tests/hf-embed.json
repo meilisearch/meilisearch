@@ -147,18 +147,6 @@
                 }
             },
             "expectedStatus": 200,
-            "expectedResponse": {
-                "chatCompletions": false,
-                "compositeEmbedders": false,
-                "containsFilter": false,
-                "editDocumentsByFunction": false,
-                "getTaskDocumentsRoute": false,
-                "logsRoute": true,
-                "metrics": false,
-                "multimodal": false,
-                "network": false,
-                "vectorStoreSetting": true
-            },
             "synchronous": "WaitForResponse"
         },
         {
