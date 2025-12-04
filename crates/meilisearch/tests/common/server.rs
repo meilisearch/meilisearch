@@ -43,9 +43,9 @@ impl Server<Owned> {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) }
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) }
         }
 
         let options = default_settings(dir.path());
@@ -58,9 +58,9 @@ impl Server<Owned> {
 
     pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) }
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) }
         }
 
         options.master_key = Some("MASTER_KEY".to_string());
@@ -215,9 +215,9 @@ impl Server<Shared> {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) }
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) }
         }
 
         let options = default_settings(dir.path());
