@@ -12,9 +12,8 @@ use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
 use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
-use meilisearch::{create_app, Opt, ServicesData, SubscriberForSecondLayer};
-#[cfg(feature = "experimental-mcp")]
 use meilisearch::mcp::McpSessionStore;
+use meilisearch::{create_app, Opt, ServicesData, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer;
@@ -145,7 +144,6 @@ impl Service {
             .map(PersonalizationService::cohere)
             .unwrap_or_else(PersonalizationService::disabled);
 
-        #[cfg(feature = "experimental-mcp")]
         let services_data = ServicesData {
             index_scheduler: self.index_scheduler.clone().into(),
             auth: self.auth.clone().into(),
@@ -155,17 +153,6 @@ impl Service {
             logs_stderr_handle: Data::new(stderr_layer_handle),
             analytics: Data::new(Analytics::no_analytics()),
             mcp_session_store: Data::new(McpSessionStore::new()),
-        };
-
-        #[cfg(not(feature = "experimental-mcp"))]
-        let services_data = ServicesData {
-            index_scheduler: self.index_scheduler.clone().into(),
-            auth: self.auth.clone().into(),
-            search_queue: Data::new(search_queue),
-            personalization_service: Data::new(personalization_service),
-            logs_route_handle: Data::new(route_layer_handle),
-            logs_stderr_handle: Data::new(stderr_layer_handle),
-            analytics: Data::new(Analytics::no_analytics()),
         };
 
         actix_web::test::init_service(create_app(services_data, self.options.clone(), true)).await

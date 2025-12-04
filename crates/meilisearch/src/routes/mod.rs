@@ -127,10 +127,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/network").configure(network::configure))
         .service(web::scope("/export").configure(export::configure))
         .service(web::scope("/chats").configure(chats::configure))
-        .service(web::scope("/webhooks").configure(webhooks::configure));
-
-    #[cfg(feature = "experimental-mcp")]
-    cfg.service(web::scope("/mcp").configure(crate::mcp::configure));
+        .service(web::scope("/webhooks").configure(webhooks::configure))
+        .service(web::scope("/mcp").configure(crate::mcp::configure));
 
     #[cfg(feature = "swagger")]
     {

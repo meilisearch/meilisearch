@@ -118,7 +118,7 @@ actix-web-lab = { version = "0.24.3", default-features = false }
 urlencoding = "2.1.3"
 backoff = { version = "0.4.0", features = ["tokio"] }
 humantime = { version = "2.3.0", default-features = false }
-strsim = { version = "0.11.1", optional = true }
+strsim = "0.11.1"
 
 [dev-dependencies]
 actix-rt = "2.11.0"
@@ -159,7 +159,6 @@ mini-dashboard = [
     "tempfile",
     "zip",
 ]
-experimental-mcp = ["dep:strsim"]
 chinese = ["meilisearch-types/chinese"]
 chinese-pinyin = ["meilisearch-types/chinese-pinyin"]
 enterprise = ["meilisearch-types/enterprise"]

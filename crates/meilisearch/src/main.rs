@@ -177,7 +177,6 @@ async fn run_http(
     let logs_route_handle = Data::new(logs_route_handle);
     let logs_stderr_handle = Data::new(logs_stderr_handle);
 
-    #[cfg(feature = "experimental-mcp")]
     let mcp_session_store = Data::new(meilisearch::mcp::McpSessionStore::new());
 
     let services = ServicesData {
@@ -188,7 +187,6 @@ async fn run_http(
         logs_route_handle,
         logs_stderr_handle,
         analytics,
-        #[cfg(feature = "experimental-mcp")]
         mcp_session_store,
     };
 

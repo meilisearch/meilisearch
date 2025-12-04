@@ -171,6 +171,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_mcp(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.mcp {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "mcp",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/868",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {

@@ -11,6 +11,14 @@ use actix_web::http::StatusCode;
 use crate::common::Server;
 use crate::json;
 
+/// Helper to create a server with MCP feature enabled
+async fn server_with_mcp() -> Server {
+    let server = Server::new().await;
+    let (response, code) = server.set_features(json!({"mcp": true})).await;
+    assert_eq!(code, StatusCode::OK, "Failed to enable MCP feature: {response}");
+    server
+}
+
 /// Helper struct for MCP request building
 struct McpRequest {
     id: u64,
@@ -90,7 +98,7 @@ fn batch(requests: Vec<McpRequest>) -> crate::common::Value {
 
 #[actix_rt::test]
 async fn mcp_initialize_handshake() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     let (response, code) = server.service.post("/mcp", McpRequest::initialize().to_json()).await;
 
@@ -105,7 +113,7 @@ async fn mcp_initialize_handshake() {
 
 #[actix_rt::test]
 async fn mcp_invalid_json_rpc() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Missing jsonrpc field
     let (response, code) = server.service.post("/mcp", json!({
@@ -119,7 +127,7 @@ async fn mcp_invalid_json_rpc() {
 
 #[actix_rt::test]
 async fn mcp_unknown_method() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Use batch: initialize + unknown method
     let (response, code) = server.service.post("/mcp", batch(vec![
@@ -142,7 +150,7 @@ async fn mcp_unknown_method() {
 
 #[actix_rt::test]
 async fn mcp_tools_list_returns_all_tools() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Use batch: initialize + tools/list
     let (response, code) = server.service.post("/mcp", batch(vec![
@@ -175,7 +183,7 @@ async fn mcp_tools_list_returns_all_tools() {
 
 #[actix_rt::test]
 async fn mcp_tools_have_valid_schemas() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Use batch: initialize + tools/list
     let (response, _) = server.service.post("/mcp", batch(vec![
@@ -200,7 +208,7 @@ async fn mcp_tools_have_valid_schemas() {
 
 #[actix_rt::test]
 async fn mcp_list_indexes_empty() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Use batch: initialize + list_indexes
     let (response, code) = server.service.post("/mcp", batch(vec![
@@ -222,7 +230,7 @@ async fn mcp_list_indexes_empty() {
 
 #[actix_rt::test]
 async fn mcp_list_indexes_with_data() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
     let index = server.unique_index();
 
     // Create an index with documents
@@ -253,7 +261,7 @@ async fn mcp_list_indexes_with_data() {
 
 #[actix_rt::test]
 async fn mcp_get_index_info_not_found() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Use batch: initialize + get_index_info
     let (response, code) = server.service.post("/mcp", batch(vec![
@@ -276,7 +284,7 @@ async fn mcp_get_index_info_not_found() {
 
 #[actix_rt::test]
 async fn mcp_get_index_info_success() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
     let index = server.unique_index();
 
     // Create index with settings
@@ -315,7 +323,7 @@ async fn mcp_get_index_info_success() {
 
 #[actix_rt::test]
 async fn mcp_search_empty_index() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
     let index = server.unique_index();
 
     // Create empty index
@@ -343,7 +351,7 @@ async fn mcp_search_empty_index() {
 
 #[actix_rt::test]
 async fn mcp_search_with_results() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
     let index = server.unique_index();
 
     // Create index with documents
@@ -376,7 +384,7 @@ async fn mcp_search_with_results() {
 
 #[actix_rt::test]
 async fn mcp_search_with_filter() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
     let index = server.unique_index();
 
     // Create index with documents and filterable attributes
@@ -414,7 +422,7 @@ async fn mcp_search_with_filter() {
 
 #[actix_rt::test]
 async fn mcp_search_index_not_found() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Use batch: initialize + search non-existent index
     let (response, code) = server.service.post("/mcp", batch(vec![
@@ -442,7 +450,7 @@ async fn mcp_search_index_not_found() {
 
 #[actix_rt::test]
 async fn mcp_tool_call_without_initialize() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Try to call tool without initializing (single request, not batch)
     let (response, code) = server.service.post(
@@ -456,7 +464,7 @@ async fn mcp_tool_call_without_initialize() {
 
 #[actix_rt::test]
 async fn mcp_unknown_tool() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Use batch: initialize + unknown tool
     let (response, code) = server.service.post("/mcp", batch(vec![
@@ -475,7 +483,7 @@ async fn mcp_unknown_tool() {
 
 #[actix_rt::test]
 async fn mcp_missing_required_parameter() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Use batch: initialize + get_index_info without required param
     let (response, code) = server.service.post("/mcp", batch(vec![
@@ -499,7 +507,7 @@ async fn mcp_missing_required_parameter() {
 
 #[actix_rt::test]
 async fn mcp_batch_requests() {
-    let server = Server::new().await;
+    let server = server_with_mcp().await;
 
     // Send batch of requests
     let (response, code) = server.service.post("/mcp", batch(vec![
@@ -512,4 +520,21 @@ async fn mcp_batch_requests() {
 
     let responses = response.as_array().unwrap();
     assert_eq!(responses.len(), 2);
+}
+
+// ============================================================================
+// Feature Gate Tests
+// ============================================================================
+
+#[actix_rt::test]
+async fn mcp_disabled_by_default() {
+    // Don't use server_with_mcp() - use regular Server to test default state
+    let server = Server::new().await;
+
+    // MCP should be disabled by default
+    let (response, code) = server.service.post("/mcp", McpRequest::initialize().to_json()).await;
+
+    assert_eq!(code, StatusCode::BAD_REQUEST);
+    assert!(response["error"]["message"].as_str().unwrap().contains("mcp"));
+    assert!(response["error"]["message"].as_str().unwrap().contains("experimental feature"));
 }

@@ -138,6 +138,18 @@ pub async fn handle_mcp_post(
     index_scheduler: Data<IndexScheduler>,
     session_store: Data<McpSessionStore>,
 ) -> HttpResponse {
+    // Check if MCP feature is enabled
+    if let Err(e) = index_scheduler.features().check_mcp("using MCP") {
+        return HttpResponse::BadRequest().json(json!({
+            "jsonrpc": "2.0",
+            "id": null,
+            "error": {
+                "code": -32600,
+                "message": e.to_string()
+            }
+        }));
+    }
+
     let session_id = get_or_create_session_id(&req, &session_store);
     let mut session = session_store.get_or_create(&session_id);
 
@@ -219,8 +231,16 @@ pub async fn handle_mcp_post(
 /// Handle GET requests (SSE stream for server-initiated messages)
 pub async fn handle_mcp_get(
     req: HttpRequest,
+    index_scheduler: Data<IndexScheduler>,
     session_store: Data<McpSessionStore>,
 ) -> HttpResponse {
+    // Check if MCP feature is enabled
+    if let Err(e) = index_scheduler.features().check_mcp("using MCP") {
+        return HttpResponse::BadRequest().json(json!({
+            "error": e.to_string()
+        }));
+    }
+
     let session_id = get_or_create_session_id(&req, &session_store);
 
     tracing::trace!("MCP GET request (SSE): session={}", session_id);
