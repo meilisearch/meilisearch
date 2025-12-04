@@ -83,8 +83,8 @@ fn generate_prototype(args: PrototypeArgs) -> anyhow::Result<()> {
     std::process::Command::new("git")
         .arg("fetch")
         .arg("--tags")
-        .stderr(Stdio::inherit())
-        .stdout(Stdio::inherit())
+        .stderr(Stdio::null())
+        .stdout(Stdio::null())
         .status()?;
 
     let output = std::process::Command::new("git")
