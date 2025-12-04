@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
 
 use actix_web::http::header;
 use actix_web::web::{self, Data};
@@ -22,19 +23,29 @@ use super::protocol::{
 };
 use super::tools;
 
+/// Session TTL - sessions expire after 1 hour of inactivity
+const SESSION_TTL: Duration = Duration::from_secs(3600);
+
+/// Maximum number of sessions before forced cleanup
+const MAX_SESSIONS: usize = 10000;
+
 /// Session state for MCP connections
 #[derive(Debug, Clone)]
 pub struct McpSession {
     pub initialized: bool,
+    pub last_accessed: Instant,
 }
 
 impl Default for McpSession {
     fn default() -> Self {
-        Self { initialized: false }
+        Self {
+            initialized: false,
+            last_accessed: Instant::now(),
+        }
     }
 }
 
-/// Global session store
+/// Global session store with TTL-based cleanup
 pub struct McpSessionStore {
     sessions: RwLock<HashMap<String, McpSession>>,
 }
@@ -46,23 +57,51 @@ impl McpSessionStore {
         }
     }
 
+    /// Cleanup expired sessions
+    fn cleanup_expired(&self, sessions: &mut HashMap<String, McpSession>) {
+        let now = Instant::now();
+        let before = sessions.len();
+        sessions.retain(|_, session| now.duration_since(session.last_accessed) < SESSION_TTL);
+        let removed = before - sessions.len();
+        if removed > 0 {
+            tracing::debug!("MCP session cleanup: removed {} expired sessions", removed);
+        }
+    }
+
     pub fn get_or_create(&self, session_id: &str) -> McpSession {
-        let sessions = self.sessions.read().unwrap();
+        let sessions = self.sessions.read().expect("MCP session store lock poisoned");
         let session = sessions.get(session_id).cloned().unwrap_or_default();
-        tracing::info!("MCP Session lookup for '{}': initialized={}, total_sessions={}",
-            session_id, session.initialized, sessions.len());
+        tracing::trace!(
+            "MCP session lookup: id={}, initialized={}, total={}",
+            session_id,
+            session.initialized,
+            sessions.len()
+        );
         session
     }
 
-    pub fn update(&self, session_id: &str, session: McpSession) {
-        let mut sessions = self.sessions.write().unwrap();
-        tracing::info!("MCP Storing session '{}': initialized={}", session_id, session.initialized);
+    pub fn update(&self, session_id: &str, mut session: McpSession) {
+        let mut sessions = self.sessions.write().expect("MCP session store lock poisoned");
+
+        // Cleanup if we have too many sessions
+        if sessions.len() >= MAX_SESSIONS {
+            self.cleanup_expired(&mut sessions);
+        }
+
+        session.last_accessed = Instant::now();
+        tracing::trace!("MCP session update: id={}, initialized={}", session_id, session.initialized);
         sessions.insert(session_id.to_string(), session);
     }
 
     pub fn create_session(&self) -> String {
         let session_id = Uuid::new_v4().to_string();
-        let mut sessions = self.sessions.write().unwrap();
+        let mut sessions = self.sessions.write().expect("MCP session store lock poisoned");
+
+        // Cleanup expired sessions periodically
+        if sessions.len() >= MAX_SESSIONS {
+            self.cleanup_expired(&mut sessions);
+        }
+
         sessions.insert(session_id.clone(), McpSession::default());
         session_id
     }
@@ -102,7 +141,7 @@ pub async fn handle_mcp_post(
     let session_id = get_or_create_session_id(&req, &session_store);
     let mut session = session_store.get_or_create(&session_id);
 
-    tracing::debug!("MCP POST request, session: {}", session_id);
+    tracing::trace!("MCP POST request: session={}", session_id);
 
     // Handle single request or batch
     let response = if body.is_array() {
@@ -184,7 +223,7 @@ pub async fn handle_mcp_get(
 ) -> HttpResponse {
     let session_id = get_or_create_session_id(&req, &session_store);
 
-    tracing::debug!("MCP GET request (SSE), session: {}", session_id);
+    tracing::trace!("MCP GET request (SSE): session={}", session_id);
 
     // For now, we don't have server-initiated messages, so return 405
     // In a full implementation, this would open an SSE stream
@@ -201,7 +240,7 @@ async fn handle_single_request(
     session: &mut McpSession,
     index_scheduler: &Data<IndexScheduler>,
 ) -> Result<Option<Value>, McpError> {
-    tracing::debug!("Handling MCP method: {}", request.method);
+    tracing::trace!("MCP method: {}", request.method);
 
     match request.method.as_str() {
         "initialize" => {
@@ -281,7 +320,7 @@ async fn handle_tools_call(
 
     let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
-    tracing::info!("Executing MCP tool: {} with args: {:?}", tool_name, arguments);
+    tracing::debug!("MCP tool call: {} args={:?}", tool_name, arguments);
 
     // Get Arc from Data
     let scheduler: Arc<IndexScheduler> = index_scheduler.clone().into_inner();
