@@ -5,17 +5,10 @@ use super::UpgradeIndex;
 use crate::progress::Progress;
 use crate::{make_enum_progress, Index, Result};
 
-#[allow(non_camel_case_types)]
-pub(super) struct Latest_V1_13_To_Latest_V1_14();
+pub(super) struct UpgradeArroyVersion();
 
-impl UpgradeIndex for Latest_V1_13_To_Latest_V1_14 {
-    fn upgrade(
-        &self,
-        wtxn: &mut RwTxn,
-        index: &Index,
-        _original: (u32, u32, u32),
-        progress: Progress,
-    ) -> Result<bool> {
+impl UpgradeIndex for UpgradeArroyVersion {
+    fn upgrade(&self, wtxn: &mut RwTxn, index: &Index, progress: Progress) -> Result<bool> {
         make_enum_progress! {
             enum VectorStore {
                 UpdateInternalVersions,
@@ -35,7 +28,11 @@ impl UpgradeIndex for Latest_V1_13_To_Latest_V1_14 {
         Ok(false)
     }
 
-    fn target_version(&self) -> (u32, u32, u32) {
-        (1, 14, 0)
+    fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
+        initial_version < (1, 14, 0)
+    }
+
+    fn description(&self) -> &'static str {
+        "Updating vector store with an internal version"
     }
 }

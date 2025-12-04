@@ -806,6 +806,10 @@ mod tests {
     use crate::vector::db::IndexEmbeddingConfig;
     use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, Search, UserError};
 
+    fn no_cancel() -> bool {
+        false
+    }
+
     #[test]
     fn simple_document_replacement() {
         let index = TempIndex::new();
@@ -1985,7 +1989,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2038,7 +2042,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2057,7 +2061,7 @@ mod tests {
             primary_key,
             &document_changes,
             RuntimeEmbedders::default(),
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2127,7 +2131,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2146,7 +2150,7 @@ mod tests {
             primary_key,
             &document_changes,
             RuntimeEmbedders::default(),
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2317,7 +2321,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2333,7 +2337,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2381,7 +2385,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2397,7 +2401,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2436,7 +2440,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2452,7 +2456,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2490,7 +2494,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2506,7 +2510,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2546,7 +2550,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2562,7 +2566,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2607,7 +2611,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2623,7 +2627,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2661,7 +2665,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2677,7 +2681,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2715,7 +2719,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2731,7 +2735,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2927,7 +2931,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -2943,7 +2947,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -2988,7 +2992,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -3004,7 +3008,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )
@@ -3046,7 +3050,7 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
                 None,
             )
@@ -3062,7 +3066,7 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
             &Default::default(),
         )

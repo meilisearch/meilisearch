@@ -6,17 +6,10 @@ use crate::progress::Progress;
 use crate::vector::db::{EmbedderInfo, EmbeddingStatus};
 use crate::{Index, InternalError, Result};
 
-#[allow(non_camel_case_types)]
-pub(super) struct Latest_V1_15_To_V1_16_0();
+pub(super) struct SwitchToMultimodal();
 
-impl UpgradeIndex for Latest_V1_15_To_V1_16_0 {
-    fn upgrade(
-        &self,
-        wtxn: &mut RwTxn,
-        index: &Index,
-        _original: (u32, u32, u32),
-        _progress: Progress,
-    ) -> Result<bool> {
+impl UpgradeIndex for SwitchToMultimodal {
+    fn upgrade(&self, wtxn: &mut RwTxn, index: &Index, _progress: Progress) -> Result<bool> {
         let v1_15_indexing_configs = index
             .main
             .remap_types::<Str, SerdeJson<Vec<super::v1_15::IndexEmbeddingConfig>>>()
@@ -41,8 +34,11 @@ impl UpgradeIndex for Latest_V1_15_To_V1_16_0 {
 
         Ok(false)
     }
+    fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
+        initial_version < (1, 16, 0)
+    }
 
-    fn target_version(&self) -> (u32, u32, u32) {
-        (1, 16, 0)
+    fn description(&self) -> &'static str {
+        "Migrating the database for multimodal support"
     }
 }

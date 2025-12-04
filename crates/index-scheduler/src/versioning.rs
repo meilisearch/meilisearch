@@ -64,14 +64,7 @@ impl Versioning {
         };
         wtxn.commit()?;
 
-        let bin_major: u32 = versioning::VERSION_MAJOR;
-        let bin_minor: u32 = versioning::VERSION_MINOR;
-        let bin_patch: u32 = versioning::VERSION_PATCH;
-        let to = (bin_major, bin_minor, bin_patch);
-
-        if from != to {
-            upgrade_index_scheduler(env, &this, from, to)?;
-        }
+        upgrade_index_scheduler(env, &this, from)?;
 
         // Once we reach this point it means the upgrade process, if there was one is entirely finished
         // we can safely say we reached the latest version of the index scheduler
