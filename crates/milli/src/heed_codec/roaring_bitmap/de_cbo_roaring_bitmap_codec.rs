@@ -15,7 +15,13 @@ impl DeCboRoaringBitmapCodec {
         bitmap: &RoaringBitmap,
         tmp_buffer: &mut Vec<u32>,
     ) -> usize {
-        DeRoaringBitmapCodec::serialized_size_with_tmp_buffer(bitmap, tmp_buffer)
+        // We are stuck with this format because the CboRoaringBitmapCodec decides to write
+        // raw and unencoded u32s, without a header when there is at most THRESHOLD elements.
+        if CboRoaringBitmapCodec::bitmap_serialize_as_raw_u32s(bitmap) {
+            CboRoaringBitmapCodec::serialized_size(bitmap)
+        } else {
+            DeRoaringBitmapCodec::serialized_size_with_tmp_buffer(bitmap, tmp_buffer)
+        }
     }
 
     /// Writes the delta-encoded compressed version of
@@ -94,9 +100,10 @@ impl heed::BytesEncode<'_> for DeCboRoaringBitmapCodec {
     type EItem = RoaringBitmap;
 
     fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
-        // let mut vec = Vec::with_capacity(Self::serialized_size(item));
-        // Self::serialize_into_vec(item, &mut vec);
-        // Ok(Cow::Owned(vec))
-        todo!()
+        let mut tmp_buffer = Vec::new();
+        let capacity = Self::serialized_size_with_tmp_buffer(&item, &mut tmp_buffer);
+        let mut output = Vec::with_capacity(capacity);
+        Self::serialize_into_with_tmp_buffer(item, &mut output, &mut tmp_buffer)?;
+        Ok(Cow::Owned(output))
     }
 }
