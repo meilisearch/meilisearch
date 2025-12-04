@@ -208,8 +208,8 @@ jobs:
           done
           cosign sign --yes ${images}
 
-      # /!\ Don't touch this without checking with Cloud team
-      - name: Send CI information to Cloud team
+      # /!\ Don't touch this without checking with engineers working on the Cloud code base on #discussion-engineering Slack channel
+      - name: Notify meilisearch-cloud 
         # Do not send if nightly build (i.e. 'schedule' or 'workflow_dispatch' event)
         if: ${{ (github.event_name == 'push') && (matrix.edition == 'enterprise') }}
         uses: peter-evans/repository-dispatch@v3
@@ -218,3 +218,14 @@ jobs:
           repository: meilisearch/meilisearch-cloud
           event-type: cloud-docker-build
           client-payload: '{ "meilisearch_version": "${{ github.ref_name }}", "stable": "${{ steps.check-tag-format.outputs.stable }}" }'
+
+      # /!\ Don't touch this without checking with integration team members on #discussion-integrations Slack channel 
+      - name: Notify meilisearch-kubernetes
+        # Do not send if nightly build (i.e. 'schedule' or 'workflow_dispatch' event), or if not stable
+        if: ${{ github.event_name == 'push' && matrix.edition == 'community' && steps.check-tag-format.outputs.stable == 'true' }}
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          repository: meilisearch/meilisearch-kubernetes
+          event-type: meilisearch-release
+          client-payload: '{ "version": "${{ github.ref_name }}" }'
