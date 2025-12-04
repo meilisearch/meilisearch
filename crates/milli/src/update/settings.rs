@@ -2138,70 +2138,59 @@ impl InnerIndexSettings {
 }
 
 fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbedders> {
-    let res: Result<_> =
-        embedding_configs
-            .into_iter()
-            .map(
-                |IndexEmbeddingConfig {
-                     name,
-                     config:
-                         EmbeddingConfig {
-                             embedder_options,
-                             prompt,
-                             quantized,
-                             fetch_url,
-                             fetch_options,
-                         },
-                     fragments,
-                 }| {
-                    let document_template = prompt.try_into().map_err(crate::Error::from)?;
+    let res: Result<_> = embedding_configs
+        .into_iter()
+        .map(
+            |IndexEmbeddingConfig {
+                 name,
+                 config: EmbeddingConfig { embedder_options, prompt, quantized, fetch_url },
+                 fragments,
+             }| {
+                let document_template = prompt.try_into().map_err(crate::Error::from)?;
 
-                    let embedder =
+                let embedder =
                     // cache_cap: no cache needed for indexing purposes
                     Arc::new(Embedder::new(embedder_options.clone(), 0)
                         .map_err(crate::vector::Error::from)
                         .map_err(crate::Error::from)?);
 
-                    let fragments = fragments
-                        .into_inner()
-                        .into_iter()
-                        .map(|fragment| {
-                            let template = JsonTemplate::new(
-                                embedder_options.fragment(&fragment.name).unwrap().clone(),
-                            )
-                            .unwrap();
+                let fragments = fragments
+                    .into_inner()
+                    .into_iter()
+                    .map(|fragment| {
+                        let template = JsonTemplate::new(
+                            embedder_options.fragment(&fragment.name).unwrap().clone(),
+                        )
+                        .unwrap();
 
-                            RuntimeFragment { name: fragment.name, id: fragment.id, template }
-                        })
-                        .collect();
+                        RuntimeFragment { name: fragment.name, id: fragment.id, template }
+                    })
+                    .collect();
 
-                    // Create URL fetcher if fetch configuration is present
-                    let (url_fetcher, fetch_mappings) = if !fetch_url.is_empty() {
-                        let fetch_opts = fetch_options.unwrap_or_default();
-                        let fetcher = crate::vector::url_fetcher::UrlFetcher::new(&fetch_opts);
-                        let mappings = crate::vector::url_fetcher::resolve_fetch_mappings(
-                            &fetch_url,
-                            &fetch_opts,
-                        );
-                        (Some(fetcher), mappings)
-                    } else {
-                        (None, Vec::new())
-                    };
+                // Create URL fetcher if fetch configuration is present
+                let (url_fetcher, fetch_mapping) = if let Some(ref fetch) = fetch_url {
+                    let fetcher = crate::vector::url_fetcher::UrlFetcher::new(fetch);
+                    let mapping =
+                        crate::vector::url_fetcher::ResolvedFetchMapping::from_mapping(fetch);
+                    (Some(fetcher), Some(mapping))
+                } else {
+                    (None, None)
+                };
 
-                    Ok((
-                        name,
-                        Arc::new(RuntimeEmbedder::new(
-                            embedder,
-                            document_template,
-                            fragments,
-                            quantized.unwrap_or_default(),
-                            url_fetcher,
-                            fetch_mappings,
-                        )),
-                    ))
-                },
-            )
-            .collect();
+                Ok((
+                    name,
+                    Arc::new(RuntimeEmbedder::new(
+                        embedder,
+                        document_template,
+                        fragments,
+                        quantized.unwrap_or_default(),
+                        url_fetcher,
+                        fetch_mapping,
+                    )),
+                ))
+            },
+        )
+        .collect();
     res.map(RuntimeEmbedders::new)
 }
 
@@ -2261,7 +2250,6 @@ pub fn validate_embedding_settings(
         distribution,
         headers,
         fetch_url,
-        fetch_options,
         binary_quantized: binary_quantize,
     } = settings;
 
@@ -2399,7 +2387,6 @@ pub fn validate_embedding_settings(
             distribution,
             headers,
             fetch_url,
-            fetch_options,
             binary_quantized: binary_quantize,
         }));
     };
@@ -2421,7 +2408,6 @@ pub fn validate_embedding_settings(
         &document_template_max_bytes,
         &headers,
         &fetch_url,
-        &fetch_options,
         &search_embedder,
         &indexing_embedder,
         &binary_quantize,
@@ -2504,7 +2490,6 @@ pub fn validate_embedding_settings(
                         &embedder.document_template_max_bytes,
                         &embedder.headers,
                         &Setting::NotSet,
-                        &Setting::NotSet,
                         &search_embedder,
                         &indexing_embedder,
                         &embedder.binary_quantized,
@@ -2563,7 +2548,6 @@ pub fn validate_embedding_settings(
                         &embedder.document_template_max_bytes,
                         &embedder.headers,
                         &Setting::NotSet,
-                        &Setting::NotSet,
                         &search_embedder,
                         &indexing_embedder,
                         &embedder.binary_quantized,
@@ -2600,7 +2584,6 @@ pub fn validate_embedding_settings(
         distribution,
         headers,
         fetch_url,
-        fetch_options,
         binary_quantized: binary_quantize,
     }))
 }

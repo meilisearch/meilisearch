@@ -17,8 +17,8 @@ pub struct RuntimeEmbedder {
     pub is_quantized: bool,
     /// URL fetcher for downloading content from URLs during embedding extraction.
     url_fetcher: Option<UrlFetcher>,
-    /// Mappings from document URL fields to virtual fields for fetched content.
-    fetch_mappings: Vec<ResolvedFetchMapping>,
+    /// Mapping from document URL field to virtual field for fetched content.
+    fetch_mapping: Option<ResolvedFetchMapping>,
 }
 
 impl RuntimeEmbedder {
@@ -28,10 +28,10 @@ impl RuntimeEmbedder {
         mut fragments: Vec<RuntimeFragment>,
         is_quantized: bool,
         url_fetcher: Option<UrlFetcher>,
-        fetch_mappings: Vec<ResolvedFetchMapping>,
+        fetch_mapping: Option<ResolvedFetchMapping>,
     ) -> Self {
         fragments.sort_unstable_by(|left, right| left.name.cmp(&right.name));
-        Self { embedder, document_template, fragments, is_quantized, url_fetcher, fetch_mappings }
+        Self { embedder, document_template, fragments, is_quantized, url_fetcher, fetch_mapping }
     }
 
     /// The runtime fragments sorted by name.
@@ -44,9 +44,9 @@ impl RuntimeEmbedder {
         self.url_fetcher.as_ref()
     }
 
-    /// The mappings from document URL fields to virtual fields.
-    pub fn fetch_mappings(&self) -> &[ResolvedFetchMapping] {
-        &self.fetch_mappings
+    /// The mapping from document URL field to virtual field.
+    pub fn fetch_mapping(&self) -> Option<&ResolvedFetchMapping> {
+        self.fetch_mapping.as_ref()
     }
 }
 pub struct RuntimeFragment {

@@ -985,7 +985,6 @@ impl IndexScheduler {
                              prompt,
                              quantized,
                              fetch_url,
-                             fetch_options,
                          },
                      fragments,
                  }|
@@ -1006,22 +1005,18 @@ impl IndexScheduler {
                         .collect();
 
                     // Create URL fetcher if fetch configuration is present
-                    let (url_fetcher, fetch_mappings) = if !fetch_url.is_empty() {
-                        let fetch_opts = fetch_options.unwrap_or_default();
+                    let (url_fetcher, fetch_mapping) = if let Some(ref fetch) = fetch_url {
                         let fetcher = match url_fetcher_stats.clone() {
-                            Some(stats) => milli::vector::url_fetcher::UrlFetcher::with_stats(
-                                &fetch_opts,
-                                stats,
-                            ),
-                            None => milli::vector::url_fetcher::UrlFetcher::new(&fetch_opts),
+                            Some(stats) => {
+                                milli::vector::url_fetcher::UrlFetcher::with_stats(fetch, stats)
+                            }
+                            None => milli::vector::url_fetcher::UrlFetcher::new(fetch),
                         };
-                        let mappings = milli::vector::url_fetcher::resolve_fetch_mappings(
-                            &fetch_url,
-                            &fetch_opts,
-                        );
-                        (Some(fetcher), mappings)
+                        let mapping =
+                            milli::vector::url_fetcher::ResolvedFetchMapping::from_mapping(fetch);
+                        (Some(fetcher), Some(mapping))
                     } else {
-                        (None, Vec::new())
+                        (None, None)
                     };
 
                     // optimistically return existing embedder
@@ -1034,7 +1029,7 @@ impl IndexScheduler {
                                 fragments,
                                 quantized.unwrap_or_default(),
                                 url_fetcher.clone(),
-                                fetch_mappings.clone(),
+                                fetch_mapping.clone(),
                             ));
 
                             return Ok((name, runtime));
@@ -1060,7 +1055,7 @@ impl IndexScheduler {
                         fragments,
                         quantized.unwrap_or_default(),
                         url_fetcher,
-                        fetch_mappings,
+                        fetch_mapping,
                     ));
 
                     Ok((name, runtime))

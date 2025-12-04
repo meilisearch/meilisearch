@@ -216,7 +216,7 @@ pub struct UrlFetchingFragmentExtractor<'a> {
     extractor_id: u8,
     doc_alloc: &'a Bump,
     url_fetcher: Option<&'a crate::vector::url_fetcher::UrlFetcher>,
-    fetch_mappings: &'a [crate::vector::url_fetcher::ResolvedFetchMapping],
+    fetch_mapping: Option<&'a crate::vector::url_fetcher::ResolvedFetchMapping>,
 }
 
 impl<'a> UrlFetchingFragmentExtractor<'a> {
@@ -224,24 +224,23 @@ impl<'a> UrlFetchingFragmentExtractor<'a> {
         fragment: &'a super::RuntimeFragment,
         doc_alloc: &'a Bump,
         url_fetcher: Option<&'a crate::vector::url_fetcher::UrlFetcher>,
-        fetch_mappings: &'a [crate::vector::url_fetcher::ResolvedFetchMapping],
+        fetch_mapping: Option<&'a crate::vector::url_fetcher::ResolvedFetchMapping>,
     ) -> Self {
         Self {
             fragment: &fragment.template,
             extractor_id: fragment.id,
             doc_alloc,
             url_fetcher,
-            fetch_mappings,
+            fetch_mapping,
         }
     }
 
-    /// Extract URLs from document, fetch them, and return virtual fields.
+    /// Extract URL from document, fetch it, and return virtual field.
     ///
     /// Supports nested paths like:
     /// - `imageUrl` - simple top-level field
     /// - `media.image.url` - nested field
     /// - `images[0].url` - array index
-    /// - `images[].url` - array wildcard (fetches all URLs, outputs as `output_0`, `output_1`, etc.)
     fn fetch_virtual_fields<'d, D: Document<'d> + Debug>(
         &self,
         doc: &D,
@@ -252,64 +251,34 @@ impl<'a> UrlFetchingFragmentExtractor<'a> {
             return virtual_fields;
         };
 
-        if self.fetch_mappings.is_empty() {
+        let Some(mapping) = self.fetch_mapping else {
             return virtual_fields;
-        }
+        };
 
         // Build a JSON object from the document's top-level fields
         let doc_json = self.build_document_json(doc);
 
-        for mapping in self.fetch_mappings {
-            // Extract URLs using the path (supports nested paths and array wildcards)
-            let urls = crate::vector::url_fetcher::extract_urls(&doc_json, &mapping.input);
+        // Extract URL using the path (supports nested paths)
+        let urls = crate::vector::url_fetcher::extract_urls(&doc_json, &mapping.input);
 
-            if urls.is_empty() {
-                continue;
-            }
+        if urls.is_empty() {
+            return virtual_fields;
+        }
 
-            // Check if this is an array wildcard path (produces multiple outputs)
-            let is_array_wildcard =
-                crate::vector::url_fetcher::path_has_array_wildcard(&mapping.input);
-
-            if is_array_wildcard && urls.len() > 1 {
-                // Multiple URLs - create indexed outputs: output_0, output_1, etc.
-                for (idx, url) in urls.iter().enumerate() {
-                    if url.is_empty() {
-                        continue;
-                    }
-                    match url_fetcher.fetch_as_base64(url, mapping) {
-                        Ok(base64_content) => {
-                            let output_name = format!("{}_{}", mapping.output, idx);
-                            virtual_fields.insert(output_name, base64_content);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to fetch URL '{}' for field '{}[{}]': {}",
-                                url,
-                                mapping.input,
-                                idx,
-                                e
-                            );
-                        }
-                    }
+        // Use the first URL found
+        let url = &urls[0];
+        if !url.is_empty() {
+            match url_fetcher.fetch_as_base64(url, mapping) {
+                Ok(base64_content) => {
+                    virtual_fields.insert(mapping.output.clone(), base64_content);
                 }
-            } else {
-                // Single URL (or first URL if somehow multiple without wildcard)
-                let url = &urls[0];
-                if !url.is_empty() {
-                    match url_fetcher.fetch_as_base64(url, mapping) {
-                        Ok(base64_content) => {
-                            virtual_fields.insert(mapping.output.clone(), base64_content);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                "Failed to fetch URL '{}' for field '{}': {}",
-                                url,
-                                mapping.input,
-                                e
-                            );
-                        }
-                    }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to fetch URL '{}' for field '{}': {}",
+                        url,
+                        mapping.input,
+                        e
+                    );
                 }
             }
         }
@@ -400,7 +369,7 @@ mod tests {
 
     use super::*;
     use crate::vector::json_template::JsonTemplate;
-    use crate::vector::settings::{FetchOptions, FetchOutputFormat};
+    use crate::vector::settings::{FetchOutputFormat, FetchUrlMapping};
     use crate::vector::url_fetcher::{ResolvedFetchMapping, UrlFetcher};
     use crate::vector::RuntimeFragment;
 
@@ -482,22 +451,18 @@ mod tests {
             "imageUrl": "https://picsum.photos/200"
         }));
 
-        // Create the URL fetcher with allowed domains
-        let fetch_options = FetchOptions {
-            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
-            ..Default::default()
-        };
-        let url_fetcher = UrlFetcher::new(&fetch_options);
-
-        // Create fetch mappings
-        let fetch_mappings = vec![ResolvedFetchMapping {
+        // Create the fetch mapping with allowed domains
+        let fetch_mapping = FetchUrlMapping {
             input: "imageUrl".to_string(),
             output: "imageBase64".to_string(),
-            timeout_ms: 30_000,
-            max_size: 10 * 1024 * 1024,
-            retries: 2,
-            output_format: FetchOutputFormat::DataUri,
-        }];
+            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
+            timeout: Some(30_000),
+            max_size: Some("10MB".to_string()),
+            retries: Some(2),
+            output_format: Some(FetchOutputFormat::DataUri),
+        };
+        let url_fetcher = UrlFetcher::new(&fetch_mapping);
+        let resolved_mapping = ResolvedFetchMapping::from_mapping(&fetch_mapping);
 
         // Create a JSON template that uses the fetched content
         // This simulates what would be sent to an embedder
@@ -516,7 +481,7 @@ mod tests {
             &fragment,
             &doc_alloc,
             Some(&url_fetcher),
-            &fetch_mappings,
+            Some(&resolved_mapping),
         );
 
         // Extract the input
@@ -543,90 +508,5 @@ mod tests {
         println!("\n=== URL Fetching Extraction Pipeline Test Passed ===");
         println!("Successfully fetched image and created embedder input");
         println!("Image data URI length: {} chars", image_str.len());
-    }
-
-    /// Integration test for fetching multiple images from an array.
-    ///
-    /// Run with: cargo test -p milli test_url_fetching_extractor_array -- --ignored --nocapture
-    #[test]
-    #[ignore] // Requires network access
-    fn test_url_fetching_extractor_array() {
-        let doc_alloc = Bump::new();
-
-        // Create a document with multiple image URLs in an array
-        let doc = TestDocument::new(json!({
-            "id": 1,
-            "title": "Product Gallery",
-            "images": [
-                { "url": "https://picsum.photos/100", "alt": "Image 1" },
-                { "url": "https://picsum.photos/150", "alt": "Image 2" }
-            ]
-        }));
-
-        // Create the URL fetcher
-        let fetch_options = FetchOptions {
-            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
-            ..Default::default()
-        };
-        let url_fetcher = UrlFetcher::new(&fetch_options);
-
-        // Create fetch mappings with array wildcard
-        let fetch_mappings = vec![ResolvedFetchMapping {
-            input: "images[].url".to_string(),
-            output: "imageData".to_string(),
-            timeout_ms: 30_000,
-            max_size: 10 * 1024 * 1024,
-            retries: 2,
-            output_format: FetchOutputFormat::DataUri,
-        }];
-
-        // Create a template that uses all fetched images
-        // With array wildcard, outputs are imageData_0, imageData_1, etc.
-        // Virtual fields are accessed via {{doc.fieldName}}
-        let template_value = json!({
-            "images": [
-                "{{doc.imageData_0}}",
-                "{{doc.imageData_1}}"
-            ]
-        });
-        let template = JsonTemplate::new(template_value).unwrap();
-
-        let fragment = RuntimeFragment { name: "gallery_fragment".to_string(), id: 0, template };
-
-        let extractor = UrlFetchingFragmentExtractor::new(
-            &fragment,
-            &doc_alloc,
-            Some(&url_fetcher),
-            &fetch_mappings,
-        );
-
-        let result = extractor.extract(&doc, &());
-        assert!(result.is_ok(), "Extraction failed: {:?}", result.err());
-
-        let input = result.unwrap();
-        assert!(input.is_some(), "No input extracted");
-
-        let input_value = input.unwrap();
-        println!("Extracted input: {}", serde_json::to_string_pretty(&input_value).unwrap());
-
-        // Verify we got an array of images
-        let images = input_value.get("images").and_then(|v| v.as_array());
-        assert!(images.is_some(), "Input should have 'images' array");
-
-        let images = images.unwrap();
-        assert_eq!(images.len(), 2, "Should have 2 images");
-
-        for (i, img) in images.iter().enumerate() {
-            let img_str = img.as_str().unwrap_or("");
-            assert!(
-                img_str.starts_with("data:image/"),
-                "Image {} should be a data URI, got: {}...",
-                i,
-                &img_str[..50.min(img_str.len())]
-            );
-            println!("Image {}: {} chars", i, img_str.len());
-        }
-
-        println!("\n=== Array URL Fetching Test Passed ===");
     }
 }

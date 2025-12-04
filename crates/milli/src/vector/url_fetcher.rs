@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use base64::Engine;
 
-use super::settings::{FetchOptions, FetchOutputFormat, FetchUrlMapping};
+use super::settings::{FetchOutputFormat, FetchUrlMapping};
 use crate::progress::UrlFetcherStats;
 use crate::vector::error::EmbedError;
 
@@ -182,21 +182,12 @@ pub struct ResolvedFetchMapping {
 }
 
 impl ResolvedFetchMapping {
-    /// Create a resolved mapping from a FetchUrlMapping and default FetchOptions.
-    pub fn from_mapping(mapping: &FetchUrlMapping, defaults: &FetchOptions) -> Self {
-        let timeout_ms = mapping.timeout.or(defaults.timeout).unwrap_or(DEFAULT_TIMEOUT_MS);
-
-        let max_size = mapping
-            .max_size
-            .as_ref()
-            .or(defaults.max_size.as_ref())
-            .map(|s| parse_size(s))
-            .unwrap_or(DEFAULT_MAX_SIZE);
-
-        let retries = mapping.retries.or(defaults.retries).unwrap_or(DEFAULT_RETRIES);
-
-        let output_format =
-            mapping.output_format.or(defaults.output_format).unwrap_or(FetchOutputFormat::Base64);
+    /// Create a resolved mapping from a FetchUrlMapping.
+    pub fn from_mapping(mapping: &FetchUrlMapping) -> Self {
+        let timeout_ms = mapping.timeout.unwrap_or(DEFAULT_TIMEOUT_MS);
+        let max_size = mapping.max_size.as_ref().map(|s| parse_size(s)).unwrap_or(DEFAULT_MAX_SIZE);
+        let retries = mapping.retries.unwrap_or(DEFAULT_RETRIES);
+        let output_format = mapping.output_format.unwrap_or(FetchOutputFormat::DataUri);
 
         Self {
             input: mapping.input.clone(),
@@ -272,9 +263,9 @@ pub struct UrlFetcher {
 }
 
 impl UrlFetcher {
-    /// Create a new URL fetcher with the given options.
-    pub fn new(options: &FetchOptions) -> Self {
-        let timeout = Duration::from_millis(options.timeout.unwrap_or(DEFAULT_TIMEOUT_MS));
+    /// Create a new URL fetcher with the given mapping configuration.
+    pub fn new(mapping: &FetchUrlMapping) -> Self {
+        let timeout = Duration::from_millis(mapping.timeout.unwrap_or(DEFAULT_TIMEOUT_MS));
 
         let client = ureq::AgentBuilder::new()
             .timeout(timeout)
@@ -282,12 +273,12 @@ impl UrlFetcher {
             .max_idle_connections_per_host(5)
             .build();
 
-        Self { client, allowed_domains: options.allowed_domains.clone(), stats: None }
+        Self { client, allowed_domains: mapping.allowed_domains.clone(), stats: None }
     }
 
-    /// Create a new URL fetcher with the given options and statistics tracking.
-    pub fn with_stats(options: &FetchOptions, stats: Arc<UrlFetcherStats>) -> Self {
-        let timeout = Duration::from_millis(options.timeout.unwrap_or(DEFAULT_TIMEOUT_MS));
+    /// Create a new URL fetcher with the given mapping configuration and statistics tracking.
+    pub fn with_stats(mapping: &FetchUrlMapping, stats: Arc<UrlFetcherStats>) -> Self {
+        let timeout = Duration::from_millis(mapping.timeout.unwrap_or(DEFAULT_TIMEOUT_MS));
 
         let client = ureq::AgentBuilder::new()
             .timeout(timeout)
@@ -295,7 +286,7 @@ impl UrlFetcher {
             .max_idle_connections_per_host(5)
             .build();
 
-        Self { client, allowed_domains: options.allowed_domains.clone(), stats: Some(stats) }
+        Self { client, allowed_domains: mapping.allowed_domains.clone(), stats: Some(stats) }
     }
 
     /// Record a successful fetch in stats.
@@ -525,14 +516,6 @@ impl UrlFetcher {
     }
 }
 
-/// Create resolved fetch mappings from settings.
-pub fn resolve_fetch_mappings(
-    fetch_url: &[FetchUrlMapping],
-    fetch_options: &FetchOptions,
-) -> Vec<ResolvedFetchMapping> {
-    fetch_url.iter().map(|m| ResolvedFetchMapping::from_mapping(m, fetch_options)).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -560,11 +543,16 @@ mod tests {
 
     #[test]
     fn test_domain_allowed() {
-        let options = FetchOptions {
+        let mapping = FetchUrlMapping {
+            input: "imageUrl".to_string(),
+            output: "imageBase64".to_string(),
             allowed_domains: vec!["example.com".to_string(), "*.cdn.example.com".to_string()],
-            ..Default::default()
+            max_size: None,
+            timeout: None,
+            retries: None,
+            output_format: None,
         };
-        let fetcher = UrlFetcher::new(&options);
+        let fetcher = UrlFetcher::new(&mapping);
 
         assert!(fetcher.is_domain_allowed("https://example.com/image.jpg").unwrap());
         assert!(fetcher.is_domain_allowed("https://images.cdn.example.com/image.jpg").unwrap());
@@ -573,8 +561,16 @@ mod tests {
 
     #[test]
     fn test_wildcard_all_domains() {
-        let options = FetchOptions { allowed_domains: vec!["*".to_string()], ..Default::default() };
-        let fetcher = UrlFetcher::new(&options);
+        let mapping = FetchUrlMapping {
+            input: "imageUrl".to_string(),
+            output: "imageBase64".to_string(),
+            allowed_domains: vec!["*".to_string()],
+            max_size: None,
+            timeout: None,
+            retries: None,
+            output_format: None,
+        };
+        let fetcher = UrlFetcher::new(&mapping);
 
         assert!(fetcher.is_domain_allowed("https://example.com/image.jpg").unwrap());
         assert!(fetcher.is_domain_allowed("https://any-domain.org/image.jpg").unwrap());
@@ -582,8 +578,16 @@ mod tests {
 
     #[test]
     fn test_empty_allowed_domains() {
-        let options = FetchOptions { allowed_domains: vec![], ..Default::default() };
-        let fetcher = UrlFetcher::new(&options);
+        let mapping = FetchUrlMapping {
+            input: "imageUrl".to_string(),
+            output: "imageBase64".to_string(),
+            allowed_domains: vec![],
+            max_size: None,
+            timeout: None,
+            retries: None,
+            output_format: None,
+        };
+        let fetcher = UrlFetcher::new(&mapping);
 
         assert!(!fetcher.is_domain_allowed("https://example.com/image.jpg").unwrap());
     }
@@ -797,22 +801,20 @@ mod tests {
         assert_eq!(urls.len(), 1);
         let url = &urls[0];
 
-        // Create a fetcher with picsum.photos allowed
-        let options = FetchOptions {
-            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
-            ..Default::default()
-        };
-        let fetcher = UrlFetcher::new(&options);
-
-        // Create a resolved mapping
-        let mapping = ResolvedFetchMapping {
+        // Create a fetch mapping with picsum.photos allowed
+        let fetch_mapping = FetchUrlMapping {
             input: "imageUrl".to_string(),
             output: "imageBase64".to_string(),
-            timeout_ms: 30_000,         // 30 seconds for network
-            max_size: 10 * 1024 * 1024, // 10MB
-            retries: 2,
-            output_format: FetchOutputFormat::DataUri,
+            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
+            timeout: Some(30_000),
+            max_size: Some("10MB".to_string()),
+            retries: Some(2),
+            output_format: Some(FetchOutputFormat::DataUri),
         };
+        let fetcher = UrlFetcher::new(&fetch_mapping);
+
+        // Create a resolved mapping
+        let mapping = ResolvedFetchMapping::from_mapping(&fetch_mapping);
 
         // Fetch the image
         let result = fetcher.fetch_as_base64(url, &mapping);
@@ -855,70 +857,5 @@ mod tests {
             "Document now contains: {:?}",
             document.as_object().unwrap().keys().collect::<Vec<_>>()
         );
-    }
-
-    /// Test fetching multiple images from an array of URLs.
-    ///
-    /// Run with: cargo test -p milli test_fetch_multiple_images_from_array -- --ignored
-    #[test]
-    #[ignore] // Requires network access
-    fn test_fetch_multiple_images_from_array() {
-        use crate::vector::settings::FetchOutputFormat;
-
-        // Create a document with multiple image URLs in an array
-        let mut document = serde_json::json!({
-            "id": 1,
-            "title": "Product with multiple images",
-            "images": [
-                { "url": "https://picsum.photos/100", "alt": "Image 1" },
-                { "url": "https://picsum.photos/150", "alt": "Image 2" }
-            ]
-        });
-
-        // Extract all URLs from the array
-        let urls = extract_urls(&document, "images[].url");
-        assert_eq!(urls.len(), 2, "Should extract 2 URLs from array");
-
-        // Create a fetcher with picsum.photos allowed
-        let options = FetchOptions {
-            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
-            ..Default::default()
-        };
-        let fetcher = UrlFetcher::new(&options);
-
-        let mapping = ResolvedFetchMapping {
-            input: "images[].url".to_string(),
-            output: "imagesBase64".to_string(),
-            timeout_ms: 30_000,
-            max_size: 10 * 1024 * 1024,
-            retries: 2,
-            output_format: FetchOutputFormat::DataUri,
-        };
-
-        // Fetch each image and collect base64 content
-        let mut fetched_images = Vec::new();
-        for url in &urls {
-            let result = fetcher.fetch_as_base64(url, &mapping);
-            assert!(result.is_ok(), "Failed to fetch {}: {:?}", url, result.err());
-            fetched_images.push(result.unwrap());
-        }
-
-        // Add fetched images back to document
-        let images_array = document["images"].as_array_mut().unwrap();
-        for (i, base64_content) in fetched_images.iter().enumerate() {
-            images_array[i]["base64"] = serde_json::Value::String(base64_content.clone());
-        }
-
-        // Verify all images were fetched and added
-        for (i, img) in document["images"].as_array().unwrap().iter().enumerate() {
-            assert!(img.get("base64").is_some(), "Image {} should have base64 field", i);
-            let base64 = img["base64"].as_str().unwrap();
-            assert!(base64.starts_with("data:image/"), "Image {} should be a data URI", i);
-        }
-
-        println!("Successfully fetched {} images", fetched_images.len());
-        for (i, base64) in fetched_images.iter().enumerate() {
-            println!("Image {}: {} chars", i, base64.len());
-        }
     }
 }

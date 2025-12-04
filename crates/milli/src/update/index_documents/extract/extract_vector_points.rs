@@ -25,10 +25,11 @@ use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::db::{EmbedderInfo, EmbeddingStatusDelta};
 use crate::vector::error::{EmbedErrorKind, PossibleEmbeddingMistakes, UnusedVectorsDistribution};
-use crate::vector::extractor::{Extractor, ExtractorDiff, RequestFragmentExtractor};
+use crate::vector::extractor::{Extractor, ExtractorDiff, UrlFetchingFragmentExtractor};
 use crate::vector::parsed_vectors::{ParsedVectorsDiff, VectorState};
 use crate::vector::session::{EmbedSession, Metadata, OnEmbed};
 use crate::vector::settings::ReindexAction;
+use crate::vector::url_fetcher::{ResolvedFetchMapping, UrlFetcher};
 use crate::vector::{Embedder, Embedding, RuntimeEmbedder, RuntimeFragment};
 use crate::{try_split_array_at, DocumentId, FieldId, Result, ThreadPoolNoAbort};
 
@@ -485,6 +486,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
+                                runtime.url_fetcher(),
+                                runtime.fetch_mapping(),
                             )
                         } else {
                             regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
@@ -513,6 +516,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
+                                runtime.url_fetcher(),
+                                runtime.fetch_mapping(),
                             )
                         } else {
                             let mut fragment_diff = Vec::new();
@@ -523,20 +528,32 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 DelAdd::Addition,
                                 new_fields_ids_map,
                             );
+                            let url_fetcher = runtime.url_fetcher();
+                            let fetch_mapping = runtime.fetch_mapping();
                             for (name, (old_index, new_index)) in must_regenerate_fragments {
                                 let Some(new) = runtime.fragments().get(*new_index) else {
                                     continue;
                                 };
 
-                                let new =
-                                    RequestFragmentExtractor::new(new, &doc_alloc).ignore_errors();
+                                let new = UrlFetchingFragmentExtractor::new(
+                                    new,
+                                    &doc_alloc,
+                                    url_fetcher,
+                                    fetch_mapping,
+                                )
+                                .ignore_errors();
 
                                 let diff = {
                                     let old = old_index.as_ref().and_then(|old| {
                                         let old = old_runtime.fragments().get(*old)?;
                                         Some(
-                                            RequestFragmentExtractor::new(old, &doc_alloc)
-                                                .ignore_errors(),
+                                            UrlFetchingFragmentExtractor::new(
+                                                old,
+                                                &doc_alloc,
+                                                url_fetcher,
+                                                fetch_mapping,
+                                            )
+                                            .ignore_errors(),
                                         )
                                     });
                                     let old = old.as_ref();
@@ -572,6 +589,8 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
+                                runtime.url_fetcher(),
+                                runtime.fetch_mapping(),
                             )
                         } else {
                             regenerate_if_prompt_changed(
@@ -747,10 +766,17 @@ fn extract_vector_document_diff(
                         new_fields_ids_map,
                     );
 
+                    let url_fetcher = runtime.url_fetcher();
+                    let fetch_mapping = runtime.fetch_mapping();
                     for new in runtime.fragments() {
                         let name = &new.name;
-                        let fragment =
-                            RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
+                        let fragment = UrlFetchingFragmentExtractor::new(
+                            new,
+                            doc_alloc,
+                            url_fetcher,
+                            fetch_mapping,
+                        )
+                        .ignore_errors();
 
                         let diff = fragment
                             .diff_documents(&old_document, &new_document, &())
@@ -808,6 +834,8 @@ fn extract_vector_document_diff(
                         doc_alloc,
                         new_fields_ids_map,
                         obkv,
+                        runtime.url_fetcher(),
+                        runtime.fetch_mapping(),
                     )
                 } else {
                     // becomes autogenerated
@@ -874,6 +902,8 @@ fn regenerate_all_fragments<'a>(
     doc_alloc: &Bump,
     new_fields_ids_map: &FieldIdMapWithMetadata,
     obkv: &KvReaderU16,
+    url_fetcher: Option<&UrlFetcher>,
+    fetch_mapping: Option<&ResolvedFetchMapping>,
 ) -> VectorStateDelta {
     let mut fragment_diff = Vec::new();
     let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
@@ -885,7 +915,8 @@ fn regenerate_all_fragments<'a>(
     );
     for new in fragments {
         let name = &new.name;
-        let new = RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
+        let new = UrlFetchingFragmentExtractor::new(new, doc_alloc, url_fetcher, fetch_mapping)
+            .ignore_errors();
 
         let diff = new.extract(&obkv_document, &()).expect("ignoring errors so this cannot fail");
         if let Some(value) = diff {

@@ -583,7 +583,7 @@ enum ChunkType<'a, 'b> {
         fragments: &'a [RuntimeFragment],
         session: EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, serde_json::Value>,
         url_fetcher: Option<&'a crate::vector::url_fetcher::UrlFetcher>,
-        fetch_mappings: &'a [crate::vector::url_fetcher::ResolvedFetchMapping],
+        fetch_mapping: Option<&'a crate::vector::url_fetcher::ResolvedFetchMapping>,
     },
 }
 
@@ -640,7 +640,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     },
                 ),
                 url_fetcher: runtime.url_fetcher(),
-                fetch_mappings: runtime.fetch_mappings(),
+                fetch_mapping: runtime.fetch_mapping(),
             }
         };
 
@@ -670,7 +670,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         self.set_status(docid, old_is_user_provided, true, false, true);
 
         match &mut self.kind {
-            ChunkType::Fragments { fragments, session, url_fetcher, fetch_mappings } => {
+            ChunkType::Fragments { fragments, session, url_fetcher, fetch_mapping } => {
                 let doc_alloc = session.doc_alloc();
                 let reindex_all_fragments =
                                 // when the vectors were user-provided, Meilisearch cannot know if they come from a particular fragment,
@@ -688,7 +688,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                             fragment,
                             doc_alloc,
                             *url_fetcher,
-                            fetch_mappings,
+                            *fetch_mapping,
                         )
                         .ignore_errors()
                     });
@@ -711,7 +711,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                             fragment_diff.new,
                             doc_alloc,
                             *url_fetcher,
-                            fetch_mappings,
+                            *fetch_mapping,
                         )
                         .ignore_errors();
                         let old = if full_reindex {
@@ -722,7 +722,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                                     old,
                                     doc_alloc,
                                     *url_fetcher,
-                                    fetch_mappings,
+                                    *fetch_mapping,
                                 )
                                 .ignore_errors()
                             })
@@ -882,14 +882,14 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     )
                 }?
             }
-            ChunkType::Fragments { fragments, session, url_fetcher, fetch_mappings } => {
+            ChunkType::Fragments { fragments, session, url_fetcher, fetch_mapping } => {
                 let doc_alloc = session.doc_alloc();
                 let extractors = fragments.iter().map(|fragment| {
                     UrlFetchingFragmentExtractor::new(
                         fragment,
                         doc_alloc,
                         *url_fetcher,
-                        fetch_mappings,
+                        *fetch_mapping,
                     )
                     .ignore_errors()
                 });
@@ -986,14 +986,14 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     )?;
                 }
             }
-            ChunkType::Fragments { fragments, session, url_fetcher, fetch_mappings } => {
+            ChunkType::Fragments { fragments, session, url_fetcher, fetch_mapping } => {
                 let doc_alloc = session.doc_alloc();
                 let extractors = fragments.iter().map(|fragment| {
                     UrlFetchingFragmentExtractor::new(
                         fragment,
                         doc_alloc,
                         *url_fetcher,
-                        fetch_mappings,
+                        *fetch_mapping,
                     )
                     .ignore_errors()
                 });
@@ -1021,7 +1021,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
             } => {
                 session.drain(unused_vectors_distribution)?;
             }
-            ChunkType::Fragments { fragments: _, session, url_fetcher: _, fetch_mappings: _ } => {
+            ChunkType::Fragments { fragments: _, session, url_fetcher: _, fetch_mapping: _ } => {
                 session.drain(unused_vectors_distribution)?;
             }
         }
@@ -1035,7 +1035,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 ignore_document_template_failures: _,
                 session,
             } => session.embedder_name(),
-            ChunkType::Fragments { fragments: _, session, url_fetcher: _, fetch_mappings: _ } => {
+            ChunkType::Fragments { fragments: _, session, url_fetcher: _, fetch_mapping: _ } => {
                 session.embedder_name()
             }
         }
@@ -1115,7 +1115,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     embeddings,
                 );
             }
-            ChunkType::Fragments { fragments: _, session, url_fetcher: _, fetch_mappings: _ } => {
+            ChunkType::Fragments { fragments: _, session, url_fetcher: _, fetch_mapping: _ } => {
                 session.on_embed_mut().process_embeddings(
                     Metadata { docid, external_docid, extractor_id: 0 },
                     embeddings,
