@@ -1,5 +1,6 @@
 {
   "name": "hackernews.ndjson_1M_ignore_first_100k",
+  "type": "bench",
   "run_count": 3,
   "extra_cli_args": [],
   "assets": {

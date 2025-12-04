@@ -1,5 +1,6 @@
 {
   "name": "search-filterable-movies.json",
+  "type": "bench",
   "run_count": 10,
   "target": "search::=trace",
   "extra_cli_args": [],

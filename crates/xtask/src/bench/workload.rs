@@ -1,24 +1,28 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::{Seek as _, Write as _};
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{bail, Context as _};
 use futures_util::TryStreamExt as _;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
-use super::assets::Asset;
-use super::client::Client;
-use super::command::SyncMode;
 use super::dashboard::DashboardClient;
 use super::BenchDeriveArgs;
-use crate::bench::{assets, meili_process};
+use crate::common::assets::{self, Asset};
+use crate::common::client::Client;
+use crate::common::command::{run_commands, Command};
+use crate::common::instance::Binary;
+use crate::common::process::{self, delete_db, start_meili};
 
-#[derive(Deserialize)]
-pub struct Workload {
+/// A bench workload.
+/// Not to be confused with [a test workload](crate::test::workload::Workload).
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BenchWorkload {
     pub name: String,
     pub run_count: u16,
     pub extra_cli_args: Vec<String>,
@@ -26,30 +30,34 @@ pub struct Workload {
     #[serde(default)]
     pub target: String,
     #[serde(default)]
-    pub precommands: Vec<super::command::Command>,
-    pub commands: Vec<super::command::Command>,
+    pub precommands: Vec<Command>,
+    pub commands: Vec<Command>,
 }
 
-async fn run_commands(
+async fn run_workload_commands(
     dashboard_client: &DashboardClient,
     logs_client: &Client,
-    meili_client: &Client,
+    meili_client: &Arc<Client>,
     workload_uuid: Uuid,
-    workload: &Workload,
+    workload: &BenchWorkload,
     args: &BenchDeriveArgs,
     run_number: u16,
 ) -> anyhow::Result<JoinHandle<anyhow::Result<File>>> {
     let report_folder = &args.report_folder;
     let workload_name = &workload.name;
+    let assets = Arc::new(workload.assets.clone());
+    let asset_folder = args.common.asset_folder.clone().leak();
 
-    for batch in workload
-        .precommands
-        .as_slice()
-        .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
-    {
-        super::command::run_batch(meili_client, batch, &workload.assets, &args.asset_folder)
-            .await?;
-    }
+    run_commands(
+        meili_client,
+        &workload.precommands,
+        0,
+        &assets,
+        asset_folder,
+        &mut HashMap::new(),
+        false,
+    )
+    .await?;
 
     std::fs::create_dir_all(report_folder)
         .with_context(|| format!("could not create report directory at {report_folder}"))?;
@@ -59,14 +67,16 @@ async fn run_commands(
 
     let report_handle = start_report(logs_client, trace_filename, &workload.target).await?;
 
-    for batch in workload
-        .commands
-        .as_slice()
-        .split_inclusive(|command| !matches!(command.synchronous, SyncMode::DontWait))
-    {
-        super::command::run_batch(meili_client, batch, &workload.assets, &args.asset_folder)
-            .await?;
-    }
+    run_commands(
+        meili_client,
+        &workload.commands,
+        0,
+        &assets,
+        asset_folder,
+        &mut HashMap::new(),
+        false,
+    )
+    .await?;
 
     let processor =
         stop_report(dashboard_client, logs_client, workload_uuid, report_filename, report_handle)
@@ -81,14 +91,14 @@ pub async fn execute(
     assets_client: &Client,
     dashboard_client: &DashboardClient,
     logs_client: &Client,
-    meili_client: &Client,
+    meili_client: &Arc<Client>,
     invocation_uuid: Uuid,
     master_key: Option<&str>,
-    workload: Workload,
+    workload: BenchWorkload,
     args: &BenchDeriveArgs,
     binary_path: Option<&Path>,
 ) -> anyhow::Result<()> {
-    assets::fetch_assets(assets_client, &workload.assets, &args.asset_folder).await?;
+    assets::fetch_assets(assets_client, &workload.assets, &args.common.asset_folder).await?;
 
     let workload_uuid = dashboard_client.create_workload(invocation_uuid, &workload).await?;
 
@@ -129,38 +139,33 @@ pub async fn execute(
 async fn execute_run(
     dashboard_client: &DashboardClient,
     logs_client: &Client,
-    meili_client: &Client,
+    meili_client: &Arc<Client>,
     workload_uuid: Uuid,
     master_key: Option<&str>,
-    workload: &Workload,
+    workload: &BenchWorkload,
     args: &BenchDeriveArgs,
     binary_path: Option<&Path>,
     run_number: u16,
 ) -> anyhow::Result<tokio::task::JoinHandle<anyhow::Result<std::fs::File>>> {
-    meili_process::delete_db();
+    delete_db().await;
 
-    let run_command = match binary_path {
-        Some(binary_path) => tokio::process::Command::new(binary_path),
-        None => {
-            meili_process::build().await?;
-            let mut command = tokio::process::Command::new("cargo");
-            command
-                .arg("run")
-                .arg("--release")
-                .arg("-p")
-                .arg("meilisearch")
-                .arg("--bin")
-                .arg("meilisearch")
-                .arg("--");
-            command
-        }
+    let binary = match binary_path {
+        Some(binary_path) => Binary {
+            source: crate::common::instance::BinarySource::Path(binary_path.to_owned()),
+            extra_cli_args: workload.extra_cli_args.clone(),
+        },
+        None => Binary {
+            source: crate::common::instance::BinarySource::Build {
+                edition: crate::common::instance::Edition::Community,
+            },
+            extra_cli_args: workload.extra_cli_args.clone(),
+        },
     };
 
     let meilisearch =
-        meili_process::start(meili_client, master_key, workload, &args.asset_folder, run_command)
-            .await?;
+        start_meili(meili_client, master_key, &binary, &args.common.asset_folder).await?;
 
-    let processor = run_commands(
+    let processor = run_workload_commands(
         dashboard_client,
         logs_client,
         meili_client,
@@ -171,7 +176,7 @@ async fn execute_run(
     )
     .await?;
 
-    meili_process::kill(meilisearch).await;
+    process::kill_meili(meilisearch).await;
 
     tracing::info!(run_number, "Successful run");
 

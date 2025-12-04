@@ -124,6 +124,7 @@ They are JSON files with the following structure (comments are not actually supp
 {
   // Name of the workload. Must be unique to the workload, as it will be used to group results on the dashboard.
   "name": "hackernews.ndjson_1M,no-threads",
+  "type": "bench",
   // Number of consecutive runs of the commands that should be performed.
   // Each run uses a fresh instance of Meilisearch and a fresh database.
   // Each run produces its own report file.

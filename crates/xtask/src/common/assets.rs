@@ -3,21 +3,22 @@ use std::io::{Read as _, Seek as _, Write as _};
 
 use anyhow::{bail, Context};
 use futures_util::TryStreamExt as _;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
 use super::client::Client;
 
-#[derive(Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Asset {
     pub local_location: Option<String>,
     pub remote_location: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "AssetFormat::is_default")]
     pub format: AssetFormat,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sha256: Option<String>,
 }
 
-#[derive(Deserialize, Default, Copy, Clone)]
+#[derive(Serialize, Deserialize, Default, Copy, Clone, Debug)]
 pub enum AssetFormat {
     #[default]
     Auto,
@@ -27,6 +28,10 @@ pub enum AssetFormat {
 }
 
 impl AssetFormat {
+    fn is_default(&self) -> bool {
+        matches!(self, AssetFormat::Auto)
+    }
+
     pub fn to_content_type(self, filename: &str) -> &'static str {
         match self {
             AssetFormat::Auto => Self::auto_detect(filename).to_content_type(filename),
@@ -166,7 +171,14 @@ fn check_sha256(name: &str, asset: &Asset, mut file: std::fs::File) -> anyhow::R
             }
         }
         None => {
-            tracing::warn!(sha256 = file_hash, "Skipping hash for asset {name} that doesn't have one. Please add it to workload file");
+            let msg = match name.starts_with("meilisearch-") {
+                true => "Please add it to crates/xtask/src/common/instance/release.rs",
+                false => "Please add it to workload file",
+            };
+            tracing::warn!(
+                sha256 = file_hash,
+                "Skipping hash for asset {name} that doesn't have one. {msg}"
+            );
             true
         }
     })

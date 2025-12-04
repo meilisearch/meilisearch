@@ -1,0 +1,419 @@
+{
+    "type": "test",
+    "name": "hf-embed",
+    "binary": {
+        "source": "release",
+        "edition": "community",
+        "version": "1.14.0"
+    },
+    "assets": {
+        "movies-100.json": {
+            "local_location": null,
+            "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies-100.json",
+            "sha256": "d215e395e4240f12f03b8f1f68901eac82d9e7ded5b462cbf4a6b8efde76c6c6"
+        }
+    },
+    "commands": [
+        {
+            "route": "indexes/movies/settings",
+            "method": "PATCH",
+            "body": {
+                "inline": {
+                    "filterableAttributes": [
+                        "genres",
+                        "release_date"
+                    ],
+                    "searchableAttributes": [
+                        "title",
+                        "overview"
+                    ],
+                    "sortableAttributes": [
+                        "release_date"
+                    ]
+                }
+            },
+            "expectedStatus": 202,
+            "expectedResponse": {
+                "enqueuedAt": "[timestamp]",
+                "indexUid": "movies",
+                "status": "enqueued",
+                "taskUid": 0,
+                "type": "settingsUpdate"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings",
+            "method": "PATCH",
+            "body": {
+                "inline": {
+                    "embedders": {
+                        "default": {
+                            "source": "huggingFace"
+                        }
+                    }
+                }
+            },
+            "expectedStatus": 202,
+            "expectedResponse": {
+                "enqueuedAt": "[timestamp]",
+                "indexUid": "movies",
+                "status": "enqueued",
+                "taskUid": 1,
+                "type": "settingsUpdate"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/documents",
+            "method": "POST",
+            "body": {
+                "asset": "movies-100.json"
+            },
+            "expectedStatus": 202,
+            "expectedResponse": {
+                "enqueuedAt": "[timestamp]",
+                "indexUid": "movies",
+                "status": "enqueued",
+                "taskUid": 2,
+                "type": "documentAdditionOrUpdate"
+            },
+            "synchronous": "WaitForTask"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "attributesToRetrieve": [
+                        "id"
+                    ],
+                    "hybrid": {
+                        "embedder": "default",
+                        "semanticRatio": 1.0
+                    },
+                    "limit": 5,
+                    "q": "Police",
+                    "showRankingScore": true
+                }
+            },
+            "register": {
+                "hit0": "/hits/0/id",
+                "hit1": "/hits/1/id",
+                "hit2": "/hits/2/id",
+                "hit3": "/hits/3/id",
+                "hit4": "/hits/4/id",
+                "hit0score": "/hits/0/_rankingScore",
+                "hit1score": "/hits/1/_rankingScore",
+                "hit2score": "/hits/2/_rankingScore",
+                "hit3score": "/hits/3/_rankingScore",
+                "hit4score": "/hits/4/_rankingScore"
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings/embedders",
+            "method": "GET",
+            "body": null,
+            "expectedStatus": 200,
+            "expectedResponse": {
+                "default": {
+                    "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+                    "documentTemplateMaxBytes": 400,
+                    "model": "BAAI/bge-base-en-v1.5",
+                    "pooling": "useModel",
+                    "revision": "617ca489d9e86b49b8167676d8220688b99db36e",
+                    "source": "huggingFace"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "binary": {
+                "source": "build",
+                "edition": "community",
+                "extraCliArgs": [
+                    "--experimental-dumpless-upgrade",
+                    "--experimental-max-number-of-batched-tasks=0"
+                ]
+            }
+        },
+        {
+            "route": "experimental-features",
+            "method": "PATCH",
+            "body": {
+                "inline": {
+                    "vectorStoreSetting": true
+                }
+            },
+            "expectedStatus": 200,
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "attributesToRetrieve": [
+                        "id"
+                    ],
+                    "hybrid": {
+                        "embedder": "default",
+                        "semanticRatio": 1.0
+                    },
+                    "limit": 5,
+                    "q": "Police",
+                    "showRankingScore": true
+                }
+            },
+            "expectedStatus": 200,
+            "expectedResponse": {
+                "estimatedTotalHits": 99,
+                "hits": [
+                    {
+                        "_rankingScore": "{{ hit0score }}",
+                        "id": "{{ hit0 }}"
+                    },
+                    {
+                        "_rankingScore": "{{ hit1score }}",
+                        "id": "{{ hit1 }}"
+                    },
+                    {
+                        "_rankingScore": "{{ hit2score }}",
+                        "id": "{{ hit2 }}"
+                    },
+                    {
+                        "_rankingScore": "{{ hit3score }}",
+                        "id": "{{ hit3 }}"
+                    },
+                    {
+                        "_rankingScore": "{{ hit4score }}",
+                        "id": "{{ hit4 }}"
+                    }
+                ],
+                "limit": 5,
+                "offset": 0,
+                "processingTimeMs": "[duration]",
+                "query": "Police",
+                "requestUid": "[uuid]",
+                "semanticHitCount": 5
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings/embedders",
+            "method": "GET",
+            "body": null,
+            "expectedStatus": 200,
+            "expectedResponse": {
+                "default": {
+                    "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+                    "documentTemplateMaxBytes": 400,
+                    "model": "BAAI/bge-base-en-v1.5",
+                    "pooling": "useModel",
+                    "revision": "617ca489d9e86b49b8167676d8220688b99db36e",
+                    "source": "huggingFace"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings/vector-store",
+            "method": "GET",
+            "body": null,
+            "expectedStatus": 200,
+            "expectedResponse": null,
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "binary": {
+                "source": "build",
+                "edition": "community",
+                "extraCliArgs": [
+                    "--experimental-dumpless-upgrade"
+                ]
+            }
+        },
+        {
+            "route": "health",
+            "method": "GET",
+            "body": null,
+            "expectedStatus": 200,
+            "expectedResponse": {
+                "status": "available"
+            },
+            "synchronous": "WaitForTask"
+        },
+        {
+            "route": "indexes/movies/settings/vector-store",
+            "method": "GET",
+            "body": null,
+            "expectedStatus": 200,
+            "expectedResponse": null,
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/search",
+            "method": "POST",
+            "body": {
+                "inline": {
+                    "attributesToRetrieve": [
+                        "id"
+                    ],
+                    "hybrid": {
+                        "embedder": "default",
+                        "semanticRatio": 1.0
+                    },
+                    "limit": 5,
+                    "q": "Police",
+                    "showRankingScore": true
+                }
+            },
+            "expectedStatus": 200,
+            "expectedResponse": {
+                "estimatedTotalHits": 99,
+                "hits": [
+                    {
+                        "_rankingScore": "{{ hit0score }}",
+                        "id": "{{ hit0 }}"
+                    },
+                    {
+                        "_rankingScore": "{{ hit1score }}",
+                        "id": "{{ hit1 }}"
+                    },
+                    {
+                        "_rankingScore": "{{ hit2score }}",
+                        "id": "{{ hit2 }}"
+                    },
+                    {
+                        "_rankingScore": "{{ hit3score }}",
+                        "id": "{{ hit3 }}"
+                    },
+                    {
+                        "_rankingScore": "{{ hit4score }}",
+                        "id": "{{ hit4 }}"
+                    }
+                ],
+                "limit": 5,
+                "offset": 0,
+                "processingTimeMs": "[duration]",
+                "query": "Police",
+                "requestUid": "[uuid]",
+                "semanticHitCount": 5
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "indexes/movies/settings/embedders",
+            "method": "GET",
+            "body": null,
+            "expectedStatus": 200,
+            "expectedResponse": {
+                "default": {
+                    "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+                    "documentTemplateMaxBytes": 400,
+                    "model": "BAAI/bge-base-en-v1.5",
+                    "pooling": "useModel",
+                    "revision": "617ca489d9e86b49b8167676d8220688b99db36e",
+                    "source": "huggingFace"
+                }
+            },
+            "synchronous": "WaitForResponse"
+        },
+        {
+            "route": "tasks",
+            "method": "GET",
+            "body": null,
+            "expectedStatus": 200,
+            "expectedResponse": {
+                "from": 3,
+                "limit": 20,
+                "next": null,
+                "results": [
+                    {
+                        "batchUid": 3,
+                        "canceledBy": null,
+                        "details": {
+                            "upgradeFrom": "v1.14.0",
+                            "upgradeTo": "[latest]"
+                        },
+                        "duration": "[duration]",
+                        "enqueuedAt": "[timestamp]",
+                        "error": null,
+                        "finishedAt": "[timestamp]",
+                        "indexUid": null,
+                        "startedAt": "[timestamp]",
+                        "status": "succeeded",
+                        "type": "upgradeDatabase",
+                        "uid": 3
+                    },
+                    {
+                        "batchUid": 2,
+                        "canceledBy": null,
+                        "details": {
+                            "indexedDocuments": 99,
+                            "receivedDocuments": 99
+                        },
+                        "duration": "[duration]",
+                        "enqueuedAt": "[timestamp]",
+                        "error": null,
+                        "finishedAt": "[timestamp]",
+                        "indexUid": "movies",
+                        "startedAt": "[timestamp]",
+                        "status": "succeeded",
+                        "type": "documentAdditionOrUpdate",
+                        "uid": 2
+                    },
+                    {
+                        "batchUid": 1,
+                        "canceledBy": null,
+                        "details": {
+                            "embedders": {
+                                "default": {
+                                    "source": "huggingFace"
+                                }
+                            }
+                        },
+                        "duration": "[duration]",
+                        "enqueuedAt": "[timestamp]",
+                        "error": null,
+                        "finishedAt": "[timestamp]",
+                        "indexUid": "movies",
+                        "startedAt": "[timestamp]",
+                        "status": "succeeded",
+                        "type": "settingsUpdate",
+                        "uid": 1
+                    },
+                    {
+                        "batchUid": 0,
+                        "canceledBy": null,
+                        "details": {
+                            "filterableAttributes": [
+                                "genres",
+                                "release_date"
+                            ],
+                            "searchableAttributes": [
+                                "title",
+                                "overview"
+                            ],
+                            "sortableAttributes": [
+                                "release_date"
+                            ]
+                        },
+                        "duration": "[duration]",
+                        "enqueuedAt": "[timestamp]",
+                        "error": null,
+                        "finishedAt": "[timestamp]",
+                        "indexUid": "movies",
+                        "startedAt": "[timestamp]",
+                        "status": "succeeded",
+                        "type": "settingsUpdate",
+                        "uid": 0
+                    }
+                ],
+                "total": 4
+            },
+            "synchronous": "WaitForResponse"
+        }
+    ]
+}

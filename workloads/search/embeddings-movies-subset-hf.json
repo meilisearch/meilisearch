@@ -1,5 +1,6 @@
 {
   "name": "search-movies-subset-hf-embeddings",
+  "type": "bench",
   "run_count": 2,
   "target": "search::=trace",
   "extra_cli_args": [

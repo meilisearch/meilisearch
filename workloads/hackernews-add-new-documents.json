@@ -1,5 +1,6 @@
 {
   "name": "hackernews.add_new_documents",
+  "type": "bench",
   "run_count": 3,
   "extra_cli_args": [],
   "assets": {

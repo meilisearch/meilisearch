@@ -1,0 +1,326 @@
+{
+  "type": "test",
+  "name": "movies",
+  "binary": {
+    "source": "release",
+    "edition": "community",
+    "version": "1.12.0"
+  },
+  "assets": {
+    "movies.json": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies.json",
+      "sha256": "5b6e4cb660bc20327776e8a33ea197b43d9ec84856710ead1cc87ab24df77de1"
+    }
+  },
+  "commands": [
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "searchableAttributes": [
+            "title",
+            "overview"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ]
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 0,
+        "type": "settingsUpdate"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "movies.json"
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 1,
+        "type": "documentAdditionOrUpdate"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade",
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
+      "route": "indexes/movies/search?q=bitcoin",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 6,
+        "hits": [
+          {
+            "genres": [
+              "Documentary"
+            ],
+            "id": 349086,
+            "overview": "A documentary exploring how money and the trading of value has evolved, culminating in Bitcoin.",
+            "poster": "https://image.tmdb.org/t/p/w500/A82oxum0dTL71N0cjD0F66S9gdt.jpg",
+            "release_date": 1437177600,
+            "title": "Bitcoin: The End of Money as We Know It"
+          },
+          {
+            "genres": [
+              "Documentary",
+              "History"
+            ],
+            "id": 427451,
+            "overview": "Not since the invention of the Internet has there been such a disruptive technology as Bitcoin. Bitcoin's early pioneers sought to blur the lines of sovereignty and the financial status quo. After years of underground development Bitcoin grabbed the attention of a curious public, and the ire of the regulators the technology had subverted. After landmark arrests of prominent cyber criminals Bitcoin faces its most severe adversary yet, the very banks it was built to destroy.",
+            "poster": "https://image.tmdb.org/t/p/w500/qW3vsno24UBawZjnrKfQ1qHRPD6.jpg",
+            "release_date": 1483056000,
+            "title": "Banking on Bitcoin"
+          },
+          {
+            "genres": [
+              "Documentary",
+              "History"
+            ],
+            "id": 292607,
+            "overview": "A documentary about the development and spread of the virtual currency called Bitcoin.",
+            "poster": "https://image.tmdb.org/t/p/w500/nUzeZupwmEOoddQIDAq10Gyifk0.jpg",
+            "release_date": 1412294400,
+            "title": "The Rise and Rise of Bitcoin"
+          },
+          {
+            "genres": [
+              "Documentary"
+            ],
+            "id": 321769,
+            "overview": "Deep Web gives the inside story of one of the most important and riveting digital crime sagas of the century -- the arrest of Ross William Ulbricht, the 30-year-old entrepreneur convicted of being 'Dread Pirate Roberts,' creator and operator of online black market Silk Road. As the only film with exclusive access to the Ulbricht family, Deep Web explores how the brightest minds and thought leaders behind the Deep Web and Bitcoin are now caught in the crosshairs of the battle for control of a future inextricably linked to technology, with our digital rights hanging in the balance.",
+            "poster": "https://image.tmdb.org/t/p/w500/dtSOFZ7ioDSaJxPzORaplqo8QZ2.jpg",
+            "release_date": 1426377600,
+            "title": "Deep Web"
+          },
+          {
+            "genres": [
+              "Comedy",
+              "Horror"
+            ],
+            "id": 179538,
+            "overview": "A gang of gold thieves lands in a coven of witches who are preparing for an ancient ritual... and in need of a sacrifice.",
+            "poster": "https://image.tmdb.org/t/p/w500/u7w6vghlbz8xDUZRayOXma3Ax96.jpg",
+            "release_date": 1379635200,
+            "title": "Witching & Bitching"
+          },
+          {
+            "genres": [
+              "Comedy"
+            ],
+            "id": 70882,
+            "overview": "Roseanne Barr is back with an all-new HBO comedy special! Filmed live at the Comedy Store in Los Angeles, Roseanne returns to her stand-up roots for the first time in 14 years, as she tackles hot issues of today - from gay marriage to President Bush.",
+            "poster": "https://image.tmdb.org/t/p/w500/cUkQQnfPTonMXRroZzCyw11eKXr.jpg",
+            "release_date": 1162598400,
+            "title": "Roseanne Barr: Blonde and Bitchin'"
+          }
+        ],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "bitcoin",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/stats",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "avgDocumentSize": 0,
+        "fieldDistribution": {
+          "genres": 31944,
+          "id": 31944,
+          "overview": 31944,
+          "poster": 31944,
+          "release_date": 31944,
+          "title": 31944
+        },
+        "isIndexing": false,
+        "numberOfDocuments": 31944,
+        "rawDocumentDbSize": 0
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade"
+        ]
+      }
+    },
+    {
+      "route": "health",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "status": "available"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/search?q=bitcoin",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 6,
+        "hits": [
+          {
+            "genres": [
+              "Documentary"
+            ],
+            "id": 349086,
+            "overview": "A documentary exploring how money and the trading of value has evolved, culminating in Bitcoin.",
+            "poster": "https://image.tmdb.org/t/p/w500/A82oxum0dTL71N0cjD0F66S9gdt.jpg",
+            "release_date": 1437177600,
+            "title": "Bitcoin: The End of Money as We Know It"
+          },
+          {
+            "genres": [
+              "Documentary",
+              "History"
+            ],
+            "id": 427451,
+            "overview": "Not since the invention of the Internet has there been such a disruptive technology as Bitcoin. Bitcoin's early pioneers sought to blur the lines of sovereignty and the financial status quo. After years of underground development Bitcoin grabbed the attention of a curious public, and the ire of the regulators the technology had subverted. After landmark arrests of prominent cyber criminals Bitcoin faces its most severe adversary yet, the very banks it was built to destroy.",
+            "poster": "https://image.tmdb.org/t/p/w500/qW3vsno24UBawZjnrKfQ1qHRPD6.jpg",
+            "release_date": 1483056000,
+            "title": "Banking on Bitcoin"
+          },
+          {
+            "genres": [
+              "Documentary",
+              "History"
+            ],
+            "id": 292607,
+            "overview": "A documentary about the development and spread of the virtual currency called Bitcoin.",
+            "poster": "https://image.tmdb.org/t/p/w500/nUzeZupwmEOoddQIDAq10Gyifk0.jpg",
+            "release_date": 1412294400,
+            "title": "The Rise and Rise of Bitcoin"
+          },
+          {
+            "genres": [
+              "Documentary"
+            ],
+            "id": 321769,
+            "overview": "Deep Web gives the inside story of one of the most important and riveting digital crime sagas of the century -- the arrest of Ross William Ulbricht, the 30-year-old entrepreneur convicted of being 'Dread Pirate Roberts,' creator and operator of online black market Silk Road. As the only film with exclusive access to the Ulbricht family, Deep Web explores how the brightest minds and thought leaders behind the Deep Web and Bitcoin are now caught in the crosshairs of the battle for control of a future inextricably linked to technology, with our digital rights hanging in the balance.",
+            "poster": "https://image.tmdb.org/t/p/w500/dtSOFZ7ioDSaJxPzORaplqo8QZ2.jpg",
+            "release_date": 1426377600,
+            "title": "Deep Web"
+          },
+          {
+            "genres": [
+              "Comedy",
+              "Horror"
+            ],
+            "id": 179538,
+            "overview": "A gang of gold thieves lands in a coven of witches who are preparing for an ancient ritual... and in need of a sacrifice.",
+            "poster": "https://image.tmdb.org/t/p/w500/u7w6vghlbz8xDUZRayOXma3Ax96.jpg",
+            "release_date": 1379635200,
+            "title": "Witching & Bitching"
+          },
+          {
+            "genres": [
+              "Comedy"
+            ],
+            "id": 70882,
+            "overview": "Roseanne Barr is back with an all-new HBO comedy special! Filmed live at the Comedy Store in Los Angeles, Roseanne returns to her stand-up roots for the first time in 14 years, as she tackles hot issues of today - from gay marriage to President Bush.",
+            "poster": "https://image.tmdb.org/t/p/w500/cUkQQnfPTonMXRroZzCyw11eKXr.jpg",
+            "release_date": 1162598400,
+            "title": "Roseanne Barr: Blonde and Bitchin'"
+          }
+        ],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "bitcoin",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/stats",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "avgDocumentSize": "[avgDocSize]",
+        "fieldDistribution": {
+          "genres": 31944,
+          "id": 31944,
+          "overview": 31944,
+          "poster": 31944,
+          "release_date": 31944,
+          "title": 31944
+        },
+        "isIndexing": false,
+        "numberOfDocuments": 31944,
+        "numberOfEmbeddedDocuments": 0,
+        "numberOfEmbeddings": 0,
+        "rawDocumentDbSize": "[rawDbSize]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "tasks?types=upgradeDatabase",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "from": 2,
+        "limit": 20,
+        "next": null,
+        "results": [
+          {
+            "batchUid": 2,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.12.0",
+              "upgradeTo": "[latest]"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": null,
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "upgradeDatabase",
+            "uid": 2
+          }
+        ],
+        "total": 1
+      },
+      "synchronous": "WaitForResponse"
+    }
+  ]
+}
