@@ -21,6 +21,7 @@ use meilisearch::{
     LogStderrType, Opt, ServicesData, SubscriberForSecondLayer,
 };
 use meilisearch_auth::{generate_master_key, AuthController, MASTER_KEY_MIN_SIZE};
+use meilisearch_types::milli::heed_codec::DELTA_ENCODING_STATUS;
 use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt as _;
@@ -94,6 +95,14 @@ async fn main() -> anyhow::Result<()> {
 
 async fn try_main(runtime: tokio::runtime::Handle) -> anyhow::Result<()> {
     let (opt, config_read_from) = Opt::try_build()?;
+
+    // Disables the delta encoding of bitmaps as soon as possible
+    if opt.indexer_options.experimental_disable_delta_encoding {
+        DELTA_ENCODING_STATUS.set_to_disabled()
+    } else {
+        DELTA_ENCODING_STATUS.set_to_enabled()
+    }
+    .expect("the delta-encoding status to be set only once");
 
     std::panic::set_hook(Box::new(on_panic));
 
