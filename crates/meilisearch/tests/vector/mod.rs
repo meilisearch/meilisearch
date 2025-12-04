@@ -1,5 +1,6 @@
 mod binary_quantized;
 mod fragments;
+mod huggingface;
 #[cfg(feature = "test-ollama")]
 mod ollama;
 mod openai;
