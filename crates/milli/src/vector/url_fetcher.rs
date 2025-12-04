@@ -775,4 +775,150 @@ mod tests {
         assert!(path_has_array_wildcard("images[].url"));
         assert!(path_has_array_wildcard("data.items[].nested.value"));
     }
+
+    /// Integration test that fetches a real image from picsum.photos and verifies
+    /// the base64 content is correctly extracted and can be added to a document.
+    ///
+    /// Run with: cargo test -p milli test_fetch_real_image_to_document -- --ignored
+    #[test]
+    #[ignore] // Requires network access
+    fn test_fetch_real_image_to_document() {
+        use crate::vector::settings::FetchOutputFormat;
+
+        // Create a document with an image URL
+        let mut document = serde_json::json!({
+            "id": 1,
+            "title": "Test Product",
+            "imageUrl": "https://picsum.photos/200"
+        });
+
+        // Extract the URL from the document
+        let urls = extract_urls(&document, "imageUrl");
+        assert_eq!(urls.len(), 1);
+        let url = &urls[0];
+
+        // Create a fetcher with picsum.photos allowed
+        let options = FetchOptions {
+            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
+            ..Default::default()
+        };
+        let fetcher = UrlFetcher::new(&options);
+
+        // Create a resolved mapping
+        let mapping = ResolvedFetchMapping {
+            input: "imageUrl".to_string(),
+            output: "imageBase64".to_string(),
+            timeout_ms: 30_000,         // 30 seconds for network
+            max_size: 10 * 1024 * 1024, // 10MB
+            retries: 2,
+            output_format: FetchOutputFormat::DataUri,
+        };
+
+        // Fetch the image
+        let result = fetcher.fetch_as_base64(url, &mapping);
+        assert!(result.is_ok(), "Failed to fetch image: {:?}", result.err());
+
+        let base64_content = result.unwrap();
+
+        // Verify it's a valid data URI for an image
+        assert!(
+            base64_content.starts_with("data:image/"),
+            "Expected data URI starting with 'data:image/', got: {}...",
+            &base64_content[..50.min(base64_content.len())]
+        );
+        assert!(base64_content.contains(";base64,"), "Expected base64 encoding marker");
+
+        // Extract just the base64 part and verify it's valid
+        let base64_part = base64_content.split(";base64,").nth(1).unwrap();
+        let decoded = base64::engine::general_purpose::STANDARD.decode(base64_part);
+        assert!(decoded.is_ok(), "Invalid base64 content");
+
+        let image_bytes = decoded.unwrap();
+        assert!(!image_bytes.is_empty(), "Image content should not be empty");
+
+        // Verify it looks like an image (JPEG or PNG magic bytes)
+        let is_jpeg = image_bytes.starts_with(&[0xFF, 0xD8, 0xFF]);
+        let is_png = image_bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47]);
+        assert!(is_jpeg || is_png, "Content should be JPEG or PNG image");
+
+        // Add the base64 content to the document as a virtual field
+        document["imageBase64"] = serde_json::Value::String(base64_content.clone());
+
+        // Verify the document now has the base64 content
+        assert!(document.get("imageBase64").is_some());
+        assert_eq!(document["imageBase64"].as_str().unwrap(), &base64_content);
+
+        println!("Successfully fetched image from picsum.photos");
+        println!("Image size: {} bytes", image_bytes.len());
+        println!("Base64 length: {} chars", base64_content.len());
+        println!(
+            "Document now contains: {:?}",
+            document.as_object().unwrap().keys().collect::<Vec<_>>()
+        );
+    }
+
+    /// Test fetching multiple images from an array of URLs.
+    ///
+    /// Run with: cargo test -p milli test_fetch_multiple_images_from_array -- --ignored
+    #[test]
+    #[ignore] // Requires network access
+    fn test_fetch_multiple_images_from_array() {
+        use crate::vector::settings::FetchOutputFormat;
+
+        // Create a document with multiple image URLs in an array
+        let mut document = serde_json::json!({
+            "id": 1,
+            "title": "Product with multiple images",
+            "images": [
+                { "url": "https://picsum.photos/100", "alt": "Image 1" },
+                { "url": "https://picsum.photos/150", "alt": "Image 2" }
+            ]
+        });
+
+        // Extract all URLs from the array
+        let urls = extract_urls(&document, "images[].url");
+        assert_eq!(urls.len(), 2, "Should extract 2 URLs from array");
+
+        // Create a fetcher with picsum.photos allowed
+        let options = FetchOptions {
+            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
+            ..Default::default()
+        };
+        let fetcher = UrlFetcher::new(&options);
+
+        let mapping = ResolvedFetchMapping {
+            input: "images[].url".to_string(),
+            output: "imagesBase64".to_string(),
+            timeout_ms: 30_000,
+            max_size: 10 * 1024 * 1024,
+            retries: 2,
+            output_format: FetchOutputFormat::DataUri,
+        };
+
+        // Fetch each image and collect base64 content
+        let mut fetched_images = Vec::new();
+        for url in &urls {
+            let result = fetcher.fetch_as_base64(url, &mapping);
+            assert!(result.is_ok(), "Failed to fetch {}: {:?}", url, result.err());
+            fetched_images.push(result.unwrap());
+        }
+
+        // Add fetched images back to document
+        let images_array = document["images"].as_array_mut().unwrap();
+        for (i, base64_content) in fetched_images.iter().enumerate() {
+            images_array[i]["base64"] = serde_json::Value::String(base64_content.clone());
+        }
+
+        // Verify all images were fetched and added
+        for (i, img) in document["images"].as_array().unwrap().iter().enumerate() {
+            assert!(img.get("base64").is_some(), "Image {} should have base64 field", i);
+            let base64 = img["base64"].as_str().unwrap();
+            assert!(base64.starts_with("data:image/"), "Image {} should be a data URI", i);
+        }
+
+        println!("Successfully fetched {} images", fetched_images.len());
+        for (i, base64) in fetched_images.iter().enumerate() {
+            println!("Image {}: {} chars", i, base64.len());
+        }
+    }
 }

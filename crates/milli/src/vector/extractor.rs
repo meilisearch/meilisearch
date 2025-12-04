@@ -318,10 +318,7 @@ impl<'a> UrlFetchingFragmentExtractor<'a> {
     }
 
     /// Build a JSON object from the document's top-level fields.
-    fn build_document_json<'d, D: Document<'d> + Debug>(
-        &self,
-        doc: &D,
-    ) -> serde_json::Value {
+    fn build_document_json<'d, D: Document<'d> + Debug>(&self, doc: &D) -> serde_json::Value {
         let mut obj = serde_json::Map::new();
 
         for (field_name, raw_value) in doc.iter_top_level_fields().flatten() {
@@ -393,5 +390,243 @@ pub enum Infallible {}
 impl From<Infallible> for crate::Error {
     fn from(_: Infallible) -> Self {
         unreachable!("Infallible values cannot be built")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use bumpalo::Bump;
+    use serde_json::json;
+
+    use super::*;
+    use crate::vector::json_template::JsonTemplate;
+    use crate::vector::settings::{FetchOptions, FetchOutputFormat};
+    use crate::vector::url_fetcher::{ResolvedFetchMapping, UrlFetcher};
+    use crate::vector::RuntimeFragment;
+
+    /// A simple test document implementation for testing extractors.
+    /// Note: This leaks memory intentionally for simplicity in tests.
+    #[derive(Debug)]
+    struct TestDocument {
+        data: serde_json::Map<String, serde_json::Value>,
+    }
+
+    impl TestDocument {
+        fn new(json: serde_json::Value) -> Self {
+            Self { data: json.as_object().cloned().unwrap_or_default() }
+        }
+    }
+
+    impl<'a> Document<'a> for &'a TestDocument {
+        fn iter_top_level_fields(
+            &self,
+        ) -> impl Iterator<Item = Result<(&'a str, &'a serde_json::value::RawValue), crate::Error>>
+        {
+            self.data.iter().filter_map(|(k, v)| {
+                let raw = serde_json::value::RawValue::from_string(v.to_string()).ok()?;
+                // Leak the raw value for the test (acceptable memory leak in tests)
+                let raw: &'a serde_json::value::RawValue = Box::leak(Box::new(raw));
+                let k: &'a str = Box::leak(k.clone().into_boxed_str());
+                Some(Ok((k, raw)))
+            })
+        }
+
+        fn top_level_fields_count(&self) -> usize {
+            self.data.len()
+        }
+
+        fn top_level_field(
+            &self,
+            k: &str,
+        ) -> Result<Option<&'a serde_json::value::RawValue>, crate::Error> {
+            if let Some(v) = self.data.get(k) {
+                let raw = serde_json::value::RawValue::from_string(v.to_string())
+                    .map_err(crate::InternalError::SerdeJson)?;
+                let raw: &'a serde_json::value::RawValue = Box::leak(Box::new(raw));
+                Ok(Some(raw))
+            } else {
+                Ok(None)
+            }
+        }
+
+        fn vectors_field(&self) -> Result<Option<&'a serde_json::value::RawValue>, crate::Error> {
+            Ok(None)
+        }
+
+        fn geo_field(&self) -> Result<Option<&'a serde_json::value::RawValue>, crate::Error> {
+            Ok(None)
+        }
+
+        fn geojson_field(&self) -> Result<Option<&'a serde_json::value::RawValue>, crate::Error> {
+            Ok(None)
+        }
+    }
+
+    /// Integration test that verifies the full URL fetching extraction pipeline.
+    ///
+    /// This test:
+    /// 1. Creates a document with an image URL
+    /// 2. Uses UrlFetchingFragmentExtractor to fetch the image and convert to base64
+    /// 3. Verifies the extracted input contains the base64 data
+    ///
+    /// Run with: cargo test -p milli test_url_fetching_extractor_pipeline -- --ignored --nocapture
+    #[test]
+    #[ignore] // Requires network access
+    fn test_url_fetching_extractor_pipeline() {
+        let doc_alloc = Bump::new();
+
+        // Create a document with an image URL
+        let doc = TestDocument::new(json!({
+            "id": 1,
+            "title": "Test Product",
+            "imageUrl": "https://picsum.photos/200"
+        }));
+
+        // Create the URL fetcher with allowed domains
+        let fetch_options = FetchOptions {
+            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
+            ..Default::default()
+        };
+        let url_fetcher = UrlFetcher::new(&fetch_options);
+
+        // Create fetch mappings
+        let fetch_mappings = vec![ResolvedFetchMapping {
+            input: "imageUrl".to_string(),
+            output: "imageBase64".to_string(),
+            timeout_ms: 30_000,
+            max_size: 10 * 1024 * 1024,
+            retries: 2,
+            output_format: FetchOutputFormat::DataUri,
+        }];
+
+        // Create a JSON template that uses the fetched content
+        // This simulates what would be sent to an embedder
+        // Virtual fields are accessed via {{doc.fieldName}}
+        let template_value = json!({
+            "type": "image",
+            "image": "{{doc.imageBase64}}"
+        });
+        let template = JsonTemplate::new(template_value).unwrap();
+
+        // Create the runtime fragment
+        let fragment = RuntimeFragment { name: "test_fragment".to_string(), id: 0, template };
+
+        // Create the extractor
+        let extractor = UrlFetchingFragmentExtractor::new(
+            &fragment,
+            &doc_alloc,
+            Some(&url_fetcher),
+            &fetch_mappings,
+        );
+
+        // Extract the input
+        let result = extractor.extract(&doc, &());
+        assert!(result.is_ok(), "Extraction failed: {:?}", result.err());
+
+        let input = result.unwrap();
+        assert!(input.is_some(), "No input extracted");
+
+        let input_value = input.unwrap();
+        println!("Extracted input: {}", serde_json::to_string_pretty(&input_value).unwrap());
+
+        // Verify the input contains image data
+        let image_field = input_value.get("image");
+        assert!(image_field.is_some(), "Input should have 'image' field");
+
+        let image_str = image_field.unwrap().as_str().unwrap();
+        assert!(
+            image_str.starts_with("data:image/"),
+            "Image field should be a data URI, got: {}...",
+            &image_str[..50.min(image_str.len())]
+        );
+
+        println!("\n=== URL Fetching Extraction Pipeline Test Passed ===");
+        println!("Successfully fetched image and created embedder input");
+        println!("Image data URI length: {} chars", image_str.len());
+    }
+
+    /// Integration test for fetching multiple images from an array.
+    ///
+    /// Run with: cargo test -p milli test_url_fetching_extractor_array -- --ignored --nocapture
+    #[test]
+    #[ignore] // Requires network access
+    fn test_url_fetching_extractor_array() {
+        let doc_alloc = Bump::new();
+
+        // Create a document with multiple image URLs in an array
+        let doc = TestDocument::new(json!({
+            "id": 1,
+            "title": "Product Gallery",
+            "images": [
+                { "url": "https://picsum.photos/100", "alt": "Image 1" },
+                { "url": "https://picsum.photos/150", "alt": "Image 2" }
+            ]
+        }));
+
+        // Create the URL fetcher
+        let fetch_options = FetchOptions {
+            allowed_domains: vec!["picsum.photos".to_string(), "*.picsum.photos".to_string()],
+            ..Default::default()
+        };
+        let url_fetcher = UrlFetcher::new(&fetch_options);
+
+        // Create fetch mappings with array wildcard
+        let fetch_mappings = vec![ResolvedFetchMapping {
+            input: "images[].url".to_string(),
+            output: "imageData".to_string(),
+            timeout_ms: 30_000,
+            max_size: 10 * 1024 * 1024,
+            retries: 2,
+            output_format: FetchOutputFormat::DataUri,
+        }];
+
+        // Create a template that uses all fetched images
+        // With array wildcard, outputs are imageData_0, imageData_1, etc.
+        // Virtual fields are accessed via {{doc.fieldName}}
+        let template_value = json!({
+            "images": [
+                "{{doc.imageData_0}}",
+                "{{doc.imageData_1}}"
+            ]
+        });
+        let template = JsonTemplate::new(template_value).unwrap();
+
+        let fragment = RuntimeFragment { name: "gallery_fragment".to_string(), id: 0, template };
+
+        let extractor = UrlFetchingFragmentExtractor::new(
+            &fragment,
+            &doc_alloc,
+            Some(&url_fetcher),
+            &fetch_mappings,
+        );
+
+        let result = extractor.extract(&doc, &());
+        assert!(result.is_ok(), "Extraction failed: {:?}", result.err());
+
+        let input = result.unwrap();
+        assert!(input.is_some(), "No input extracted");
+
+        let input_value = input.unwrap();
+        println!("Extracted input: {}", serde_json::to_string_pretty(&input_value).unwrap());
+
+        // Verify we got an array of images
+        let images = input_value.get("images").and_then(|v| v.as_array());
+        assert!(images.is_some(), "Input should have 'images' array");
+
+        let images = images.unwrap();
+        assert_eq!(images.len(), 2, "Should have 2 images");
+
+        for (i, img) in images.iter().enumerate() {
+            let img_str = img.as_str().unwrap_or("");
+            assert!(
+                img_str.starts_with("data:image/"),
+                "Image {} should be a data URI, got: {}...",
+                i,
+                &img_str[..50.min(img_str.len())]
+            );
+            println!("Image {}: {} chars", i, img_str.len());
+        }
+
+        println!("\n=== Array URL Fetching Test Passed ===");
     }
 }

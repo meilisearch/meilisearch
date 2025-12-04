@@ -1244,9 +1244,16 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         &name,
                         EmbeddingValidationContext::FullSettings,
                     )?;
+                    // For new embedders, check if binary quantization is requested
+                    let quantize = setting
+                        .as_ref()
+                        .set()
+                        .and_then(|s| s.binary_quantized.as_ref().set().copied())
+                        .unwrap_or(false);
                     embedder_actions.insert(
                         name.clone(),
-                        EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
+                        EmbedderAction::with_reindex(ReindexAction::FullReindex, false)
+                            .with_is_being_quantized(quantize),
                     );
                     let mut fragments = FragmentConfigs::new();
                     fragments.add_new_fragments(

@@ -2333,14 +2333,16 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
             response,
             distribution,
             headers,
-            fetch_url: _,
-            fetch_options: _,
+            fetch_url,
+            fetch_options,
             binary_quantized,
             search_embedder,
             mut indexing_embedder,
         } = value;
 
         this.quantized = binary_quantized.set();
+        this.fetch_url = fetch_url.set().unwrap_or_default();
+        this.fetch_options = fetch_options.set();
         if let Some((template, document_template_max_bytes)) =
             match (document_template, &mut indexing_embedder) {
                 (Setting::Set(template), _) => Some((template, document_template_max_bytes)),

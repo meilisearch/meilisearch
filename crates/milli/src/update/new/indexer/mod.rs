@@ -426,12 +426,18 @@ fn vector_stores_from_embedder_actions<'indexer>(
                         },
                     )));
                 };
-                let writer = VectorStore::new(
-                    backend,
-                    vector_arroy,
-                    embedder_category_id,
-                    action.was_quantized,
-                );
+                // For new embedders being quantized (was_quantized=false, is_being_quantized=true),
+                // write directly to the quantized DB. For existing embedders, use was_quantized
+                // and let build_and_quantize handle conversion if needed.
+                let target_quantized = if !action.was_quantized && action.is_being_quantized() {
+                    // New embedder with quantization: write directly to quantized DB
+                    true
+                } else {
+                    // Existing embedder: use current state, build_and_quantize handles conversion
+                    action.was_quantized
+                };
+                let writer =
+                    VectorStore::new(backend, vector_arroy, embedder_category_id, target_quantized);
                 let dimensions = runtime.embedder.dimensions();
                 Some(Ok((
                     embedder_category_id,
