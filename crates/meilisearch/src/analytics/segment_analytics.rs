@@ -303,6 +303,7 @@ impl Infos {
             max_indexing_memory,
             max_indexing_threads,
             skip_index_budget: _,
+            experimental_disable_delta_encoding: _,
             experimental_no_edition_2024_for_settings,
             experimental_no_edition_2024_for_dumps,
         } = indexer_options;
