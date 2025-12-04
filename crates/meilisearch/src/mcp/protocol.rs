@@ -1,6 +1,6 @@
-//! JSON-RPC 2.0 protocol implementation for MCP
+//! JSON-RPC 2.0 protocol types for MCP
 //!
-//! Implements the wire protocol for communicating with MCP clients over STDIO.
+//! Implements the wire protocol types for communicating with MCP clients over HTTP.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -41,20 +41,6 @@ pub struct ErrorObject {
     pub data: Option<Value>,
 }
 
-/// MCP Protocol Messages
-#[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(tag = "method", rename_all = "camelCase")]
-pub enum McpMethod {
-    #[serde(rename = "initialize")]
-    Initialize { params: InitializeParams },
-    #[serde(rename = "notifications/initialized")]
-    Initialized,
-    #[serde(rename = "tools/list")]
-    ToolsList,
-    #[serde(rename = "tools/call")]
-    ToolsCall { params: ToolCallParams },
-}
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct InitializeParams {
     #[serde(rename = "protocolVersion")]
@@ -76,12 +62,6 @@ pub struct ClientCapabilities {
     pub experimental: Option<Value>,
     #[serde(default)]
     pub sampling: Option<Value>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ToolCallParams {
-    pub name: String,
-    pub arguments: Value,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

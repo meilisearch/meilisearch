@@ -259,7 +259,7 @@ async fn mcp_get_index_info_not_found() {
     let (response, code) = server.service.post("/mcp", batch(vec![
         McpRequest::initialize(),
         McpRequest::tools_call(2, "meilisearch_get_index_info", serde_json::json!({
-            "index_uid": "non_existent_index"
+            "indexUid": "non_existent_index"
         })),
     ])).await;
 
@@ -293,7 +293,7 @@ async fn mcp_get_index_info_success() {
     let (response, code) = server.service.post("/mcp", batch(vec![
         McpRequest::initialize(),
         McpRequest::tools_call(2, "meilisearch_get_index_info", serde_json::json!({
-            "index_uid": index.uid
+            "indexUid": index.uid
         })),
     ])).await;
 

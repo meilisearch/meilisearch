@@ -53,12 +53,12 @@ pub fn get_tools_schema() -> Vec<Value> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "index_uid": {
+                    "indexUid": {
                         "type": "string",
                         "description": "Index identifier to inspect."
                     }
                 },
-                "required": ["index_uid"],
+                "required": ["indexUid"],
                 "additionalProperties": false
             }
         }),
@@ -165,6 +165,7 @@ fn default_limit() -> usize {
 
 /// Parameters for get_index_info tool
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GetIndexInfoParams {
     pub index_uid: String,
 }
