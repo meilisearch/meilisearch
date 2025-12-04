@@ -508,6 +508,8 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             experimental_no_edition_2024_for_dumps: false,
             experimental_no_edition_2024_for_prefix_post_processing: false,
             experimental_no_edition_2024_for_facet_post_processing: false,
+            // It has no effect to set the delta encoding here as the toggle is done in try_main
+            experimental_disable_delta_encoding: false,
         },
         experimental_enable_metrics: false,
         ..Parser::parse_from(None as Option<&str>)
