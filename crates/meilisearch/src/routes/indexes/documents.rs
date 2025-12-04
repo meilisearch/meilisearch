@@ -233,6 +233,26 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
         )),
     )
 )]
+/// added documentation
+/// Retrieves a single document by ID from the specified index.
+///
+/// This handles GET requests to `/indexes/{index_uid}/documents/{document_id}`
+///
+/// # Arguments
+///
+/// * `index_scheduler` - The index scheduler with read permissions
+/// * `document_param` - Contains the index UID and document ID
+/// * `params` - Optional query parameters for field selection
+///
+/// # Returns
+///
+/// * `200 OK` with the document as JSON
+/// * `404 Not Found` if the document doesn't exist
+///
+///
+/// ```
+/// GET /indexes/movies/documents/123
+/// ```
 pub async fn get_document(
     index_scheduler: GuardedData<ActionPolicy<{ actions::DOCUMENTS_GET }>, Data<IndexScheduler>>,
     document_param: web::Path<DocumentParam>,
