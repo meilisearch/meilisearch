@@ -53,30 +53,6 @@ impl Body {
     ) -> anyhow::Result<Option<(Vec<u8>, &'static str)>> {
         Ok(match self {
             Body::Inline { inline: mut body } => {
-                fn insert_variables(value: &mut Value, registered: &HashMap<String, Value>) {
-                    match value {
-                        Value::Null | Value::Bool(_) | Value::Number(_) => (),
-                        Value::String(s) => {
-                            if s.starts_with("{{") && s.ends_with("}}") {
-                                let name = s[2..s.len() - 2].trim();
-                                if let Some(replacement) = registered.get(name) {
-                                    *value = replacement.clone();
-                                }
-                            }
-                        }
-                        Value::Array(values) => {
-                            for value in values {
-                                insert_variables(value, registered);
-                            }
-                        }
-                        Value::Object(map) => {
-                            for (_key, value) in map.iter_mut() {
-                                insert_variables(value, registered);
-                            }
-                        }
-                    }
-                }
-
                 if !registered.is_empty() {
                     insert_variables(&mut body, registered);
                 }
@@ -347,6 +323,16 @@ pub async fn run(
     }
 
     if let Some(expected_response) = &command.expected_response {
+        let mut evaluated_expected_response;
+
+        let expected_response = if !registered.is_empty() {
+            evaluated_expected_response = expected_response.clone();
+            insert_variables(&mut evaluated_expected_response, &registered);
+            &evaluated_expected_response
+        } else {
+            expected_response
+        };
+
         let response: serde_json::Value = response
             .json()
             .await
@@ -416,5 +402,29 @@ pub fn health_command() -> Command {
         expected_status: None,
         expected_response: None,
         api_key_variable: None,
+    }
+}
+
+pub fn insert_variables(value: &mut Value, registered: &HashMap<String, Value>) {
+    match value {
+        Value::Null | Value::Bool(_) | Value::Number(_) => (),
+        Value::String(s) => {
+            if s.starts_with("{{") && s.ends_with("}}") {
+                let name = s[2..s.len() - 2].trim();
+                if let Some(replacement) = registered.get(name) {
+                    *value = replacement.clone();
+                }
+            }
+        }
+        Value::Array(values) => {
+            for value in values {
+                insert_variables(value, registered);
+            }
+        }
+        Value::Object(map) => {
+            for (_key, value) in map.iter_mut() {
+                insert_variables(value, registered);
+            }
+        }
     }
 }
