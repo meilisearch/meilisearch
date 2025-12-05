@@ -34,7 +34,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 /// Compact an index
 #[utoipa::path(
     post,
-    path = "{indexUid}/compact",
+    path = "/{indexUid}/compact",
     tag = "Compact an index",
     security(("Bearer" = ["search", "*"])),
     params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
