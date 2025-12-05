@@ -8,7 +8,7 @@ use regex::Regex;
 use serde_json::{json, Value};
 use utoipa::OpenApi;
 
-const CODE_SAMPLES_URL: &str = "https://raw.githubusercontent.com/meilisearch/documentation/6a694aad651772cc3805fb39ab4f0d92273795de/.code-samples.meilisearch.yaml";
+const CODE_SAMPLES_URL: &str = "https://raw.githubusercontent.com/meilisearch/documentation/refs/heads/main/.code-samples.meilisearch.yaml";
 
 #[derive(Parser)]
 #[command(name = "openapi-generator")]
