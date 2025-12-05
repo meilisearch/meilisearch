@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -9,6 +10,8 @@ use serde_json::{json, Value};
 use utoipa::OpenApi;
 
 const CODE_SAMPLES_DOCS_URL: &str = "https://raw.githubusercontent.com/meilisearch/documentation/refs/heads/main/.code-samples.meilisearch.yaml";
+
+const HTTP_METHODS: &[&str] = &["get", "post", "put", "patch", "delete"];
 
 // Mapping of repository URLs to language names
 const SDK_REPOS: &[(&str, &str)] = &[
@@ -23,6 +26,12 @@ const SDK_REPOS: &[(&str, &str)] = &[
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-rust/refs/heads/main/.code-samples.meilisearch.yaml", "Rust"),
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-swift/refs/heads/main/.code-samples.meilisearch.yaml", "Swift"),
 ];
+
+// Pre-compiled regex patterns
+static COMMENT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^#\s*([a-zA-Z0-9_]+)\s*$").unwrap());
+static CODE_START_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([a-zA-Z0-9_]+):\s*\|-\s*$").unwrap());
 
 #[derive(Parser)]
 #[command(name = "openapi-generator")]
@@ -90,7 +99,7 @@ fn fetch_all_code_samples() -> Result<HashMap<String, Vec<CodeSample>>> {
         .text()
         .context("Failed to read documentation code samples response")?;
 
-    let key_to_sample_ids = parse_documentation_mapping(&docs_response)?;
+    let key_to_sample_ids = parse_documentation_mapping(&docs_response);
 
     // Now fetch code samples from each SDK repository
     let mut all_samples: HashMap<String, Vec<CodeSample>> = HashMap::new();
@@ -100,10 +109,7 @@ fn fetch_all_code_samples() -> Result<HashMap<String, Vec<CodeSample>>> {
             Ok(samples) => {
                 // Merge samples into all_samples
                 for (key, code_samples) in samples {
-                    all_samples
-                        .entry(key)
-                        .or_insert_with(Vec::new)
-                        .extend(code_samples);
+                    all_samples.entry(key).or_default().extend(code_samples);
                 }
             }
             Err(e) => {
@@ -114,15 +120,9 @@ fn fetch_all_code_samples() -> Result<HashMap<String, Vec<CodeSample>>> {
     }
 
     // Also add cURL samples from the documentation
-    let curl_samples = parse_code_samples_yaml(&docs_response)?;
+    let curl_samples = parse_code_samples_yaml(&docs_response);
     for (key, source) in curl_samples {
-        all_samples
-            .entry(key)
-            .or_insert_with(Vec::new)
-            .push(CodeSample {
-                lang: "cURL".to_string(),
-                source,
-            });
+        all_samples.entry(key).or_default().push(CodeSample { lang: "cURL".to_string(), source });
     }
 
     Ok(all_samples)
@@ -130,35 +130,27 @@ fn fetch_all_code_samples() -> Result<HashMap<String, Vec<CodeSample>>> {
 
 /// Parse the documentation file to create a mapping from keys (comment IDs) to sample IDs
 /// Returns: HashMap<key, Vec<sample_id>>
-fn parse_documentation_mapping(content: &str) -> Result<HashMap<String, Vec<String>>> {
+fn parse_documentation_mapping(content: &str) -> HashMap<String, Vec<String>> {
     let mut mapping: HashMap<String, Vec<String>> = HashMap::new();
     let mut current_key: Option<String> = None;
 
-    // Regex to match comment lines that define keys
-    let comment_re = Regex::new(r"^#\s*([a-zA-Z0-9_]+)\s*$")?;
-    // Regex to match the start of a code sample (sample_id: |-)
-    let code_start_re = Regex::new(r"^([a-zA-Z0-9_]+):\s*\|-\s*$")?;
-
     for line in content.lines() {
         // Check if this is a comment line defining a new key
-        if let Some(caps) = comment_re.captures(line) {
+        if let Some(caps) = COMMENT_RE.captures(line) {
             current_key = Some(caps[1].to_string());
             continue;
         }
 
         // Check if this starts a new code block and extract the sample_id
-        if let Some(caps) = code_start_re.captures(line) {
+        if let Some(caps) = CODE_START_RE.captures(line) {
             if let Some(ref key) = current_key {
                 let sample_id = caps[1].to_string();
-                mapping
-                    .entry(key.clone())
-                    .or_insert_with(Vec::new)
-                    .push(sample_id);
+                mapping.entry(key.clone()).or_default().push(sample_id);
             }
         }
     }
 
-    Ok(mapping)
+    mapping
 }
 
 /// Fetch and parse code samples from an SDK repository
@@ -174,21 +166,22 @@ fn fetch_sdk_code_samples(
         .with_context(|| format!("Failed to read code samples response from {}", url))?;
 
     // Parse the SDK file to get sample_id -> code mapping
-    let sample_id_to_code = parse_sdk_code_samples(&response)?;
+    let sample_id_to_code = parse_sdk_code_samples(&response);
 
     // Use the documentation mapping to create key -> Vec<CodeSample>
     let mut result: HashMap<String, Vec<CodeSample>> = HashMap::new();
 
     for (key, sample_ids) in key_to_sample_ids {
-        let mut samples = Vec::new();
-        for sample_id in sample_ids {
-            if let Some(source) = sample_id_to_code.get(sample_id) {
-                samples.push(CodeSample {
+        let samples: Vec<CodeSample> = sample_ids
+            .iter()
+            .filter_map(|sample_id| {
+                sample_id_to_code.get(sample_id).map(|source| CodeSample {
                     lang: lang.to_string(),
                     source: source.clone(),
-                });
-            }
-        }
+                })
+            })
+            .collect();
+
         if !samples.is_empty() {
             result.insert(key.clone(), samples);
         }
@@ -197,81 +190,106 @@ fn fetch_sdk_code_samples(
     Ok(result)
 }
 
+/// State machine for parsing YAML code blocks
+struct YamlCodeBlockParser {
+    current_value: Vec<String>,
+    in_code_block: bool,
+    base_indent: Option<usize>,
+}
+
+impl YamlCodeBlockParser {
+    fn new() -> Self {
+        Self { current_value: Vec::new(), in_code_block: false, base_indent: None }
+    }
+
+    fn start_new_block(&mut self) {
+        self.current_value.clear();
+        self.in_code_block = true;
+        self.base_indent = None;
+    }
+
+    fn take_value(&mut self) -> Option<String> {
+        if self.current_value.is_empty() {
+            return None;
+        }
+        let value = self.current_value.join("\n").trim_end().to_string();
+        self.current_value.clear();
+        self.in_code_block = false;
+        self.base_indent = None;
+        Some(value)
+    }
+
+    fn process_line(&mut self, line: &str) {
+        if !self.in_code_block {
+            return;
+        }
+
+        // Empty line or line with only whitespace
+        if line.trim().is_empty() {
+            // Only add empty lines if we've already started collecting
+            if !self.current_value.is_empty() {
+                self.current_value.push(String::new());
+            }
+            return;
+        }
+
+        // Calculate indentation
+        let indent = line.len() - line.trim_start().len();
+
+        // Set base indent from first non-empty line
+        let base = *self.base_indent.get_or_insert(indent);
+
+        // If line has less indentation than base, we've exited the block
+        if indent < base {
+            self.in_code_block = false;
+            return;
+        }
+
+        // Remove base indentation and add to value
+        let dedented = if line.len() > base { &line[base..] } else { line.trim_start() };
+        self.current_value.push(dedented.to_string());
+    }
+}
+
 /// Parse an SDK code samples YAML file
 /// Returns: HashMap<sample_id, code>
-fn parse_sdk_code_samples(content: &str) -> Result<HashMap<String, String>> {
+fn parse_sdk_code_samples(content: &str) -> HashMap<String, String> {
     let mut samples: HashMap<String, String> = HashMap::new();
     let mut current_sample_id: Option<String> = None;
-    let mut current_value: Vec<String> = Vec::new();
-    let mut in_code_block = false;
-    let mut base_indent: Option<usize> = None;
-
-    // Regex to match the start of a code sample (sample_id: |-)
-    let code_start_re = Regex::new(r"^([a-zA-Z0-9_]+):\s*\|-\s*$")?;
-    // Regex to match comment lines (we ignore them in SDK files)
-    let comment_re = Regex::new(r"^#.*$")?;
+    let mut parser = YamlCodeBlockParser::new();
 
     for line in content.lines() {
-        // Ignore comment lines
-        if comment_re.is_match(line) {
+        // Ignore comment lines in SDK files
+        if line.starts_with('#') {
             continue;
         }
 
         // Check if this starts a new code block
-        if let Some(caps) = code_start_re.captures(line) {
+        if let Some(caps) = CODE_START_RE.captures(line) {
             // Save previous sample if exists
             if let Some(sample_id) = current_sample_id.take() {
-                if !current_value.is_empty() {
-                    samples.insert(sample_id, current_value.join("\n").trim_end().to_string());
+                if let Some(value) = parser.take_value() {
+                    samples.insert(sample_id, value);
                 }
             }
             current_sample_id = Some(caps[1].to_string());
-            current_value.clear();
-            in_code_block = true;
-            base_indent = None;
+            parser.start_new_block();
             continue;
         }
 
-        // If we're in a code block and have a current sample_id, collect the content
-        if in_code_block && current_sample_id.is_some() {
-            // Empty line or line with only whitespace
-            if line.trim().is_empty() {
-                // Only add empty lines if we've already started collecting
-                if !current_value.is_empty() {
-                    current_value.push(String::new());
-                }
-                continue;
-            }
-
-            // Calculate indentation
-            let indent = line.len() - line.trim_start().len();
-
-            // Set base indent from first non-empty line
-            if base_indent.is_none() {
-                base_indent = Some(indent);
-            }
-
-            // If line has less indentation than base, we've exited the block
-            if indent < base_indent.unwrap_or(0) && !line.trim().is_empty() {
-                in_code_block = false;
-                continue;
-            }
-
-            // Remove base indentation and add to value
-            let base = base_indent.unwrap_or(0);
-            let dedented = if line.len() > base { &line[base..] } else { line.trim_start() };
-            current_value.push(dedented.to_string());
+        if current_sample_id.is_some() {
+            parser.process_line(line);
         }
     }
 
     // Don't forget the last sample
     if let Some(sample_id) = current_sample_id {
-        if !current_value.is_empty() {
-            samples.insert(sample_id, current_value.join("\n").trim_end().to_string());
+        if let Some(value) = parser.take_value() {
+            samples.insert(sample_id, value);
         }
     }
 
-    Ok(samples)
+    samples
 }
 
 /// Parse the code samples YAML file (used for cURL samples from documentation)
@@ -283,81 +301,43 @@ fn parse_sdk_code_samples(content: &str) -> Result<HashMap<String, String>> {
 ///     -X GET 'URL'
 /// ```
 /// We extract the comment as the key and everything after `|-` as the value
-fn parse_code_samples_yaml(content: &str) -> Result<HashMap<String, String>> {
+fn parse_code_samples_yaml(content: &str) -> HashMap<String, String> {
     let mut samples: HashMap<String, String> = HashMap::new();
     let mut current_key: Option<String> = None;
-    let mut current_value: Vec<String> = Vec::new();
-    let mut in_code_block = false;
-    let mut base_indent: Option<usize> = None;
-
-    // Regex to match the start of a code sample (key: |-)
-    let code_start_re = Regex::new(r"^[a-zA-Z0-9_]+:\s*\|-\s*$")?;
-    // Regex to match comment lines that define keys
-    let comment_re = Regex::new(r"^#\s*([a-zA-Z0-9_]+)\s*$")?;
+    let mut parser = YamlCodeBlockParser::new();
 
     for line in content.lines() {
         // Check if this is a comment line defining a new key
-        if let Some(caps) = comment_re.captures(line) {
+        if let Some(caps) = COMMENT_RE.captures(line) {
             // Save previous sample if exists
             if let Some(key) = current_key.take() {
-                if !current_value.is_empty() {
-                    samples.insert(key, current_value.join("\n").trim_end().to_string());
+                if let Some(value) = parser.take_value() {
+                    samples.insert(key, value);
                 }
             }
             current_key = Some(caps[1].to_string());
-            current_value.clear();
-            in_code_block = false;
-            base_indent = None;
             continue;
         }
 
         // Check if this starts a new code block
-        if code_start_re.is_match(line) {
-            in_code_block = true;
-            base_indent = None;
+        if CODE_START_RE.is_match(line) {
+            parser.start_new_block();
             continue;
         }
 
-        // If we're in a code block and have a current key, collect the content
-        if in_code_block && current_key.is_some() {
-            // Empty line or line with only whitespace
-            if line.trim().is_empty() {
-                // Only add empty lines if we've already started collecting
-                if !current_value.is_empty() {
-                    current_value.push(String::new());
-                }
-                continue;
-            }
-
-            // Calculate indentation
-            let indent = line.len() - line.trim_start().len();
-
-            // Set base indent from first non-empty line
-            if base_indent.is_none() {
-                base_indent = Some(indent);
-            }
-
-            // If line has less indentation than base, we've exited the block
-            if indent < base_indent.unwrap_or(0) && !line.trim().is_empty() {
-                in_code_block = false;
-                continue;
-            }
-
-            // Remove base indentation and add to value
-            let base = base_indent.unwrap_or(0);
-            let dedented = if line.len() > base { &line[base..] } else { line.trim_start() };
-            current_value.push(dedented.to_string());
+        if current_key.is_some() {
+            parser.process_line(line);
         }
     }
 
     // Don't forget the last sample
     if let Some(key) = current_key {
-        if !current_value.is_empty() {
-            samples.insert(key, current_value.join("\n").trim_end().to_string());
+        if let Some(value) = parser.take_value() {
+            samples.insert(key, value);
         }
     }
 
-    Ok(samples)
+    samples
 }
 
 /// Convert an OpenAPI path to a code sample key
@@ -393,19 +373,18 @@ fn path_to_key(path: &str, method: &str) -> String {
 
 /// Convert snake_case to camelCase
 fn to_camel_case(s: &str) -> String {
-    let mut result = String::new();
+    let mut result = String::with_capacity(s.len());
     let mut capitalize_next = false;
 
     for (i, c) in s.chars().enumerate() {
-        if c == '_' {
-            capitalize_next = true;
-        } else if capitalize_next {
-            result.push(c.to_ascii_uppercase());
-            capitalize_next = false;
-        } else if i == 0 {
-            result.push(c.to_ascii_lowercase());
-        } else {
-            result.push(c);
+        match c {
+            '_' => capitalize_next = true,
+            _ if capitalize_next => {
+                result.push(c.to_ascii_uppercase());
+                capitalize_next = false;
+            }
+            _ if i == 0 => result.push(c.to_ascii_lowercase()),
+            _ => result.push(c),
         }
     }
 
@@ -423,37 +402,35 @@ fn add_code_samples_to_openapi(
         .context("OpenAPI spec missing 'paths' object")?;
 
     for (path, path_item) in paths.iter_mut() {
-        let path_item = match path_item.as_object_mut() {
-            Some(p) => p,
-            None => continue,
+        let Some(path_item) = path_item.as_object_mut() else {
+            continue;
         };
 
-        let methods = ["get", "post", "put", "patch", "delete"];
+        for method in HTTP_METHODS {
+            let Some(operation) = path_item.get_mut(*method) else {
+                continue;
+            };
 
-        for method in methods {
-            if let Some(operation) = path_item.get_mut(method) {
-                let key = path_to_key(path, method);
+            let key = path_to_key(path, method);
 
-                if let Some(samples) = code_samples.get(&key) {
-                    // Create x-codeSamples array according to Redocly spec
-                    // Sort by language name for consistent output
-                    let mut sorted_samples = samples.clone();
-                    sorted_samples.sort_by(|a, b| a.lang.cmp(&b.lang));
+            if let Some(samples) = code_samples.get(&key) {
+                // Create x-codeSamples array according to Redocly spec
+                // Sort by language name for consistent output
+                let mut sorted_samples = samples.clone();
+                sorted_samples.sort_by(|a, b| a.lang.cmp(&b.lang));
 
-                    let code_sample_array: Vec<Value> = sorted_samples
-                        .iter()
-                        .map(|sample| {
-                            json!({
-                                "lang": sample.lang,
-                                "source": sample.source
-                            })
+                let code_sample_array: Vec<Value> = sorted_samples
+                    .iter()
+                    .map(|sample| {
+                        json!({
+                            "lang": sample.lang,
+                            "source": sample.source
                         })
-                        .collect();
+                    })
+                    .collect();
 
-                    operation
-                        .as_object_mut()
-                        .map(|op| op.insert("x-codeSamples".to_string(), json!(code_sample_array)));
-
+                if let Some(op) = operation.as_object_mut() {
+                    op.insert("x-codeSamples".to_string(), json!(code_sample_array));
                 }
             }
         }
@@ -478,7 +455,10 @@ mod tests {
             path_to_key("/indexes/{index_uid}/documents/{document_id}", "GET"),
             "get_indexes_indexUid_documents_documentId"
         );
-        assert_eq!(path_to_key("/indexes/{index_uid}/settings/stop-words", "GET"), "get_indexes_indexUid_settings_stop_words");
+        assert_eq!(
+            path_to_key("/indexes/{index_uid}/settings/stop-words", "GET"),
+            "get_indexes_indexUid_settings_stop_words"
+        );
     }
 
     #[test]
@@ -504,7 +484,7 @@ create_an_index_1: |-
       "uid": "movies"
     }'
 "#;
-        let samples = parse_code_samples_yaml(yaml).unwrap();
+        let samples = parse_code_samples_yaml(yaml);
 
         assert_eq!(samples.len(), 2);
         assert!(samples.contains_key("get_indexes"));
@@ -528,7 +508,7 @@ another_sample_id: |-
   curl \
     -X POST 'MEILISEARCH_URL/indexes'
 "#;
-        let mapping = parse_documentation_mapping(yaml).unwrap();
+        let mapping = parse_documentation_mapping(yaml);
 
         assert_eq!(mapping.len(), 2);
         assert!(mapping.contains_key("get_indexes"));
@@ -553,7 +533,7 @@ list_all_indexes_1: |-
 create_an_index_1: |-
   const task = await client.createIndex('movies');
 "#;
-        let samples = parse_sdk_code_samples(yaml).unwrap();
+        let samples = parse_sdk_code_samples(yaml);
 
         assert_eq!(samples.len(), 2);
         assert!(samples.contains_key("list_all_indexes_1"));
