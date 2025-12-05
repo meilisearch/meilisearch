@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::LazyLock;
@@ -9,12 +10,15 @@ use regex::Regex;
 use serde_json::{json, Value};
 use utoipa::OpenApi;
 
-const CODE_SAMPLES_DOCS: &str = "https://raw.githubusercontent.com/meilisearch/documentation/refs/heads/main/.code-samples.meilisearch.yaml";
-
 const HTTP_METHODS: &[&str] = &["get", "post", "put", "patch", "delete"];
 
-// Mapping of repository URLs to language names
-const CODE_SAMPLES_SDKS: &[(&str, &str)] = &[
+/// Language used in the documentation repository (contains the key mapping)
+const DOCS_LANG: &str = "cURL";
+
+/// Mapping of repository URLs to language names.
+/// The "cURL" entry is special: it contains the key mapping used to resolve sample IDs for all SDKs.
+const CODE_SAMPLES: &[(&str, &str)] = &[
+    ("https://raw.githubusercontent.com/meilisearch/documentation/refs/heads/main/.code-samples.meilisearch.yaml", "cURL"),
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-dotnet/refs/heads/main/.code-samples.meilisearch.yaml", "C#"),
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-dart/refs/heads/main/.code-samples.meilisearch.yaml", "Dart"),
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-go/refs/heads/main/.code-samples.meilisearch.yaml", "Go"),
@@ -93,36 +97,47 @@ struct CodeSample {
 /// Fetch and parse code samples from all repositories
 /// Returns a map from key (e.g., "get_indexes") to a list of code samples for different languages
 fn fetch_all_code_samples() -> Result<HashMap<String, Vec<CodeSample>>> {
-    // First, fetch the documentation file to get the mapping: key -> sample_ids
-    let docs_response = reqwest::blocking::get(CODE_SAMPLES_DOCS)
+    // First, fetch the documentation file (cURL) to get the key mapping
+    let (docs_url, _) = CODE_SAMPLES
+        .iter()
+        .find(|(_, lang)| *lang == DOCS_LANG)
+        .context("Documentation source not found in CODE_SAMPLES")?;
+
+    let docs_content = reqwest::blocking::get(*docs_url)
         .context("Failed to fetch documentation code samples")?
         .text()
         .context("Failed to read documentation code samples response")?;
 
-    let key_to_sample_ids = parse_documentation_mapping(&docs_response);
+    let key_to_sample_ids = parse_documentation_mapping(&docs_content);
 
-    // Now fetch code samples from each SDK repository
+    // Fetch code samples from all sources
     let mut all_samples: HashMap<String, Vec<CodeSample>> = HashMap::new();
 
-    for (url, lang) in CODE_SAMPLES_SDKS {
-        match fetch_sdk_code_samples(url, lang, &key_to_sample_ids) {
-            Ok(samples) => {
-                // Merge samples into all_samples
-                for (key, code_samples) in samples {
-                    all_samples.entry(key).or_default().extend(code_samples);
+    for (url, lang) in CODE_SAMPLES {
+        // For cURL, reuse already fetched content; for SDKs, fetch from URL
+        let content: Cow<'_, str> = if *lang == DOCS_LANG {
+            Cow::Borrowed(&docs_content)
+        } else {
+            match reqwest::blocking::get(*url).and_then(|r| r.text()) {
+                Ok(text) => Cow::Owned(text),
+                Err(e) => {
+                    eprintln!("Warning: Failed to fetch code samples for {}: {}", lang, e);
+                    continue;
                 }
             }
-            Err(e) => {
-                eprintln!("Warning: Failed to fetch code samples for {}: {}", lang, e);
-                // Continue with other languages
+        };
+
+        let sample_id_to_code = parse_code_samples(&content);
+        for (key, sample_ids) in &key_to_sample_ids {
+            for sample_id in sample_ids {
+                if let Some(source) = sample_id_to_code.get(sample_id) {
+                    all_samples.entry(key.clone()).or_default().push(CodeSample {
+                        lang: lang.to_string(),
+                        source: source.clone(),
+                    });
+                }
             }
         }
-    }
-
-    // Also add cURL samples from the documentation
-    let curl_samples = parse_code_samples_yaml(&docs_response);
-    for (key, source) in curl_samples {
-        all_samples.entry(key).or_default().push(CodeSample { lang: "cURL".to_string(), source });
     }
 
     Ok(all_samples)
@@ -151,43 +166,6 @@ fn parse_documentation_mapping(content: &str) -> HashMap<String, Vec<String>> {
     }
 
     mapping
-}
-
-/// Fetch and parse code samples from an SDK repository
-/// Returns samples mapped by key (e.g., "get_indexes")
-fn fetch_sdk_code_samples(
-    url: &str,
-    lang: &str,
-    key_to_sample_ids: &HashMap<String, Vec<String>>,
-) -> Result<HashMap<String, Vec<CodeSample>>> {
-    let response = reqwest::blocking::get(url)
-        .with_context(|| format!("Failed to fetch code samples from {}", url))?
-        .text()
-        .with_context(|| format!("Failed to read code samples response from {}", url))?;
-
-    // Parse the SDK file to get sample_id -> code mapping
-    let sample_id_to_code = parse_sdk_code_samples(&response);
-
-    // Use the documentation mapping to create key -> Vec<CodeSample>
-    let mut result: HashMap<String, Vec<CodeSample>> = HashMap::new();
-
-    for (key, sample_ids) in key_to_sample_ids {
-        let samples: Vec<CodeSample> = sample_ids
-            .iter()
-            .filter_map(|sample_id| {
-                sample_id_to_code.get(sample_id).map(|source| CodeSample {
-                    lang: lang.to_string(),
-                    source: source.clone(),
-                })
-            })
-            .collect();
-
-        if !samples.is_empty() {
-            result.insert(key.clone(), samples);
-        }
-    }
-
-    Ok(result)
 }
 
 /// State machine for parsing YAML code blocks
@@ -246,20 +224,20 @@ impl YamlCodeBlockParser {
         }
 
         // Remove base indentation and add to value
-        let dedented = if line.len() > base { &line[base..] } else { line.trim_start() };
+        let dedented = line.get(base..).unwrap_or_else(|| line.trim_start());
         self.current_value.push(dedented.to_string());
     }
 }
 
-/// Parse an SDK code samples YAML file
+/// Parse a code samples YAML file
 /// Returns: HashMap<sample_id, code>
-fn parse_sdk_code_samples(content: &str) -> HashMap<String, String> {
+fn parse_code_samples(content: &str) -> HashMap<String, String> {
     let mut samples: HashMap<String, String> = HashMap::new();
     let mut current_sample_id: Option<String> = None;
     let mut parser = YamlCodeBlockParser::new();
 
     for line in content.lines() {
-        // Ignore comment lines in SDK files
+        // Ignore comment lines
         if line.starts_with('#') {
             continue;
         }
@@ -286,54 +264,6 @@ fn parse_sdk_code_samples(content: &str) -> HashMap<String, String> {
     if let Some(sample_id) = current_sample_id {
         if let Some(value) = parser.take_value() {
             samples.insert(sample_id, value);
-        }
-    }
-
-    samples
-}
-
-/// Parse the code samples YAML file (used for cURL samples from documentation)
-/// The format is:
-/// ```yaml
-/// # key_name
-/// some_id: |-
-///   curl \
-///     -X GET 'URL'
-/// ```
-/// We extract the comment as the key and everything after `|-` as the value
-fn parse_code_samples_yaml(content: &str) -> HashMap<String, String> {
-    let mut samples: HashMap<String, String> = HashMap::new();
-    let mut current_key: Option<String> = None;
-    let mut parser = YamlCodeBlockParser::new();
-
-    for line in content.lines() {
-        // Check if this is a comment line defining a new key
-        if let Some(caps) = COMMENT_RE.captures(line) {
-            // Save previous sample if exists
-            if let Some(key) = current_key.take() {
-                if let Some(value) = parser.take_value() {
-                    samples.insert(key, value);
-                }
-            }
-            current_key = Some(caps[1].to_string());
-            continue;
-        }
-
-        // Check if this starts a new code block
-        if CODE_START_RE.is_match(line) {
-            parser.start_new_block();
-            continue;
-        }
-
-        if current_key.is_some() {
-            parser.process_line(line);
-        }
-    }
-
-    // Don't forget the last sample
-    if let Some(key) = current_key {
-        if let Some(value) = parser.take_value() {
-            samples.insert(key, value);
         }
     }
 
@@ -469,31 +399,6 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_code_samples() {
-        let yaml = r#"
-# get_indexes
-list_all_indexes_1: |-
-  curl \
-    -X GET 'MEILISEARCH_URL/indexes'
-# post_indexes
-create_an_index_1: |-
-  curl \
-    -X POST 'MEILISEARCH_URL/indexes' \
-    -H 'Content-Type: application/json' \
-    --data-binary '{
-      "uid": "movies"
-    }'
-"#;
-        let samples = parse_code_samples_yaml(yaml);
-
-        assert_eq!(samples.len(), 2);
-        assert!(samples.contains_key("get_indexes"));
-        assert!(samples.contains_key("post_indexes"));
-        assert!(samples["get_indexes"].contains("curl"));
-        assert!(samples["post_indexes"].contains("POST"));
-    }
-
-    #[test]
     fn test_parse_documentation_mapping() {
         let yaml = r#"
 # get_indexes
@@ -518,7 +423,7 @@ another_sample_id: |-
     }
 
     #[test]
-    fn test_parse_sdk_code_samples() {
+    fn test_parse_code_samples() {
         let yaml = r#"
 # This is a comment that should be ignored
 list_all_indexes_1: |-
@@ -533,7 +438,7 @@ list_all_indexes_1: |-
 create_an_index_1: |-
   const task = await client.createIndex('movies');
 "#;
-        let samples = parse_sdk_code_samples(yaml);
+        let samples = parse_code_samples(yaml);
 
         assert_eq!(samples.len(), 2);
         assert!(samples.contains_key("list_all_indexes_1"));
