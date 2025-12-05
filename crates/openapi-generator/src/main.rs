@@ -9,12 +9,12 @@ use regex::Regex;
 use serde_json::{json, Value};
 use utoipa::OpenApi;
 
-const CODE_SAMPLES_DOCS_URL: &str = "https://raw.githubusercontent.com/meilisearch/documentation/refs/heads/main/.code-samples.meilisearch.yaml";
+const CODE_SAMPLES_DOCS: &str = "https://raw.githubusercontent.com/meilisearch/documentation/refs/heads/main/.code-samples.meilisearch.yaml";
 
 const HTTP_METHODS: &[&str] = &["get", "post", "put", "patch", "delete"];
 
 // Mapping of repository URLs to language names
-const SDK_REPOS: &[(&str, &str)] = &[
+const CODE_SAMPLES_SDKS: &[(&str, &str)] = &[
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-dotnet/refs/heads/main/.code-samples.meilisearch.yaml", "C#"),
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-dart/refs/heads/main/.code-samples.meilisearch.yaml", "Dart"),
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-go/refs/heads/main/.code-samples.meilisearch.yaml", "Go"),
@@ -94,7 +94,7 @@ struct CodeSample {
 /// Returns a map from key (e.g., "get_indexes") to a list of code samples for different languages
 fn fetch_all_code_samples() -> Result<HashMap<String, Vec<CodeSample>>> {
     // First, fetch the documentation file to get the mapping: key -> sample_ids
-    let docs_response = reqwest::blocking::get(CODE_SAMPLES_DOCS_URL)
+    let docs_response = reqwest::blocking::get(CODE_SAMPLES_DOCS)
         .context("Failed to fetch documentation code samples")?
         .text()
         .context("Failed to read documentation code samples response")?;
@@ -104,7 +104,7 @@ fn fetch_all_code_samples() -> Result<HashMap<String, Vec<CodeSample>>> {
     // Now fetch code samples from each SDK repository
     let mut all_samples: HashMap<String, Vec<CodeSample>> = HashMap::new();
 
-    for (url, lang) in SDK_REPOS {
+    for (url, lang) in CODE_SAMPLES_SDKS {
         match fetch_sdk_code_samples(url, lang, &key_to_sample_ids) {
             Ok(samples) => {
                 // Merge samples into all_samples
