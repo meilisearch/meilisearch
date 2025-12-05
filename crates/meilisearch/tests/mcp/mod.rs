@@ -475,10 +475,9 @@ async fn mcp_unknown_tool() {
     assert_eq!(code, StatusCode::OK);
     let responses = response.as_array().unwrap();
 
-    let content = &responses[1]["result"]["content"][0]["text"];
-    let result: serde_json::Value = serde_json::from_str(content.as_str().unwrap()).unwrap();
-
-    assert!(result["error"].is_object());
+    // Unknown tool returns a JSON-RPC error (not a tool result with error content)
+    assert!(responses[1]["error"].is_object(), "Expected JSON-RPC error for unknown tool: {}", responses[1]);
+    assert_eq!(responses[1]["error"]["code"], -32601); // Method not found
 }
 
 #[actix_rt::test]
@@ -537,4 +536,217 @@ async fn mcp_disabled_by_default() {
     assert_eq!(code, StatusCode::BAD_REQUEST);
     assert!(response["error"]["message"].as_str().unwrap().contains("mcp"));
     assert!(response["error"]["message"].as_str().unwrap().contains("experimental feature"));
+}
+
+// ============================================================================
+// Authentication Tests
+// ============================================================================
+
+const MASTER_KEY: &str = "MASTER_KEY";
+
+/// Helper to create a server with MCP enabled and master key set
+async fn server_with_mcp_auth() -> Server {
+    let mut server = Server::new_auth().await;
+    server.use_api_key(MASTER_KEY);
+    let (response, code) = server.set_features(json!({"mcp": true})).await;
+    assert_eq!(code, StatusCode::OK, "Failed to enable MCP feature: {response}");
+    server
+}
+
+#[actix_rt::test]
+async fn mcp_requires_auth_when_master_key_set() {
+    let server = server_with_mcp_auth().await;
+
+    // Clear API key to test unauthenticated access
+    let mut server = server;
+    server.clear_api_key();
+
+    // Try to initialize without auth - should fail
+    let (response, code) = server.service.post("/mcp", McpRequest::initialize().to_json()).await;
+
+    assert_eq!(code, StatusCode::UNAUTHORIZED, "Response: {response}");
+    assert!(response["error"].is_object());
+    assert!(response["error"]["message"].as_str().unwrap().contains("Authorization"));
+}
+
+#[actix_rt::test]
+async fn mcp_works_with_master_key() {
+    let server = server_with_mcp_auth().await;
+
+    // Initialize with master key - should succeed
+    let (response, code) = server.service.post("/mcp", McpRequest::initialize().to_json()).await;
+
+    assert_eq!(code, StatusCode::OK, "Response: {response}");
+    assert_eq!(response["jsonrpc"], "2.0");
+    assert!(response["result"]["protocolVersion"].is_string());
+}
+
+#[actix_rt::test]
+async fn mcp_works_with_api_key() {
+    let mut server = server_with_mcp_auth().await;
+
+    // Create an API key with all necessary permissions
+    let (key_response, code) = server.add_api_key(json!({
+        "name": "mcp-full-access",
+        "description": "Full access key for MCP testing",
+        "actions": ["search", "indexes.get", "settings.get"],
+        "indexes": ["*"],
+        "expiresAt": null
+    })).await;
+    assert_eq!(code, StatusCode::CREATED, "Failed to create API key: {key_response}");
+
+    let api_key = key_response["key"].as_str().unwrap();
+
+    // Use the new API key
+    server.use_api_key(api_key);
+
+    // Initialize with API key - should succeed
+    let (response, code) = server.service.post("/mcp", McpRequest::initialize().to_json()).await;
+
+    assert_eq!(code, StatusCode::OK, "Response: {response}");
+    assert_eq!(response["jsonrpc"], "2.0");
+}
+
+#[actix_rt::test]
+async fn mcp_search_only_key_filters_tools() {
+    let mut server = server_with_mcp_auth().await;
+
+    // Create a search-only API key
+    let (key_response, code) = server.add_api_key(json!({
+        "name": "search-only",
+        "description": "Search only key",
+        "actions": ["search"],
+        "indexes": ["*"],
+        "expiresAt": null
+    })).await;
+    assert_eq!(code, StatusCode::CREATED, "Failed to create API key: {key_response}");
+
+    let api_key = key_response["key"].as_str().unwrap();
+    server.use_api_key(api_key);
+
+    // Use batch: initialize + tools/list
+    let (response, code) = server.service.post("/mcp", batch(vec![
+        McpRequest::initialize(),
+        McpRequest::tools_list(2),
+    ])).await;
+
+    assert_eq!(code, StatusCode::OK, "Response: {response}");
+    let responses = response.as_array().expect("batch should return array");
+
+    // Check tools list - should only contain meilisearch_search
+    let tools_response = &responses[1];
+    let tools = tools_response["result"]["tools"].as_array().expect("tools should be an array");
+
+    let tool_names: Vec<&str> = tools
+        .iter()
+        .filter_map(|t| t["name"].as_str())
+        .collect();
+
+    assert!(tool_names.contains(&"meilisearch_search"), "Search tool should be available");
+    assert!(!tool_names.contains(&"meilisearch_list_indexes"), "list_indexes should be filtered out");
+    assert!(!tool_names.contains(&"meilisearch_get_index_info"), "get_index_info should be filtered out");
+}
+
+#[actix_rt::test]
+async fn mcp_index_scoped_key_filters_results() {
+    let mut server = server_with_mcp_auth().await;
+
+    // Create two indexes with master key
+    let index1 = server.unique_index();
+    let index1_uid = index1.uid.clone();
+    let index2 = server.unique_index();
+
+    let (response, _) = index1.add_documents(json!([{"id": 1, "title": "Test 1"}]), Some("id")).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (response, _) = index2.add_documents(json!([{"id": 2, "title": "Test 2"}]), Some("id")).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    // Create an API key scoped to only index1
+    let (key_response, code) = server.add_api_key(json!({
+        "name": "index1-only",
+        "description": "Access to index1 only",
+        "actions": ["search", "indexes.get", "settings.get"],
+        "indexes": [&index1_uid],
+        "expiresAt": null
+    })).await;
+    assert_eq!(code, StatusCode::CREATED, "Failed to create API key: {key_response}");
+
+    let api_key = key_response["key"].as_str().unwrap();
+    server.use_api_key(api_key);
+
+    // Use batch: initialize + list_indexes
+    let (response, code) = server.service.post("/mcp", batch(vec![
+        McpRequest::initialize(),
+        McpRequest::tools_call(2, "meilisearch_list_indexes", serde_json::json!({})),
+    ])).await;
+
+    assert_eq!(code, StatusCode::OK, "Response: {response}");
+    let responses = response.as_array().unwrap();
+
+    let content = &responses[1]["result"]["content"][0]["text"];
+    let result: serde_json::Value = serde_json::from_str(content.as_str().unwrap()).unwrap();
+
+    // Should only see index1, not index2
+    assert_eq!(result["total"], 1, "Should only see one index");
+    let indexes = result["results"].as_array().unwrap();
+    assert_eq!(indexes[0]["uid"], index1_uid);
+}
+
+#[actix_rt::test]
+async fn mcp_search_unauthorized_index_fails() {
+    let mut server = server_with_mcp_auth().await;
+
+    // Create an index with master key
+    let index = server.unique_index();
+    let index_uid = index.uid.clone();
+    let (response, _) = index.add_documents(json!([{"id": 1, "title": "Test"}]), Some("id")).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    // Create an API key scoped to a different index
+    let (key_response, code) = server.add_api_key(json!({
+        "name": "other-index-only",
+        "description": "Access to other index only",
+        "actions": ["search"],
+        "indexes": ["other_index"],
+        "expiresAt": null
+    })).await;
+    assert_eq!(code, StatusCode::CREATED, "Failed to create API key: {key_response}");
+
+    let api_key = key_response["key"].as_str().unwrap();
+    server.use_api_key(api_key);
+
+    // Use batch: initialize + search (should fail for unauthorized index)
+    let (response, code) = server.service.post("/mcp", batch(vec![
+        McpRequest::initialize(),
+        McpRequest::tools_call(2, "meilisearch_search", serde_json::json!({
+            "indexUid": index_uid,
+            "q": "test"
+        })),
+    ])).await;
+
+    assert_eq!(code, StatusCode::OK, "Response: {response}");
+    let responses = response.as_array().unwrap();
+
+    let content = &responses[1]["result"]["content"][0]["text"];
+    let result: serde_json::Value = serde_json::from_str(content.as_str().unwrap()).unwrap();
+
+    // Should be an error about unauthorized index
+    assert!(result["error"].is_object(), "Should return error for unauthorized index");
+    assert_eq!(result["error"]["type"], "index_unauthorized");
+}
+
+#[actix_rt::test]
+async fn mcp_invalid_api_key_fails() {
+    let server = server_with_mcp_auth().await;
+
+    // Use an invalid API key
+    let mut server = server;
+    server.use_api_key("invalid_api_key_12345");
+
+    // Try to initialize with invalid key - should fail
+    let (response, code) = server.service.post("/mcp", McpRequest::initialize().to_json()).await;
+
+    assert_eq!(code, StatusCode::UNAUTHORIZED, "Response: {response}");
+    assert!(response["error"].is_object());
 }

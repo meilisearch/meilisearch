@@ -10,6 +10,7 @@ use serde_json::{json, Value};
 use std::sync::Arc;
 
 use index_scheduler::IndexScheduler;
+use meilisearch_auth::AuthFilter;
 use meilisearch_types::index_uid::IndexUid;
 use uuid::Uuid;
 
@@ -216,19 +217,20 @@ pub async fn execute_tool(
     tool_name: &str,
     arguments: Value,
     index_scheduler: Arc<IndexScheduler>,
+    auth_filter: &AuthFilter,
 ) -> Result<Value, McpError> {
     match tool_name {
         "meilisearch_list_indexes" => {
             let params: ListIndexesParams = serde_json::from_value(arguments)?;
-            list_indexes(params, index_scheduler).await
+            list_indexes(params, index_scheduler, auth_filter).await
         }
         "meilisearch_get_index_info" => {
             let params: GetIndexInfoParams = serde_json::from_value(arguments)?;
-            get_index_info(params, index_scheduler).await
+            get_index_info(params, index_scheduler, auth_filter).await
         }
         "meilisearch_search" => {
             let params: McpSearchParams = serde_json::from_value(arguments)?;
-            search(params, index_scheduler).await
+            search(params, index_scheduler, auth_filter).await
         }
         _ => Err(McpError::MethodNotFound(format!("Unknown tool: {}", tool_name))),
     }
@@ -238,13 +240,20 @@ pub async fn execute_tool(
 async fn list_indexes(
     params: ListIndexesParams,
     index_scheduler: Arc<IndexScheduler>,
+    auth_filter: &AuthFilter,
 ) -> Result<Value, McpError> {
-    let indexes = index_scheduler
+    let all_indexes = index_scheduler
         .index_names()
         .map_err(|e| McpError::InternalError(format!("Failed to list indexes: {}", e)))?;
 
-    let total = indexes.len();
-    let indexes: Vec<_> = indexes
+    // Filter indexes based on API key authorization
+    let authorized_indexes: Vec<_> = all_indexes
+        .into_iter()
+        .filter(|index_uid| auth_filter.is_index_authorized(index_uid))
+        .collect();
+
+    let total = authorized_indexes.len();
+    let indexes: Vec<_> = authorized_indexes
         .into_iter()
         .skip(params.offset)
         .take(params.limit)
@@ -285,8 +294,18 @@ async fn list_indexes(
 async fn get_index_info(
     params: GetIndexInfoParams,
     index_scheduler: Arc<IndexScheduler>,
+    auth_filter: &AuthFilter,
 ) -> Result<Value, McpError> {
     let index_uid_str = params.index_uid;
+
+    // Check index authorization
+    if !auth_filter.is_index_authorized(&index_uid_str) {
+        return Err(McpError::IndexUnauthorized {
+            index: index_uid_str,
+            allowed: auth_filter.api_key_list_index_authorized(),
+        });
+    }
+
     let index_uid = IndexUid::try_from(index_uid_str.clone())
         .map_err(|_| McpError::InvalidParameter("index_uid".to_string(), "Invalid index UID format".to_string()))?;
 
@@ -309,13 +328,13 @@ async fn get_index_info(
         .map(|attrs| attrs.into_iter().map(String::from).collect())
         .unwrap_or_else(|| vec!["*".to_string()]);
 
-    // Get filterable attributes from rules - serialize each rule to get string representation
-    let filterable_attributes: Vec<String> = index
+    // Get filterable attributes from rules - serialize each rule to proper JSON values
+    let filterable_attributes: Vec<Value> = index
         .filterable_attributes_rules(&rtxn)
         .ok()
         .map(|rules| {
             rules.into_iter()
-                .map(|rule| serde_json::to_string(&rule).unwrap_or_default())
+                .filter_map(|rule| serde_json::to_value(&rule).ok())
                 .collect()
         })
         .unwrap_or_default();
@@ -355,8 +374,18 @@ async fn get_index_info(
 async fn search(
     params: McpSearchParams,
     index_scheduler: Arc<IndexScheduler>,
+    auth_filter: &AuthFilter,
 ) -> Result<Value, McpError> {
     let index_uid_str = params.index_uid;
+
+    // Check index authorization
+    if !auth_filter.is_index_authorized(&index_uid_str) {
+        return Err(McpError::IndexUnauthorized {
+            index: index_uid_str,
+            allowed: auth_filter.api_key_list_index_authorized(),
+        });
+    }
+
     let index_uid = IndexUid::try_from(index_uid_str.clone())
         .map_err(|_| McpError::InvalidParameter("index_uid".to_string(), "Invalid index UID format".to_string()))?;
 
@@ -371,7 +400,7 @@ async fn search(
         vector: params.vector,
         limit: params.limit,
         offset: params.offset,
-        filter: params.filter.map(|f| serde_json::Value::String(f)),
+        filter: params.filter.map(serde_json::Value::String),
         sort: params.sort,
         show_ranking_score: params.show_ranking_score,
         ranking_score_threshold: params.ranking_score_threshold.and_then(|t| {

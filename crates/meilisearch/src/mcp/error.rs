@@ -26,6 +26,18 @@ pub enum McpError {
 
     #[error("Parse error: {0}")]
     ParseError(String),
+
+    #[error("Missing Authorization header. Use 'Authorization: Bearer <api-key>'")]
+    MissingAuthorizationHeader,
+
+    #[error("Invalid API key")]
+    InvalidApiKey,
+
+    #[error("API key does not have '{action}' permission required for tool '{tool}'")]
+    Unauthorized { tool: String, action: String },
+
+    #[error("API key cannot access index '{index}'. Allowed indexes: {allowed:?}")]
+    IndexUnauthorized { index: String, allowed: Vec<String> },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -72,6 +84,41 @@ impl McpError {
                 context: Some(json!({
                     "parameter": param,
                     "reason": reason,
+                })),
+            },
+            Self::MissingAuthorizationHeader => McpErrorContext {
+                error_type: "authentication_required".to_string(),
+                code: "missing_authorization_header".to_string(),
+                context: Some(json!({
+                    "fix": "Add 'Authorization: Bearer <api-key>' header to your request",
+                    "docs": "https://www.meilisearch.com/docs/reference/api/keys"
+                })),
+            },
+            Self::InvalidApiKey => McpErrorContext {
+                error_type: "authentication_failed".to_string(),
+                code: "invalid_api_key".to_string(),
+                context: Some(json!({
+                    "fix": "Check that your API key is valid and not expired",
+                    "docs": "https://www.meilisearch.com/docs/reference/api/keys"
+                })),
+            },
+            Self::Unauthorized { tool, action } => McpErrorContext {
+                error_type: "unauthorized".to_string(),
+                code: "insufficient_permissions".to_string(),
+                context: Some(json!({
+                    "tool": tool,
+                    "required_action": action,
+                    "fix": format!("Use an API key with '{}' permission", action),
+                    "docs": "https://www.meilisearch.com/docs/reference/api/keys#actions"
+                })),
+            },
+            Self::IndexUnauthorized { index, allowed } => McpErrorContext {
+                error_type: "index_unauthorized".to_string(),
+                code: "index_access_denied".to_string(),
+                context: Some(json!({
+                    "requested_index": index,
+                    "allowed_indexes": allowed,
+                    "fix": format!("Use an API key with access to '{}' or search from allowed indexes", index)
                 })),
             },
             _ => McpErrorContext {

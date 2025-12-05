@@ -9,10 +9,12 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use actix_web::http::header;
+use actix_web::http::header::{self, AUTHORIZATION};
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use index_scheduler::IndexScheduler;
+use meilisearch_auth::{AuthController, AuthFilter};
+use meilisearch_types::keys::Action;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
@@ -131,11 +133,85 @@ fn get_or_create_session_id(req: &HttpRequest, session_store: &McpSessionStore) 
         .unwrap_or_else(|| session_store.create_session())
 }
 
+/// Extract token from Authorization header
+fn extract_token_from_request(req: &HttpRequest) -> Result<Option<&str>, McpError> {
+    match req
+        .headers()
+        .get(AUTHORIZATION)
+        .map(|type_token| type_token.to_str().unwrap_or_default().splitn(2, ' '))
+    {
+        Some(mut type_token) => match type_token.next() {
+            Some("Bearer") => match type_token.next() {
+                Some(token) => Ok(Some(token)),
+                None => Err(McpError::MissingAuthorizationHeader),
+            },
+            _ => Err(McpError::MissingAuthorizationHeader),
+        },
+        None => Ok(None),
+    }
+}
+
+/// Authenticate MCP request and return AuthFilter
+fn authenticate_mcp_request(
+    auth: &AuthController,
+    token: Option<&str>,
+) -> Result<AuthFilter, McpError> {
+    // If no master key is configured, allow access without auth
+    let master_key = auth.get_master_key();
+
+    match (master_key, token) {
+        // No master key configured - allow full access
+        (None, _) => Ok(AuthFilter::default()),
+        // Master key matches token - full access
+        (Some(mk), Some(t)) if mk == t => Ok(AuthFilter::default()),
+        // Token provided, try to authenticate as API key
+        (Some(_), Some(token)) => {
+            let key_uuid = auth
+                .get_optional_uid_from_encoded_key(token.as_bytes())
+                .map_err(|_| McpError::InvalidApiKey)?
+                .ok_or(McpError::InvalidApiKey)?;
+
+            auth.get_key_filters(key_uuid, None)
+                .map_err(|_| McpError::InvalidApiKey)
+        }
+        // Master key set but no token provided
+        (Some(_), None) => Err(McpError::MissingAuthorizationHeader),
+    }
+}
+
+/// Check if a key is authorized for a specific action on an optional index
+fn is_key_authorized_for_action(
+    auth: &AuthController,
+    token: Option<&str>,
+    action: Action,
+    index: Option<&str>,
+) -> bool {
+    let master_key = auth.get_master_key();
+
+    match (master_key, token) {
+        // No master key - allow all
+        (None, _) => true,
+        // Master key matches - allow all
+        (Some(mk), Some(t)) if mk == t => true,
+        // API key - check authorization
+        (Some(_), Some(token)) => {
+            if let Ok(Some(key_uuid)) = auth.get_optional_uid_from_encoded_key(token.as_bytes()) {
+                auth.is_key_authorized(key_uuid, action, index).unwrap_or(false)
+            } else {
+                false
+            }
+        }
+        // No token when master key is set
+        (Some(_), None) => false,
+    }
+}
+
 /// Handle POST requests (JSON-RPC messages from client)
 pub async fn handle_mcp_post(
     req: HttpRequest,
     body: web::Json<Value>,
     index_scheduler: Data<IndexScheduler>,
+    auth: Data<AuthController>,
     session_store: Data<McpSessionStore>,
 ) -> HttpResponse {
     // Check if MCP feature is enabled
@@ -149,6 +225,40 @@ pub async fn handle_mcp_post(
             }
         }));
     }
+
+    // Extract token from Authorization header
+    let token = match extract_token_from_request(&req) {
+        Ok(t) => t,
+        Err(e) => {
+            let error_context = e.to_context(None);
+            return HttpResponse::Unauthorized().json(json!({
+                "jsonrpc": "2.0",
+                "id": null,
+                "error": {
+                    "code": -32600,
+                    "message": e.to_string(),
+                    "data": error_context
+                }
+            }));
+        }
+    };
+
+    // Authenticate the request
+    let auth_filter = match authenticate_mcp_request(&auth, token) {
+        Ok(filter) => filter,
+        Err(e) => {
+            let error_context = e.to_context(None);
+            return HttpResponse::Unauthorized().json(json!({
+                "jsonrpc": "2.0",
+                "id": null,
+                "error": {
+                    "code": -32600,
+                    "message": e.to_string(),
+                    "data": error_context
+                }
+            }));
+        }
+    };
 
     let session_id = get_or_create_session_id(&req, &session_store);
     let mut session = session_store.get_or_create(&session_id);
@@ -174,7 +284,7 @@ pub async fn handle_mcp_post(
 
         let mut responses = Vec::new();
         for request in requests {
-            match handle_single_request(&request, &mut session, &index_scheduler).await {
+            match handle_single_request(&request, &mut session, &index_scheduler, &auth, token, &auth_filter).await {
                 Ok(Some(resp)) => responses.push(resp),
                 Ok(None) => {} // Notification, no response
                 Err(e) => responses.push(create_error_response(request.id.clone(), e)),
@@ -204,7 +314,7 @@ pub async fn handle_mcp_post(
             }
         };
 
-        match handle_single_request(&request, &mut session, &index_scheduler).await {
+        match handle_single_request(&request, &mut session, &index_scheduler, &auth, token, &auth_filter).await {
             Ok(Some(resp)) => {
                 session_store.update(&session_id, session);
                 resp
@@ -259,6 +369,9 @@ async fn handle_single_request(
     request: &JsonRpcRequest,
     session: &mut McpSession,
     index_scheduler: &Data<IndexScheduler>,
+    auth: &Data<AuthController>,
+    token: Option<&str>,
+    auth_filter: &AuthFilter,
 ) -> Result<Option<Value>, McpError> {
     tracing::trace!("MCP method: {}", request.method);
 
@@ -273,11 +386,11 @@ async fn handle_single_request(
             Ok(None) // Notifications don't need responses
         }
         "tools/list" => {
-            let result = handle_tools_list(request)?;
+            let result = handle_tools_list(request, auth, token)?;
             Ok(Some(result))
         }
         "tools/call" => {
-            let result = handle_tools_call(request, session, index_scheduler).await?;
+            let result = handle_tools_call(request, session, index_scheduler, auth, token, auth_filter).await?;
             Ok(Some(result))
         }
         _ => Err(McpError::MethodNotFound(request.method.clone())),
@@ -307,14 +420,40 @@ fn handle_initialize(request: &JsonRpcRequest) -> Result<Value, McpError> {
     }))
 }
 
-/// Handle tools/list request
-fn handle_tools_list(request: &JsonRpcRequest) -> Result<Value, McpError> {
-    let tools_schema = tools::get_tools_schema();
+/// Handle tools/list request - returns only tools the key can access
+fn handle_tools_list(
+    request: &JsonRpcRequest,
+    auth: &Data<AuthController>,
+    token: Option<&str>,
+) -> Result<Value, McpError> {
+    let all_tools = tools::get_tools_schema();
+
+    // Filter tools based on API key permissions
+    let authorized_tools: Vec<Value> = all_tools
+        .into_iter()
+        .filter(|tool| {
+            let tool_name = tool["name"].as_str().unwrap_or("");
+            match tool_name {
+                "meilisearch_list_indexes" => {
+                    is_key_authorized_for_action(auth, token, Action::IndexesGet, None)
+                }
+                "meilisearch_get_index_info" => {
+                    // Requires both indexes.get and settings.get
+                    is_key_authorized_for_action(auth, token, Action::IndexesGet, None)
+                        && is_key_authorized_for_action(auth, token, Action::SettingsGet, None)
+                }
+                "meilisearch_search" => {
+                    is_key_authorized_for_action(auth, token, Action::Search, None)
+                }
+                _ => false,
+            }
+        })
+        .collect();
 
     let response = JsonRpcResponse {
         jsonrpc: "2.0".to_string(),
         id: request.id.clone(),
-        result: json!({ "tools": tools_schema }),
+        result: json!({ "tools": authorized_tools }),
     };
 
     Ok(serde_json::to_value(response)?)
@@ -325,6 +464,9 @@ async fn handle_tools_call(
     request: &JsonRpcRequest,
     session: &McpSession,
     index_scheduler: &Data<IndexScheduler>,
+    auth: &Data<AuthController>,
+    token: Option<&str>,
+    auth_filter: &AuthFilter,
 ) -> Result<Value, McpError> {
     if !session.initialized {
         return Err(McpError::InvalidRequest(
@@ -340,12 +482,39 @@ async fn handle_tools_call(
 
     let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
 
+    // Check permission for the requested tool
+    let (required_action, action_name) = match tool_name {
+        "meilisearch_list_indexes" => (Action::IndexesGet, "indexes.get"),
+        "meilisearch_get_index_info" => (Action::IndexesGet, "indexes.get"),
+        "meilisearch_search" => (Action::Search, "search"),
+        _ => {
+            return Err(McpError::MethodNotFound(format!("Unknown tool: {}", tool_name)));
+        }
+    };
+
+    if !is_key_authorized_for_action(auth, token, required_action, None) {
+        return Err(McpError::Unauthorized {
+            tool: tool_name.to_string(),
+            action: action_name.to_string(),
+        });
+    }
+
+    // For get_index_info, also check settings.get
+    if tool_name == "meilisearch_get_index_info"
+        && !is_key_authorized_for_action(auth, token, Action::SettingsGet, None)
+    {
+        return Err(McpError::Unauthorized {
+            tool: tool_name.to_string(),
+            action: "settings.get".to_string(),
+        });
+    }
+
     tracing::debug!("MCP tool call: {} args={:?}", tool_name, arguments);
 
     // Get Arc from Data
     let scheduler: Arc<IndexScheduler> = index_scheduler.clone().into_inner();
 
-    match tools::execute_tool(tool_name, arguments, scheduler).await {
+    match tools::execute_tool(tool_name, arguments, scheduler, auth_filter).await {
         Ok(result) => {
             let tool_result = ToolResult {
                 content: vec![Content::Text {
