@@ -89,8 +89,8 @@ jobs:
           asset_name: meilisearch-${{ matrix.edition-suffix }}${{ matrix.asset_name }}
           tag: ${{ github.ref }}
 
-  publish-openapi-file:
-    name: Publish OpenAPI file
+  publish-openapi-files:
+    name: Publish OpenAPI files
     needs: check-version
     runs-on: ubuntu-latest
     steps:
@@ -101,16 +101,26 @@ jobs:
         with:
           toolchain: stable
           override: true
-      - name: Generate OpenAPI file
+      - name: Generate OpenAPI files
         run: |
           cd crates/openapi-generator
-          cargo run --release -- --pretty --output ../../meilisearch.json
-      - name: Upload OpenAPI to Release
+          cargo run --release -- --pretty --debug --output ../../meilisearch-openapi.json
+          cargo run --release -- --pretty --debug --with-mintlify-code-samples --output ../../meilisearch-openapi-mintlify.json
+      - name: Upload OpenAPI file to Release
         # No need to upload for dry run (cron or workflow_dispatch)
         if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@2.11.2
         with:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
-          file: ./meilisearch.json
+          file: ./meilisearch-openapi.json
           asset_name: meilisearch-openapi.json
+          tag: ${{ github.ref }}
+      - name: Upload Mintlify OpenAPI file to Release
+        # No need to upload for dry run (cron or workflow_dispatch)
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@2.11.2
+        with:
+          repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
+          file: ./meilisearch-openapi-mintlify.json
+          asset_name: meilisearch-openapi-mintlify.json
           tag: ${{ github.ref }}
