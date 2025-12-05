@@ -28,7 +28,7 @@ const SDK_REPOS: &[(&str, &str)] = &[
 #[command(name = "openapi-generator")]
 #[command(about = "Generate OpenAPI specification for Meilisearch")]
 struct Cli {
-    /// Output file path (default: meilisearch.json)
+    /// Output file path (default: meilisearch-openapi.json)
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
 
@@ -57,7 +57,7 @@ fn main() -> Result<()> {
     }
 
     // Determine output path
-    let output_path = cli.output.unwrap_or_else(|| PathBuf::from("meilisearch.json"));
+    let output_path = cli.output.unwrap_or_else(|| PathBuf::from("meilisearch-openapi.json"));
 
     // Serialize to JSON
     let json = if cli.pretty {
