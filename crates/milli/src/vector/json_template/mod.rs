@@ -114,8 +114,28 @@ impl JsonTemplate {
         document: D,
         doc_alloc: &'doc Bump,
     ) -> Result<Value, Error> {
+        self.render_document_with_virtual_fields(document, doc_alloc, None)
+    }
+
+    /// Renders this value with the document and optional virtual fields.
+    ///
+    /// Virtual fields are additional fields that can be accessed in templates via `{{doc.field_name}}`.
+    /// They are used for URL fetching where fetched content is exposed as virtual fields.
+    ///
+    /// # Error
+    ///
+    /// - If any of the strings contains a template that cannot be rendered.
+    pub fn render_document_with_virtual_fields<'a, 'doc, D: Document<'a> + std::fmt::Debug>(
+        &self,
+        document: D,
+        doc_alloc: &'doc Bump,
+        virtual_fields: Option<&std::collections::BTreeMap<String, String>>,
+    ) -> Result<Value, Error> {
         let document = ParseableDocument::new(document, doc_alloc);
-        let context = crate::prompt::Context::without_fields(&document);
+        let context = match virtual_fields {
+            Some(fields) => crate::prompt::ContextWithVirtualFields::new(&document, fields),
+            None => crate::prompt::ContextWithVirtualFields::without_virtual_fields(&document),
+        };
         self.render(&context)
     }
 

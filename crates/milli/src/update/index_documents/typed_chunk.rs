@@ -704,7 +704,7 @@ pub(crate) fn write_typed_chunk_into_index(
             embedders.put_embedder_info(wtxn, &embedder_name, &infos)?;
 
             let binary_quantized = settings_diff
-                .old
+                .new
                 .runtime_embedders
                 .get(&embedder_name)
                 .is_some_and(|conf| conf.is_quantized);

@@ -424,7 +424,7 @@ impl SearchKind {
     ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
         let rtxn = index.read_txn()?;
         let embedder_configs = index.embedding_configs().embedding_configs(&rtxn)?;
-        let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
+        let embedders = index_scheduler.embedders(index_uid, embedder_configs, None)?;
 
         let (embedder, quantized) = embedders
             .get(embedder_name)
