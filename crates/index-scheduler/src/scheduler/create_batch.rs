@@ -4,6 +4,7 @@ use std::io::ErrorKind;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::{Settings, Unchecked};
+use meilisearch_types::tasks::network::NetworkTopologyState;
 use meilisearch_types::tasks::{BatchStopReason, Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
@@ -57,6 +58,14 @@ pub(crate) enum Batch {
     },
     IndexCompaction {
         index_uid: String,
+        task: Task,
+    },
+    #[allow(clippy::enum_variant_names)] // warranted because we are executing an inner index batch
+    NetworkIndexBatch {
+        network_task: Task,
+        inner_batch: Box<Batch>,
+    },
+    NetworkReady {
         task: Task,
     },
 }
@@ -140,8 +149,13 @@ impl Batch {
                     ..
                 } => RoaringBitmap::from_iter(tasks.iter().chain(other).map(|task| task.uid)),
             },
-            Batch::IndexSwap { task } => {
+            Batch::IndexSwap { task } | Batch::NetworkReady { task } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
+            }
+            Batch::NetworkIndexBatch { network_task, inner_batch } => {
+                let mut tasks = inner_batch.ids();
+                tasks.insert(network_task.uid);
+                tasks
             }
         }
     }
@@ -156,12 +170,14 @@ impl Batch {
             | Dump(_)
             | Export { .. }
             | UpgradeDatabase { .. }
+            | NetworkReady { .. }
             | IndexSwap { .. } => None,
             IndexOperation { op, .. } => Some(op.index_uid()),
             IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
             | IndexDeletion { index_uid, .. }
             | IndexCompaction { index_uid, .. } => Some(index_uid),
+            NetworkIndexBatch { network_task: _, inner_batch } => inner_batch.index_uid(),
         }
     }
 }
@@ -184,6 +200,8 @@ impl fmt::Display for Batch {
             Batch::IndexCompaction { .. } => f.write_str("IndexCompaction")?,
             Batch::Export { .. } => f.write_str("Export")?,
             Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
+            Batch::NetworkIndexBatch { .. } => f.write_str("NetworkTopologyChange")?,
+            Batch::NetworkReady { .. } => f.write_str("NetworkTopologyChange")?,
         };
         match index_uid {
             Some(name) => f.write_fmt(format_args!(" on {name:?} from tasks: {tasks:?}")),
