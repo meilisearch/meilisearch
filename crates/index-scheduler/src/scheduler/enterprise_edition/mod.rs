@@ -89,14 +89,15 @@ impl IndexScheduler {
         };
 
         if let Some((remotes, out_name)) = network_topology_change.export_to_process() {
-            network_topology_change.set_moved(self.balance_documents(
+            let moved_documents = self.balance_documents(
                 remotes,
                 out_name,
                 network_topology_change.in_name(),
                 origin,
                 &progress,
                 &self.scheduler.must_stop_processing,
-            )?);
+            )?;
+            network_topology_change.set_moved(moved_documents);
         }
         network_topology_change.update_state();
         if network_topology_change.state() == NetworkTopologyState::Finished {
