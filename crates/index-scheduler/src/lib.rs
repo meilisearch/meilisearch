@@ -760,18 +760,30 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
-        self.register_with_custom_metadata(kind, task_id, None, dry_run)
+        self.register_with_custom_metadata(kind, task_id, None, dry_run, None)
     }
 
     /// Register a new task in the scheduler, with metadata.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
+    ///
+    /// # Parameters
+    ///
+    /// - task_network: network of the task to check.
+    ///
+    /// If the task is an import task, only accept it if:
+    ///
+    /// 1. There is an ongoing network topology change task
+    /// 2. The task to register matches the network version of the network topology change task
+    ///
+    /// Always accept the task if it is not an import task.
     pub fn register_with_custom_metadata(
         &self,
         kind: KindWithContent,
         task_id: Option<TaskId>,
         custom_metadata: Option<String>,
         dry_run: bool,
+        task_network: Option<TaskNetwork>,
     ) -> Result<Task> {
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
@@ -782,7 +794,19 @@ impl IndexScheduler {
         }
 
         let mut wtxn = self.env.write_txn()?;
-        let task = self.queue.register(&mut wtxn, &kind, task_id, custom_metadata, dry_run)?;
+
+        if let Some(TaskNetwork::Import { import_from, network_change, metadata }) = &task_network {
+            self.update_network_task(&mut wtxn, import_from, network_change, metadata)?;
+        }
+
+        let task = self.queue.register(
+            &mut wtxn,
+            &kind,
+            task_id,
+            custom_metadata,
+            dry_run,
+            task_network.map(DbTaskNetwork::from),
+        )?;
 
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).
@@ -802,6 +826,91 @@ impl IndexScheduler {
         // notify the scheduler loop to execute a new tick
         self.scheduler.wake_up.signal();
         Ok(task)
+    }
+
+    pub fn network_no_index_for_remote(
+        &self,
+        remote_name: String,
+        origin: Origin,
+    ) -> Result<(), Error> {
+        let mut wtxn = self.env.write_txn()?;
+
+        self.update_network_task(
+            &mut wtxn,
+            &ImportData { remote_name, index_name: None, document_count: 0 },
+            &origin,
+            &ImportMetadata { index_count: 0, task_key: None, total_index_documents: 0 },
+        )?;
+
+        wtxn.commit()?;
+
+        // wake up the scheduler as the task state has changed
+        self.scheduler.wake_up.signal();
+
+        Ok(())
+    }
+
+    fn update_network_task(
+        &self,
+        wtxn: &mut heed::RwTxn<'_>,
+        import_from: &ImportData,
+        network_change: &Origin,
+        metadata: &ImportMetadata,
+    ) -> Result<(), Error> {
+        let mut network_tasks = self
+            .queue
+            .tasks
+            .get_kind(&*wtxn, meilisearch_types::tasks::Kind::NetworkTopologyChange)?;
+        if network_tasks.is_empty() {
+            return Err(Error::ImportTaskWithoutNetworkTask);
+        }
+        let network_task = {
+            let processing = self.processing_tasks.read().unwrap().processing.clone();
+            if processing.is_disjoint(&network_tasks) {
+                let enqueued = self
+                    .queue
+                    .tasks
+                    .get_status(&*wtxn, meilisearch_types::tasks::Status::Enqueued)?;
+
+                network_tasks &= enqueued;
+                if let Some(network_task) = network_tasks.into_iter().next() {
+                    network_task
+                } else {
+                    return Err(Error::ImportTaskWithoutNetworkTask);
+                }
+            } else {
+                network_tasks &= &*processing;
+                network_tasks.into_iter().next().unwrap()
+            }
+        };
+        let mut network_task = self.queue.tasks.get_task(&*wtxn, network_task)?.unwrap();
+        let network_task_version = network_task
+            .network
+            .as_ref()
+            .map(|network| network.network_version())
+            .unwrap_or_default();
+        if network_task_version != network_change.network_version {
+            return Err(Error::NetworkVersionMismatch {
+                network_task: network_task_version,
+                import_task: network_change.network_version,
+            });
+        }
+        let KindWithContent::NetworkTopologyChange(network_topology_change) =
+            &mut network_task.kind
+        else {
+            tracing::error!("unexpected network kind for network task while registering task");
+            return Err(Error::CorruptedTaskQueue);
+        };
+        network_topology_change.receive_remote_task(
+            &import_from.remote_name,
+            import_from.index_name.as_deref(),
+            metadata.task_key,
+            import_from.document_count,
+            metadata.index_count,
+            metadata.total_index_documents,
+        )?;
+        self.queue.tasks.update_task(wtxn, &mut network_task)?;
+        Ok(())
     }
 
     /// Register a new task coming from a dump in the scheduler.
