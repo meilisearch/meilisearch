@@ -14,7 +14,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::star_or::{OptionStarOr, OptionStarOrList};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::macros::format_description;
 use time::{Date, Duration, OffsetDateTime, Time};
@@ -488,18 +488,18 @@ async fn delete_tasks(
     Ok(HttpResponse::Ok().json(task))
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AllTasks {
     /// The list of tasks that matched the filter.
-    results: Vec<TaskView>,
+    pub results: Vec<TaskView>,
     /// Total number of browsable results using offset/limit parameters for the given resource.
-    total: u64,
+    pub total: u64,
     /// Limit given for the query. If limit is not provided as a query parameter, this parameter displays the default limit value.
-    limit: u32,
+    pub limit: u32,
     /// The first task uid returned.
-    from: Option<u32>,
+    pub from: Option<u32>,
     /// Represents the value to send in from to fetch the next slice of the results. The first item for the next slice starts at this exact number. When the returned value is null, it means that all the data have been browsed in the given order.
-    next: Option<u32>,
+    pub next: Option<u32>,
 }
 
 /// Get all tasks
