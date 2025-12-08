@@ -157,7 +157,10 @@ impl NetworkTopologyChange {
         index_name: &str,
         document_count: u64,
     ) {
-        let remote = self.in_remotes.get_mut(remote_name).unwrap();
+        let remote = self
+            .in_remotes
+            .get_mut(remote_name)
+            .expect("process_remote_tasks called on a remote that is not in `in_remotes`");
         remote.import_state = match std::mem::take(&mut remote.import_state) {
             ImportState::WaitingForInitialTask => panic!("no task received yet one processed"),
             ImportState::Ongoing { mut import_index_state, total_indexes } => {
