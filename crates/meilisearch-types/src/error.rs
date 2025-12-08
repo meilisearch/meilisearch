@@ -156,7 +156,7 @@ macro_rules! make_error_codes {
             }
 
             /// return error name, used as error code
-            fn name(&self) -> String {
+            pub fn name(&self) -> String {
                 match self {
                     $(
                         Code::$code_ident => stringify!($code_ident).to_case(convert_case::Case::Snake)
