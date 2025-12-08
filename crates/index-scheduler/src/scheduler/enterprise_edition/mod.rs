@@ -159,8 +159,8 @@ impl IndexScheduler {
                 let err = |err| Error::from_milli(err, Some(index_uid.to_string()));
                 let index_rtxn = index.read_txn()?;
                 let all_docids = index.external_documents_ids();
-                let mut documents_to_move_to: hashbrown::HashMap<String, RoaringBitmap> =
-                    hashbrown::HashMap::new();
+                let mut documents_to_move_to =
+                    hashbrown::HashMap::<String, RoaringBitmap>::new();
                 let mut documents_to_delete = RoaringBitmap::new();
 
                 for res in all_docids.iter(&index_rtxn)? {
