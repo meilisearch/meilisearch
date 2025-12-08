@@ -420,8 +420,8 @@ impl InRemote {
 #[serde(rename_all = "camelCase")]
 enum ImportState {
     /// Initially Meilisearch doesn't know how many documents it should expect from a remote.
-    /// The first task for each remote contains the information of how many indexes will be imported,
-    /// and the first task for each index contains the number of documents to import for that index.
+    /// Any task from each remote contains the information of how many indexes will be imported,
+    /// and the number of documents to import for the index of the task.
     #[default]
     WaitingForInitialTask,
     Ongoing {
