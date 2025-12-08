@@ -178,6 +178,7 @@ pub fn get_arch() -> anyhow::Result<&'static str> {
     #[cfg(not(all(target_os = "linux", target_arch = "aarch64")))]
     #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
     #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+    #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
     anyhow::bail!("unsupported platform")
 }
 
