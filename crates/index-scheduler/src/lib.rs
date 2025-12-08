@@ -68,10 +68,12 @@ use meilisearch_types::milli::vector::{
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::network::Network;
 use meilisearch_types::task_view::TaskView;
-use meilisearch_types::tasks::{KindWithContent, Task, TaskNetwork};
+use meilisearch_types::tasks::network::{
+    DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,
+};
+use meilisearch_types::tasks::{KindWithContent, Task};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};
 use milli::vector::db::IndexEmbeddingConfig;
-use processing::ProcessingTasks;
 pub use queue::Query;
 use queue::Queue;
 use roaring::RoaringBitmap;
@@ -82,6 +84,7 @@ use uuid::Uuid;
 use versioning::Versioning;
 
 use crate::index_mapper::IndexMapper;
+use crate::processing::ProcessingTasks;
 use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
@@ -700,14 +703,14 @@ impl IndexScheduler {
         self.queue.get_task_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
-    pub fn set_task_network(&self, task_id: TaskId, network: TaskNetwork) -> Result<()> {
+    pub fn set_task_network(&self, task_id: TaskId, network: DbTaskNetwork) -> Result<Task> {
         let mut wtxn = self.env.write_txn()?;
         let mut task =
             self.queue.tasks.get_task(&wtxn, task_id)?.ok_or(Error::TaskNotFound(task_id))?;
         task.network = Some(network);
         self.queue.tasks.all_tasks.put(&mut wtxn, &task_id, &task)?;
         wtxn.commit()?;
-        Ok(())
+        Ok(task)
     }
 
     /// Return the batches matching the query from the user's point of view along
