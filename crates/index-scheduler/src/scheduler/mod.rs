@@ -1,7 +1,12 @@
 mod autobatcher;
 #[cfg(test)]
 mod autobatcher_test;
+#[cfg(not(feature = "enterprise"))]
+mod community_edition;
 mod create_batch;
+#[cfg(feature = "enterprise")]
+mod enterprise_edition;
+
 mod process_batch;
 mod process_dump_creation;
 mod process_export;
