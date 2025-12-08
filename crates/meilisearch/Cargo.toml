@@ -160,7 +160,7 @@ mini-dashboard = [
 ]
 chinese = ["meilisearch-types/chinese"]
 chinese-pinyin = ["meilisearch-types/chinese-pinyin"]
-enterprise = ["meilisearch-types/enterprise"]
+enterprise = ["meilisearch-types/enterprise", "index-scheduler/enterprise"]
 hebrew = ["meilisearch-types/hebrew"]
 japanese = ["meilisearch-types/japanese"]
 korean = ["meilisearch-types/korean"]
