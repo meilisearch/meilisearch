@@ -99,6 +99,7 @@ impl From<TaskNetwork> for DbTaskNetwork {
 pub struct Origin {
     pub remote_name: String,
     pub task_uid: u32,
+    #[serde(default)]
     pub network_version: Uuid,
 }
 
