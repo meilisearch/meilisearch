@@ -153,9 +153,11 @@ impl IndexScheduler {
             return Ok(0);
         }
 
-        let moved_documents: Vec<u64> = self.index_mapper.try_for_each_index(
+        let mut total_moved_documents = 0;
+
+        self.index_mapper.try_for_each_index::<(), ()>(
             &scheduler_rtxn,
-            |index_uid, index| -> crate::Result<u64> {
+            |index_uid, index| -> crate::Result<()> {
                 indexer_alloc.reset();
                 let err = |err| Error::from_milli(err, Some(index_uid.to_string()));
                 let index_rtxn = index.read_txn()?;
@@ -219,10 +221,10 @@ impl IndexScheduler {
                 }
 
                 if documents_to_delete.is_empty() {
-                    return Ok(0);
+                    return Ok(());
                 }
 
-                let moved_count = documents_to_delete.len();
+                total_moved_documents += documents_to_delete.len();
 
                 let mut new_fields_ids_map = fields_ids_map.clone();
 
@@ -273,12 +275,10 @@ impl IndexScheduler {
                 // update stats after committing changes to index
                 mapper_wtxn.commit()?;
 
-                Ok(moved_count)
+                Ok(())
             },
         )?;
 
-        let moved_documents: u64 = moved_documents.into_iter().sum();
-
-        Ok(moved_documents)
+        Ok(total_moved_documents)
     }
 }
