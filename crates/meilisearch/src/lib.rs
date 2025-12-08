@@ -12,6 +12,7 @@ pub mod option;
 #[cfg(test)]
 mod option_test;
 pub mod personalization;
+pub mod proxy;
 pub mod routes;
 pub mod search;
 pub mod search_queue;

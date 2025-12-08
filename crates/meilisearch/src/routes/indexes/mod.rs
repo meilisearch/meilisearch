@@ -31,15 +31,6 @@ use crate::Opt;
 pub mod compact;
 pub mod documents;
 
-#[cfg(not(feature = "enterprise"))]
-mod community_edition;
-#[cfg(feature = "enterprise")]
-mod enterprise_edition;
-#[cfg(not(feature = "enterprise"))]
-use community_edition as current_edition;
-#[cfg(feature = "enterprise")]
-use enterprise_edition as current_edition;
-
 pub mod facet_search;
 pub mod search;
 mod search_analytics;
@@ -49,8 +40,6 @@ pub mod settings;
 mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
-
-pub use current_edition::proxy::{PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER};
 
 #[derive(OpenApi)]
 #[openapi(
