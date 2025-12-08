@@ -145,11 +145,8 @@ impl IndexScheduler {
                     must_stop_processing,
                 );
 
-                match res {
-                    Ok(_) => {}
-                    Err(err) => {
-                        tracing::warn!("Could not signal not to wait documents to `{remote_name}` due to error: {err}");
-                    }
+                if let Err(err) = res {
+                    tracing::warn!("Could not signal not to wait documents to `{remote_name}` due to error: {err}");
                 }
             }
             return Ok(0);
