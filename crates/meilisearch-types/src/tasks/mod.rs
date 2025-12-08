@@ -23,6 +23,8 @@ use crate::{versioning, InstanceUid};
 
 pub type TaskId = u32;
 
+pub mod network;
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
@@ -44,7 +46,7 @@ pub struct Task {
     pub kind: KindWithContent,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub network: Option<TaskNetwork>,
+    pub network: Option<network::DbTaskNetwork>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_metadata: Option<String>,
@@ -61,6 +63,7 @@ impl Task {
             | TaskDeletion { .. }
             | Export { .. }
             | UpgradeDatabase { .. }
+            | NetworkTopologyChange { .. }
             | IndexSwap { .. } => None,
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -99,6 +102,7 @@ impl Task {
             | KindWithContent::SnapshotCreation
             | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. }
+            | KindWithContent::NetworkTopologyChange { .. }
             | KindWithContent::IndexCompaction { .. } => None,
         }
     }
@@ -178,6 +182,7 @@ pub enum KindWithContent {
     IndexCompaction {
         index_uid: String,
     },
+    NetworkTopologyChange(network::NetworkTopologyChange),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -215,6 +220,7 @@ impl KindWithContent {
             KindWithContent::Export { .. } => Kind::Export,
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
             KindWithContent::IndexCompaction { .. } => Kind::IndexCompaction,
+            KindWithContent::NetworkTopologyChange { .. } => Kind::NetworkTopologyChange,
         }
     }
 
@@ -227,6 +233,7 @@ impl KindWithContent {
             | TaskCancelation { .. }
             | TaskDeletion { .. }
             | Export { .. }
+            | NetworkTopologyChange { .. }
             | UpgradeDatabase { .. } => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
@@ -340,6 +347,10 @@ impl KindWithContent {
                 pre_compaction_size: None,
                 post_compaction_size: None,
             }),
+            KindWithContent::NetworkTopologyChange { .. } => Some(Details::NetworkTopologyChange {
+                moved_documents: 0,
+                message: "processing tasks for previous network versions".into(),
+            }),
         }
     }
 
@@ -392,7 +403,7 @@ impl KindWithContent {
                 })
             }
             KindWithContent::IndexSwap { .. } => {
-                todo!()
+                unimplemented!("do not call `default_finished_details` for `IndexSwap` tasks")
             }
             KindWithContent::TaskCancelation { query, tasks } => Some(Details::TaskCancelation {
                 matched_tasks: tasks.len(),
@@ -427,6 +438,9 @@ impl KindWithContent {
                 pre_compaction_size: None,
                 post_compaction_size: None,
             }),
+            KindWithContent::NetworkTopologyChange(network_topology_change) => {
+                Some(network_topology_change.to_details())
+            }
         }
     }
 }
@@ -494,6 +508,9 @@ impl From<&KindWithContent> for Option<Details> {
                 pre_compaction_size: None,
                 post_compaction_size: None,
             }),
+            KindWithContent::NetworkTopologyChange(network_topology_change) => {
+                Some(network_topology_change.to_details())
+            }
         }
     }
 }
@@ -605,6 +622,7 @@ pub enum Kind {
     Export,
     UpgradeDatabase,
     IndexCompaction,
+    NetworkTopologyChange,
 }
 
 impl Kind {
@@ -624,6 +642,7 @@ impl Kind {
             | Kind::DumpCreation
             | Kind::Export
             | Kind::UpgradeDatabase
+            | Kind::NetworkTopologyChange
             | Kind::SnapshotCreation => false,
         }
     }
@@ -646,6 +665,7 @@ impl Display for Kind {
             Kind::Export => write!(f, "export"),
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
             Kind::IndexCompaction => write!(f, "indexCompaction"),
+            Kind::NetworkTopologyChange => write!(f, "networkTopologyChange"),
         }
     }
 }
@@ -683,6 +703,8 @@ impl FromStr for Kind {
             Ok(Kind::UpgradeDatabase)
         } else if kind.eq_ignore_ascii_case("indexCompaction") {
             Ok(Kind::IndexCompaction)
+        } else if kind.eq_ignore_ascii_case("networkTopologyChange") {
+            Ok(Kind::NetworkTopologyChange)
         } else {
             Err(ParseTaskKindError(kind.to_owned()))
         }
@@ -773,36 +795,10 @@ pub enum Details {
         pre_compaction_size: Option<Byte>,
         post_compaction_size: Option<Byte>,
     },
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(untagged, rename_all = "camelCase")]
-pub enum TaskNetwork {
-    Origin { origin: Origin },
-    Remotes { remote_tasks: BTreeMap<String, RemoteTask> },
-}
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Origin {
-    pub remote_name: String,
-    pub task_uid: usize,
-}
-
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoteTask {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    task_uid: Option<TaskId>,
-    error: Option<ResponseError>,
-}
-
-impl From<Result<TaskId, ResponseError>> for RemoteTask {
-    fn from(res: Result<TaskId, ResponseError>) -> RemoteTask {
-        match res {
-            Ok(task_uid) => RemoteTask { task_uid: Some(task_uid), error: None },
-            Err(err) => RemoteTask { task_uid: None, error: Some(err) },
-        }
-    }
+    NetworkTopologyChange {
+        moved_documents: u64,
+        message: String,
+    },
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
@@ -845,6 +841,9 @@ impl Details {
             | Self::Export { .. }
             | Self::UpgradeDatabase { .. }
             | Self::IndexSwap { .. } => (),
+            Self::NetworkTopologyChange { moved_documents: _, message } => {
+                *message = format!("Failed. Previous status: {}", message);
+            }
         }
 
         details
