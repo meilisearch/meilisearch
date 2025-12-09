@@ -47,18 +47,13 @@ pub struct Settings<T> {
     pub _kind: PhantomData<T>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Copy)]
 #[cfg_attr(test, derive(serde::Serialize))]
 pub enum Setting<T> {
     Set(T),
     Reset,
+    #[default]
     NotSet,
-}
-
-impl<T> Default for Setting<T> {
-    fn default() -> Self {
-        Self::NotSet
-    }
 }
 
 impl<T> Setting<T> {

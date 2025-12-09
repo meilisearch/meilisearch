@@ -67,7 +67,7 @@ impl<F> Embeddings<F> {
     ///
     /// If `embeddings.len() % self.dimension != 0`, then the append operation fails.
     pub fn append(&mut self, mut embeddings: Vec<F>) -> Result<(), Vec<F>> {
-        if embeddings.len() % self.dimension != 0 {
+        if !embeddings.len().is_multiple_of(self.dimension) {
             return Err(embeddings);
         }
         self.data.append(&mut embeddings);

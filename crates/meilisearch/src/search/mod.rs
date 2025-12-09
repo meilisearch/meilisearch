@@ -789,22 +789,17 @@ impl TryFrom<Value> for ExternalDocumentId {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize)]
 #[deserr(rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
 pub enum MatchingStrategy {
     /// Remove query words from last to first
+    #[default]
     Last,
     /// All query words are mandatory
     All,
     /// Remove query words from the most frequent to the least
     Frequency,
-}
-
-impl Default for MatchingStrategy {
-    fn default() -> Self {
-        Self::Last
-    }
 }
 
 impl From<MatchingStrategy> for TermsMatchingStrategy {

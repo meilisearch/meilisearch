@@ -680,7 +680,7 @@ async fn multi_search_authorized_simple_token() {
 
 #[actix_rt::test]
 async fn single_search_authorized_filter_token() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"*": {"filter": "color = blue"}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
@@ -733,7 +733,7 @@ async fn single_search_authorized_filter_token() {
 
 #[actix_rt::test]
 async fn multi_search_authorized_filter_token() {
-    let both_tenant_tokens = vec![
+    let both_tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"sales": {"filter": "color = blue"}, "products": {"filter": "doggos.age <= 5"}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
@@ -842,7 +842,7 @@ async fn filter_single_search_authorized_filter_token() {
 
 #[actix_rt::test]
 async fn filter_multi_search_authorized_filter_token() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"sales": {"filter": "color = blue"}, "products": {"filter": "doggos.age <= 5"}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
@@ -900,7 +900,7 @@ async fn filter_multi_search_authorized_filter_token() {
 /// Tests that those Tenant Token are incompatible with the REFUSED_KEYS defined above.
 #[actix_rt::test]
 async fn error_single_search_token_forbidden_parent_key() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"*": {}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
@@ -941,7 +941,7 @@ async fn error_single_search_token_forbidden_parent_key() {
 /// Tests that those Tenant Token are incompatible with the REFUSED_KEYS defined above.
 #[actix_rt::test]
 async fn error_multi_search_token_forbidden_parent_key() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"*": {}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())

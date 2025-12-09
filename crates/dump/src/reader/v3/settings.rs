@@ -161,17 +161,12 @@ pub struct Facets {
     pub min_level_size: Option<NonZeroUsize>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 pub enum Setting<T> {
     Set(T),
     Reset,
+    #[default]
     NotSet,
-}
-
-impl<T> Default for Setting<T> {
-    fn default() -> Self {
-        Self::NotSet
-    }
 }
 
 impl<T> Setting<T> {
