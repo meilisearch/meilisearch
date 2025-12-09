@@ -497,7 +497,7 @@ impl<'de> serde::de::Visitor<'de> for TaskKeysVisitor {
     where
         E: serde::de::Error,
     {
-        let task_keys = CboRoaringBitmapCodec::deserialize_from(&decoded).map_err(|_err| {
+        let task_keys = CboRoaringBitmapCodec::deserialize_from(decoded).map_err(|_err| {
             E::invalid_value(serde::de::Unexpected::Bytes(decoded), &"a cbo roaring bitmap")
         })?;
         Ok(TaskKeys(task_keys))
