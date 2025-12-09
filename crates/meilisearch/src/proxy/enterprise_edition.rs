@@ -30,6 +30,31 @@ use crate::error::MeilisearchHttpError;
 use crate::proxy::{Body, ProxyError, ReqwestErrorWithoutUrl};
 use crate::routes::SummarizedTaskView;
 
+mod timeouts {
+    use std::sync::LazyLock;
+
+    pub static CONNECT_SECONDS: LazyLock<u64> =
+        LazyLock::new(|| fetch_or_default("MEILI_EXPERIMENTAL_PROXY_CONNECT_TIMEOUT_SECONDS", 3));
+
+    pub static BACKOFF_SECONDS: LazyLock<u64> =
+        LazyLock::new(|| fetch_or_default("MEILI_EXPERIMENTAL_PROXY_BACKOFF_TIMEOUT_SECONDS", 25));
+
+    pub static REQUEST_SECONDS: LazyLock<u64> =
+        LazyLock::new(|| fetch_or_default("MEILI_EXPERIMENTAL_PROXY_REQUEST_TIMEOUT_SECONDS", 30));
+
+    fn fetch_or_default(key: &str, default: u64) -> u64 {
+        match std::env::var(key) {
+            Ok(timeout) => timeout.parse().unwrap_or_else(|_| {
+                panic!("`{key}` environment variable is not parseable as an integer: {timeout}")
+            }),
+            Err(std::env::VarError::NotPresent) => default,
+            Err(std::env::VarError::NotUnicode(_)) => {
+                panic!("`{key}` environment variable is not set to a integer")
+            }
+        }
+    }
+}
+
 impl<T, F> Body<T, F>
 where
     T: serde::Serialize,
@@ -194,7 +219,7 @@ where
 
         let mut in_flight_remote_queries = BTreeMap::new();
         let client = reqwest::ClientBuilder::new()
-            .connect_timeout(std::time::Duration::from_secs(3))
+            .connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
             .build()
             .unwrap();
 
@@ -226,7 +251,9 @@ where
                     let content_type = content_type.map(|b| b.to_owned());
 
                     let backoff = backoff::ExponentialBackoffBuilder::new()
-                        .with_max_elapsed_time(Some(std::time::Duration::from_secs(25)))
+                        .with_max_elapsed_time(Some(std::time::Duration::from_secs(
+                            *timeouts::BACKOFF_SECONDS,
+                        )))
                         .build();
 
                     backoff::future::retry(backoff, move || {
@@ -322,7 +349,7 @@ where
     let body = body.into_bytes(remote_name, remote).map_err(Box::new)?;
 
     let client = reqwest::ClientBuilder::new()
-        .connect_timeout(std::time::Duration::from_secs(3))
+        .connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
         .build()
         .unwrap();
 
@@ -333,7 +360,7 @@ where
     let api_key = remote.write_api_key.clone();
 
     let backoff = backoff::ExponentialBackoffBuilder::new()
-        .with_max_elapsed_time(Some(std::time::Duration::from_secs(25)))
+        .with_max_elapsed_time(Some(std::time::Duration::from_secs(*timeouts::BACKOFF_SECONDS)))
         .build();
 
     backoff::future::retry(backoff, move || {
@@ -346,7 +373,9 @@ where
         let method = method.clone();
 
         async move {
-            let request = client.request(method, url).timeout(std::time::Duration::from_secs(30));
+            let request = client
+                .request(method, url)
+                .timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
             let request = if let Some(body) = body { request.body(body) } else { request };
             let request =
                 if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
@@ -441,7 +470,9 @@ async fn try_proxy(
     url_encoded_task_uid: &str,
     body: Option<Bytes>,
 ) -> Result<SummarizedTaskView, backoff::Error<ProxyError>> {
-    let request = client.request(method, url).timeout(std::time::Duration::from_secs(30));
+    let request = client
+        .request(method, url)
+        .timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
     let request = if let Some(body) = body { request.body(body) } else { request };
     let request = if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
     let request = request.header(PROXY_ORIGIN_TASK_UID_HEADER, url_encoded_task_uid);
