@@ -286,28 +286,28 @@ impl NetworkTopologyChange {
                     "Importing documents from {total} remotes{waiting}{ongoing}{finished}",
                     total = self.in_remotes.len(),
                     waiting = if let Some(first_waiting) = first_waiting {
-                        &format!(
+                        format!(
                             ", waiting on first task from `{}`{others}",
                             first_waiting,
                             others = if other_waiting_count > 0 {
-                                &format!(" and {other_waiting_count} other remotes")
+                                format!(" and {other_waiting_count} other remotes")
                             } else {
-                                ""
+                                "".into()
                             }
                         )
                     } else {
-                        ""
+                        "".into()
                     },
                     ongoing = if let Some(first_ongoing) = first_ongoing {
-                        &format!(", awaiting {ongoing_missing_documents} and processed {ongoing_processed_documents} out of {ongoing_total_documents} documents in {ongoing_total_indexes} indexes from `{first_ongoing}`{others}",
-                others=if other_ongoing_count > 0 {&format!(" and {other_ongoing_count} other remotes")} else {""})
+                        format!(", awaiting {ongoing_missing_documents} and processed {ongoing_processed_documents} out of {ongoing_total_documents} documents in {ongoing_total_indexes} indexes from `{first_ongoing}`{others}",
+                others=if other_ongoing_count > 0 {format!(" and {other_ongoing_count} other remotes")} else {"".into()})
                     } else {
-                        ""
+                        "".into()
                     },
                     finished = if finished_count >= 0 {
-                        &format!(", {finished_count} remotes finished processing")
+                        format!(", {finished_count} remotes finished processing")
                     } else {
-                        ""
+                        "".into()
                     }
                 )
             }
