@@ -259,7 +259,7 @@ impl IndexScheduler {
 
         let mut indexer = indexer::DocumentDeletion::new();
         indexer.delete_documents_by_docids(documents_to_delete);
-        let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
+        let document_changes = indexer.into_changes(indexer_alloc, primary_key);
         let embedders = index
             .embedding_configs()
             .embedding_configs(&index_wtxn)
