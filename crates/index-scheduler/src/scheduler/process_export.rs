@@ -204,7 +204,10 @@ impl IndexScheduler {
         let (step, progress_step) = AtomicDocumentStep::new(total_documents);
         ctx.progress.update_progress(progress_step);
 
-        let limit = options.payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(20 * 1024 * 1024); // defaults to 20 MiB
+        let limit = options
+            .payload_size
+            .map(|ps| ps.as_u64() as usize)
+            .unwrap_or(self.export_default_payload_size_bytes.as_u64() as usize);
         let documents_url = format!(
             "{base_url}/indexes/{index_uid}/documents",
             base_url = target.base_url,

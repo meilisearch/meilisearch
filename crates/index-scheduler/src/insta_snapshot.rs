@@ -27,6 +27,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         queue,
         scheduler,
         persisted,
+        export_default_payload_size_bytes: _,
 
         index_mapper,
         features: _,

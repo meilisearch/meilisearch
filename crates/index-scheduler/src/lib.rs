@@ -48,6 +48,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use byte_unit::Byte;
 use dump::Dump;
 pub use error::Error;
 pub use features::RoFeatures;
@@ -147,9 +148,11 @@ pub struct IndexSchedulerOptions {
     /// If the autobatcher is allowed to automatically batch tasks
     /// it will only batch this defined maximum size (in bytes) of tasks at once.
     pub batched_tasks_size_limit: u64,
+    /// The maximum size of the default payload for exporting documents, in bytes
+    pub export_default_payload_size_bytes: Byte,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
-    /// The experimental features enabled for this instance.
+    /// Whether the index scheduler is able to auto upgrade or not.
     pub auto_upgrade: bool,
     /// The maximal number of entries in the search query cache of an embedder.
     ///
@@ -202,6 +205,9 @@ pub struct IndexScheduler {
     /// to the same embeddings for the same input text.
     embedders: Arc<RwLock<HashMap<EmbedderOptions, Arc<Embedder>>>>,
 
+    /// The maximum size of the default payload for exporting documents, in bytes
+    pub export_default_payload_size_bytes: Byte,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -237,6 +243,7 @@ impl IndexScheduler {
             cleanup_enabled: self.cleanup_enabled,
             experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
             persisted: self.persisted,
+            export_default_payload_size_bytes: self.export_default_payload_size_bytes,
 
             webhooks: self.webhooks.clone(),
             embedders: self.embedders.clone(),
@@ -348,6 +355,7 @@ impl IndexScheduler {
             persisted,
             webhooks: Arc::new(webhooks),
             embedders: Default::default(),
+            export_default_payload_size_bytes: options.export_default_payload_size_bytes,
 
             #[cfg(test)] // Will be replaced in `new_tests` in test environments
             test_breakpoint_sdr: crossbeam_channel::bounded(0).0,

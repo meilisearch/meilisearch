@@ -230,6 +230,7 @@ pub fn setup_meilisearch(
         autobatching_enabled: true,
         cleanup_enabled: !opt.experimental_replication_parameters,
         max_number_of_tasks: 1_000_000,
+        export_default_payload_size_bytes: almost_as_big_as(opt.http_payload_size_limit),
         max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
         batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size.map_or_else(
             || {
@@ -338,6 +339,13 @@ pub fn setup_meilisearch(
     }
 
     Ok((index_scheduler, auth_controller))
+}
+
+/// Returns the input - 1MiB, or at least 20MiB
+fn almost_as_big_as(input: byte_unit::Byte) -> byte_unit::Byte {
+    let with_margin = input.subtract(byte_unit::Byte::MEBIBYTE);
+    let at_least = byte_unit::Byte::MEBIBYTE.multiply(20).unwrap();
+    with_margin.unwrap_or(at_least).max(at_least)
 }
 
 /// Try to start the IndexScheduler and AuthController without checking the VERSION file or anything.
