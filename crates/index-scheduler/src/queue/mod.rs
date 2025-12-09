@@ -41,11 +41,11 @@ mod db_name {
 ///
 /// An empty/default query (where each field is set to `None`) matches all tasks.
 /// Each non-null field restricts the set of tasks further.
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Query {
-    /// The maximum number of tasks to be matched
-    pub limit: Option<u32>,
-    /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched
+    /// The maximum number of tasks to be matched. Defaults to 20.
+    pub limit: usize,
+    /// The minimum [task id](`meilisearch_types::tasks::Task::uid`) to be matched. Defaults to 0.
     pub from: Option<u32>,
     /// The order used to return the tasks. By default the newest tasks are returned first and the boolean is `false`.
     pub reverse: Option<bool>,
@@ -84,32 +84,29 @@ pub struct Query {
     pub after_finished_at: Option<OffsetDateTime>,
 }
 
-impl Query {
-    /// Return `true` if every field of the query is set to `None`, such that the query
-    /// matches all tasks.
-    pub fn is_empty(&self) -> bool {
-        matches!(
-            self,
-            Query {
-                limit: None,
-                from: None,
-                reverse: None,
-                uids: None,
-                batch_uids: None,
-                statuses: None,
-                types: None,
-                index_uids: None,
-                canceled_by: None,
-                before_enqueued_at: None,
-                after_enqueued_at: None,
-                before_started_at: None,
-                after_started_at: None,
-                before_finished_at: None,
-                after_finished_at: None,
-            }
-        )
+impl Default for Query {
+    fn default() -> Self {
+        Self {
+            limit: 20,
+            from: Default::default(),
+            reverse: Default::default(),
+            uids: Default::default(),
+            batch_uids: Default::default(),
+            statuses: Default::default(),
+            types: Default::default(),
+            index_uids: Default::default(),
+            canceled_by: Default::default(),
+            before_enqueued_at: Default::default(),
+            after_enqueued_at: Default::default(),
+            before_started_at: Default::default(),
+            after_started_at: Default::default(),
+            before_finished_at: Default::default(),
+            after_finished_at: Default::default(),
+        }
     }
+}
 
+impl Query {
     /// Add an [index id](meilisearch_types::tasks::Task::index_uid) to the list of permitted indexes.
     pub fn with_index(self, index_uid: String) -> Self {
         let mut index_vec = self.index_uids.unwrap_or_default();
@@ -120,7 +117,7 @@ impl Query {
     // Removes the `from` and `limit` restrictions from the query.
     // Useful to get the total number of tasks matching a filter.
     pub fn without_limits(self) -> Self {
-        Query { limit: None, from: None, ..self }
+        Query { limit: usize::MAX, from: None, ..self }
     }
 }
 
