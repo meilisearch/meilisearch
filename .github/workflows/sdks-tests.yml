@@ -25,14 +25,18 @@ jobs:
       - uses: actions/checkout@v5
       - name: Define the Docker image we need to use
         id: define-image
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DOCKER_IMAGE_INPUT: ${{ github.event.inputs.docker_image }}
         run: |
-          event=${{ github.event_name }}
           echo "docker-image=nightly" >> $GITHUB_OUTPUT
-          if [[ $event == 'workflow_dispatch' ]]; then
-            echo "docker-image=${{ github.event.inputs.docker_image }}" >> $GITHUB_OUTPUT
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            echo "docker-image=$DOCKER_IMAGE_INPUT" >> $GITHUB_OUTPUT
           fi
       - name: Docker image is ${{ steps.define-image.outputs.docker-image }}
-        run: echo "Docker image is ${{ steps.define-image.outputs.docker-image }}"
+        env:
+          DOCKER_IMAGE: ${{ steps.define-image.outputs.docker-image }}
+        run: echo "Docker image is $DOCKER_IMAGE"
 
 ##########
 ## SDKs ##
