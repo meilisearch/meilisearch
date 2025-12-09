@@ -599,14 +599,17 @@ impl IndexScheduler {
         // 8. We make a batch from the unprioritised tasks.
         let (batch, current_batch) =
             self.create_next_batch_unprioritized(rtxn, enqueued, current_batch, |task| {
-                let is_task_from_the_future = task
-                    .network
-                    .as_ref()
-                    .map(|task_network| task_network.network_version() > network.version)
-                    // tasks without versions are not from the future
-                    .unwrap_or_default();
+                // We want to execute all tasks, except those that have a version strictly higher than the network version
 
-                is_task_from_the_future
+                let Some(task_version) =
+                    task.network.as_ref().map(|tastk_network| tastk_network.network_version())
+                else {
+                    // do not skip tasks that have no network version, otherwise we will never execute them
+                    return false;
+                };
+
+                // skip tasks with a version strictly higher than the network version
+                task_version > network.version
             })?;
         Ok(batch.map(|batch| (batch, current_batch)))
     }
@@ -753,20 +756,19 @@ impl IndexScheduler {
             NetworkTopologyState::WaitingForOlderTasks => {
                 let res =
                     self.create_next_batch_unprioritized(rtxn, enqueued, current_batch, |task| {
-                        let has_index = task.index_uid().is_some();
+                        // in this limited mode of execution, we only want to run tasks:
+                        // 1. with a version
+                        // 2. that version strictly lower than the network task version
 
-                        if !has_index {
+                        // 1. skip tasks without version
+                        let Some(task_version) =
+                            task.network.as_ref().map(|network| network.network_version())
+                        else {
                             return true;
-                        }
+                        };
 
-                        let has_older_network_version = task
-                            .network
-                            .as_ref()
-                            .map(|network| network.network_version() < change_version)
-                            // if there is no version, we never retain the task
-                            .unwrap_or_default();
-
-                        !has_older_network_version
+                        // 2. skip tasks with a version equal or higher to the network task version
+                        task_version >= change_version
                     });
 
                 let (batch, current_batch) = res?;
@@ -790,23 +792,20 @@ impl IndexScheduler {
 
                 let res =
                     self.create_next_batch_unprioritized(rtxn, enqueued, current_batch, |task| {
-                        let has_index = task.index_uid().is_some();
+                        // in this limited mode of execution, we only want to run tasks:
+                        // 1. with a version
+                        // 2. that version equal to the network task version
 
-                        if !has_index {
+
+                        // 1. skip tasks without version
+                        let Some(task_version) =
+                            task.network.as_ref().map(|network| network.network_version())
+                        else {
                             return true;
-                        }
+                        };
 
-                        let is_import_task = task
-                            .network
-                            .as_ref()
-                            .map(|network| {
-                                network.network_version() == change_version
-                                    && network.import_data().is_some()
-                            })
-                            // if there is no version, we never retain the task
-                            .unwrap_or_default();
-
-                        !is_import_task
+                        // 2. skip tasks with a version different from the network task version
+                        task_version != change_version
                     });
 
                 let (batch, current_batch) = res?;
