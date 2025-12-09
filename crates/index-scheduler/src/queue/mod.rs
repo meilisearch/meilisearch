@@ -32,6 +32,9 @@ use crate::{Error, IndexSchedulerOptions, Result, TaskId};
 
 /// The number of database used by queue itself
 const NUMBER_OF_DATABASES: u32 = 1;
+/// The default limit for pagination
+const DEFAULT_LIMIT: usize = 20;
+
 /// Database const names for the `IndexScheduler`.
 mod db_name {
     pub const BATCH_TO_TASKS_MAPPING: &str = "batch-to-tasks-mapping";
@@ -87,7 +90,7 @@ pub struct Query {
 impl Default for Query {
     fn default() -> Self {
         Self {
-            limit: 20,
+            limit: DEFAULT_LIMIT,
             from: Default::default(),
             reverse: Default::default(),
             uids: Default::default(),
