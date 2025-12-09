@@ -454,13 +454,13 @@ pub enum ReceiveTaskError {
 }
 
 pub mod headers {
-    pub const PROXY_ORIGIN_REMOTE_HEADER: &str = "Meili-Proxy-Origin-Remote";
-    pub const PROXY_ORIGIN_TASK_UID_HEADER: &str = "Meili-Proxy-Origin-TaskUid";
-    pub const PROXY_ORIGIN_NETWORK_VERSION_HEADER: &str = "Meili-Proxy-Origin-Network-Version";
-    pub const PROXY_IMPORT_REMOTE_HEADER: &str = "Meili-Proxy-Import-Remote";
-    pub const PROXY_IMPORT_INDEX_COUNT_HEADER: &str = "Meili-Proxy-Import-Index-Count";
-    pub const PROXY_IMPORT_INDEX_HEADER: &str = "Meili-Proxy-Import-Index";
-    pub const PROXY_IMPORT_TASK_KEY_HEADER: &str = "Meili-Proxy-Import-Task-Key";
-    pub const PROXY_IMPORT_DOCS_HEADER: &str = "Meili-Proxy-Import-Docs";
-    pub const PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER: &str = "Meili-Proxy-Import-Total-Index-Docs";
+    pub const PROXY_ORIGIN_REMOTE_HEADER: &str = "X-Meili-Proxy-Origin-Remote";
+    pub const PROXY_ORIGIN_TASK_UID_HEADER: &str = "X-Meili-Proxy-Origin-TaskUid";
+    pub const PROXY_ORIGIN_NETWORK_VERSION_HEADER: &str = "X-Meili-Proxy-Origin-Network-Version";
+    pub const PROXY_IMPORT_REMOTE_HEADER: &str = "X-Meili-Proxy-Import-Remote";
+    pub const PROXY_IMPORT_INDEX_COUNT_HEADER: &str = "X-Meili-Proxy-Import-Index-Count";
+    pub const PROXY_IMPORT_INDEX_HEADER: &str = "X-Meili-Proxy-Import-Index";
+    pub const PROXY_IMPORT_TASK_KEY_HEADER: &str = "X-Meili-Proxy-Import-Task-Key";
+    pub const PROXY_IMPORT_DOCS_HEADER: &str = "X-Meili-Proxy-Import-Docs";
+    pub const PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER: &str = "X-Meili-Proxy-Import-Total-Index-Docs";
 }
