@@ -31,7 +31,7 @@ jobs:
           sudo rm -rf "/usr/share/dotnet" || true
           sudo rm -rf "/usr/local/lib/android" || true
           sudo rm -rf "/usr/local/share/boost" || true
-      - uses: dtolnay/rust-toolchain@1.89
+      - uses: dtolnay/rust-toolchain@1.91.1
       - name: Install cargo-deb
         run: cargo install cargo-deb
       - uses: actions/checkout@v5

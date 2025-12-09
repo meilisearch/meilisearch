@@ -3,7 +3,7 @@ name: Look for flaky tests
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 4 * * *' # Every day at 4:00AM
+    - cron: "0 4 * * *" # Every day at 4:00AM
 
 jobs:
   flaky:
@@ -23,7 +23,7 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
-      - uses: dtolnay/rust-toolchain@1.89
+      - uses: dtolnay/rust-toolchain@1.91.1
       - name: Install cargo-flaky
         run: cargo install cargo-flaky
       - name: Run cargo flaky in the dumps
