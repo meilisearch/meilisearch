@@ -1,7 +1,9 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
+use base64::Engine as _;
 use itertools::{EitherOrBoth, Itertools as _};
-use milli::DocumentId;
+use milli::{CboRoaringBitmapCodec, DocumentId};
+use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -369,13 +371,13 @@ fn merge_import_index_state(left: ImportIndexState, right: ImportIndexState) -> 
                 total_documents: right_total_documents,
                 received_documents: right_received_documents,
                 processed_documents: right_processed_documents,
-                task_keys: mut right_task_keys,
+                task_keys: right_task_keys,
             },
         ) => {
             let total_documents = u64::max(left_total_documents, right_total_documents);
             let received_documents = u64::max(left_received_documents, right_received_documents);
             let processed_documents = u64::max(left_processed_documents, right_processed_documents);
-            left_task_keys.append(&mut right_task_keys);
+            left_task_keys.0 |= &right_task_keys.0;
             let task_keys = left_task_keys;
 
             ImportIndexState::Ongoing {
@@ -441,11 +443,65 @@ enum ImportIndexState {
         total_documents: u64,
         received_documents: u64,
         processed_documents: u64,
-        task_keys: BTreeSet<DocumentId>,
+        task_keys: TaskKeys,
     },
     Finished {
         total_documents: u64,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TaskKeys(pub RoaringBitmap);
+
+impl Serialize for TaskKeys {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let TaskKeys(task_keys) = self;
+        let mut bytes = Vec::new();
+        CboRoaringBitmapCodec::serialize_into_vec(task_keys, &mut bytes);
+        let encoded = base64::prelude::BASE64_STANDARD.encode(&bytes);
+        serializer.serialize_str(&encoded)
+    }
+}
+
+impl<'de> Deserialize<'de> for TaskKeys {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(TaskKeysVisitor)
+    }
+}
+
+struct TaskKeysVisitor;
+impl<'de> serde::de::Visitor<'de> for TaskKeysVisitor {
+    type Value = TaskKeys;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a base64 encoded cbo roaring bitmap")
+    }
+
+    fn visit_str<E>(self, encoded: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let decoded = base64::prelude::BASE64_STANDARD.decode(encoded).map_err(|_err| {
+            E::invalid_value(serde::de::Unexpected::Str(encoded), &"a base64 string")
+        })?;
+        self.visit_bytes(&decoded)
+    }
+
+    fn visit_bytes<E>(self, decoded: &[u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        let task_keys = CboRoaringBitmapCodec::deserialize_from(&decoded).map_err(|_err| {
+            E::invalid_value(serde::de::Unexpected::Bytes(decoded), &"a cbo roaring bitmap")
+        })?;
+        Ok(TaskKeys(task_keys))
+    }
 }
 
 pub enum ReceiveTaskError {

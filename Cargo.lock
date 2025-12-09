@@ -4071,6 +4071,7 @@ version = "1.29.0"
 dependencies = [
  "actix-web",
  "anyhow",
+ "base64 0.22.1",
  "bumpalo",
  "bumparaw-collections",
  "byte-unit",

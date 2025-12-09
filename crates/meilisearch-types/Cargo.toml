@@ -13,6 +13,7 @@ license.workspace = true
 [dependencies]
 actix-web = { version = "4.12.0", default-features = false }
 anyhow = "1.0.100"
+base64 = "0.22.1"
 bumpalo = "3.19.0"
 bumparaw-collections = "0.1.4"
 byte-unit = { version = "5.1.6", features = ["serde"] }

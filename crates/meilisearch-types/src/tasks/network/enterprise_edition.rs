@@ -3,10 +3,12 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap};
 
 use milli::DocumentId;
+use roaring::RoaringBitmap;
 
+use super::TaskKeys;
 use crate::network::Remote;
 use crate::tasks::network::{
     ImportIndexState, ImportState, InRemote, NetworkTopologyChange, NetworkTopologyState,
@@ -75,7 +77,7 @@ impl NetworkTopologyChange {
                 if total_indexes == 0 {
                     ImportState::Finished { total_indexes, total_documents: 0 }
                 } else {
-                    let mut task_keys = BTreeSet::new();
+                    let mut task_keys = RoaringBitmap::new();
                     if let Some(index_name) = index_name {
                         if let Some(task_key) = task_key {
                             task_keys.insert(task_key);
@@ -86,7 +88,7 @@ impl NetworkTopologyChange {
                             ImportIndexState::Ongoing {
                                 total_documents: total_index_documents,
                                 received_documents: document_count,
-                                task_keys,
+                                task_keys: TaskKeys(task_keys),
                                 processed_documents: 0,
                             },
                         );
@@ -109,7 +111,7 @@ impl NetworkTopologyChange {
                                 mut task_keys,
                             } => {
                                 if let Some(task_key) = task_key {
-                                    if !task_keys.insert(task_key) {
+                                    if !task_keys.0.insert(task_key) {
                                         return Err(ReceiveTaskError::DuplicateTask(task_key));
                                     }
                                 }
@@ -127,7 +129,7 @@ impl NetworkTopologyChange {
                         };
                         import_index_state.insert(index_name, index_state);
                     } else {
-                        let mut task_keys = BTreeSet::new();
+                        let mut task_keys = RoaringBitmap::new();
                         if let Some(task_key) = task_key {
                             task_keys.insert(task_key);
                         }
@@ -135,7 +137,7 @@ impl NetworkTopologyChange {
                             total_documents: total_index_documents,
                             received_documents: document_count,
                             processed_documents: 0,
-                            task_keys,
+                            task_keys: TaskKeys(task_keys),
                         };
                         import_index_state.insert(index_name.to_string(), state);
                     }
