@@ -76,7 +76,7 @@ jobs:
     needs: check-version
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.89
+      - uses: dtolnay/rust-toolchain@1.91.1
       - name: Build
         run: cargo build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
       # No need to upload binaries for dry run (cron or workflow_dispatch)

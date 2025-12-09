@@ -322,7 +322,7 @@ impl From<Task> for TaskView {
             _ => None,
         });
 
-        let duration = finished_at.zip(started_at).map(|(tf, ts)| (tf - ts));
+        let duration = finished_at.zip(started_at).map(|(tf, ts)| tf - ts);
 
         Self {
             uid: id,

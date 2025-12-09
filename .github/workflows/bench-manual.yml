@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 180 # 3h
     steps:
       - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@1.89
+      - uses: dtolnay/rust-toolchain@1.91.1
         with:
           profile: minimal
 

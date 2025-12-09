@@ -54,22 +54,17 @@ pub struct DocumentAdditionResult {
     pub number_of_documents: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum IndexDocumentsMethod {
     /// Replace the previous document with the new one,
     /// removing all the already known attributes.
+    #[default]
     ReplaceDocuments,
 
     /// Merge the previous version of the document with the new version,
     /// replacing old attributes values with the new ones and add the new attributes.
     UpdateDocuments,
-}
-
-impl Default for IndexDocumentsMethod {
-    fn default() -> Self {
-        Self::ReplaceDocuments
-    }
 }
 
 pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {

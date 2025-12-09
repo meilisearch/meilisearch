@@ -385,20 +385,15 @@ pub struct SearchResult {
     pub query_vector: Option<Embedding>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TermsMatchingStrategy {
     // remove last word first
+    #[default]
     Last,
     // all words are mandatory
     All,
     // remove more frequent word first
     Frequency,
-}
-
-impl Default for TermsMatchingStrategy {
-    fn default() -> Self {
-        Self::Last
-    }
 }
 
 impl From<MatchingStrategy> for TermsMatchingStrategy {

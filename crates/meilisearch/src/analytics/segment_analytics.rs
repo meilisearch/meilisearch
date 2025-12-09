@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -344,14 +344,14 @@ impl Infos {
             experimental_no_edition_2024_for_dumps,
             experimental_vector_store_setting: vector_store_setting,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
-            db_path: db_path != PathBuf::from("./data.ms"),
+            db_path: db_path != Path::new("./data.ms"),
             import_dump: import_dump.is_some(),
-            dump_dir: dump_dir != PathBuf::from("dumps/"),
+            dump_dir: dump_dir != Path::new("dumps/"),
             ignore_missing_dump,
             ignore_dump_if_db_exists,
             import_snapshot: import_snapshot.is_some(),
             schedule_snapshot,
-            snapshot_dir: snapshot_dir != PathBuf::from("snapshots/"),
+            snapshot_dir: snapshot_dir != Path::new("snapshots/"),
             uses_s3_snapshots: s3_snapshot_options.is_some(),
             ignore_missing_snapshot,
             ignore_snapshot_if_db_exists,

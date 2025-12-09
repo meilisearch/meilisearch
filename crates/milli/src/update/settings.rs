@@ -48,10 +48,11 @@ use crate::{
     ChannelCongestion, FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
     Set(T),
     Reset,
+    #[default]
     NotSet,
 }
 
@@ -68,12 +69,6 @@ where
             deserr::Value::Null => Ok(Setting::Reset),
             _ => T::deserialize_from_value(value, location).map(Setting::Set),
         }
-    }
-}
-
-impl<T> Default for Setting<T> {
-    fn default() -> Self {
-        Self::NotSet
     }
 }
 
