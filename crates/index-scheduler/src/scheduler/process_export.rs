@@ -204,7 +204,7 @@ impl IndexScheduler {
         let (step, progress_step) = AtomicDocumentStep::new(total_documents);
         ctx.progress.update_progress(progress_step);
 
-        let limit = options.payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(20 * 1024 * 1024);
+        let limit = options.payload_size.map(|ps| ps.as_u64() as usize).unwrap_or(20 * 1024 * 1024); // defaults to 20 MiB
         let documents_url = format!(
             "{base_url}/indexes/{index_uid}/documents",
             base_url = target.base_url,
@@ -415,10 +415,10 @@ fn set_network_ureq_headers(
     metadata: &ImportMetadata,
 ) -> ureq::Request {
     let request = request
-        .set(headers::PROXY_ORIGIN_REMOTE_HEADER, &origin.remote_name)
+        .set(headers::PROXY_ORIGIN_REMOTE_HEADER, &urlencoding::encode(&origin.remote_name))
         .set(headers::PROXY_ORIGIN_TASK_UID_HEADER, &origin.task_uid.to_string())
         .set(headers::PROXY_ORIGIN_NETWORK_VERSION_HEADER, &origin.network_version.to_string())
-        .set(headers::PROXY_IMPORT_REMOTE_HEADER, &import_data.remote_name)
+        .set(headers::PROXY_IMPORT_REMOTE_HEADER, &urlencoding::encode(&import_data.remote_name))
         .set(headers::PROXY_IMPORT_DOCS_HEADER, &import_data.document_count.to_string())
         .set(headers::PROXY_IMPORT_INDEX_COUNT_HEADER, &metadata.index_count.to_string())
         .set(
@@ -426,7 +426,7 @@ fn set_network_ureq_headers(
             &metadata.total_index_documents.to_string(),
         );
     let request = if let Some(index_name) = import_data.index_name.as_deref() {
-        request.set(headers::PROXY_IMPORT_INDEX_HEADER, index_name)
+        request.set(headers::PROXY_IMPORT_INDEX_HEADER, &urlencoding::encode(index_name))
     } else {
         request
     };

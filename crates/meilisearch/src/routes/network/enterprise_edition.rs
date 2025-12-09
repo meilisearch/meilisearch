@@ -104,6 +104,7 @@ async fn patch_network_without_origin(
                 meilisearch_types::tasks::Status::Processing,
             ]),
             types: Some(vec![meilisearch_types::tasks::Kind::NetworkTopologyChange]),
+            limit: Some(1),
             ..Default::default()
         };
 
@@ -126,73 +127,80 @@ async fn patch_network_without_origin(
                     left.cmp(right)
                 })
                 .map(|eob| -> Result<_, ResponseError> {
-                    Ok(async move {
-                        let (remote_name, remote, allow_unreachable) = match eob {
-                            EitherOrBoth::Both(_, (remote_name, remote))
-                            | EitherOrBoth::Right((remote_name, remote)) => {
-                                (remote_name, remote, false)
-                            }
-                            EitherOrBoth::Left((remote_name, remote)) => {
-                                (remote_name, remote, true)
-                            }
-                        };
-                        {
-                            // 1. check that the experimental feature is enabled
-                            let remote_features: RuntimeTogglableFeatures = match proxy::send_request(
-                                "/experimental-features",
-                                reqwest::Method::GET,
-                                None,
-                                Body::none(),
-                                remote_name,
-                                remote,
-                            )
-                            .await {
-                                Ok(remote_features) => remote_features,
-                                Err(ProxyError::Timeout | ProxyError::CouldNotSendRequest(_)) if allow_unreachable => {
-                                    return Ok(())
-                                },
-                                Err(err) => return Err(err.as_response_error()),
-                            };
-                            let remote_features =
-                                RoFeatures::from_runtime_features(remote_features);
-                            remote_features
-                                .check_network("receiving a proxied network task")
-                                .map_err(|error| MeilisearchHttpError::RemoteIndexScheduler {
-                                    remote: remote_name.to_owned(),
-                                    error,
-                                })?;
-
-                            // 2. check whether there are any unfinished network task
-                            let network_tasks: AllTasks = match proxy::send_request(
-                        "/tasks?types=networkTopologyChange&statuses=enqueued,processing&limit=1",
-                                reqwest::Method::GET,
-                                None,
-                                Body::none(),
-                                remote_name,
-                                remote).await {
-                                    Ok(network_tasks) => network_tasks,
-                                Err(ProxyError::Timeout | ProxyError::CouldNotSendRequest(_)) if allow_unreachable => {
-                                    return Ok(())
-                                },
-                                Err(err) => return Err(err.as_response_error()),
-                                };
-
-                            if let [first, ..] = network_tasks.results.as_slice() {
-                                return Err(ResponseError::from(
-                                    MeilisearchHttpError::UnprocessedNetworkTask {
-                                        remote: Some(remote_name.to_owned()),
-                                        task_uid: first.uid,
-                                    },
-                                ));
-                            }
+                    match eob {
+                        EitherOrBoth::Both(_, (remote_name, remote))
+                        | EitherOrBoth::Right((remote_name, remote)) => {
+                            Ok((remote_name, remote, false))
                         }
-
-                        Ok(())
-                    })
+                        EitherOrBoth::Left((remote_name, remote)) => {
+                            Ok((remote_name, remote, true))
+                        }
+                    }
                 }),
         )
-        .try_buffer_unordered(40)
-        .try_collect::<()>()
+        .try_for_each_concurrent(Some(40), |(remote_name, remote, allow_unreachable)| {
+            async move {
+                {
+                    // 1. check that the experimental feature is enabled
+                    let remote_features: RuntimeTogglableFeatures = match proxy::send_request(
+                        "/experimental-features",
+                        reqwest::Method::GET,
+                        None,
+                        Body::none(),
+                        remote_name,
+                        remote,
+                    )
+                    .await
+                    {
+                        Ok(remote_features) => remote_features,
+                        Err(ProxyError::Timeout | ProxyError::CouldNotSendRequest(_))
+                            if allow_unreachable =>
+                        {
+                            return Ok(())
+                        }
+                        Err(err) => return Err(err.as_response_error()),
+                    };
+                    let remote_features = RoFeatures::from_runtime_features(remote_features);
+                    remote_features.check_network("receiving a proxied network task").map_err(
+                        |error| MeilisearchHttpError::RemoteIndexScheduler {
+                            remote: remote_name.to_owned(),
+                            error,
+                        },
+                    )?;
+
+                    // 2. check whether there are any unfinished network task
+                    let network_tasks: AllTasks = match proxy::send_request(
+                        "/tasks?types=networkTopologyChange&statuses=enqueued,processing&limit=1",
+                        reqwest::Method::GET,
+                        None,
+                        Body::none(),
+                        remote_name,
+                        remote,
+                    )
+                    .await
+                    {
+                        Ok(network_tasks) => network_tasks,
+                        Err(ProxyError::Timeout | ProxyError::CouldNotSendRequest(_))
+                            if allow_unreachable =>
+                        {
+                            return Ok(())
+                        }
+                        Err(err) => return Err(err.as_response_error()),
+                    };
+
+                    if let [first, ..] = network_tasks.results.as_slice() {
+                        return Err(ResponseError::from(
+                            MeilisearchHttpError::UnprocessedNetworkTask {
+                                remote: Some(remote_name.to_owned()),
+                                task_uid: first.uid,
+                            },
+                        ));
+                    }
+                }
+
+                Ok(())
+            }
+        })
         .await?;
     }
 
@@ -235,6 +243,8 @@ async fn patch_network_without_origin(
         };
         let mut deleted_network = old_network;
 
+        // only keep the deleted remotes, to inform them that they're deleted.
+        // deleted remotes are remotes that appear in the old version of the network, but not the new version.
         let deleted_remotes = &mut deleted_network.remotes;
         deleted_remotes.retain(|node, _| !merged_network.remotes.contains_key(node));
 
@@ -310,10 +320,14 @@ async fn patch_network_with_origin(
 
     old_network.remotes = previous_remotes;
 
+    let new_leader = merged_network.leader.set().ok_or_else(|| {
+        ResponseError::from_msg("Duplicated task without leader".into(), Code::InvalidNetworkLeader)
+    })?;
+
     let new_network = DbNetwork {
         local: merged_network.local.set(),
         remotes,
-        leader: merged_network.leader.set(),
+        leader: Some(new_leader),
         version: origin.network_version,
     };
     index_scheduler.put_network(new_network.clone())?;
@@ -329,7 +343,6 @@ async fn patch_network_with_origin(
     let network_topology_change = NetworkTopologyChange::new(old_network, new_network);
     let task = KindWithContent::NetworkTopologyChange(network_topology_change);
     let task = {
-        let index_scheduler = index_scheduler.clone();
         tokio::task::spawn_blocking(move || {
             index_scheduler.register_with_custom_metadata(
                 task,

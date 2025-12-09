@@ -54,6 +54,7 @@ reqwest = { version = "0.12.24", features = [
 ], default-features = false }
 rusty-s3 = "0.8.1"
 tokio = { version = "1.48.0", features = ["full"] }
+urlencoding = "2.1.3"
 
 [dev-dependencies]
 big_s = "1.0.2"

@@ -3226,6 +3226,7 @@ dependencies = [
  "tokio",
  "tracing",
  "ureq",
+ "urlencoding",
  "uuid",
 ]
 

@@ -3,7 +3,6 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use actix_web::http::header::CONTENT_TYPE;
@@ -183,7 +182,7 @@ where
         let this = network
             .local
             .as_deref()
-            .expect("inconsistent `network.sharding` and `network.self`")
+            .expect("inconsistent `network.leader` and `network.self`")
             .to_owned();
 
         let content_type = match &body {
@@ -370,45 +369,49 @@ where
                 }
             };
 
-            match response.status() {
-                status_code if status_code.is_success() => (),
-                StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                    return Err(backoff::Error::Permanent(ProxyError::AuthenticationError))
-                }
-                status_code if status_code.is_client_error() => {
-                    let response = parse_error(response).await;
-                    return Err(backoff::Error::Permanent(ProxyError::BadRequest {
-                        status_code,
-                        response,
-                    }));
-                }
-                status_code if status_code.is_server_error() => {
-                    let response = parse_error(response).await;
-                    return Err(backoff::Error::transient(ProxyError::RemoteError {
-                        status_code,
-                        response,
-                    }));
-                }
-                status_code => {
-                    tracing::warn!(
-                        status_code = status_code.as_u16(),
-                        "remote replied with unexpected status code"
-                    );
-                }
-            }
-
-            let response: U = match parse_response(response).await {
-                Ok(response) => response,
-                Err(response) => {
-                    return Err(backoff::Error::transient(ProxyError::CouldNotParseResponse {
-                        response,
-                    }))
-                }
-            };
-            Ok(response)
+            handle_response(response).await
         }
     })
     .await
+}
+
+async fn handle_response<U>(response: reqwest::Response) -> Result<U, backoff::Error<ProxyError>>
+where
+    U: DeserializeOwned,
+{
+    match response.status() {
+        status_code if status_code.is_success() => (),
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+            return Err(backoff::Error::Permanent(ProxyError::AuthenticationError))
+        }
+        status_code if status_code.is_client_error() => {
+            let response = parse_error(response).await;
+            return Err(backoff::Error::Permanent(ProxyError::BadRequest {
+                status_code,
+                response,
+            }));
+        }
+        status_code if status_code.is_server_error() => {
+            let response = parse_error(response).await;
+            return Err(backoff::Error::transient(ProxyError::RemoteError {
+                status_code,
+                response,
+            }));
+        }
+        status_code => {
+            tracing::warn!(
+                status_code = status_code.as_u16(),
+                "remote replied with unexpected status code"
+            );
+        }
+    }
+    let response: U = match parse_response(response).await {
+        Ok(response) => response,
+        Err(response) => {
+            return Err(backoff::Error::permanent(ProxyError::CouldNotParseResponse { response }))
+        }
+    };
+    Ok(response)
 }
 
 fn from_old_http_method(method: &actix_http::Method) -> reqwest::Method {
@@ -463,41 +466,7 @@ async fn try_proxy(
         }
     };
 
-    match response.status() {
-        status_code if status_code.is_success() => (),
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-            return Err(backoff::Error::Permanent(ProxyError::AuthenticationError))
-        }
-        status_code if status_code.is_client_error() => {
-            let response = parse_error(response).await;
-            return Err(backoff::Error::Permanent(ProxyError::BadRequest {
-                status_code,
-                response,
-            }));
-        }
-        status_code if status_code.is_server_error() => {
-            let response = parse_error(response).await;
-            return Err(backoff::Error::transient(ProxyError::RemoteError {
-                status_code,
-                response,
-            }));
-        }
-        status_code => {
-            tracing::warn!(
-                status_code = status_code.as_u16(),
-                "remote replied with unexpected status code"
-            );
-        }
-    }
-
-    let response = match parse_response(response).await {
-        Ok(response) => response,
-        Err(response) => {
-            return Err(backoff::Error::transient(ProxyError::CouldNotParseResponse { response }))
-        }
-    };
-
-    Ok(response)
+    handle_response(response).await
 }
 
 async fn parse_error(response: reqwest::Response) -> Result<String, ReqwestErrorWithoutUrl> {
@@ -567,7 +536,7 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
                 msg: format!("while URL-decoding task UID: {err}"),
             })?;
             let network_version = match network_version {
-                Some(network_version) => {
+                Some(network_version) => Some({
                     urlencoding::decode(network_version.to_str().map_err(|err| {
                         MeilisearchHttpError::InvalidHeaderValue {
                             header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
@@ -580,8 +549,8 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
                             msg: format!("while URL-decoding network version: {err}"),
                         }
                     })?
-                }
-                None => Cow::Borrowed("0"),
+                }),
+                None => None,
             };
             (remote_name, task_uid, network_version)
         }
@@ -593,12 +562,16 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
             msg: format!("while parsing the task UID as an integer: {err}"),
         })?;
 
-    let network_version: Uuid = Uuid::parse_str(&network_version).map_err(|err| {
-        MeilisearchHttpError::InvalidHeaderValue {
-            header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
-            msg: format!("while parsing the network version as an UUID: {err}"),
-        }
-    })?;
+    let network_version: Uuid = if let Some(network_version) = network_version {
+        Uuid::parse_str(&network_version).map_err(|err| {
+            MeilisearchHttpError::InvalidHeaderValue {
+                header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
+                msg: format!("while parsing the network version as an UUID: {err}"),
+            }
+        })?
+    } else {
+        Uuid::nil()
+    };
 
     Ok(Some(Origin { remote_name: remote_name.into_owned(), task_uid, network_version }))
 }

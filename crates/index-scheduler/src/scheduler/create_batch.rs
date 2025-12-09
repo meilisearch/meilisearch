@@ -796,7 +796,6 @@ impl IndexScheduler {
                         // 1. with a version
                         // 2. that version equal to the network task version
 
-
                         // 1. skip tasks without version
                         let Some(task_version) =
                             task.network.as_ref().map(|network| network.network_version())
