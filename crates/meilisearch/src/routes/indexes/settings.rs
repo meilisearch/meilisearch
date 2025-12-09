@@ -197,11 +197,6 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let new_settings = $crate::routes::indexes::settings::validate_settings(
-                    new_settings,
-                    &index_scheduler,
-                )?;
-
                 let task = register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
 
                 debug!(returns = ?task, "Update settings");
@@ -550,7 +545,6 @@ pub async fn update_all(
 
     let new_settings: Settings<Unchecked> = body.into_inner();
     debug!(parameters = ?new_settings, "Update all settings");
-    let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
     analytics.publish(
         SettingsAnalytics {
@@ -615,6 +609,13 @@ async fn register_new_settings(
 ) -> Result<SummarizedTaskView, ResponseError> {
     let network = index_scheduler.network();
     let task_network = task_network_and_check_leader_and_version(req, &network)?;
+
+    // validate settings unless this is a duplicated task
+    let new_settings = if task_network.is_none() {
+        validate_settings(new_settings, &index_scheduler)?
+    } else {
+        new_settings
+    };
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
     let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
