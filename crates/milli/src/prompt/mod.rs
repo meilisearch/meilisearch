@@ -13,7 +13,7 @@ pub(crate) use document::{Document, ParseableDocument};
 use error::{NewPromptError, RenderPromptError};
 pub use fields::{BorrowedFields, OwnedFields};
 
-pub use self::context::Context;
+pub use self::context::{Context, ContextWithVirtualFields};
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::del_add::DelAdd;
 use crate::GlobalFieldsIdsMap;

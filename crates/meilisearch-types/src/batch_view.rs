@@ -3,7 +3,7 @@ use serde::Serialize;
 use time::{Duration, OffsetDateTime};
 use utoipa::ToSchema;
 
-use crate::batches::{Batch, BatchId, BatchStats, EmbedderStatsView};
+use crate::batches::{Batch, BatchId, BatchStats, EmbedderStatsView, UrlFetcherStatsView};
 use crate::task_view::DetailsView;
 use crate::tasks::serialize_duration;
 
@@ -33,6 +33,8 @@ pub struct BatchStatsView {
     pub stats: BatchStats,
     #[serde(skip_serializing_if = "EmbedderStatsView::skip_serializing", default)]
     pub embedder_requests: EmbedderStatsView,
+    #[serde(skip_serializing_if = "UrlFetcherStatsView::skip_serializing", default)]
+    pub url_fetch_requests: UrlFetcherStatsView,
 }
 
 impl BatchView {
@@ -44,6 +46,7 @@ impl BatchView {
             stats: BatchStatsView {
                 stats: batch.stats.clone(),
                 embedder_requests: batch.embedder_stats.clone(),
+                url_fetch_requests: batch.url_fetcher_stats.clone(),
             },
             duration: batch.finished_at.map(|finished_at| finished_at - batch.started_at),
             started_at: batch.started_at,

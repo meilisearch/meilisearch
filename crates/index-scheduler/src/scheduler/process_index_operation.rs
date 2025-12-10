@@ -4,7 +4,7 @@ use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::milli::documents::PrimaryKey;
-use meilisearch_types::milli::progress::{EmbedderStats, Progress};
+use meilisearch_types::milli::progress::{EmbedderStats, Progress, UrlFetcherStats};
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::DocumentAdditionResult;
 use meilisearch_types::milli::{self, ChannelCongestion, Filter};
@@ -26,7 +26,7 @@ impl IndexScheduler {
     /// The list of processed tasks.
     #[tracing::instrument(
         level = "trace",
-        skip(self, index_wtxn, index, progress, embedder_stats),
+        skip(self, index_wtxn, index, progress, embedder_stats, url_fetcher_stats),
         target = "indexing::scheduler"
     )]
     pub(crate) fn apply_index_operation<'i>(
@@ -36,6 +36,7 @@ impl IndexScheduler {
         operation: IndexOperation,
         progress: &Progress,
         embedder_stats: Arc<EmbedderStats>,
+        url_fetcher_stats: Arc<UrlFetcherStats>,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         let indexer_alloc = Bump::new();
         let started_processing_at = std::time::Instant::now();
@@ -97,7 +98,8 @@ impl IndexScheduler {
                     .embedding_configs()
                     .embedding_configs(index_wtxn)
                     .map_err(|e| Error::from_milli(e.into(), Some(index_uid.clone())))?;
-                let embedders = self.embedders(index_uid.clone(), embedders)?;
+                let embedders =
+                    self.embedders(index_uid.clone(), embedders, Some(url_fetcher_stats.clone()))?;
                 for operation in operations {
                     match operation {
                         DocumentOperation::Replace(_content_uuid) => {
@@ -284,7 +286,11 @@ impl IndexScheduler {
                         .embedding_configs()
                         .embedding_configs(index_wtxn)
                         .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
-                    let embedders = self.embedders(index_uid.clone(), embedders)?;
+                    let embedders = self.embedders(
+                        index_uid.clone(),
+                        embedders,
+                        Some(url_fetcher_stats.clone()),
+                    )?;
 
                     progress.update_progress(DocumentEditionProgress::Indexing);
                     congestion = Some(
@@ -434,7 +440,11 @@ impl IndexScheduler {
                         .embedding_configs()
                         .embedding_configs(index_wtxn)
                         .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?;
-                    let embedders = self.embedders(index_uid.clone(), embedders)?;
+                    let embedders = self.embedders(
+                        index_uid.clone(),
+                        embedders,
+                        Some(url_fetcher_stats.clone()),
+                    )?;
 
                     progress.update_progress(DocumentDeletionProgress::Indexing);
                     congestion = Some(
@@ -504,6 +514,7 @@ impl IndexScheduler {
                     },
                     progress,
                     embedder_stats.clone(),
+                    url_fetcher_stats.clone(),
                 )?;
 
                 let (settings_tasks, _congestion) = self.apply_index_operation(
@@ -512,6 +523,7 @@ impl IndexScheduler {
                     IndexOperation::Settings { index_uid, settings, tasks: settings_tasks },
                     progress,
                     embedder_stats,
+                    url_fetcher_stats,
                 )?;
 
                 let mut tasks = settings_tasks;

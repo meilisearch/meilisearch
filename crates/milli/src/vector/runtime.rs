@@ -4,6 +4,7 @@ use std::sync::Arc;
 use super::Embedder;
 use crate::prompt::Prompt;
 use crate::vector::json_template::JsonTemplate;
+use crate::vector::url_fetcher::{ResolvedFetchMapping, UrlFetcher};
 
 /// Map of runtime embedder data.
 #[derive(Clone, Default)]
@@ -14,6 +15,10 @@ pub struct RuntimeEmbedder {
     pub document_template: Prompt,
     fragments: Vec<RuntimeFragment>,
     pub is_quantized: bool,
+    /// URL fetcher for downloading content from URLs during embedding extraction.
+    url_fetcher: Option<UrlFetcher>,
+    /// Mapping from document URL field to virtual field for fetched content.
+    fetch_mapping: Option<ResolvedFetchMapping>,
 }
 
 impl RuntimeEmbedder {
@@ -22,14 +27,26 @@ impl RuntimeEmbedder {
         document_template: Prompt,
         mut fragments: Vec<RuntimeFragment>,
         is_quantized: bool,
+        url_fetcher: Option<UrlFetcher>,
+        fetch_mapping: Option<ResolvedFetchMapping>,
     ) -> Self {
         fragments.sort_unstable_by(|left, right| left.name.cmp(&right.name));
-        Self { embedder, document_template, fragments, is_quantized }
+        Self { embedder, document_template, fragments, is_quantized, url_fetcher, fetch_mapping }
     }
 
     /// The runtime fragments sorted by name.
     pub fn fragments(&self) -> &[RuntimeFragment] {
         self.fragments.as_slice()
+    }
+
+    /// The URL fetcher for downloading content during embedding extraction.
+    pub fn url_fetcher(&self) -> Option<&UrlFetcher> {
+        self.url_fetcher.as_ref()
+    }
+
+    /// The mapping from document URL field to virtual field.
+    pub fn fetch_mapping(&self) -> Option<&ResolvedFetchMapping> {
+        self.fetch_mapping.as_ref()
     }
 }
 pub struct RuntimeFragment {

@@ -176,6 +176,7 @@ impl IndexScheduler {
                     op,
                     &progress,
                     current_batch.embedder_stats.clone(),
+                    current_batch.url_fetcher_stats.clone(),
                 )?;
 
                 {

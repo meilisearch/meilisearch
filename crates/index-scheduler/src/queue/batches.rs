@@ -180,6 +180,7 @@ impl BatchQueue {
                 details: batch.details,
                 stats: batch.stats,
                 embedder_stats: batch.embedder_stats.as_ref().into(),
+                url_fetcher_stats: batch.url_fetcher_stats.as_ref().into(),
                 started_at: batch.started_at,
                 finished_at: batch.finished_at,
                 enqueued_at: batch.enqueued_at,

@@ -312,6 +312,24 @@ pub struct EmbeddingSettings {
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
+    #[schema(value_type = Option<Vec<FetchUrlMapping>>)]
+    /// List of URL fields to fetch and expose as virtual fields for embedding.
+    ///
+    /// Each entry maps a document field containing a URL to a virtual field that will
+    /// contain the fetched content (as base64) during template rendering.
+    /// The fetched content is NOT stored in the database.
+    ///
+    /// # Availability
+    ///
+    /// - This parameter is available for source `rest`
+    ///
+    /// # 🔄 Reindexing
+    ///
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
+    pub fetch_url: Setting<FetchUrlMapping>,
+
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default)]
     #[schema(value_type = Option<SubEmbeddingSettings>)]
     pub search_embedder: Setting<SubEmbeddingSettings>,
 
@@ -739,6 +757,7 @@ impl SettingsDiff {
                     mut indexing_embedder,
                     mut distribution,
                     mut headers,
+                    mut fetch_url,
                     mut document_template_max_bytes,
                     binary_quantized: mut binary_quantize,
                 } = old;
@@ -760,6 +779,7 @@ impl SettingsDiff {
                     indexing_embedder: new_indexing_embedder,
                     distribution: new_distribution,
                     headers: new_headers,
+                    fetch_url: new_fetch_url,
                     document_template_max_bytes: new_document_template_max_bytes,
                     binary_quantized: new_binary_quantize,
                 } = new;
@@ -818,6 +838,11 @@ impl SettingsDiff {
 
                 distribution.apply(new_distribution);
 
+                // Changing fetchUrl triggers a full reindex
+                if fetch_url.apply(new_fetch_url) {
+                    ReindexAction::push_action(&mut reindex_action, ReindexAction::FullReindex);
+                }
+
                 let updated_settings = EmbeddingSettings {
                     source,
                     model,
@@ -835,6 +860,7 @@ impl SettingsDiff {
                     indexing_embedder,
                     distribution,
                     headers,
+                    fetch_url,
                     document_template_max_bytes,
                     binary_quantized: binary_quantize,
                 };
@@ -1378,6 +1404,8 @@ pub enum MetaEmbeddingSetting {
     Request,
     Response,
     Headers,
+    FetchUrl,
+    FetchOptions,
     SearchEmbedder,
     IndexingEmbedder,
     Distribution,
@@ -1402,6 +1430,8 @@ impl MetaEmbeddingSetting {
             Request => "request",
             Response => "response",
             Headers => "headers",
+            FetchUrl => "fetchUrl",
+            FetchOptions => "fetchOptions",
             SearchEmbedder => "searchEmbedder",
             IndexingEmbedder => "indexingEmbedder",
             Distribution => "distribution",
@@ -1429,6 +1459,7 @@ impl EmbeddingSettings {
         document_template: &Setting<String>,
         document_template_max_bytes: &Setting<usize>,
         headers: &Setting<BTreeMap<String, String>>,
+        fetch_url: &Setting<FetchUrlMapping>,
         search_embedder: &Setting<SubEmbeddingSettings>,
         indexing_embedder: &Setting<SubEmbeddingSettings>,
         binary_quantized: &Setting<bool>,
@@ -1506,6 +1537,13 @@ impl EmbeddingSettings {
             MetaEmbeddingSetting::Headers,
             context,
             headers,
+        )?;
+        Self::check_setting(
+            embedder_name,
+            source,
+            MetaEmbeddingSetting::FetchUrl,
+            context,
+            fetch_url,
         )?;
         Self::check_setting(
             embedder_name,
@@ -1611,7 +1649,7 @@ impl EmbeddingSettings {
             (
                 OpenAi,
                 Revision | Pooling | IndexingFragments | SearchFragments | Request | Response
-                | Headers | SearchEmbedder | IndexingEmbedder,
+                | Headers | FetchUrl | FetchOptions | SearchEmbedder | IndexingEmbedder,
                 _,
             ) => FieldStatus::Disallowed,
             (
@@ -1622,7 +1660,7 @@ impl EmbeddingSettings {
             (
                 HuggingFace,
                 ApiKey | Dimensions | Url | IndexingFragments | SearchFragments | Request
-                | Response | Headers | SearchEmbedder | IndexingEmbedder,
+                | Response | Headers | FetchUrl | FetchOptions | SearchEmbedder | IndexingEmbedder,
                 _,
             ) => FieldStatus::Disallowed,
             (Ollama, Model, _) => FieldStatus::Mandatory,
@@ -1634,7 +1672,7 @@ impl EmbeddingSettings {
             (
                 Ollama,
                 Revision | Pooling | IndexingFragments | SearchFragments | Request | Response
-                | Headers | SearchEmbedder | IndexingEmbedder,
+                | Headers | FetchUrl | FetchOptions | SearchEmbedder | IndexingEmbedder,
                 _,
             ) => FieldStatus::Disallowed,
             (UserProvided, Dimensions, _) => FieldStatus::Mandatory,
@@ -1653,6 +1691,8 @@ impl EmbeddingSettings {
                 | Request
                 | Response
                 | Headers
+                | FetchUrl
+                | FetchOptions
                 | SearchEmbedder
                 | IndexingEmbedder,
                 _,
@@ -1672,6 +1712,9 @@ impl EmbeddingSettings {
             (Rest, IndexingFragments, Search) => FieldStatus::Disallowed,
             (Rest, SearchFragments, NotNested | Search) => FieldStatus::Allowed,
             (Rest, SearchFragments, Indexing) => FieldStatus::Disallowed,
+            // FetchUrl and FetchOptions are only available for indexing (not search)
+            (Rest, FetchUrl | FetchOptions, NotNested | Indexing) => FieldStatus::Allowed,
+            (Rest, FetchUrl | FetchOptions, Search) => FieldStatus::Disallowed,
             (Rest, Model | Revision | Pooling | SearchEmbedder | IndexingEmbedder, _) => {
                 FieldStatus::Disallowed
             }
@@ -1691,7 +1734,9 @@ impl EmbeddingSettings {
                 | SearchFragments
                 | Request
                 | Response
-                | Headers,
+                | Headers
+                | FetchUrl
+                | FetchOptions,
                 _,
             ) => FieldStatus::Disallowed,
         }
@@ -1787,6 +1832,67 @@ pub struct Fragment {
     pub value: serde_json::Value,
 }
 
+/// Output format for fetched URL content.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase)]
+pub enum FetchOutputFormat {
+    /// Raw base64-encoded content (e.g., "SGVsbG8gV29ybGQ=")
+    #[default]
+    Base64,
+    /// Data URI format (e.g., "data:image/png;base64,SGVsbG8gV29ybGQ=")
+    DataUri,
+}
+
+/// Configuration for fetching a URL field and exposing it as a virtual field for embedding.
+///
+/// This allows documents to store URLs (e.g., to images or PDFs) and have Meilisearch
+/// automatically fetch the content during embedding extraction, without persisting
+/// the fetched content in the database.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+#[deserr(rename_all = camelCase, deny_unknown_fields)]
+pub struct FetchUrlMapping {
+    /// The document field containing the URL to fetch.
+    pub input: String,
+    /// The virtual field name to expose the fetched content (as base64) in templates.
+    pub output: String,
+    /// List of allowed domains. Use `["*"]` to allow any domain.
+    /// Defaults to `["*"]` (all domains allowed).
+    #[serde(
+        default = "default_allowed_domains",
+        skip_serializing_if = "is_default_allowed_domains"
+    )]
+    #[deserr(default = default_allowed_domains())]
+    #[schema(value_type = Option<Vec<String>>)]
+    pub allowed_domains: Vec<String>,
+    /// Maximum content size to download. Defaults to "10MB".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[deserr(default)]
+    pub max_size: Option<String>,
+    /// Request timeout in milliseconds. Defaults to 10000 (10 seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[deserr(default)]
+    pub timeout: Option<u64>,
+    /// Number of retry attempts on failure. Defaults to 2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[deserr(default)]
+    pub retries: Option<u32>,
+    /// Output format for fetched content.
+    /// Defaults to `dataUri` for data URI format (e.g., "data:image/png;base64,...").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[deserr(default)]
+    pub output_format: Option<FetchOutputFormat>,
+}
+
+fn default_allowed_domains() -> Vec<String> {
+    vec!["*".to_string()]
+}
+
+fn is_default_allowed_domains(domains: &[String]) -> bool {
+    domains.len() == 1 && domains[0] == "*"
+}
+
 impl EmbeddingSettings {
     fn from_hugging_face(
         hf::EmbedderOptions { model, revision, distribution, pooling }: hf::EmbedderOptions,
@@ -1809,6 +1915,7 @@ impl EmbeddingSettings {
             request: Setting::NotSet,
             response: Setting::NotSet,
             headers: Setting::NotSet,
+            fetch_url: Setting::NotSet,
             search_embedder: Setting::NotSet,
             indexing_embedder: Setting::NotSet,
             distribution: Setting::some_or_not_set(distribution),
@@ -1843,6 +1950,7 @@ impl EmbeddingSettings {
             request: Setting::NotSet,
             response: Setting::NotSet,
             headers: Setting::NotSet,
+            fetch_url: Setting::NotSet,
             search_embedder: Setting::NotSet,
             indexing_embedder: Setting::NotSet,
             distribution: Setting::some_or_not_set(distribution),
@@ -1877,6 +1985,7 @@ impl EmbeddingSettings {
             request: Setting::NotSet,
             response: Setting::NotSet,
             headers: Setting::NotSet,
+            fetch_url: Setting::NotSet,
             search_embedder: Setting::NotSet,
             indexing_embedder: Setting::NotSet,
             distribution: Setting::some_or_not_set(distribution),
@@ -1903,6 +2012,7 @@ impl EmbeddingSettings {
             request: Setting::NotSet,
             response: Setting::NotSet,
             headers: Setting::NotSet,
+            fetch_url: Setting::NotSet,
             search_embedder: Setting::NotSet,
             indexing_embedder: Setting::NotSet,
             distribution: Setting::some_or_not_set(distribution),
@@ -1970,6 +2080,7 @@ impl EmbeddingSettings {
             response: Setting::Set(response),
             distribution: Setting::some_or_not_set(distribution),
             headers: Setting::Set(headers),
+            fetch_url: Setting::NotSet,
             search_embedder: Setting::NotSet,
             indexing_embedder: Setting::NotSet,
             binary_quantized: Setting::some_or_not_set(quantized),
@@ -1979,7 +2090,7 @@ impl EmbeddingSettings {
 
 impl From<EmbeddingConfig> for EmbeddingSettings {
     fn from(value: EmbeddingConfig) -> Self {
-        let EmbeddingConfig { embedder_options, prompt, quantized } = value;
+        let EmbeddingConfig { embedder_options, prompt, quantized, fetch_url } = value;
         let document_template_max_bytes =
             Setting::Set(prompt.max_bytes.unwrap_or(default_max_bytes()).get());
         match embedder_options {
@@ -2004,12 +2115,19 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
             super::EmbedderOptions::UserProvided(options) => {
                 Self::from_user_provided(options, quantized)
             }
-            super::EmbedderOptions::Rest(options) => Self::from_rest(
-                options,
-                Setting::Set(prompt.template),
-                document_template_max_bytes,
-                quantized,
-            ),
+            super::EmbedderOptions::Rest(options) => {
+                let mut settings = Self::from_rest(
+                    options,
+                    Setting::Set(prompt.template),
+                    document_template_max_bytes,
+                    quantized,
+                );
+                // Include fetch configuration for REST embedders
+                if let Some(fetch) = fetch_url {
+                    settings.fetch_url = Setting::Set(fetch);
+                }
+                settings
+            }
             super::EmbedderOptions::Composite(composite::EmbedderOptions { search, index }) => {
                 Self {
                     source: Setting::Set(EmbedderSource::Composite),
@@ -2027,6 +2145,7 @@ impl From<EmbeddingConfig> for EmbeddingSettings {
                     request: Setting::NotSet,
                     response: Setting::NotSet,
                     headers: Setting::NotSet,
+                    fetch_url: Setting::NotSet,
                     distribution: Setting::some_or_not_set(search.distribution()),
                     search_embedder: Setting::Set(SubEmbeddingSettings::from_options(
                         search,
@@ -2102,6 +2221,7 @@ impl From<EmbeddingSettings> for SubEmbeddingSettings {
             request,
             response,
             headers,
+            fetch_url: _,
             binary_quantized: _,
             search_embedder: _,
             indexing_embedder: _,
@@ -2149,12 +2269,14 @@ impl From<EmbeddingSettings> for EmbeddingConfig {
             response,
             distribution,
             headers,
+            fetch_url,
             binary_quantized,
             search_embedder,
             mut indexing_embedder,
         } = value;
 
         this.quantized = binary_quantized.set();
+        this.fetch_url = fetch_url.set();
         if let Some((template, document_template_max_bytes)) =
             match (document_template, &mut indexing_embedder) {
                 (Setting::Set(template), _) => Some((template, document_template_max_bytes)),

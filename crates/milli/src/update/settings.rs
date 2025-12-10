@@ -1239,9 +1239,16 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         &name,
                         EmbeddingValidationContext::FullSettings,
                     )?;
+                    // For new embedders, check if binary quantization is requested
+                    let quantize = setting
+                        .as_ref()
+                        .set()
+                        .and_then(|s| s.binary_quantized.as_ref().set().copied())
+                        .unwrap_or(false);
                     embedder_actions.insert(
                         name.clone(),
-                        EmbedderAction::with_reindex(ReindexAction::FullReindex, false),
+                        EmbedderAction::with_reindex(ReindexAction::FullReindex, false)
+                            .with_is_being_quantized(quantize),
                     );
                     let mut fragments = FragmentConfigs::new();
                     fragments.add_new_fragments(
@@ -2131,7 +2138,7 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbe
         .map(
             |IndexEmbeddingConfig {
                  name,
-                 config: EmbeddingConfig { embedder_options, prompt, quantized },
+                 config: EmbeddingConfig { embedder_options, prompt, quantized, fetch_url },
                  fragments,
              }| {
                 let document_template = prompt.try_into().map_err(crate::Error::from)?;
@@ -2155,6 +2162,16 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbe
                     })
                     .collect();
 
+                // Create URL fetcher if fetch configuration is present
+                let (url_fetcher, fetch_mapping) = if let Some(ref fetch) = fetch_url {
+                    let fetcher = crate::vector::url_fetcher::UrlFetcher::new(fetch);
+                    let mapping =
+                        crate::vector::url_fetcher::ResolvedFetchMapping::from_mapping(fetch);
+                    (Some(fetcher), Some(mapping))
+                } else {
+                    (None, None)
+                };
+
                 Ok((
                     name,
                     Arc::new(RuntimeEmbedder::new(
@@ -2162,6 +2179,8 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbe
                         document_template,
                         fragments,
                         quantized.unwrap_or_default(),
+                        url_fetcher,
+                        fetch_mapping,
                     )),
                 ))
             },
@@ -2225,6 +2244,7 @@ pub fn validate_embedding_settings(
         mut indexing_embedder,
         distribution,
         headers,
+        fetch_url,
         binary_quantized: binary_quantize,
     } = settings;
 
@@ -2361,6 +2381,7 @@ pub fn validate_embedding_settings(
             indexing_embedder,
             distribution,
             headers,
+            fetch_url,
             binary_quantized: binary_quantize,
         }));
     };
@@ -2381,6 +2402,7 @@ pub fn validate_embedding_settings(
         &document_template,
         &document_template_max_bytes,
         &headers,
+        &fetch_url,
         &search_embedder,
         &indexing_embedder,
         &binary_quantize,
@@ -2462,6 +2484,7 @@ pub fn validate_embedding_settings(
                         &embedder.document_template,
                         &embedder.document_template_max_bytes,
                         &embedder.headers,
+                        &Setting::NotSet,
                         &search_embedder,
                         &indexing_embedder,
                         &embedder.binary_quantized,
@@ -2519,6 +2542,7 @@ pub fn validate_embedding_settings(
                         &embedder.document_template,
                         &embedder.document_template_max_bytes,
                         &embedder.headers,
+                        &Setting::NotSet,
                         &search_embedder,
                         &indexing_embedder,
                         &embedder.binary_quantized,
@@ -2554,6 +2578,7 @@ pub fn validate_embedding_settings(
         indexing_embedder,
         distribution,
         headers,
+        fetch_url,
         binary_quantized: binary_quantize,
     }))
 }

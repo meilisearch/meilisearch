@@ -972,13 +972,20 @@ impl IndexScheduler {
         &self,
         index_uid: String,
         embedding_configs: Vec<IndexEmbeddingConfig>,
+        url_fetcher_stats: Option<Arc<milli::progress::UrlFetcherStats>>,
     ) -> Result<RuntimeEmbedders> {
         let res: Result<_> = embedding_configs
             .into_iter()
             .map(
                 |IndexEmbeddingConfig {
                      name,
-                     config: milli::vector::EmbeddingConfig { embedder_options, prompt, quantized },
+                     config:
+                         milli::vector::EmbeddingConfig {
+                             embedder_options,
+                             prompt,
+                             quantized,
+                             fetch_url,
+                         },
                      fragments,
                  }|
                  -> Result<(String, Arc<RuntimeEmbedder>)> {
@@ -996,6 +1003,22 @@ impl IndexScheduler {
                             RuntimeFragment { name: fragment.name, id: fragment.id, template }
                         })
                         .collect();
+
+                    // Create URL fetcher if fetch configuration is present
+                    let (url_fetcher, fetch_mapping) = if let Some(ref fetch) = fetch_url {
+                        let fetcher = match url_fetcher_stats.clone() {
+                            Some(stats) => {
+                                milli::vector::url_fetcher::UrlFetcher::with_stats(fetch, stats)
+                            }
+                            None => milli::vector::url_fetcher::UrlFetcher::new(fetch),
+                        };
+                        let mapping =
+                            milli::vector::url_fetcher::ResolvedFetchMapping::from_mapping(fetch);
+                        (Some(fetcher), Some(mapping))
+                    } else {
+                        (None, None)
+                    };
+
                     // optimistically return existing embedder
                     {
                         let embedders = self.embedders.read().unwrap();
@@ -1005,6 +1028,8 @@ impl IndexScheduler {
                                 document_template,
                                 fragments,
                                 quantized.unwrap_or_default(),
+                                url_fetcher.clone(),
+                                fetch_mapping.clone(),
                             ));
 
                             return Ok((name, runtime));
@@ -1029,6 +1054,8 @@ impl IndexScheduler {
                         document_template,
                         fragments,
                         quantized.unwrap_or_default(),
+                        url_fetcher,
+                        fetch_mapping,
                     ));
 
                     Ok((name, runtime))

@@ -2817,6 +2817,7 @@ mod tests {
                         response: Setting::NotSet,
                         distribution: Setting::NotSet,
                         headers: Setting::NotSet,
+                        fetch_url: Setting::NotSet,
                         search_embedder: Setting::NotSet,
                         indexing_embedder: Setting::NotSet,
                         binary_quantized: Setting::NotSet,
