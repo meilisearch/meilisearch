@@ -49,6 +49,8 @@ pub struct S3SnapshotOptions {
     pub s3_snapshot_prefix: String,
     pub s3_access_key: String,
     pub s3_secret_key: String,
+    pub s3_role_arn: String,
+    pub s3_web_identity_token_file: String,
     pub s3_max_in_flight_parts: NonZeroUsize,
     pub s3_compression_level: u32,
     pub s3_signature_duration: Duration,
