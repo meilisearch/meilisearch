@@ -757,8 +757,14 @@ impl IndexScheduler {
                 let res =
                     self.create_next_batch_unprioritized(rtxn, enqueued, current_batch, |task| {
                         // in this limited mode of execution, we only want to run tasks:
+                        // 0. with an index
                         // 1. with a version
                         // 2. that version strictly lower than the network task version
+
+                        // 0. skip indexless tasks that are not index swap
+                        if task.index_uid().is_none() && task.kind.as_kind() != Kind::IndexSwap {
+                            return true;
+                        }
 
                         // 1. skip tasks without version
                         let Some(task_version) =
@@ -793,8 +799,14 @@ impl IndexScheduler {
                 let res =
                     self.create_next_batch_unprioritized(rtxn, enqueued, current_batch, |task| {
                         // in this limited mode of execution, we only want to run tasks:
+                        // 0. with an index
                         // 1. with a version
                         // 2. that version equal to the network task version
+
+                        // 0. skip indexless tasks
+                        if task.index_uid().is_none() && task.kind.as_kind() != Kind::IndexSwap {
+                            return true;
+                        }
 
                         // 1. skip tasks without version
                         let Some(task_version) =
