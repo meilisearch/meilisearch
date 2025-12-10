@@ -8,6 +8,8 @@ use tracing::info;
 use crate::queue::TaskQueue;
 use crate::versioning::Versioning;
 
+mod v1_29;
+mod v1_30;
 trait UpgradeIndexScheduler {
     fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()>;
     /// Whether the migration should be applied, depending on the initial version of the index scheduler before
@@ -41,6 +43,7 @@ pub fn upgrade_index_scheduler(
 
     let upgrade_functions: &[&dyn UpgradeIndexScheduler] = &[
         // List all upgrade functions to apply in order here.
+        &v1_30::MigrateNetwork
     ];
 
     let (initial_major, initial_minor, initial_patch) = initial_version;
