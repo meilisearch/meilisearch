@@ -420,11 +420,7 @@ fn set_network_ureq_headers(
 ) -> ureq::Request {
     let request = RequestWrapper(request);
 
-    let ImportMetadata {
-        index_count,
-        task_key,
-        total_index_documents,
-    } = metadata;
+    let ImportMetadata { index_count, task_key, total_index_documents } = metadata;
     let Origin { remote_name: origin_remote, task_uid, network_version } = origin;
     let ImportData { remote_name: import_remote, index_name, document_count } = import_data;
 
