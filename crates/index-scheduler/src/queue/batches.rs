@@ -502,13 +502,11 @@ impl Queue {
             *before_finished_at,
         )?;
 
-        if let Some(limit) = limit {
-            batches = if query.reverse.unwrap_or_default() {
-                batches.into_iter().take(*limit as usize).collect()
-            } else {
-                batches.into_iter().rev().take(*limit as usize).collect()
-            };
-        }
+        batches = if query.reverse.unwrap_or_default() {
+            batches.into_iter().take(*limit).collect()
+        } else {
+            batches.into_iter().rev().take(*limit).collect()
+        };
 
         Ok(batches)
     }
@@ -602,11 +600,8 @@ impl Queue {
             Box::new(batches.into_iter().rev()) as Box<dyn Iterator<Item = u32>>
         };
 
-        let batches = self.batches.get_existing_batches(
-            rtxn,
-            batches.take(query.limit.unwrap_or(u32::MAX) as usize),
-            processing,
-        )?;
+        let batches =
+            self.batches.get_existing_batches(rtxn, batches.take(query.limit), processing)?;
 
         Ok((batches, total))
     }

@@ -126,7 +126,7 @@ pub struct TasksFilterQuery {
 impl TasksFilterQuery {
     pub(crate) fn into_query(self) -> Query {
         Query {
-            limit: Some(self.limit.0),
+            limit: self.limit.0 as usize,
             from: self.from.as_deref().copied(),
             reverse: self.reverse.as_deref().copied(),
             batch_uids: self.batch_uids.merge_star_and_none(),
@@ -225,7 +225,8 @@ pub struct TaskDeletionOrCancelationQuery {
 impl TaskDeletionOrCancelationQuery {
     fn into_query(self) -> Query {
         Query {
-            limit: None,
+            // We want to delete all tasks that match the given filters
+            limit: usize::MAX,
             from: None,
             reverse: None,
             batch_uids: self.batch_uids.merge_star_and_none(),
