@@ -161,9 +161,17 @@ fn parse_documentation_mapping(content: &str) -> HashMap<String, Vec<String>> {
 
         // Check if this starts a new code block and extract the sample_id
         if let Some(caps) = CODE_START_RE.captures(line) {
+            let sample_id = caps[1].to_string();
+
             if let Some(ref key) = current_key {
-                let sample_id = caps[1].to_string();
-                mapping.entry(key.clone()).or_default().push(sample_id);
+                // Only associate this sample_id with the current key if it follows the pattern {key}_N
+                // This prevents samples without a preceding comment from being incorrectly associated
+                if sample_id.starts_with(&format!("{}_", key)) {
+                    mapping.entry(key.clone()).or_default().push(sample_id);
+                } else {
+                    // Sample ID doesn't match the current key, reset current_key
+                    current_key = None;
+                }
             }
         }
     }
@@ -438,24 +446,43 @@ mod tests {
     fn test_parse_documentation_mapping() {
         let yaml = r#"
 # get_indexes
-list_all_indexes_1: |-
+get_indexes_1: |-
   curl \
     -X GET 'MEILISEARCH_URL/indexes'
+get_indexes_2: |-
+  curl \
+    -X GET 'MEILISEARCH_URL/indexes?limit=5'
 # post_indexes
-create_an_index_1: |-
+post_indexes_1: |-
   curl \
     -X POST 'MEILISEARCH_URL/indexes'
-another_sample_id: |-
+post_indexes_2: |-
   curl \
     -X POST 'MEILISEARCH_URL/indexes'
+# get_version
+get_version_1: |-
+  curl \
+    -X GET 'MEILISEARCH_URL/version'
+# COMMENT WITHOUT KEY - SHOULD BE IGNORED
+## COMMENT WITHOUT KEY - SHOULD BE IGNORED
+unrelated_sample_without_comment: |-
+  curl \
+    -X GET 'MEILISEARCH_URL/something'
 "#;
         let mapping = parse_documentation_mapping(yaml);
 
-        assert_eq!(mapping.len(), 2);
+        assert_eq!(mapping.len(), 3);
         assert!(mapping.contains_key("get_indexes"));
         assert!(mapping.contains_key("post_indexes"));
-        assert_eq!(mapping["get_indexes"], vec!["list_all_indexes_1"]);
-        assert_eq!(mapping["post_indexes"], vec!["create_an_index_1", "another_sample_id"]);
+        assert!(mapping.contains_key("get_version"));
+        assert_eq!(mapping["get_indexes"], vec!["get_indexes_1", "get_indexes_2"]);
+        assert_eq!(mapping["post_indexes"], vec!["post_indexes_1", "post_indexes_2"]);
+        assert_eq!(mapping["get_version"], vec!["get_version_1"]);
+        // unrelated_sample_without_comment should not be in the mapping
+        assert!(!mapping.values().any(|v| v.contains(&"unrelated_sample_without_comment".to_string())));
+        // Comments with multiple words or ## should be ignored and not create keys
+        assert!(!mapping.contains_key("COMMENT"));
+        assert!(!mapping.contains_key("##"));
     }
 
     #[test]
