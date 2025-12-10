@@ -17,6 +17,7 @@ use meilisearch_types::milli::update::{request_threads, Setting};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self, obkv_to_json, Filter, InternalError};
 use meilisearch_types::settings::{self, SecretPolicy};
+use meilisearch_types::tasks::network::headers::SetHeader as _;
 use meilisearch_types::tasks::network::{headers, ImportData, ImportMetadata, Origin};
 use meilisearch_types::tasks::{DetailsExportIndexSettings, ExportIndexSettings};
 use roaring::RoaringBitmap;
@@ -417,26 +418,35 @@ fn set_network_ureq_headers(
     origin: &Origin,
     metadata: &ImportMetadata,
 ) -> ureq::Request {
+    let request = RequestWrapper(request);
+
     let request = request
-        .set(headers::PROXY_ORIGIN_REMOTE_HEADER, &urlencoding::encode(&origin.remote_name))
-        .set(headers::PROXY_ORIGIN_TASK_UID_HEADER, &origin.task_uid.to_string())
-        .set(headers::PROXY_ORIGIN_NETWORK_VERSION_HEADER, &origin.network_version.to_string())
-        .set(headers::PROXY_IMPORT_REMOTE_HEADER, &urlencoding::encode(&import_data.remote_name))
-        .set(headers::PROXY_IMPORT_DOCS_HEADER, &import_data.document_count.to_string())
-        .set(headers::PROXY_IMPORT_INDEX_COUNT_HEADER, &metadata.index_count.to_string())
-        .set(
-            headers::PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
-            &metadata.total_index_documents.to_string(),
-        );
+        .set_origin_remote(&origin.remote_name)
+        .set_origin_task_uid(origin.task_uid)
+        .set_origin_network_version(origin.network_version)
+        .set_import_remote(&import_data.remote_name)
+        .set_import_docs(metadata.index_count)
+        .set_import_index_count(metadata.index_count)
+        .set_import_index_docs(metadata.total_index_documents);
+
     let request = if let Some(index_name) = import_data.index_name.as_deref() {
-        request.set(headers::PROXY_IMPORT_INDEX_HEADER, &urlencoding::encode(index_name))
+        request.set_import_index(index_name)
     } else {
         request
     };
-    if let Some(task_key) = metadata.task_key {
-        request.set(headers::PROXY_IMPORT_TASK_KEY_HEADER, &task_key.to_string())
+    let RequestWrapper(request) = if let Some(task_key) = metadata.task_key {
+        request.set_import_task_key(task_key)
     } else {
         request
+    };
+
+    request
+}
+
+struct RequestWrapper(ureq::Request);
+impl headers::SetHeader for RequestWrapper {
+    fn set_header(self, name: &str, value: &str) -> Self {
+        Self(self.0.set(name, value))
     }
 }
 

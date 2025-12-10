@@ -10,18 +10,13 @@ use actix_web::HttpRequest;
 use bytes::Bytes;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::milli::DocumentId;
 use meilisearch_types::network::Remote;
-use meilisearch_types::tasks::network::headers::{
-    PROXY_IMPORT_DOCS_HEADER, PROXY_IMPORT_INDEX_COUNT_HEADER, PROXY_IMPORT_INDEX_HEADER,
-    PROXY_IMPORT_REMOTE_HEADER, PROXY_IMPORT_TASK_KEY_HEADER, PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
-    PROXY_ORIGIN_NETWORK_VERSION_HEADER, PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER,
-};
+use meilisearch_types::tasks::network::headers::{GetHeader, SetHeader};
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,
 };
-use meilisearch_types::tasks::Task;
-use reqwest::StatusCode;
+use meilisearch_types::tasks::{Task, TaskId};
+use reqwest::{RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use uuid::Uuid;
@@ -237,6 +232,7 @@ where
             let client = client.clone();
             let api_key = node.write_api_key;
             let this = this.clone();
+            let task_uid = task.uid;
             let method = method.clone();
             let path_and_query = req.uri().path_and_query().map(|paq| paq.as_str()).unwrap_or("/");
 
@@ -244,9 +240,6 @@ where
                 node_name,
                 tokio::spawn({
                     let url = format!("{}{}", node.url, path_and_query);
-
-                    let url_encoded_this = urlencoding::encode(&this).into_owned();
-                    let url_encoded_task_uid = task.uid.to_string(); // it's url encoded i promize
 
                     let content_type = content_type.map(|b| b.to_owned());
 
@@ -259,8 +252,7 @@ where
                     backoff::future::retry(backoff, move || {
                         let url = url.clone();
                         let client = client.clone();
-                        let url_encoded_this = url_encoded_this.clone();
-                        let url_encoded_task_uid = url_encoded_task_uid.clone();
+                        let this = this.clone();
                         let content_type = content_type.clone();
 
                         let body = body.clone();
@@ -275,8 +267,8 @@ where
                                 network_version,
                                 api_key.as_deref(),
                                 &client,
-                                &url_encoded_this,
-                                &url_encoded_task_uid,
+                                &this,
+                                task_uid,
                                 body,
                             )
                             .await
@@ -466,8 +458,8 @@ async fn try_proxy(
     network_version: Uuid,
     api_key: Option<&str>,
     client: &reqwest::Client,
-    url_encoded_this: &str,
-    url_encoded_task_uid: &str,
+    this: &str,
+    task_uid: TaskId,
     body: Option<Bytes>,
 ) -> Result<SummarizedTaskView, backoff::Error<ProxyError>> {
     let request = client
@@ -475,9 +467,11 @@ async fn try_proxy(
         .timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
     let request = if let Some(body) = body { request.body(body) } else { request };
     let request = if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
-    let request = request.header(PROXY_ORIGIN_TASK_UID_HEADER, url_encoded_task_uid);
-    let request = request.header(PROXY_ORIGIN_NETWORK_VERSION_HEADER, &network_version.to_string());
-    let request = request.header(PROXY_ORIGIN_REMOTE_HEADER, url_encoded_this);
+    let RequestWrapper(request) = RequestWrapper(request)
+        .set_origin_task_uid(task_uid)
+        .set_origin_network_version(network_version)
+        .set_origin_remote(this);
+
     let request = if let Some(content_type) = content_type {
         request.header(CONTENT_TYPE.as_str(), content_type)
     } else {
@@ -498,6 +492,13 @@ async fn try_proxy(
     };
 
     handle_response(response).await
+}
+
+struct RequestWrapper(RequestBuilder);
+impl meilisearch_types::tasks::network::headers::SetHeader for RequestWrapper {
+    fn set_header(self, name: &str, value: &str) -> Self {
+        Self(self.0.header(name, value))
+    }
 }
 
 async fn parse_error(response: reqwest::Response) -> Result<String, ReqwestErrorWithoutUrl> {
@@ -530,11 +531,21 @@ async fn parse_response<T: DeserializeOwned>(
     }
 }
 
+struct ResponseWrapper<'a>(&'a HttpRequest);
+impl<'a> meilisearch_types::tasks::network::headers::GetHeader for ResponseWrapper<'a> {
+    type Error = actix_http::header::ToStrError;
+
+    fn get_header(&self, name: &str) -> Result<Option<&str>, Self::Error> {
+        self.0.headers().get(name).map(|value| value.to_str()).transpose()
+    }
+}
+
 pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchHttpError> {
+    let req = ResponseWrapper(req);
     let (remote_name, task_uid, network_version) = match (
-        req.headers().get(PROXY_ORIGIN_REMOTE_HEADER),
-        req.headers().get(PROXY_ORIGIN_TASK_UID_HEADER),
-        req.headers().get(PROXY_ORIGIN_NETWORK_VERSION_HEADER),
+        req.get_origin_remote()?,
+        req.get_origin_task_uid()?,
+        req.get_origin_network_version()?,
     ) {
         (None, None, _) => return Ok(None),
         (None, Some(_), _) => {
@@ -546,148 +557,32 @@ pub fn origin_from_req(req: &HttpRequest) -> Result<Option<Origin>, MeilisearchH
             })
         }
         (Some(remote_name), Some(task_uid), network_version) => {
-            let remote_name = urlencoding::decode(remote_name.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_ORIGIN_REMOTE_HEADER,
-                    msg: format!("while parsing remote name as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_ORIGIN_REMOTE_HEADER,
-                msg: format!("while URL-decoding remote name: {err}"),
-            })?;
-            let task_uid = urlencoding::decode(task_uid.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_ORIGIN_TASK_UID_HEADER,
-                    msg: format!("while parsing task UID as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_ORIGIN_TASK_UID_HEADER,
-                msg: format!("while URL-decoding task UID: {err}"),
-            })?;
-            let network_version = match network_version {
-                Some(network_version) => Some({
-                    urlencoding::decode(network_version.to_str().map_err(|err| {
-                        MeilisearchHttpError::InvalidHeaderValue {
-                            header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
-                            msg: format!("while parsing network version as UTF-8: {err}"),
-                        }
-                    })?)
-                    .map_err(|err| {
-                        MeilisearchHttpError::InvalidHeaderValue {
-                            header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
-                            msg: format!("while URL-decoding network version: {err}"),
-                        }
-                    })?
-                }),
-                None => None,
-            };
             (remote_name, task_uid, network_version)
         }
     };
 
-    let task_uid: u32 =
-        task_uid.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-            header_name: PROXY_ORIGIN_TASK_UID_HEADER,
-            msg: format!("while parsing the task UID as an integer: {err}"),
-        })?;
-
-    let network_version: Uuid = if let Some(network_version) = network_version {
-        Uuid::parse_str(&network_version).map_err(|err| {
-            MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
-                msg: format!("while parsing the network version as an UUID: {err}"),
-            }
-        })?
-    } else {
-        Uuid::nil()
-    };
+    let network_version = network_version.unwrap_or_else(Uuid::nil);
 
     Ok(Some(Origin { remote_name: remote_name.into_owned(), task_uid, network_version }))
 }
 
 pub fn import_data_from_req(req: &HttpRequest) -> Result<Option<ImportData>, MeilisearchHttpError> {
-    let (remote_name, index_name, documents) = match (
-        req.headers().get(PROXY_IMPORT_REMOTE_HEADER),
-        req.headers().get(PROXY_IMPORT_INDEX_HEADER),
-        req.headers().get(PROXY_IMPORT_DOCS_HEADER),
-    ) {
-        (None, None, None) => return Ok(None),
-        (Some(remote_name), Some(index_name), Some(documents)) => {
-            let remote_name = urlencoding::decode(remote_name.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_REMOTE_HEADER,
-                    msg: format!("while parsing import remote name as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_REMOTE_HEADER,
-                msg: format!("while URL-decoding import remote name: {err}"),
-            })?;
-
-            let index_name = urlencoding::decode(index_name.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_INDEX_HEADER,
-                    msg: format!("while parsing import index name as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_INDEX_HEADER,
-                msg: format!("while URL-decoding import index name: {err}"),
-            })?;
-
-            let documents = urlencoding::decode(documents.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_DOCS_HEADER,
-                    msg: format!("while parsing documents as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_DOCS_HEADER,
-                msg: format!("while URL-decoding documents: {err}"),
-            })?;
-            (remote_name, Some(index_name), documents)
-        }
-        (Some(remote_name), None, Some(documents)) => {
-            let remote_name = urlencoding::decode(remote_name.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_REMOTE_HEADER,
-                    msg: format!("while parsing import remote name as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_REMOTE_HEADER,
-                msg: format!("while URL-decoding import remote name: {err}"),
-            })?;
-
-            let documents = urlencoding::decode(documents.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_DOCS_HEADER,
-                    msg: format!("while parsing documents as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_DOCS_HEADER,
-                msg: format!("while URL-decoding documents: {err}"),
-            })?;
-            (remote_name, None, documents)
-        }
-        // catch-all pattern that has to contain an inconsistency since we already matched (None, None, None) and (Some, Some, Some)
-        (remote_name, index_name, documents) => {
-            return Err(MeilisearchHttpError::InconsistentImportHeaders {
-                is_remote_missing: remote_name.is_none(),
-                is_index_missing: index_name.is_none(),
-                is_docs_missing: documents.is_none(),
-            })
-        }
-    };
-
-    let document_count: u64 =
-        documents.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-            header_name: PROXY_IMPORT_DOCS_HEADER,
-            msg: format!("while parsing the documents as an integer: {err}"),
-        })?;
+    let req = ResponseWrapper(req);
+    let (remote_name, index_name, document_count) =
+        match (req.get_import_remote()?, req.get_import_index()?, req.get_import_docs()?) {
+            (None, None, None) => return Ok(None),
+            (Some(remote_name), index_name, Some(documents)) => {
+                (remote_name, index_name, documents)
+            }
+            // catch-all pattern that has to contain an inconsistency since we already matched (None, None, None) and (Some, Some, Some)
+            (remote_name, index_name, documents) => {
+                return Err(MeilisearchHttpError::InconsistentImportHeaders {
+                    is_remote_missing: remote_name.is_none(),
+                    is_index_missing: index_name.is_none(),
+                    is_docs_missing: documents.is_none(),
+                })
+            }
+        };
 
     Ok(Some(ImportData {
         remote_name: remote_name.to_string(),
@@ -699,72 +594,15 @@ pub fn import_data_from_req(req: &HttpRequest) -> Result<Option<ImportData>, Mei
 pub fn import_metadata_from_req(
     req: &HttpRequest,
 ) -> Result<Option<ImportMetadata>, MeilisearchHttpError> {
+    let req = ResponseWrapper(req);
     let (index_count, task_key, total_index_documents) = match (
-        req.headers().get(PROXY_IMPORT_INDEX_COUNT_HEADER),
-        req.headers().get(PROXY_IMPORT_TASK_KEY_HEADER),
-        req.headers().get(PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER),
+        req.get_import_index_count()?,
+        req.get_import_task_key()?,
+        req.get_import_index_docs()?,
     ) {
         (None, None, None) => return Ok(None),
-        (Some(index_count), Some(task_key), Some(total_index_documents)) => {
-            let index_count = urlencoding::decode(index_count.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_REMOTE_HEADER,
-                    msg: format!("while parsing import index count as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_INDEX_COUNT_HEADER,
-                msg: format!("while URL-decoding import index count: {err}"),
-            })?;
-
-            let task_key = urlencoding::decode(task_key.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_TASK_KEY_HEADER,
-                    msg: format!("while parsing import task key as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_TASK_KEY_HEADER,
-                msg: format!("while URL-decoding import task key: {err}"),
-            })?;
-
-            let total_index_documents =
-                urlencoding::decode(total_index_documents.to_str().map_err(|err| {
-                    MeilisearchHttpError::InvalidHeaderValue {
-                        header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
-                        msg: format!("while parsing total index documents as UTF-8: {err}"),
-                    }
-                })?)
-                .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
-                    msg: format!("while URL-decoding total index documents: {err}"),
-                })?;
-            (index_count, Some(task_key), total_index_documents)
-        }
-        (Some(index_count), None, Some(total_index_documents)) => {
-            let index_count = urlencoding::decode(index_count.to_str().map_err(|err| {
-                MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_REMOTE_HEADER,
-                    msg: format!("while parsing import index count as UTF-8: {err}"),
-                }
-            })?)
-            .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                header_name: PROXY_IMPORT_INDEX_COUNT_HEADER,
-                msg: format!("while URL-decoding import index count: {err}"),
-            })?;
-
-            let total_index_documents =
-                urlencoding::decode(total_index_documents.to_str().map_err(|err| {
-                    MeilisearchHttpError::InvalidHeaderValue {
-                        header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
-                        msg: format!("while parsing total index documents as UTF-8: {err}"),
-                    }
-                })?)
-                .map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
-                    msg: format!("while URL-decoding total index documents: {err}"),
-                })?;
-            (index_count, None, total_index_documents)
+        (Some(index_count), task_key, Some(total_index_documents)) => {
+            (index_count, task_key, total_index_documents)
         }
         // catch-all pattern that has to contain an inconsistency since we already matched (None, None, None) and (Some, Some, Some)
         (index_count, task_key, total_index_documents) => {
@@ -775,29 +613,6 @@ pub fn import_metadata_from_req(
             })
         }
     };
-
-    let index_count: u64 =
-        index_count.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-            header_name: PROXY_IMPORT_INDEX_COUNT_HEADER,
-            msg: format!("while parsing the index count as an integer: {err}"),
-        })?;
-
-    let task_key = task_key
-        .map(|task_key| {
-            let task_key: Result<DocumentId, _> =
-                task_key.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-                    header_name: PROXY_IMPORT_TASK_KEY_HEADER,
-                    msg: format!("while parsing import task key as an integer: {err}"),
-                });
-            task_key
-        })
-        .transpose()?;
-
-    let total_index_documents: u64 =
-        total_index_documents.parse().map_err(|err| MeilisearchHttpError::InvalidHeaderValue {
-            header_name: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
-            msg: format!("while parsing the total index documents as an integer: {err}"),
-        })?;
 
     Ok(Some(ImportMetadata { index_count, task_key, total_index_documents }))
 }

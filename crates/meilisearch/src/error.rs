@@ -134,7 +134,7 @@ pub enum MeilisearchHttpError {
         is_missing_import: bool,
         is_missing_import_metadata: bool,
     },
-    #[error("Invalid value for header {header_name}: {msg}")]
+    #[error("Invalid value for header `{header_name}`: {msg}")]
     InvalidHeaderValue { header_name: &'static str, msg: String },
     #[error("This remote is not the leader of the network.\n  - Note: only the leader `{leader}` can receive new tasks.")]
     NotLeader { leader: String },
@@ -230,6 +230,14 @@ impl From<aweb::error::PayloadError> for MeilisearchHttpError {
                 ActixPayloadError::OtherError(error),
             )),
         }
+    }
+}
+
+impl<T: meilisearch_types::tasks::network::headers::GetHeader>
+    From<meilisearch_types::tasks::network::headers::DecodeError<T>> for MeilisearchHttpError
+{
+    fn from(value: meilisearch_types::tasks::network::headers::DecodeError<T>) -> Self {
+        Self::InvalidHeaderValue { header_name: value.header(), msg: value.to_string() }
     }
 }
 

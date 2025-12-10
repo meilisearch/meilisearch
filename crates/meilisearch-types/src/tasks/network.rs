@@ -510,6 +510,237 @@ pub enum ReceiveTaskError {
 }
 
 pub mod headers {
+    use std::borrow::Cow;
+    use std::num::ParseIntError;
+    use std::string::FromUtf8Error;
+
+    use milli::DocumentId;
+    use uuid::Uuid;
+
+    use crate::tasks::TaskId;
+
+    /// Implement on response types to extract header values
+    pub trait GetHeader: Sized {
+        type Error: std::fmt::Debug + std::fmt::Display;
+        fn get_header(&self, name: &str) -> Result<Option<&str>, Self::Error>;
+
+        fn get_origin_remote(&self) -> Result<Option<Cow<'_, str>>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_ORIGIN_REMOTE_HEADER)? else {
+                return Ok(None);
+            };
+
+            Ok(Some(urlencoding::decode(encoded).map_err(|inner| DecodeError::UrlDecoding {
+                inner,
+                header: PROXY_ORIGIN_REMOTE_HEADER,
+            })?))
+        }
+
+        fn get_origin_task_uid(&self) -> Result<Option<TaskId>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_ORIGIN_TASK_UID_HEADER)? else {
+                return Ok(None);
+            };
+
+            let decoded = urlencoding::decode(encoded).map_err(|inner| {
+                DecodeError::UrlDecoding { inner, header: PROXY_ORIGIN_TASK_UID_HEADER }
+            })?;
+
+            let parsed = decoded.parse().map_err(|inner| DecodeError::ParseInt {
+                inner,
+                header: PROXY_ORIGIN_TASK_UID_HEADER,
+            })?;
+
+            Ok(Some(parsed))
+        }
+
+        fn get_origin_network_version(&self) -> Result<Option<Uuid>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_ORIGIN_NETWORK_VERSION_HEADER)?
+            else {
+                return Ok(None);
+            };
+
+            let decoded = urlencoding::decode(encoded).map_err(|inner| {
+                DecodeError::UrlDecoding { inner, header: PROXY_ORIGIN_NETWORK_VERSION_HEADER }
+            })?;
+
+            let parsed = decoded.parse().map_err(|inner| DecodeError::ParseUuid {
+                inner,
+                header: PROXY_ORIGIN_NETWORK_VERSION_HEADER,
+            })?;
+
+            Ok(Some(parsed))
+        }
+
+        fn get_import_remote(&self) -> Result<Option<Cow<'_, str>>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_IMPORT_REMOTE_HEADER)? else {
+                return Ok(None);
+            };
+
+            Ok(Some(urlencoding::decode(encoded).map_err(|inner| DecodeError::UrlDecoding {
+                inner,
+                header: PROXY_IMPORT_REMOTE_HEADER,
+            })?))
+        }
+
+        fn get_import_index_count(&self) -> Result<Option<u64>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_IMPORT_INDEX_COUNT_HEADER)?
+            else {
+                return Ok(None);
+            };
+
+            let decoded = urlencoding::decode(encoded).map_err(|inner| {
+                DecodeError::UrlDecoding { inner, header: PROXY_IMPORT_INDEX_COUNT_HEADER }
+            })?;
+
+            let parsed = decoded.parse().map_err(|inner| DecodeError::ParseInt {
+                inner,
+                header: PROXY_IMPORT_INDEX_COUNT_HEADER,
+            })?;
+
+            Ok(Some(parsed))
+        }
+
+        fn get_import_index(&self) -> Result<Option<Cow<'_, str>>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_IMPORT_INDEX_HEADER)? else {
+                return Ok(None);
+            };
+
+            Ok(Some(urlencoding::decode(encoded).map_err(|inner| DecodeError::UrlDecoding {
+                inner,
+                header: PROXY_IMPORT_INDEX_HEADER,
+            })?))
+        }
+
+        fn get_import_task_key(&self) -> Result<Option<DocumentId>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_IMPORT_TASK_KEY_HEADER)? else {
+                return Ok(None);
+            };
+
+            let decoded = urlencoding::decode(encoded).map_err(|inner| {
+                DecodeError::UrlDecoding { inner, header: PROXY_IMPORT_TASK_KEY_HEADER }
+            })?;
+
+            let parsed = decoded.parse().map_err(|inner| DecodeError::ParseInt {
+                inner,
+                header: PROXY_IMPORT_TASK_KEY_HEADER,
+            })?;
+
+            Ok(Some(parsed))
+        }
+
+        fn get_import_docs(&self) -> Result<Option<u64>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_IMPORT_DOCS_HEADER)? else {
+                return Ok(None);
+            };
+
+            let decoded = urlencoding::decode(encoded).map_err(|inner| {
+                DecodeError::UrlDecoding { inner, header: PROXY_IMPORT_DOCS_HEADER }
+            })?;
+
+            let parsed = decoded.parse().map_err(|inner| DecodeError::ParseInt {
+                inner,
+                header: PROXY_IMPORT_DOCS_HEADER,
+            })?;
+
+            Ok(Some(parsed))
+        }
+
+        fn get_import_index_docs(&self) -> Result<Option<u64>, DecodeError<Self>> {
+            let Some(encoded) = get_header_and_legacy(self, PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER)?
+            else {
+                return Ok(None);
+            };
+
+            let decoded = urlencoding::decode(encoded).map_err(|inner| {
+                DecodeError::UrlDecoding { inner, header: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER }
+            })?;
+
+            let parsed = decoded.parse().map_err(|inner| DecodeError::ParseInt {
+                inner,
+                header: PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+            })?;
+
+            Ok(Some(parsed))
+        }
+    }
+
+    /// Implement on query types to set header values
+    pub trait SetHeader: Sized {
+        fn set_header(self, name: &str, value: &str) -> Self;
+
+        fn set_origin_remote(self, value: &str) -> Self {
+            let encoded = urlencoding::encode(value);
+            set_header_and_legacy(self, PROXY_ORIGIN_REMOTE_HEADER, &encoded)
+        }
+
+        fn set_origin_task_uid(self, value: TaskId) -> Self {
+            let value = value.to_string();
+            let encoded = urlencoding::encode(&value);
+            set_header_and_legacy(self, PROXY_ORIGIN_TASK_UID_HEADER, &encoded)
+        }
+
+        fn set_origin_network_version(self, value: Uuid) -> Self {
+            let value = value.to_string();
+            let encoded = urlencoding::encode(&value);
+            set_header_and_legacy(self, PROXY_ORIGIN_NETWORK_VERSION_HEADER, &encoded)
+        }
+        fn set_import_remote(self, value: &str) -> Self {
+            let encoded = urlencoding::encode(value);
+            set_header_and_legacy(self, PROXY_IMPORT_REMOTE_HEADER, &encoded)
+        }
+
+        fn set_import_index_count(self, value: u64) -> Self {
+            let value = value.to_string();
+            let encoded = urlencoding::encode(&value);
+            set_header_and_legacy(self, PROXY_IMPORT_INDEX_COUNT_HEADER, &encoded)
+        }
+
+        fn set_import_index(self, value: &str) -> Self {
+            let encoded = urlencoding::encode(value);
+            set_header_and_legacy(self, PROXY_IMPORT_INDEX_HEADER, &encoded)
+        }
+
+        fn set_import_task_key(self, value: DocumentId) -> Self {
+            let value = value.to_string();
+            let encoded = urlencoding::encode(&value);
+            set_header_and_legacy(self, PROXY_IMPORT_TASK_KEY_HEADER, &encoded)
+        }
+
+        fn set_import_docs(self, value: u64) -> Self {
+            let value = value.to_string();
+            let encoded = urlencoding::encode(&value);
+            set_header_and_legacy(self, PROXY_IMPORT_DOCS_HEADER, &encoded)
+        }
+
+        fn set_import_index_docs(self, value: u64) -> Self {
+            let value = value.to_string();
+            let encoded = urlencoding::encode(&value);
+            set_header_and_legacy(self, PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER, &encoded)
+        }
+    }
+
+    #[derive(Debug, thiserror::Error)]
+    pub enum DecodeError<T: GetHeader> {
+        #[error("while getting header: {inner}")]
+        InResponse { inner: T::Error, header: &'static str },
+        #[error("while url-decoding: {inner}")]
+        UrlDecoding { inner: FromUtf8Error, header: &'static str },
+        #[error("while parsing as an integer: {inner}")]
+        ParseInt { inner: ParseIntError, header: &'static str },
+        #[error("while parsing as a UUID: {inner}")]
+        ParseUuid { inner: uuid::Error, header: &'static str },
+    }
+
+    impl<T: GetHeader> DecodeError<T> {
+        pub fn header(&self) -> &'static str {
+            match self {
+                DecodeError::InResponse { inner: _, header }
+                | DecodeError::UrlDecoding { inner: _, header }
+                | DecodeError::ParseInt { inner: _, header }
+                | DecodeError::ParseUuid { inner: _, header } => header,
+            }
+        }
+    }
+
     pub const PROXY_ORIGIN_REMOTE_HEADER: &str = "X-Meili-Proxy-Origin-Remote";
     pub const PROXY_ORIGIN_TASK_UID_HEADER: &str = "X-Meili-Proxy-Origin-TaskUid";
     pub const PROXY_ORIGIN_NETWORK_VERSION_HEADER: &str = "X-Meili-Proxy-Origin-Network-Version";
@@ -519,4 +750,32 @@ pub mod headers {
     pub const PROXY_IMPORT_TASK_KEY_HEADER: &str = "X-Meili-Proxy-Import-Task-Key";
     pub const PROXY_IMPORT_DOCS_HEADER: &str = "X-Meili-Proxy-Import-Docs";
     pub const PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER: &str = "X-Meili-Proxy-Import-Total-Index-Docs";
+
+    fn get_header_and_legacy<'a, T: GetHeader>(
+        t: &'a T,
+        header: &'static str,
+    ) -> Result<Option<&'a str>, DecodeError<T>> {
+        Ok(Some(
+            if let Some(encoded) =
+                t.get_header(header).map_err(|inner| DecodeError::InResponse { inner, header })?
+            {
+                encoded
+            } else {
+                let header = header.strip_prefix("X-").unwrap();
+                let Some(encoded) = t
+                    .get_header(header)
+                    .map_err(|inner| DecodeError::InResponse { inner, header })?
+                else {
+                    return Ok(None);
+                };
+                encoded
+            },
+        ))
+    }
+
+    fn set_header_and_legacy<T: SetHeader>(t: T, name: &'static str, value: &str) -> T {
+        let t = t.set_header(name, value);
+        let name = name.strip_prefix("X-").unwrap();
+        t.set_header(name, value)
+    }
 }
