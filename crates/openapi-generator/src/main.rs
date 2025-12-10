@@ -69,6 +69,9 @@ fn main() -> Result<()> {
         add_code_samples_to_openapi(&mut openapi_value, &code_samples)?;
     }
 
+    // Clean up null descriptions in tags
+    clean_null_descriptions(&mut openapi_value);
+
     // Determine output path
     let output_path = cli.output.unwrap_or_else(|| PathBuf::from("meilisearch-openapi.json"));
 
@@ -369,6 +372,39 @@ fn add_code_samples_to_openapi(
     Ok(())
 }
 
+/// Clean up null descriptions in tags to make Mintlify work
+/// Removes any "description" fields with null values (both JSON null and "null" string)
+/// from the tags array and all nested objects
+fn clean_null_descriptions(openapi: &mut Value) {
+    if let Some(tags) = openapi.get_mut("tags").and_then(|t| t.as_array_mut()) {
+        for tag in tags.iter_mut() {
+            remove_null_descriptions_recursive(tag);
+        }
+    }
+}
+
+/// Recursively remove all "description" fields that are null or "null" string
+fn remove_null_descriptions_recursive(value: &mut Value) {
+    if let Some(obj) = value.as_object_mut() {
+        // Check and remove description if it's null or "null" string
+        if let Some(desc) = obj.get("description") {
+            if desc.is_null() || (desc.is_string() && desc.as_str() == Some("null")) {
+                obj.remove("description");
+            }
+        }
+
+        // Recursively process all nested objects
+        for (_, v) in obj.iter_mut() {
+            remove_null_descriptions_recursive(v);
+        }
+    } else if let Some(arr) = value.as_array_mut() {
+        // Recursively process arrays
+        for item in arr.iter_mut() {
+            remove_null_descriptions_recursive(item);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -445,5 +481,68 @@ create_an_index_1: |-
         assert!(samples.contains_key("create_an_index_1"));
         assert!(samples["list_all_indexes_1"].contains("getIndexes"));
         assert!(samples["create_an_index_1"].contains("createIndex"));
+    }
+
+    #[test]
+    fn test_clean_null_descriptions() {
+        let mut openapi = json!({
+            "tags": [
+                {
+                    "name": "Test1",
+                    "description": "null"
+                },
+                {
+                    "name": "Test2",
+                    "description": null
+                },
+                {
+                    "name": "Test3",
+                    "description": "Valid description"
+                },
+                {
+                    "name": "Test4",
+                    "description": "null",
+                    "externalDocs": {
+                        "url": "https://example.com",
+                        "description": null
+                    }
+                },
+                {
+                    "name": "Test5",
+                    "externalDocs": {
+                        "url": "https://example.com",
+                        "description": "null"
+                    }
+                }
+            ]
+        });
+
+        clean_null_descriptions(&mut openapi);
+
+        let tags = openapi["tags"].as_array().unwrap();
+
+        // Test1: description "null" should be removed
+        assert!(!tags[0].as_object().unwrap().contains_key("description"));
+
+        // Test2: description null should be removed
+        assert!(!tags[1].as_object().unwrap().contains_key("description"));
+
+        // Test3: valid description should remain
+        assert_eq!(tags[2]["description"], "Valid description");
+
+        // Test4: both tag description and externalDocs description should be removed
+        assert!(!tags[3].as_object().unwrap().contains_key("description"));
+        assert!(!tags[3]["externalDocs"]
+            .as_object()
+            .unwrap()
+            .contains_key("description"));
+        assert_eq!(tags[3]["externalDocs"]["url"], "https://example.com");
+
+        // Test5: externalDocs description "null" should be removed
+        assert!(!tags[4]["externalDocs"]
+            .as_object()
+            .unwrap()
+            .contains_key("description"));
+        assert_eq!(tags[4]["externalDocs"]["url"], "https://example.com");
     }
 }
