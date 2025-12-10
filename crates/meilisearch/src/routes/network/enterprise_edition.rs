@@ -97,7 +97,7 @@ async fn patch_network_without_origin(
     //
     // These checks are by no mean perfect (they are not atomic since the network is involved), but they should
     // help preventing a bad situation.
-    if merged_network.leader.is_some() {
+    if let Some(merged_leader) = &merged_network.leader {
         let query = Query {
             statuses: Some(vec![
                 meilisearch_types::tasks::Status::Enqueued,
@@ -119,6 +119,8 @@ async fn patch_network_without_origin(
             .into());
         }
 
+        let mut kept_leader = false;
+
         futures::stream::iter(
             old_network
                 .remotes
@@ -130,6 +132,7 @@ async fn patch_network_without_origin(
                     match eob {
                         EitherOrBoth::Both(_, (remote_name, remote))
                         | EitherOrBoth::Right((remote_name, remote)) => {
+                            kept_leader |= remote_name == merged_leader;
                             Ok((remote_name, remote, false))
                         }
                         EitherOrBoth::Left((remote_name, remote)) => {
@@ -202,6 +205,13 @@ async fn patch_network_without_origin(
             }
         })
         .await?;
+
+        if !kept_leader {
+            return Err(ResponseError::from_msg(
+                format!("leader `{merged_leader}` is missing from remotes"),
+                Code::InvalidNetworkRemotes,
+            ));
+        }
     }
 
     index_scheduler.put_network(merged_network.clone())?;
