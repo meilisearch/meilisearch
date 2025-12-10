@@ -420,22 +420,30 @@ fn set_network_ureq_headers(
 ) -> ureq::Request {
     let request = RequestWrapper(request);
 
-    let request = request
-        .set_origin_remote(&origin.remote_name)
-        .set_origin_task_uid(origin.task_uid)
-        .set_origin_network_version(origin.network_version)
-        .set_import_remote(&import_data.remote_name)
-        .set_import_docs(metadata.index_count)
-        .set_import_index_count(metadata.index_count)
-        .set_import_index_docs(metadata.total_index_documents);
+    let ImportMetadata {
+        index_count,
+        task_key,
+        total_index_documents,
+    } = metadata;
+    let Origin { remote_name: origin_remote, task_uid, network_version } = origin;
+    let ImportData { remote_name: import_remote, index_name, document_count } = import_data;
 
-    let request = if let Some(index_name) = import_data.index_name.as_deref() {
+    let request = request
+        .set_origin_remote(origin_remote)
+        .set_origin_task_uid(*task_uid)
+        .set_origin_network_version(*network_version)
+        .set_import_remote(import_remote)
+        .set_import_docs(*document_count)
+        .set_import_index_count(*index_count)
+        .set_import_index_docs(*total_index_documents);
+
+    let request = if let Some(index_name) = index_name.as_deref() {
         request.set_import_index(index_name)
     } else {
         request
     };
-    let RequestWrapper(request) = if let Some(task_key) = metadata.task_key {
-        request.set_import_task_key(task_key)
+    let RequestWrapper(request) = if let Some(task_key) = task_key {
+        request.set_import_task_key(*task_key)
     } else {
         request
     };
