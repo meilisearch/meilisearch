@@ -178,23 +178,29 @@ pub struct NetworkTopologyChange {
 
 impl NetworkTopologyChange {
     pub fn new(old_network: Network, new_network: Network) -> Self {
-        // we use our old name as export name
-        let out_name = old_network.local;
         // we use our new name as import name
         let in_name = new_network.local;
+        // we use our old name as export name
+        let out_name = old_network.local.or_else(|| in_name.clone());
+
         // we export to the new network
         let mut out_remotes = new_network.remotes;
         // don't export to ourselves
         if let Some(in_name) = &in_name {
             out_remotes.remove(in_name);
         }
-        let in_remotes = old_network
-            .remotes
-            .into_keys()
-            // don't await imports from ourselves
-            .filter(|name| Some(name.as_str()) != out_name.as_deref())
-            .map(|name| (name, InRemote::new()))
-            .collect();
+        let in_remotes = if in_name.is_some() {
+            old_network
+                .remotes
+                .into_keys()
+                .chain(out_remotes.keys().cloned())
+                // don't await imports from ourselves
+                .filter(|name| Some(name.as_str()) != out_name.as_deref())
+                .map(|name| (name, InRemote::new()))
+                .collect()
+        } else {
+            Default::default()
+        };
         Self {
             state: NetworkTopologyState::WaitingForOlderTasks,
             in_name,
