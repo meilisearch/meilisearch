@@ -164,7 +164,7 @@ jobs:
         with:
           repository: meilisearch/meilisearch-js
       - name: Setup node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           cache: "pnpm"
       - name: Install dependencies
