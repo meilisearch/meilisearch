@@ -286,6 +286,10 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
 
                             match method {
                                 ReplaceDocuments => {
+                                    if matches!(on_missing_document, MissingDocumentPolicy::Skip) {
+                                        continue;
+                                    }
+
                                     entry.insert(PayloadOperations::new_replacement(
                                         docid,
                                         true, // is new
@@ -293,6 +297,10 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
                                     ));
                                 }
                                 UpdateDocuments => {
+                                    if matches!(on_missing_document, MissingDocumentPolicy::Skip) {
+                                        continue;
+                                    }
+
                                     entry.insert(PayloadOperations::new_update(
                                         docid,
                                         true, // is new
@@ -312,6 +320,12 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
                 },
                 Entry::Vacant(entry) => match method {
                     ReplaceDocuments => {
+                        if payload_operations.is_new
+                            && matches!(on_missing_document, MissingDocumentPolicy::Skip)
+                        {
+                            continue;
+                        }
+
                         entry.insert(PayloadOperations::new_replacement(
                             payload_operations.docid,
                             payload_operations.is_new,
@@ -319,6 +333,12 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
                         ));
                     }
                     UpdateDocuments => {
+                        if payload_operations.is_new
+                            && matches!(on_missing_document, MissingDocumentPolicy::Skip)
+                        {
+                            continue;
+                        }
+
                         entry.insert(PayloadOperations::new_update(
                             payload_operations.docid,
                             payload_operations.is_new,
