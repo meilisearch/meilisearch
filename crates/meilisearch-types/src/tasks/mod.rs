@@ -899,6 +899,17 @@ pub enum BatchStopReason {
     SettingsWithDocumentOperation {
         id: TaskId,
     },
+    NetworkTask {
+        id: TaskId,
+    },
+    NetworkTaskOlderTasks {
+        id: TaskId,
+        inner_reason: String,
+    },
+    NetworkTaskImportTasks {
+        id: TaskId,
+        inner_reason: String,
+    },
 }
 
 impl BatchStopReason {
@@ -985,6 +996,24 @@ impl Display for BatchStopReason {
                 write!(
                     f,
                     "stopped before task with id {id} because it is a document operation which cannot be batched with settings changes"
+                )
+            }
+            BatchStopReason::NetworkTask { id } => {
+                write!(
+                    f,
+                    "stopped after task with id {id} because it is a network topology change task"
+                )
+            }
+            BatchStopReason::NetworkTaskOlderTasks { id, inner_reason } => {
+                write!(
+                    f,
+                    "stopped after batching network task with id {id} and a batch of older tasks: {inner_reason}"
+                )
+            }
+            BatchStopReason::NetworkTaskImportTasks { id, inner_reason } => {
+                write!(
+                    f,
+                    "stopped after batching network task with id {id} and a batch of import tasks: {inner_reason}"
                 )
             }
         }

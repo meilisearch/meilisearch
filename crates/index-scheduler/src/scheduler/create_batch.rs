@@ -745,6 +745,7 @@ impl IndexScheduler {
         mut current_batch: ProcessingBatch,
     ) -> Result<Option<(Batch, ProcessingBatch)>> {
         current_batch.processing(Some(&mut task));
+        current_batch.reason(BatchStopReason::NetworkTask { id: task.uid });
 
         let change_version =
             task.network.as_ref().map(|network| network.network_version()).unwrap_or_default();
@@ -777,11 +778,16 @@ impl IndexScheduler {
                         task_version >= change_version
                     });
 
-                let (batch, current_batch) = res?;
+                let (batch, mut current_batch) = res?;
 
                 let batch = match batch {
                     Some(batch) => {
                         let inner_batch = Box::new(batch);
+                        let inner_reason = current_batch.reason.to_string();
+                        current_batch.reason(BatchStopReason::NetworkTaskOlderTasks {
+                            id: task.uid,
+                            inner_reason,
+                        });
 
                         Batch::NetworkIndexBatch { network_task: task, inner_batch }
                     }
@@ -819,10 +825,15 @@ impl IndexScheduler {
                         task_version != change_version
                     });
 
-                let (batch, current_batch) = res?;
+                let (batch, mut current_batch) = res?;
 
                 let batch = batch.map(|batch| {
                     let inner_batch = Box::new(batch);
+                    let inner_reason = current_batch.reason.to_string();
+                    current_batch.reason(BatchStopReason::NetworkTaskOlderTasks {
+                        id: task.uid,
+                        inner_reason,
+                    });
 
                     (Batch::NetworkIndexBatch { network_task: task, inner_batch }, current_batch)
                 });
