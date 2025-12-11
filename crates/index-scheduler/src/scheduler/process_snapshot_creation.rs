@@ -336,17 +336,20 @@ impl IndexScheduler {
 
         let (reader, writer) = std::io::pipe()?;
         let uploader_task = tokio::spawn(async move {
-            let (s3_access_key, s3_secret_key, s3_token) = if !s3_role_arn.is_empty()
-                && !s3_web_identity_token_file.is_empty()
-            {
-                let StsCredentials { access_key_id, secret_access_key, session_token } =
-                    Self::assume_role_with_web_identity(&s3_role_arn, &s3_web_identity_token_file)
-                        .await
-                        .map_err(Error::Anyhow)?;
-                (access_key_id, secret_access_key, Some(session_token))
-            } else {
-                (s3_access_key, s3_secret_key, None)
-            };
+            let (s3_access_key, s3_secret_key, s3_token) =
+                if let (Some(role_arn), Some(token_file)) =
+                    (s3_role_arn, s3_web_identity_token_file)
+                {
+                    let StsCredentials { access_key_id, secret_access_key, session_token } =
+                        Self::assume_role_with_web_identity(&role_arn, &token_file)
+                            .await
+                            .map_err(Error::Anyhow)?;
+                    (access_key_id, secret_access_key, Some(session_token))
+                } else if let (Some(access_key), Some(secret_key)) = (s3_access_key, s3_secret_key) {
+                    (access_key, secret_key, None)
+                } else {
+                    return Err(Error::Anyhow(anyhow::anyhow!("Failed to parse args")))
+                };
 
             multipart_stream_to_s3(
                 s3_bucket_url,
