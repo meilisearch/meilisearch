@@ -687,6 +687,11 @@ pub struct UpdateDocumentsQuery {
     #[param(example = "custom")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
     pub custom_metadata: Option<String>,
+
+    #[param(example = "true")]
+    #[deserr(default, try_from(&String) = from_string_skip_creation -> DeserrQueryParamError<InvalidSkipCreation>, error = DeserrQueryParamError<InvalidSkipCreation>)]
+    /// Only update documents if they already exist.
+    pub skip_creation: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
@@ -709,6 +714,23 @@ fn from_char_csv_delimiter(
             Code::InvalidDocumentCsvDelimiter,
         ))
     }
+}
+
+fn from_string_skip_creation(
+    s: &String,
+) -> Result<Option<bool>, DeserrQueryParamError<InvalidSkipCreation>> {
+    if s.eq_ignore_ascii_case("true") {
+        return Ok(Some(true));
+    }
+
+    if s.eq_ignore_ascii_case("false") {
+        return Ok(Some(false));
+    }
+
+    Err(DeserrQueryParamError::new(
+        format!("skipCreation must be either `true` or `false`. Found: `{}`", s),
+        Code::InvalidSkipCreation,
+    ))
 }
 
 aggregate_methods!(
