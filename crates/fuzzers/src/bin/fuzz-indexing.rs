@@ -113,9 +113,9 @@ fn main() {
 
                             for op in &operations {
                                 match op {
-                                    Either::Left(documents) => {
-                                        indexer.replace_documents(documents).unwrap()
-                                    }
+                                    Either::Left(documents) => indexer
+                                        .replace_documents(documents, Default::default())
+                                        .unwrap(),
                                     Either::Right(ids) => indexer.delete_documents(ids),
                                 }
                             }

@@ -77,8 +77,8 @@ impl IndexScheduler {
                 let mut content_files = Vec::new();
                 for operation in &operations {
                     match operation {
-                        DocumentOperation::Replace(content_uuid)
-                        | DocumentOperation::Update(content_uuid) => {
+                        DocumentOperation::Replace { content_file: content_uuid, .. }
+                        | DocumentOperation::Update { content_file: content_uuid, .. } => {
                             let content_file = self.queue.file_store.get_update(*content_uuid)?;
                             let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
                             content_files.push(mmap);
@@ -100,16 +100,16 @@ impl IndexScheduler {
                 let embedders = self.embedders(index_uid.clone(), embedders)?;
                 for operation in operations {
                     match operation {
-                        DocumentOperation::Replace(_content_uuid) => {
+                        DocumentOperation::Replace { content_file: _, on_missing_document } => {
                             let mmap = content_files_iter.next().unwrap();
                             indexer
-                                .replace_documents(mmap)
+                                .replace_documents(mmap, on_missing_document)
                                 .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
                         }
-                        DocumentOperation::Update(_content_uuid) => {
+                        DocumentOperation::Update { content_file: _, on_missing_document } => {
                             let mmap = content_files_iter.next().unwrap();
                             indexer
-                                .update_documents(mmap)
+                                .update_documents(mmap, on_missing_document)
                                 .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
                         }
                         DocumentOperation::Delete(document_ids) => {

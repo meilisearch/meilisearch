@@ -126,7 +126,7 @@ fn test_typo_disabled_on_word() {
     let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
 
-    indexer.replace_documents(&documents).unwrap();
+    indexer.replace_documents(&documents, Default::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer

@@ -20,7 +20,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::update::{MissingDocumentPolicy, IndexDocumentsMethod};
+use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{AscDesc, DocumentId};
 use meilisearch_types::serde_cs::vec::CS;

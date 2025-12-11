@@ -629,7 +629,7 @@ fn import_dump(
 
             let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
 
-            indexer.replace_documents(&mmap)?;
+            indexer.replace_documents(&mmap, Default::default())?;
 
             let indexer_config = index_scheduler.indexer_config();
             let pool = &indexer_config.thread_pool;

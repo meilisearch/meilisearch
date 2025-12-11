@@ -21,7 +21,7 @@ use crate::update::new::indexer::current_edition::sharding::Shards;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
-use crate::update::{AvailableIds, IndexDocumentsMethod};
+use crate::update::{AvailableIds, IndexDocumentsMethod, MissingDocumentPolicy};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
 #[derive(Default)]
@@ -37,20 +37,28 @@ impl<'pl> DocumentOperation<'pl> {
     /// Append a replacement of documents.
     ///
     /// The payload is expected to be in the NDJSON format
-    pub fn replace_documents(&mut self, payload: &'pl Mmap) -> Result<()> {
+    pub fn replace_documents(
+        &mut self,
+        payload: &'pl Mmap,
+        on_missing_document: MissingDocumentPolicy,
+    ) -> Result<()> {
         #[cfg(unix)]
         payload.advise(memmap2::Advice::Sequential)?;
-        self.operations.push(Payload::Replace(&payload[..]));
+        self.operations.push(Payload::Replace { payload: &payload[..], on_missing_document });
         Ok(())
     }
 
     /// Append an update of documents.
     ///
     /// The payload is expected to be in the NDJSON format
-    pub fn update_documents(&mut self, payload: &'pl Mmap) -> Result<()> {
+    pub fn update_documents(
+        &mut self,
+        payload: &'pl Mmap,
+        on_missing_document: MissingDocumentPolicy,
+    ) -> Result<()> {
         #[cfg(unix)]
         payload.advise(memmap2::Advice::Sequential)?;
-        self.operations.push(Payload::Update(&payload[..]));
+        self.operations.push(Payload::Update { payload: &payload[..], on_missing_document });
         Ok(())
     }
 
@@ -98,34 +106,40 @@ impl<'pl> DocumentOperation<'pl> {
 
             let mut bytes = 0;
             let result = match operation {
-                Payload::Replace(payload) => extract_addition_payload_changes(
-                    indexer,
-                    index,
-                    rtxn,
-                    primary_key_from_op,
-                    &mut primary_key,
-                    new_fields_ids_map,
-                    &mut available_docids,
-                    &mut bytes,
-                    &docids_version_offsets,
-                    IndexDocumentsMethod::ReplaceDocuments,
-                    shards,
-                    payload,
-                ),
-                Payload::Update(payload) => extract_addition_payload_changes(
-                    indexer,
-                    index,
-                    rtxn,
-                    primary_key_from_op,
-                    &mut primary_key,
-                    new_fields_ids_map,
-                    &mut available_docids,
-                    &mut bytes,
-                    &docids_version_offsets,
-                    IndexDocumentsMethod::UpdateDocuments,
-                    shards,
-                    payload,
-                ),
+                Payload::Replace { payload, on_missing_document } => {
+                    extract_addition_payload_changes(
+                        indexer,
+                        index,
+                        rtxn,
+                        primary_key_from_op,
+                        &mut primary_key,
+                        new_fields_ids_map,
+                        &mut available_docids,
+                        &mut bytes,
+                        &docids_version_offsets,
+                        IndexDocumentsMethod::ReplaceDocuments,
+                        shards,
+                        payload,
+                        on_missing_document,
+                    )
+                }
+                Payload::Update { payload, on_missing_document } => {
+                    extract_addition_payload_changes(
+                        indexer,
+                        index,
+                        rtxn,
+                        primary_key_from_op,
+                        &mut primary_key,
+                        new_fields_ids_map,
+                        &mut available_docids,
+                        &mut bytes,
+                        &docids_version_offsets,
+                        IndexDocumentsMethod::UpdateDocuments,
+                        shards,
+                        payload,
+                        on_missing_document,
+                    )
+                }
                 Payload::Deletion(to_delete) => extract_deletion_payload_changes(
                     index,
                     rtxn,
@@ -180,6 +194,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     method: IndexDocumentsMethod,
     shards: Option<&Shards>,
     payload: &'pl [u8],
+    on_missing_document: MissingDocumentPolicy,
 ) -> Result<hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>> {
     use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
 
@@ -448,8 +463,8 @@ pub struct DocumentOperationChanges<'pl> {
 }
 
 pub enum Payload<'pl> {
-    Replace(&'pl [u8]),
-    Update(&'pl [u8]),
+    Replace { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
+    Update { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
     Deletion(&'pl [&'pl str]),
 }
 

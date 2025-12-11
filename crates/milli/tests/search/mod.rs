@@ -85,7 +85,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
 
     // index documents
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, Default::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, operation_stats, primary_key) = indexer

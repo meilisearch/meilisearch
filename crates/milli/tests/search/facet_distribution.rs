@@ -47,7 +47,7 @@ fn test_facet_distribution_with_no_facet_values() {
     let documents = mmap_from_objects(vec![doc1, doc2]);
 
     // index documents
-    indexer.replace_documents(&documents).unwrap();
+    indexer.replace_documents(&documents, Default::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer

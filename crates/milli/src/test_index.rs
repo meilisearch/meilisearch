@@ -70,9 +70,11 @@ impl TempIndex {
         let mut indexer = indexer::DocumentOperation::new();
         match self.index_documents_config.update_method {
             IndexDocumentsMethod::ReplaceDocuments => {
-                indexer.replace_documents(&documents).unwrap()
+                indexer.replace_documents(&documents, Default::default()).unwrap()
             }
-            IndexDocumentsMethod::UpdateDocuments => indexer.update_documents(&documents).unwrap(),
+            IndexDocumentsMethod::UpdateDocuments => {
+                indexer.update_documents(&documents, Default::default()).unwrap()
+            }
         }
 
         let indexer_alloc = Bump::new();
@@ -232,7 +234,7 @@ fn aborting_indexation() {
         { "id": 2, "name": "bob", "age": 20 },
         { "id": 2, "name": "bob", "age": 20 },
     ]);
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, Default::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer

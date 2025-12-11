@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use byte_unit::Byte;
 use enum_iterator::Sequence;
-use milli::update::{MissingDocumentPolicy, IndexDocumentsMethod};
+use milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};

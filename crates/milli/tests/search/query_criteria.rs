@@ -319,7 +319,7 @@ fn criteria_ascdesc() {
     file.sync_all().unwrap();
 
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, Default::default()).unwrap();
     let (document_changes, _operation_stats, primary_key) = indexer
         .into_changes(
             &indexer_alloc,
