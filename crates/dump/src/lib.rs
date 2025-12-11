@@ -620,7 +620,10 @@ pub(crate) mod test {
         assert_eq!(dump.features().unwrap().unwrap(), expected);
 
         // ==== checking the network
-        let expected = create_test_network();
+        let mut expected = create_test_network();
+        // from v1.29, we drop `leader` and `local` on import
+        expected.leader = None;
+        expected.local = None;
         assert_eq!(&expected, dump.network().unwrap().unwrap());
     }
 }
