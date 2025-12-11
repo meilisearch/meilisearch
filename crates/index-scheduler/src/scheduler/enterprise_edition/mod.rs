@@ -134,6 +134,7 @@ impl IndexScheduler {
         if index_count == 0 {
             for (remote_name, remote) in remotes {
                 let target = TargetInstance {
+                    remote_name: Some(remote_name),
                     base_url: &remote.url,
                     api_key: remote.write_api_key.as_deref(),
                 };
@@ -186,6 +187,7 @@ impl IndexScheduler {
                         documents_to_move_to.remove(remote_name).unwrap_or_default();
 
                     let target = TargetInstance {
+                        remote_name: Some(remote_name),
                         base_url: &remote.url,
                         api_key: remote.write_api_key.as_deref(),
                     };

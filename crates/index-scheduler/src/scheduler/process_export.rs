@@ -76,7 +76,7 @@ impl IndexScheduler {
             let whole_universe =
                 index.documents_ids(&index_rtxn).map_err(milli::Error::from).map_err(err)?;
             let universe = filter_universe.unwrap_or(whole_universe);
-            let target = TargetInstance { base_url, api_key };
+            let target = TargetInstance { remote_name: None, base_url, api_key };
             let ctx = ExportContext {
                 index: &index,
                 index_rtxn: &index_rtxn,
@@ -142,33 +142,40 @@ impl IndexScheduler {
             ctx.index.primary_key(ctx.index_rtxn).map_err(milli::Error::from).map_err(err)?;
         if !index_exists {
             let url = format!("{base_url}/indexes", base_url = target.base_url);
-            let _ = handle_response(retry(ctx.must_stop_processing, || {
-                let mut request = ctx.agent.post(&url);
+            let _ = handle_response(
+                target.remote_name,
+                retry(ctx.must_stop_processing, || {
+                    let mut request = ctx.agent.post(&url);
 
-                if let Some((import_data, origin, metadata)) = &task_network {
-                    request = set_network_ureq_headers(request, import_data, origin, metadata);
-                }
+                    if let Some((import_data, origin, metadata)) = &task_network {
+                        request = set_network_ureq_headers(request, import_data, origin, metadata);
+                    }
 
-                if let Some(bearer) = bearer.as_ref() {
-                    request = request.set("Authorization", bearer);
-                }
-                let index_param = json!({ "uid": options.index_uid, "primaryKey": primary_key });
+                    if let Some(bearer) = bearer.as_ref() {
+                        request = request.set("Authorization", bearer);
+                    }
+                    let index_param =
+                        json!({ "uid": options.index_uid, "primaryKey": primary_key });
 
-                request.send_json(&index_param).map_err(into_backoff_error)
-            }))?;
+                    request.send_json(&index_param).map_err(into_backoff_error)
+                }),
+            )?;
         }
         if index_exists && options.override_settings {
-            let _ = handle_response(retry(ctx.must_stop_processing, || {
-                let mut request = ctx.agent.patch(&url);
-                if let Some((import_data, origin, metadata)) = &task_network {
-                    request = set_network_ureq_headers(request, import_data, origin, metadata);
-                }
-                if let Some(bearer) = &bearer {
-                    request = request.set("Authorization", bearer);
-                }
-                let index_param = json!({ "primaryKey": primary_key });
-                request.send_json(&index_param).map_err(into_backoff_error)
-            }))?;
+            let _ = handle_response(
+                target.remote_name,
+                retry(ctx.must_stop_processing, || {
+                    let mut request = ctx.agent.patch(&url);
+                    if let Some((import_data, origin, metadata)) = &task_network {
+                        request = set_network_ureq_headers(request, import_data, origin, metadata);
+                    }
+                    if let Some(bearer) = &bearer {
+                        request = request.set("Authorization", bearer);
+                    }
+                    let index_param = json!({ "primaryKey": primary_key });
+                    request.send_json(&index_param).map_err(into_backoff_error)
+                }),
+            )?;
         }
         if !index_exists || options.override_settings {
             let mut settings =
@@ -185,18 +192,21 @@ impl IndexScheduler {
                 index_uid = options.index_uid
             );
 
-            let _ = handle_response(retry(ctx.must_stop_processing, || {
-                let mut request = ctx.agent.patch(&url);
+            let _ = handle_response(
+                target.remote_name,
+                retry(ctx.must_stop_processing, || {
+                    let mut request = ctx.agent.patch(&url);
 
-                if let Some((import_data, origin, metadata)) = &task_network {
-                    request = set_network_ureq_headers(request, import_data, origin, metadata);
-                }
+                    if let Some((import_data, origin, metadata)) = &task_network {
+                        request = set_network_ureq_headers(request, import_data, origin, metadata);
+                    }
 
-                if let Some(bearer) = bearer.as_ref() {
-                    request = request.set("Authorization", bearer);
-                }
-                request.send_json(settings.clone()).map_err(into_backoff_error)
-            }))?;
+                    if let Some(bearer) = bearer.as_ref() {
+                        request = request.set("Authorization", bearer);
+                    }
+                    request.send_json(settings.clone()).map_err(into_backoff_error)
+                }),
+            )?;
         }
 
         let fields_ids_map = ctx.index.fields_ids_map(ctx.index_rtxn)?;
@@ -226,6 +236,7 @@ impl IndexScheduler {
                     ctx.must_stop_processing,
                     ctx.agent,
                     &documents_url,
+                    target.remote_name,
                     bearer.as_deref(),
                     Some(&(import_data, network_change_origin.clone(), metadata)),
                     &err,
@@ -324,6 +335,7 @@ impl IndexScheduler {
                             ctx.must_stop_processing,
                             ctx.agent,
                             &documents_url,
+                            target.remote_name,
                             bearer.as_deref(),
                             task_network.as_ref(),
                             &err,
@@ -354,6 +366,7 @@ impl IndexScheduler {
                         ctx.must_stop_processing,
                         ctx.agent,
                         &documents_url,
+                        target.remote_name,
                         bearer.as_deref(),
                         task_network.as_ref(),
                         &err,
@@ -383,29 +396,36 @@ impl IndexScheduler {
         let url = format!("{base_url}/network", base_url = target.base_url,);
 
         {
-            let _ = handle_response(retry(must_stop_processing, || {
-                let request = agent.patch(&url);
-                let mut request = set_network_ureq_headers(
-                    request,
-                    &ImportData {
-                        remote_name: export_old_remote_name.to_string(),
-                        index_name: None,
-                        document_count: 0,
-                    },
-                    network_change_origin,
-                    &ImportMetadata { index_count: 0, task_key: None, total_index_documents: 0 },
-                );
-                request = request.set("Content-Type", "application/json");
-                if let Some(bearer) = &bearer {
-                    request = request.set("Authorization", bearer);
-                }
-                request
-                    .send_json(
-                        // empty payload that will be disregarded
-                        serde_json::Value::Object(Default::default()),
-                    )
-                    .map_err(into_backoff_error)
-            }))?;
+            let _ = handle_response(
+                target.remote_name,
+                retry(must_stop_processing, || {
+                    let request = agent.patch(&url);
+                    let mut request = set_network_ureq_headers(
+                        request,
+                        &ImportData {
+                            remote_name: export_old_remote_name.to_string(),
+                            index_name: None,
+                            document_count: 0,
+                        },
+                        network_change_origin,
+                        &ImportMetadata {
+                            index_count: 0,
+                            task_key: None,
+                            total_index_documents: 0,
+                        },
+                    );
+                    request = request.set("Content-Type", "application/json");
+                    if let Some(bearer) = &bearer {
+                        request = request.set("Authorization", bearer);
+                    }
+                    request
+                        .send_json(
+                            // empty payload that will be disregarded
+                            serde_json::Value::Object(Default::default()),
+                        )
+                        .map_err(into_backoff_error)
+                }),
+            )?;
         }
 
         Ok(())
@@ -461,6 +481,7 @@ fn send_buffer<'a>(
     must_stop_processing: &MustStopProcessing,
     agent: &ureq::Agent,
     documents_url: &'a str,
+    remote_name: Option<&str>,
     bearer: Option<&'a str>,
     task_network: Option<&(ImportData, Origin, ImportMetadata)>,
     err: &'a impl Fn(milli::Error) -> crate::Error,
@@ -484,10 +505,11 @@ fn send_buffer<'a>(
         request.send_bytes(compressed_buffer).map_err(into_backoff_error)
     });
 
-    handle_response(res)
+    handle_response(remote_name, res)
 }
 
-fn handle_response(res: Result<Response>) -> Result<ControlFlow<()>> {
+fn handle_response(remote_name: Option<&str>, res: Result<Response>) -> Result<ControlFlow<()>> {
+    let remote_name = remote_name.unwrap_or("unnamed");
     match res {
         Ok(_response) => Ok(ControlFlow::Continue(())),
         Err(Error::FromRemoteWhenExporting { code, .. })
@@ -498,14 +520,14 @@ fn handle_response(res: Result<Response>) -> Result<ControlFlow<()>> {
         Err(Error::FromRemoteWhenExporting { code, message, .. })
             if code == Code::ImportTaskUnknownRemote.name() =>
         {
-            tracing::warn!("remote answered with: {message}");
+            tracing::warn!("remote `{remote_name}` answered with: {message}");
             Ok(ControlFlow::Break(()))
         }
         // note: there has already been many attempts to get this due to exponential backoff
         Err(Error::FromRemoteWhenExporting { code, message, .. })
             if code == Code::ImportTaskWithoutNetworkTask.name() =>
         {
-            tracing::warn!("remote answered with: {message}");
+            tracing::warn!("remote `{remote_name}` answered with: {message}");
             Ok(ControlFlow::Break(()))
         }
         Err(e) => {
@@ -573,6 +595,7 @@ fn ureq_error_into_error(error: ureq::Error) -> Error {
 
 // export_one_index arguments
 pub(super) struct TargetInstance<'a> {
+    pub(super) remote_name: Option<&'a str>,
     pub(super) base_url: &'a str,
     pub(super) api_key: Option<&'a str>,
 }
