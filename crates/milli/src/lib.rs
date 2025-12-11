@@ -19,6 +19,7 @@ mod external_documents_ids;
 pub mod facet;
 mod fields_ids_map;
 mod filterable_attributes_rules;
+mod foreign_key;
 pub mod heed_codec;
 pub mod index;
 mod localized_attributes_rules;
@@ -71,6 +72,7 @@ pub use self::filterable_attributes_rules::{
     FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
     FilterableAttributesRule,
 };
+pub use self::foreign_key::ForeignKey;
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,

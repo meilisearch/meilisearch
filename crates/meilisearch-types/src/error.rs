@@ -327,6 +327,7 @@ InvalidSettingsFacetSearch                     , InvalidRequest       , BAD_REQU
 InvalidSettingsPrefixSearch                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting                        , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes            , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsForeignKeys                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination                      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSearchCutoffMs                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsEmbedders                       , InvalidRequest       , BAD_REQUEST ;
