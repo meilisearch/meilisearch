@@ -43,7 +43,7 @@ pub fn upgrade_index_scheduler(
 
     let upgrade_functions: &[&dyn UpgradeIndexScheduler] = &[
         // List all upgrade functions to apply in order here.
-        &v1_30::MigrateNetwork
+        &v1_30::MigrateNetwork,
     ];
 
     let (initial_major, initial_minor, initial_patch) = initial_version;

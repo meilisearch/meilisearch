@@ -44,7 +44,7 @@ pub struct MigrateNetwork;
 
 impl super::UpgradeIndexScheduler for MigrateNetwork {
     fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()> {
-        let Some(v1_29::Network { local, remotes, sharding }) = v1_29::get_network(env, &wtxn)?
+        let Some(v1_29::Network { local, remotes, sharding }) = v1_29::get_network(env, wtxn)?
         else {
             return Ok(());
         };
