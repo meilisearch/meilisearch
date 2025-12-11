@@ -45,6 +45,10 @@ pub fn write_to_db(
                 let database_name = database.database_name();
                 let database = database.database(index);
                 if let Err(error) = database.put(wtxn, &key, &value) {
+                    // Allow MDB_MAP_FULL to bubble up for proper handling
+                    if let heed::Error::Mdb(heed::MdbError::MapFull) = error {
+                        return Err(Error::from(error));
+                    }
                     return Err(Error::InternalError(InternalError::StorePut {
                         database_name,
                         key: bstr::BString::from(&key[..]),
@@ -201,6 +205,10 @@ pub fn write_from_bbqueue(
                 match operation.key_value(frame) {
                     (key, Some(value)) => {
                         if let Err(error) = database.put(wtxn, key, value) {
+                            // Allow MDB_MAP_FULL to bubble up for proper handling
+                            if let heed::Error::Mdb(heed::MdbError::MapFull) = error {
+                                return Err(Error::from(error));
+                            }
                             return Err(Error::InternalError(InternalError::StorePut {
                                 database_name,
                                 key: key.into(),
