@@ -1,0 +1,304 @@
+{
+  "type": "test",
+  "name": "network",
+  "binary": {
+    "source": "release",
+    "edition": "enterprise",
+    "version": "1.28.0"
+  },
+  "assets": {
+    "movies.json": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/movies.json",
+      "sha256": "5b6e4cb660bc20327776e8a33ea197b43d9ec84856710ead1cc87ab24df77de1"
+    }
+  },
+  "commands": [
+    {
+      "route": "experimental-features",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "network": true
+        }
+      },
+      "expectedStatus": 200,
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "network",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "remotes": {
+            "prod1": {
+              "searchApiKey": "foo1",
+              "url": "http://localhost:7701",
+              "writeApiKey": "bar1"
+            },
+            "prod2": {
+              "searchApiKey": "foo2",
+              "url": "http://localhost:7702",
+              "writeApiKey": "bar2"
+            },
+            "prod3": {
+              "searchApiKey": "foo3",
+              "url": "http://localhost:7703",
+              "writeApiKey": "bar3"
+            },
+            "prod4": {
+              "searchApiKey": "foo4",
+              "url": "http://localhost:7704",
+              "writeApiKey": "bar4"
+            },
+            "prod5": {
+              "searchApiKey": "foo5",
+              "url": "http://localhost:7705",
+              "writeApiKey": "bar5"
+            }
+          },
+          "self": "prod1",
+          "sharding": true
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "remotes": {
+          "prod1": {
+            "searchApiKey": "foo1",
+            "url": "http://localhost:7701",
+            "writeApiKey": "bar1"
+          },
+          "prod2": {
+            "searchApiKey": "foo2",
+            "url": "http://localhost:7702",
+            "writeApiKey": "bar2"
+          },
+          "prod3": {
+            "searchApiKey": "foo3",
+            "url": "http://localhost:7703",
+            "writeApiKey": "bar3"
+          },
+          "prod4": {
+            "searchApiKey": "foo4",
+            "url": "http://localhost:7704",
+            "writeApiKey": "bar4"
+          },
+          "prod5": {
+            "searchApiKey": "foo5",
+            "url": "http://localhost:7705",
+            "writeApiKey": "bar5"
+          }
+        },
+        "self": "prod1",
+        "sharding": true
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "searchableAttributes": [
+            "title",
+            "overview"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ]
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 0,
+        "type": "settingsUpdate"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "movies.json"
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "movies",
+        "status": "enqueued",
+        "taskUid": 1,
+        "type": "documentAdditionOrUpdate"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade",
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
+      "route": "network",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "leader": "prod1",
+        "remotes": {
+          "prod1": {
+            "searchApiKey": "foo1",
+            "url": "http://localhost:7701",
+            "writeApiKey": "bar1"
+          },
+          "prod2": {
+            "searchApiKey": "foo2",
+            "url": "http://localhost:7702",
+            "writeApiKey": "bar2"
+          },
+          "prod3": {
+            "searchApiKey": "foo3",
+            "url": "http://localhost:7703",
+            "writeApiKey": "bar3"
+          },
+          "prod4": {
+            "searchApiKey": "foo4",
+            "url": "http://localhost:7704",
+            "writeApiKey": "bar4"
+          },
+          "prod5": {
+            "searchApiKey": "foo5",
+            "url": "http://localhost:7705",
+            "writeApiKey": "bar5"
+          }
+        },
+        "self": "prod1",
+        "version": "[uuid]"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "tasks",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "from": 2,
+        "limit": 20,
+        "next": null,
+        "results": [
+          {
+            "batchUid": null,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.28.0",
+              "upgradeTo": "[latest]"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": null,
+            "indexUid": null,
+            "startedAt": null,
+            "status": "enqueued",
+            "type": "upgradeDatabase",
+            "uid": 2
+          },
+          {
+            "batchUid": 1,
+            "canceledBy": null,
+            "details": {
+              "indexedDocuments": 6553,
+              "receivedDocuments": 31968
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": "movies",
+            "network": {
+              "network_version": "[uuid]",
+              "remote_tasks": {
+                "prod2": {
+                  "error": {
+                    "code": "remote_could_not_send_request",
+                    "link": "https://docs.meilisearch.com/errors#remote_could_not_send_request",
+                    "message": "error sending request",
+                    "type": "system"
+                  }
+                },
+                "prod3": {
+                  "error": {
+                    "code": "remote_could_not_send_request",
+                    "link": "https://docs.meilisearch.com/errors#remote_could_not_send_request",
+                    "message": "error sending request",
+                    "type": "system"
+                  }
+                },
+                "prod4": {
+                  "error": {
+                    "code": "remote_could_not_send_request",
+                    "link": "https://docs.meilisearch.com/errors#remote_could_not_send_request",
+                    "message": "error sending request",
+                    "type": "system"
+                  }
+                },
+                "prod5": {
+                  "error": {
+                    "code": "remote_could_not_send_request",
+                    "link": "https://docs.meilisearch.com/errors#remote_could_not_send_request",
+                    "message": "error sending request",
+                    "type": "system"
+                  }
+                }
+              }
+            },
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "documentAdditionOrUpdate",
+            "uid": 1
+          },
+          {
+            "batchUid": 0,
+            "canceledBy": null,
+            "details": {
+              "filterableAttributes": [
+                "genres",
+                "release_date"
+              ],
+              "searchableAttributes": [
+                "title",
+                "overview"
+              ],
+              "sortableAttributes": [
+                "release_date"
+              ]
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": "movies",
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "settingsUpdate",
+            "uid": 0
+          }
+        ],
+        "total": 3
+      },
+      "synchronous": "WaitForResponse"
+    }
+  ]
+}
