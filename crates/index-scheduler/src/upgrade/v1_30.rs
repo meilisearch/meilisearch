@@ -58,7 +58,7 @@ impl super::UpgradeIndexScheduler for MigrateNetwork {
             })
             .collect();
 
-        let network = Network { local, remotes, leader, version: Uuid::now_v7() };
+        let network = Network { local, remotes, leader, version: Uuid::nil() };
 
         set_network(env, wtxn, &network)?;
         Ok(())
