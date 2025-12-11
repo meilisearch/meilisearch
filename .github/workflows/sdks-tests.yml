@@ -164,23 +164,23 @@ jobs:
         with:
           repository: meilisearch/meilisearch-js
       - name: Setup node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v6
         with:
           cache: 'yarn'
       - name: Install dependencies
-        run: yarn --dev
+        run: pnpm install
       - name: Run tests
-        run: yarn test
+        run: pnpm test
       - name: Build project
-        run: yarn build
+        run: pnpm build
       - name: Run ESM env
-        run: yarn test:env:esm
+        run: pnpm test:env:esm
       - name: Run Node.js env
-        run: yarn test:env:nodejs
+        run: pnpm test:env:nodejs
       - name: Run node typescript env
-        run: yarn test:env:node-ts
+        run: pnpm test:env:node-ts
       - name: Run Browser env
-        run: yarn test:env:browser
+        run: pnpm test:env:browser
 
   meilisearch-php-tests:
     needs: define-docker-image
