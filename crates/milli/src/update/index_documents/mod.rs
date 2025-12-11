@@ -70,7 +70,7 @@ pub enum IndexDocumentsMethod {
 /// Controls whether new documents should be created when they don't already exist.
 ///
 /// This policy is checked when processing a document whose ID is not found in the index.
-/// It applies to both add and update operations.
+/// It applies to both update and replace operations.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MissingDocumentPolicy {
     /// Create the document if it doesn't exist. This is the default behavior.
