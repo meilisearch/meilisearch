@@ -25,6 +25,7 @@ impl IndexScheduler {
         Err(Error::RequiresEnterpriseEdition { action: "processing a network task" })
     }
 
+    #[cfg(unix)]
     pub(super) async fn process_snapshot_to_s3(
         &self,
         _progress: Progress,

@@ -91,7 +91,7 @@ impl<'a> Index<'a, Owned> {
         documents: Value,
         primary_key: Option<&str>,
     ) -> (Value, StatusCode) {
-        self._add_documents(documents, primary_key, None).await
+        self._add_documents(documents, primary_key, None, false).await
     }
 
     pub async fn add_documents_with_custom_metadata(
@@ -100,7 +100,17 @@ impl<'a> Index<'a, Owned> {
         primary_key: Option<&str>,
         custom_metadata: Option<&str>,
     ) -> (Value, StatusCode) {
-        self._add_documents(documents, primary_key, custom_metadata).await
+        self._add_documents(documents, primary_key, custom_metadata, false).await
+    }
+
+    pub async fn add_documents_with_skip_creation(
+        &self,
+        documents: Value,
+        primary_key: Option<&str>,
+        custom_metadata: Option<&str>,
+        skip_creation: bool,
+    ) -> (Value, StatusCode) {
+        self._add_documents(documents, primary_key, custom_metadata, skip_creation).await
     }
 
     pub async fn raw_add_documents(
@@ -362,24 +372,31 @@ impl<State> Index<'_, State> {
         documents: Value,
         primary_key: Option<&str>,
         custom_metadata: Option<&str>,
+        skip_creation: bool,
     ) -> (Value, StatusCode) {
         let url = match (primary_key, custom_metadata) {
             (Some(key), Some(meta)) => {
                 format!(
-                    "/indexes/{}/documents?primaryKey={key}&customMetadata={meta}",
+                    "/indexes/{}/documents?primaryKey={key}&customMetadata={meta}&skipCreation={skip_creation}",
                     urlencode(self.uid.as_ref()),
                 )
             }
             (None, Some(meta)) => {
                 format!(
-                    "/indexes/{}/documents?&customMetadata={meta}",
+                    "/indexes/{}/documents?&customMetadata={meta}&skipCreation={skip_creation}",
                     urlencode(self.uid.as_ref()),
                 )
             }
             (Some(key), None) => {
-                format!("/indexes/{}/documents?&primaryKey={key}", urlencode(self.uid.as_ref()),)
+                format!(
+                    "/indexes/{}/documents?&primaryKey={key}&skipCreation={skip_creation}",
+                    urlencode(self.uid.as_ref()),
+                )
             }
-            (None, None) => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
+            (None, None) => format!(
+                "/indexes/{}/documents?skipCreation={skip_creation}",
+                urlencode(self.uid.as_ref())
+            ),
         };
         self.service.post_encoded(url, documents, self.encoder).await
     }

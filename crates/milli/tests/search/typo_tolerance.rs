@@ -5,7 +5,7 @@ use heed::EnvOpenOptions;
 use milli::documents::mmap_from_objects;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexerConfig, Settings};
+use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
 use serde_json::from_value;
@@ -126,7 +126,7 @@ fn test_typo_disabled_on_word() {
     let embedders = RuntimeEmbedders::default();
     let mut indexer = indexer::DocumentOperation::new();
 
-    indexer.replace_documents(&documents).unwrap();
+    indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer

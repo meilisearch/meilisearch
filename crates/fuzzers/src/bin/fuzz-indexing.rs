@@ -12,7 +12,7 @@ use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::IndexerConfig;
+use milli::update::{IndexerConfig, MissingDocumentPolicy};
 use milli::vector::RuntimeEmbedders;
 use milli::Index;
 use serde_json::Value;
@@ -113,9 +113,12 @@ fn main() {
 
                             for op in &operations {
                                 match op {
-                                    Either::Left(documents) => {
-                                        indexer.replace_documents(documents).unwrap()
-                                    }
+                                    Either::Left(documents) => indexer
+                                        .replace_documents(
+                                            documents,
+                                            MissingDocumentPolicy::default(),
+                                        )
+                                        .unwrap(),
                                     Either::Right(ids) => indexer.delete_documents(ids),
                                 }
                             }

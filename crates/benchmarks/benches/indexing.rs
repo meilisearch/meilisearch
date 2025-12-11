@@ -10,7 +10,7 @@ use milli::documents::PrimaryKey;
 use milli::heed::{EnvOpenOptions, RwTxn};
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexerConfig, Settings};
+use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{FilterableAttributesRule, Index};
 use rand::seq::SliceRandom;
@@ -146,7 +146,7 @@ fn indexing_songs_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -214,7 +214,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -260,7 +260,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -330,7 +330,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -408,7 +408,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_1_2, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -454,7 +454,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_3_4, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -496,7 +496,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_4_4, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -565,7 +565,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
 
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -633,7 +633,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -701,7 +701,7 @@ fn indexing_wiki(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -768,7 +768,7 @@ fn reindexing_wiki(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -814,7 +814,7 @@ fn reindexing_wiki(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -883,7 +883,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -961,7 +961,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_1_2, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1008,7 +1008,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_3_4, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1051,7 +1051,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_4_4, "csv");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1119,7 +1119,7 @@ fn indexing_movies_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1186,7 +1186,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1232,7 +1232,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1301,7 +1301,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1416,7 +1416,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_1_2, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1462,7 +1462,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_3_4, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1504,7 +1504,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_4_4, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1595,7 +1595,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1687,7 +1687,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1771,7 +1771,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1839,7 +1839,7 @@ fn indexing_geo(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1906,7 +1906,7 @@ fn reindexing_geo(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -1952,7 +1952,7 @@ fn reindexing_geo(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer
@@ -2021,7 +2021,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
 
                 let mut indexer = indexer::DocumentOperation::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
-                indexer.replace_documents(&documents).unwrap();
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
                 let indexer_alloc = Bump::new();
                 let (document_changes, _operation_stats, primary_key) = indexer

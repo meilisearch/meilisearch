@@ -3,7 +3,7 @@ use std::time::Instant;
 use big_s::S;
 use meili_snap::snapshot;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
-use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::update::{MissingDocumentPolicy, Setting};
 use meilisearch_types::milli::{obkv_to_json, FilterableAttributesRule};
 use meilisearch_types::tasks::{Kind, KindWithContent};
 
@@ -52,6 +52,7 @@ fn fail_in_process_batch_for_document_addition() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -94,6 +95,7 @@ fn fail_in_update_task_after_process_batch_success_for_document_addition() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -160,6 +162,7 @@ fn fail_in_process_batch_for_document_deletion() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,

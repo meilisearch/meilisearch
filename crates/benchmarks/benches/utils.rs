@@ -13,7 +13,7 @@ use milli::documents::sort::recursive_sort;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexerConfig, Settings};
+use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
 use serde_json::Value;
@@ -111,7 +111,7 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     let documents = documents_from(conf.dataset, conf.dataset_format);
     let mut indexer = indexer::DocumentOperation::new();
-    indexer.replace_documents(&documents).unwrap();
+    indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer

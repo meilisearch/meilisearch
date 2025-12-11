@@ -67,6 +67,21 @@ pub enum IndexDocumentsMethod {
     UpdateDocuments,
 }
 
+/// Controls whether new documents should be created when they don't already exist.
+///
+/// This policy is checked when processing a document whose ID is not found in the index.
+/// It applies to both update and replace operations.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MissingDocumentPolicy {
+    /// Create the document if it doesn't exist. This is the default behavior.
+    #[default]
+    Create,
+
+    /// Skip the document silently if it doesn't exist. No error is returned, the document is simply
+    /// not indexed.
+    Skip,
+}
+
 pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     wtxn: &'t mut heed::RwTxn<'i>,
     index: &'i Index,
@@ -1971,10 +1986,10 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let mut indexer = indexer::DocumentOperation::new();
-        indexer.replace_documents(&doc1).unwrap();
-        indexer.replace_documents(&doc2).unwrap();
-        indexer.replace_documents(&doc3).unwrap();
-        indexer.replace_documents(&doc4).unwrap();
+        indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
+        indexer.replace_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
+        indexer.replace_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
+        indexer.replace_documents(&doc4, MissingDocumentPolicy::default()).unwrap();
 
         let indexer_alloc = Bump::new();
         let (_document_changes, operation_stats, _primary_key) = indexer
@@ -2024,10 +2039,10 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let mut indexer = indexer::DocumentOperation::new();
-        indexer.replace_documents(&doc1).unwrap();
-        indexer.update_documents(&doc2).unwrap();
-        indexer.update_documents(&doc3).unwrap();
-        indexer.update_documents(&doc4).unwrap();
+        indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc4, MissingDocumentPolicy::default()).unwrap();
 
         let indexer_alloc = Bump::new();
         let (document_changes, operation_stats, primary_key) = indexer
@@ -2112,11 +2127,11 @@ mod tests {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let mut indexer = indexer::DocumentOperation::new();
-        indexer.replace_documents(&doc1).unwrap();
-        indexer.update_documents(&doc2).unwrap();
-        indexer.update_documents(&doc3).unwrap();
-        indexer.replace_documents(&doc4).unwrap();
-        indexer.update_documents(&doc5).unwrap();
+        indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
+        indexer.replace_documents(&doc4, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc5, MissingDocumentPolicy::default()).unwrap();
 
         let indexer_alloc = Bump::new();
         let (document_changes, operation_stats, primary_key) = indexer
@@ -2307,7 +2322,7 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
         indexer.delete_documents(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2362,13 +2377,13 @@ mod tests {
             { "id": 3, "name": "jean", "age": 25 },
         ]);
         let mut indexer = indexer::DocumentOperation::new();
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let indexer_alloc = Bump::new();
@@ -2426,7 +2441,7 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2479,7 +2494,7 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::DocumentOperation::new();
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2536,7 +2551,7 @@ mod tests {
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2595,7 +2610,7 @@ mod tests {
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2651,7 +2666,7 @@ mod tests {
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
         ]);
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2705,7 +2720,7 @@ mod tests {
             { "id": 1, "catto": "jorts" },
         ]);
 
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2916,7 +2931,7 @@ mod tests {
         let documents = documents!([
             { "id": 1, "doggo": "bernese" },
         ]);
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         // FINISHING
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2978,7 +2993,7 @@ mod tests {
         let documents = documents!([
             { "id": 0, "catto": "jorts" },
         ]);
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -3036,7 +3051,7 @@ mod tests {
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(

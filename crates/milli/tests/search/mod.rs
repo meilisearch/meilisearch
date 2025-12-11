@@ -9,7 +9,7 @@ use heed::EnvOpenOptions;
 use maplit::{btreemap, hashset};
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexerConfig, Settings};
+use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{
     normalize_facet, AscDesc, Criterion, DocumentId, FilterableAttributesRule, Index, Member,
@@ -85,7 +85,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
 
     // index documents
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, operation_stats, primary_key) = indexer

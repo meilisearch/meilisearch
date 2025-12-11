@@ -20,7 +20,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{AscDesc, DocumentId};
 use meilisearch_types::serde_cs::vec::CS;
@@ -695,6 +695,11 @@ pub struct UpdateDocumentsQuery {
     #[param(example = "custom")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
     pub custom_metadata: Option<String>,
+
+    #[param(example = "true")]
+    #[deserr(default, try_from(&String) = from_string_skip_creation -> DeserrQueryParamError<InvalidSkipCreation>, error = DeserrQueryParamError<InvalidSkipCreation>)]
+    /// Only update documents if they already exist.
+    pub skip_creation: Option<bool>,
 }
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
@@ -717,6 +722,23 @@ fn from_char_csv_delimiter(
             Code::InvalidDocumentCsvDelimiter,
         ))
     }
+}
+
+fn from_string_skip_creation(
+    s: &String,
+) -> Result<Option<bool>, DeserrQueryParamError<InvalidSkipCreation>> {
+    if s.eq_ignore_ascii_case("true") {
+        return Ok(Some(true));
+    }
+
+    if s.eq_ignore_ascii_case("false") {
+        return Ok(Some(false));
+    }
+
+    Err(DeserrQueryParamError::new(
+        format!("skipCreation must be either `true` or `false`. Found: `{}`", s),
+        Code::InvalidSkipCreation,
+    ))
 }
 
 aggregate_methods!(
@@ -848,6 +870,7 @@ pub async fn replace_documents(
         params.custom_metadata,
         dry_run,
         allow_index_creation,
+        params.skip_creation,
         &req,
     )
     .await?;
@@ -951,6 +974,7 @@ pub async fn update_documents(
         params.custom_metadata,
         dry_run,
         allow_index_creation,
+        params.skip_creation,
         &req,
     )
     .await?;
@@ -971,6 +995,7 @@ async fn document_addition(
     custom_metadata: Option<String>,
     dry_run: bool,
     allow_index_creation: bool,
+    skip_creation: Option<bool>,
     req: &HttpRequest,
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
     let mime_type = extract_mime_type(req)?;
@@ -1092,6 +1117,11 @@ async fn document_addition(
         primary_key,
         allow_index_creation,
         index_uid: index_uid.to_string(),
+        on_missing_document: if matches!(skip_creation, Some(true)) {
+            MissingDocumentPolicy::Skip
+        } else {
+            MissingDocumentPolicy::Create
+        },
     };
 
     // FIXME: not new to #6000, but _any_ error here will cause the payload to unduly persist

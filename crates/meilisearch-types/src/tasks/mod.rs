@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use byte_unit::Byte;
 use enum_iterator::Sequence;
-use milli::update::IndexDocumentsMethod;
+use milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -118,6 +118,8 @@ pub enum KindWithContent {
         content_file: Uuid,
         documents_count: u64,
         allow_index_creation: bool,
+        #[serde(default)]
+        on_missing_document: MissingDocumentPolicy,
     },
     DocumentDeletion {
         index_uid: String,

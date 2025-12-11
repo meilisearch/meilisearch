@@ -1,12 +1,12 @@
-use meilisearch_types::milli::update::IndexDocumentsMethod::{
-    self, ReplaceDocuments, UpdateDocuments,
-};
-use meilisearch_types::tasks::{BatchStopReason, IndexSwap, KindWithContent};
-use uuid::Uuid;
-
 use self::autobatcher::{autobatch, BatchKind};
 use super::*;
 use crate::TaskId;
+use meilisearch_types::milli::update::IndexDocumentsMethod::{
+    self, ReplaceDocuments, UpdateDocuments,
+};
+use meilisearch_types::milli::update::MissingDocumentPolicy;
+use meilisearch_types::tasks::{BatchStopReason, IndexSwap, KindWithContent};
+use uuid::Uuid;
 
 #[macro_export]
 macro_rules! debug_snapshot {
@@ -40,6 +40,7 @@ fn doc_imp(
         content_file: Uuid::new_v4(),
         documents_count: 0,
         allow_index_creation,
+        on_missing_document: MissingDocumentPolicy::default(),
     }
 }
 
