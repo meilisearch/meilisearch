@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use byte_unit::Byte;
 use enum_iterator::Sequence;
-use milli::update::{DocumentCreationPolicy, IndexDocumentsMethod};
+use milli::update::{MissingDocumentPolicy, IndexDocumentsMethod};
 use milli::Object;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -114,7 +114,7 @@ pub enum KindWithContent {
         content_file: Uuid,
         documents_count: u64,
         allow_index_creation: bool,
-        document_creation_policy: DocumentCreationPolicy,
+        on_missing_document: MissingDocumentPolicy,
     },
     DocumentDeletion {
         index_uid: String,

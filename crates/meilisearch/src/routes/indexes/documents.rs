@@ -20,7 +20,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::update::{DocumentCreationPolicy, IndexDocumentsMethod};
+use meilisearch_types::milli::update::{MissingDocumentPolicy, IndexDocumentsMethod};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{AscDesc, DocumentId};
 use meilisearch_types::serde_cs::vec::CS;
@@ -1108,10 +1108,10 @@ async fn document_addition(
         primary_key,
         allow_index_creation,
         index_uid: index_uid.to_string(),
-        document_creation_policy: if matches!(skip_creation, Some(true)) {
-            DocumentCreationPolicy::Skip
+        on_missing_document: if matches!(skip_creation, Some(true)) {
+            MissingDocumentPolicy::Skip
         } else {
-            DocumentCreationPolicy::Allow
+            MissingDocumentPolicy::Create
         },
     };
 
