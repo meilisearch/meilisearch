@@ -184,7 +184,7 @@
           }
         },
         "self": "prod1",
-        "version": "[uuid]"
+        "version": "00000000-0000-0000-0000-000000000000"
       },
       "synchronous": "WaitForResponse"
     },
