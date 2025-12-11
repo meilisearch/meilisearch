@@ -164,6 +164,7 @@ impl<'a> Dump<'a> {
                     content_file: content_uuid.ok_or(Error::CorruptedDump)?,
                     documents_count,
                     allow_index_creation,
+                    document_creation_policy: Default::default(),
                 },
                 KindDump::DocumentDeletion { documents_ids } => KindWithContent::DocumentDeletion {
                     documents_ids,

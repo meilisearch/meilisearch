@@ -20,7 +20,7 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::milli::update::{DocumentCreationPolicy, IndexDocumentsMethod};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{AscDesc, DocumentId};
 use meilisearch_types::serde_cs::vec::CS;
@@ -862,6 +862,7 @@ pub async fn replace_documents(
         params.custom_metadata,
         dry_run,
         allow_index_creation,
+        params.skip_creation,
         &req,
     )
     .await?;
@@ -965,6 +966,7 @@ pub async fn update_documents(
         params.custom_metadata,
         dry_run,
         allow_index_creation,
+        params.skip_creation,
         &req,
     )
     .await?;
@@ -985,6 +987,7 @@ async fn document_addition(
     custom_metadata: Option<String>,
     dry_run: bool,
     allow_index_creation: bool,
+    skip_creation: Option<bool>,
     req: &HttpRequest,
 ) -> Result<SummarizedTaskView, MeilisearchHttpError> {
     let mime_type = extract_mime_type(req)?;
@@ -1105,6 +1108,11 @@ async fn document_addition(
         primary_key,
         allow_index_creation,
         index_uid: index_uid.to_string(),
+        document_creation_policy: if matches!(skip_creation, Some(true)) {
+            DocumentCreationPolicy::Skip
+        } else {
+            DocumentCreationPolicy::Allow
+        },
     };
 
     let scheduler = index_scheduler.clone();

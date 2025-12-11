@@ -67,6 +67,21 @@ pub enum IndexDocumentsMethod {
     UpdateDocuments,
 }
 
+/// Controls whether new documents should be created when they don't already exist.
+///
+/// This policy is checked when processing a document whose ID is not found in the index.
+/// It applies to both add and update operations.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DocumentCreationPolicy {
+    /// Create the document if it doesn't exist. This is the default behavior.
+    #[default]
+    Allow,
+
+    /// Skip the document silently if it doesn't exist. No error is returned, the document is simply
+    /// not indexed.
+    Skip,
+}
+
 pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
     wtxn: &'t mut heed::RwTxn<'i>,
     index: &'i Index,

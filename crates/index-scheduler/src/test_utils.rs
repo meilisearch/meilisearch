@@ -197,6 +197,7 @@ pub(crate) fn replace_document_import_task(
         content_file: Uuid::from_u128(content_file_uuid),
         documents_count,
         allow_index_creation: true,
+        document_creation_policy: Default::default(),
     }
 }
 
