@@ -85,6 +85,8 @@ const MEILI_S3_BUCKET_NAME: &str = "MEILI_S3_BUCKET_NAME";
 const MEILI_S3_SNAPSHOT_PREFIX: &str = "MEILI_S3_SNAPSHOT_PREFIX";
 const MEILI_S3_ACCESS_KEY: &str = "MEILI_S3_ACCESS_KEY";
 const MEILI_S3_SECRET_KEY: &str = "MEILI_S3_SECRET_KEY";
+const MEILI_S3_ROLE_ARN: &str = "MEILI_S3_ROLE_ARN";
+const MEILI_S3_WEB_IDENTITY_TOKEN_FILE: &str = "MEILI_S3_WEB_IDENTITY_TOKEN_FILE";
 const MEILI_EXPERIMENTAL_S3_MAX_IN_FLIGHT_PARTS: &str = "MEILI_EXPERIMENTAL_S3_MAX_IN_FLIGHT_PARTS";
 const MEILI_EXPERIMENTAL_S3_COMPRESSION_LEVEL: &str = "MEILI_EXPERIMENTAL_S3_COMPRESSION_LEVEL";
 const MEILI_EXPERIMENTAL_S3_SIGNATURE_DURATION_SECONDS: &str =
@@ -942,7 +944,8 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
 // This group is a bit tricky but makes it possible to require all listed fields if one of them
 // is specified. It lets us keep an Option for the S3SnapshotOpts configuration.
 // <https://github.com/clap-rs/clap/issues/5092#issuecomment-2616986075>
-#[group(requires_all = ["s3_bucket_url", "s3_bucket_region", "s3_bucket_name", "s3_snapshot_prefix", "s3_access_key", "s3_secret_key"])]
+#[group(requires_all = ["s3_bucket_url", "s3_bucket_region", "s3_bucket_name", "s3_snapshot_prefix"])]
+#[group(requires = "s3_auth")]
 pub struct S3SnapshotOpts {
     /// The S3 bucket URL in the format https://s3.<region>.amazonaws.com.
     #[clap(long, env = MEILI_S3_BUCKET_URL, required = false)]
@@ -964,15 +967,51 @@ pub struct S3SnapshotOpts {
     #[serde(default)]
     pub s3_snapshot_prefix: String,
 
-    /// The S3 access key.
-    #[clap(long, env = MEILI_S3_ACCESS_KEY, required = false)]
+    /// The S3 access key. Conflicts with --s3-role-arn and --s3-web-identity-token-file.
+    #[clap(
+        long,
+        env = MEILI_S3_ACCESS_KEY,
+        required = false,
+        group = "s3_auth",
+        requires = "s3_secret_key",
+        conflicts_with_all = ["s3_role_arn", "s3_web_identity_token_file"]
+    )]
     #[serde(default)]
-    pub s3_access_key: String,
+    pub s3_access_key: Option<String>,
 
-    /// The S3 secret key.
-    #[clap(long, env = MEILI_S3_SECRET_KEY, required = false)]
+    /// The S3 secret key. Conflicts with --s3-role-arn and --s3-web-identity-token-file.
+    #[clap(
+        long,
+        env = MEILI_S3_SECRET_KEY,
+        required = false,
+        requires = "s3_access_key",
+        conflicts_with_all = ["s3_role_arn", "s3_web_identity_token_file"]
+    )]
     #[serde(default)]
-    pub s3_secret_key: String,
+    pub s3_secret_key: Option<String>,
+
+    /// The IAM role ARN for web identity federation. Conflicts with --s3-access-key and --s3-secret-key.
+    #[clap(
+        long,
+        env = MEILI_S3_ROLE_ARN,
+        required = false,
+        group = "s3_auth",
+        requires = "s3_web_identity_token_file",
+        conflicts_with_all = ["s3_access_key", "s3_secret_key"]
+    )]
+    #[serde(default)]
+    pub s3_role_arn: Option<String>,
+
+    /// The path to the web identity token file. Conflicts with --s3-access-key and --s3-secret-key.
+    #[clap(
+        long,
+        env = MEILI_S3_WEB_IDENTITY_TOKEN_FILE,
+        required = false,
+        requires = "s3_role_arn",
+        conflicts_with_all = ["s3_access_key", "s3_secret_key"]
+    )]
+    #[serde(default)]
+    pub s3_web_identity_token_file: Option<String>,
 
     /// The maximum number of parts that can be uploaded in parallel.
     ///
@@ -1017,6 +1056,8 @@ impl S3SnapshotOpts {
             s3_snapshot_prefix,
             s3_access_key,
             s3_secret_key,
+            s3_role_arn,
+            s3_web_identity_token_file,
             experimental_s3_max_in_flight_parts,
             experimental_s3_compression_level,
             experimental_s3_signature_duration_seconds,
@@ -1027,8 +1068,18 @@ impl S3SnapshotOpts {
         export_to_env_if_not_present(MEILI_S3_BUCKET_REGION, s3_bucket_region);
         export_to_env_if_not_present(MEILI_S3_BUCKET_NAME, s3_bucket_name);
         export_to_env_if_not_present(MEILI_S3_SNAPSHOT_PREFIX, s3_snapshot_prefix);
-        export_to_env_if_not_present(MEILI_S3_ACCESS_KEY, s3_access_key);
-        export_to_env_if_not_present(MEILI_S3_SECRET_KEY, s3_secret_key);
+        if let Some(key) = s3_access_key {
+            export_to_env_if_not_present(MEILI_S3_ACCESS_KEY, key);
+        }
+        if let Some(key) = s3_secret_key {
+            export_to_env_if_not_present(MEILI_S3_SECRET_KEY, key);
+        }
+        if let Some(arn) = s3_role_arn {
+            export_to_env_if_not_present(MEILI_S3_ROLE_ARN, arn);
+        }
+        if let Some(path) = s3_web_identity_token_file {
+            export_to_env_if_not_present(MEILI_S3_WEB_IDENTITY_TOKEN_FILE, path);
+        }
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_S3_MAX_IN_FLIGHT_PARTS,
             experimental_s3_max_in_flight_parts.to_string(),
@@ -1059,6 +1110,8 @@ impl TryFrom<S3SnapshotOpts> for S3SnapshotOptions {
             s3_snapshot_prefix,
             s3_access_key,
             s3_secret_key,
+            s3_role_arn,
+            s3_web_identity_token_file,
             experimental_s3_max_in_flight_parts,
             experimental_s3_compression_level,
             experimental_s3_signature_duration_seconds,
@@ -1072,6 +1125,8 @@ impl TryFrom<S3SnapshotOpts> for S3SnapshotOptions {
             s3_snapshot_prefix,
             s3_access_key,
             s3_secret_key,
+            s3_role_arn,
+            s3_web_identity_token_file,
             s3_max_in_flight_parts: experimental_s3_max_in_flight_parts,
             s3_compression_level: experimental_s3_compression_level,
             s3_signature_duration: Duration::from_secs(experimental_s3_signature_duration_seconds),
