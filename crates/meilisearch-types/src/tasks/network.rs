@@ -9,7 +9,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::error::ResponseError;
-use crate::network::{Network, Remote};
+use crate::network::Network;
 use crate::tasks::{Details, TaskId};
 
 #[cfg(not(feature = "enterprise"))]
@@ -165,37 +165,25 @@ impl From<Result<TaskId, ResponseError>> for RemoteTask {
 #[serde(rename_all = "camelCase")]
 pub struct NetworkTopologyChange {
     state: NetworkTopologyState,
-    // in name, `None` if the node is no longer part of the network
-    #[serde(skip_serializing_if = "Option::is_none")]
-    in_name: Option<String>,
-    // out name, `None` if the node is new to the network
-    #[serde(skip_serializing_if = "Option::is_none")]
-    out_name: Option<String>,
-    out_remotes: BTreeMap<String, Remote>,
     in_remotes: BTreeMap<String, InRemote>,
+    old_network: Network,
+    new_network: Network,
     stats: NetworkTopologyStats,
 }
 
 impl NetworkTopologyChange {
     pub fn new(old_network: Network, new_network: Network) -> Self {
-        // we use our new name as import name
-        let in_name = new_network.local;
-        // we use our old name as export name
-        let out_name = old_network.local.or_else(|| in_name.clone());
+        let in_name = new_network.local.as_deref();
+        let out_name = old_network.local.as_deref().or(in_name);
 
-        // we export to the new network
-        let mut out_remotes = new_network.remotes;
-        // don't export to ourselves
-        if let Some(in_name) = &in_name {
-            out_remotes.remove(in_name);
-        }
         let in_remotes = if in_name.is_some() {
             old_network
                 .remotes
-                .into_keys()
-                .chain(out_remotes.keys().cloned())
+                .keys()
+                .chain(new_network.remotes.keys())
                 // don't await imports from ourselves
-                .filter(|name| Some(name.as_str()) != out_name.as_deref())
+                .filter(|name| Some(name.as_str()) != out_name)
+                .cloned()
                 .map(|name| (name, InRemote::new()))
                 .collect()
         } else {
@@ -203,25 +191,23 @@ impl NetworkTopologyChange {
         };
         Self {
             state: NetworkTopologyState::WaitingForOlderTasks,
-            in_name,
-            out_name,
-            out_remotes,
             in_remotes,
             stats: NetworkTopologyStats { moved_documents: 0 },
+            new_network,
+            old_network,
         }
+    }
+
+    pub fn in_name(&self) -> Option<&str> {
+        self.new_network.local.as_deref()
+    }
+
+    pub fn out_name(&self) -> Option<&str> {
+        self.old_network.local.as_deref().or_else(|| self.in_name())
     }
 
     pub fn state(&self) -> NetworkTopologyState {
         self.state
-    }
-
-    pub fn out_name(&self) -> Option<&str> {
-        // unwrap: one of out name or in_name must be defined
-        self.out_name.as_deref()
-    }
-
-    pub fn in_name(&self) -> Option<&str> {
-        self.in_name.as_deref()
     }
 
     pub fn to_details(&self) -> Details {
@@ -326,7 +312,7 @@ impl NetworkTopologyChange {
 
     pub fn merge(&mut self, other: NetworkTopologyChange) {
         // The topology change has a guarantee of forward progress, so for each field we're going to keep the "most advanced" values.
-        let Self { state, in_name: _, out_name: _, out_remotes: _, in_remotes, stats } = self;
+        let Self { state, new_network: _, old_network: _, in_remotes, stats } = self;
 
         *state = Ord::max(*state, other.state);
         *stats = Ord::max(*stats, other.stats);
@@ -358,6 +344,15 @@ impl NetworkTopologyChange {
                         ImportState::Ongoing{ import_index_state, total_indexes : u64::max(left_total_indexes, right_total_indexes) }
                     },
                 }
+        }
+    }
+
+    pub fn network_for_state(&self) -> &Network {
+        match self.state {
+            NetworkTopologyState::WaitingForOlderTasks => &self.old_network,
+            NetworkTopologyState::ExportingDocuments
+            | NetworkTopologyState::ImportingDocuments
+            | NetworkTopologyState::Finished => &self.new_network,
         }
     }
 }

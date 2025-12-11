@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use milli::update::new::indexer::current_edition::sharding::Shards;
 use milli::DocumentId;
 use roaring::RoaringBitmap;
 
@@ -16,17 +17,30 @@ use crate::tasks::network::{
 };
 
 impl NetworkTopologyChange {
-    pub fn export_to_process(&self) -> Option<(&BTreeMap<String, Remote>, &str)> {
+    pub fn export_to_process(
+        &self,
+    ) -> Option<(impl Iterator<Item = (&str, &Remote)> + Clone, &str)> {
         if self.state != NetworkTopologyState::ExportingDocuments {
             return None;
         }
 
-        if self.out_remotes.is_empty() {
+        if self.new_network.remotes.is_empty() {
             return None;
         }
 
         let out_name = self.out_name()?;
-        Some((&self.out_remotes, out_name))
+        Some((
+            self.new_network.remotes.iter().filter_map(|(name, remote)| {
+                // don't export to ourselves
+
+                (Some(name.as_str()) != self.in_name()).then_some((name.as_str(), remote))
+            }),
+            out_name,
+        ))
+    }
+
+    pub fn new_shards(&self) -> Option<Shards> {
+        self.new_network.shards()
     }
 
     pub fn set_moved(&mut self, moved_documents: u64) {

@@ -231,7 +231,12 @@ impl IndexScheduler {
                 let handle = std::thread::Builder::new()
                     .name(String::from("batch-operation"))
                     .spawn_scoped(s, move || {
-                        cloned_index_scheduler.process_batch(batch, processing_batch, p)
+                        cloned_index_scheduler.process_batch(
+                            batch,
+                            processing_batch,
+                            p,
+                            &self.network(),
+                        )
                     })
                     .unwrap();
 

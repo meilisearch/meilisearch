@@ -10,6 +10,7 @@ use meilisearch_types::heed::{RoTxn, RwTxn};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::{self, ChannelCongestion};
+use meilisearch_types::network::Network;
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use milli::update::Settings as MilliSettings;
@@ -55,6 +56,7 @@ impl IndexScheduler {
         batch: Batch,
         current_batch: &mut ProcessingBatch,
         progress: Progress,
+        network: &Network,
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         #[cfg(test)]
         {
@@ -176,6 +178,7 @@ impl IndexScheduler {
                     op,
                     &progress,
                     current_batch.embedder_stats.clone(),
+                    network,
                 )?;
 
                 {
@@ -235,6 +238,7 @@ impl IndexScheduler {
                     Batch::IndexUpdate { index_uid, primary_key, new_index_uid: None, task },
                     current_batch,
                     progress,
+                    network,
                 )
             }
             Batch::IndexUpdate { index_uid, primary_key, new_index_uid, mut task } => {

@@ -3,7 +3,6 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 use bumpalo::Bump;
@@ -31,13 +30,18 @@ impl IndexScheduler {
         current_batch: &mut ProcessingBatch,
         progress: Progress,
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
-        let (mut tasks, info) = self.process_batch(*inner_batch, current_batch, progress)?;
         let KindWithContent::NetworkTopologyChange(network_topology_change) =
             &mut network_task.kind
         else {
             tracing::error!("unexpected network kind for network task while processing batch");
             return Err(Error::CorruptedTaskQueue);
         };
+
+        let network = network_topology_change.network_for_state();
+
+        let (mut tasks, info) =
+            self.process_batch(*inner_batch, current_batch, progress, network)?;
+
         for task in &tasks {
             let Some(network) = task.network.as_ref() else {
                 continue;
@@ -88,15 +92,21 @@ impl IndexScheduler {
             }
         };
 
-        if let Some((remotes, out_name)) = network_topology_change.export_to_process() {
-            let moved_documents = self.balance_documents(
+        let mut moved_documents = None;
+        if let (Some((remotes, out_name)), Some(new_shards)) =
+            (network_topology_change.export_to_process(), network_topology_change.new_shards())
+        {
+            moved_documents = Some(self.balance_documents(
                 remotes,
                 out_name,
-                network_topology_change.in_name(),
+                new_shards,
                 origin,
                 &progress,
                 &self.scheduler.must_stop_processing,
-            )?;
+            )?);
+        }
+        if let Some(moved_documents) = moved_documents {
+            // we need the mut moved documents to avoid a lifetime error in the previous if let.
             network_topology_change.set_moved(moved_documents);
         }
         network_topology_change.update_state();
@@ -108,18 +118,15 @@ impl IndexScheduler {
         Ok((vec![task], Default::default()))
     }
 
-    fn balance_documents(
+    fn balance_documents<'a, I: Iterator<Item = (&'a str, &'a Remote)> + Clone>(
         &self,
-        remotes: &BTreeMap<String, Remote>,
+        remotes: I,
         out_name: &str,
-        in_name: Option<&str>,
+        new_shards: Shards,
         network_change_origin: &Origin,
         progress: &Progress,
         must_stop_processing: &crate::scheduler::MustStopProcessing,
     ) -> crate::Result<u64> {
-        let new_shards =
-            Shards::from_remotes_local(remotes.keys().map(String::as_str).chain(in_name), in_name);
-
         // TECHDEBT: this spawns a `ureq` agent additionally to `reqwest`. We probably want to harmonize all of this.
         let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(5)).build();
 
@@ -182,7 +189,7 @@ impl IndexScheduler {
 
                 let fields_ids_map = index.fields_ids_map(&index_rtxn)?;
 
-                for (remote_name, remote) in remotes {
+                for (remote_name, remote) in remotes.clone() {
                     let documents_to_move =
                         documents_to_move_to.remove(remote_name).unwrap_or_default();
 
