@@ -143,6 +143,8 @@ impl Display for Value {
                 ".processingTimeMs" => "[duration]",
                 ".details.embedders.*.url" => "[url]",
                 ".details.dumpUid" => "[dump_uid]",
+                ".network.network_version" => "[version]",
+                ".network.origin.networkVersion" => "[version]",
             })
         )
     }

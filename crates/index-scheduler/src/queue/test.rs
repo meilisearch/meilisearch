@@ -203,26 +203,30 @@ fn test_disable_auto_deletion_of_tasks() {
         )
         .unwrap();
 
-    let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
-    let tasks =
-        index_scheduler.queue.get_task_ids(&rtxn, &Query { ..Default::default() }, &proc).unwrap();
-    let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
-    snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), name: "task_queue_is_full");
-    drop(rtxn);
-    drop(proc);
+    {
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap();
+        let tasks = index_scheduler
+            .queue
+            .get_task_ids(&rtxn, &Query { ..Default::default() }, &proc)
+            .unwrap();
+        let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), name: "task_queue_is_full");
+    }
 
     // now we're above the max number of tasks
     // and if we try to advance in the tick function no new task deletion should be enqueued
     handle.advance_till([Start, BatchCreated]);
-    let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
-    let tasks =
-        index_scheduler.queue.get_task_ids(&rtxn, &Query { ..Default::default() }, &proc).unwrap();
-    let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
-    snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_not_been_enqueued");
-    drop(rtxn);
-    drop(proc);
+    {
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap();
+        let tasks = index_scheduler
+            .queue
+            .get_task_ids(&rtxn, &Query { ..Default::default() }, &proc)
+            .unwrap();
+        let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_not_been_enqueued");
+    }
 }
 
 #[test]
@@ -267,59 +271,69 @@ fn test_auto_deletion_of_tasks() {
         )
         .unwrap();
 
-    let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
-    let tasks =
-        index_scheduler.queue.get_task_ids(&rtxn, &Query { ..Default::default() }, &proc).unwrap();
-    let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
-    snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), name: "task_queue_is_full");
-    drop(rtxn);
-    drop(proc);
+    {
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap();
+        let tasks = index_scheduler
+            .queue
+            .get_task_ids(&rtxn, &Query { ..Default::default() }, &proc)
+            .unwrap();
+        let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]" }), name: "task_queue_is_full");
+    }
 
-    // now we're above the max number of tasks
-    // and if we try to advance in the tick function a new task deletion should be enqueued
-    handle.advance_till([Start, BatchCreated]);
-    let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
-    let tasks =
-        index_scheduler.queue.get_task_ids(&rtxn, &Query { ..Default::default() }, &proc).unwrap();
-    let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
-    snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_been_enqueued");
-    drop(rtxn);
-    drop(proc);
+    {
+        // now we're above the max number of tasks
+        // and if we try to advance in the tick function a new task deletion should be enqueued
+        handle.advance_till([Start, BatchCreated]);
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap();
+        let tasks = index_scheduler
+            .queue
+            .get_task_ids(&rtxn, &Query { ..Default::default() }, &proc)
+            .unwrap();
+        let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_been_enqueued");
+    }
 
-    handle.advance_till([InsideProcessBatch, ProcessBatchSucceeded, AfterProcessing]);
-    let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
-    let tasks =
-        index_scheduler.queue.get_task_ids(&rtxn, &Query { ..Default::default() }, &proc).unwrap();
-    let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
-    snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_been_processed");
-    drop(rtxn);
-    drop(proc);
+    {
+        handle.advance_till([InsideProcessBatch, ProcessBatchSucceeded, AfterProcessing]);
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap();
+        let tasks = index_scheduler
+            .queue
+            .get_task_ids(&rtxn, &Query { ..Default::default() }, &proc)
+            .unwrap();
+        let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "task_deletion_have_been_processed");
+    }
 
     handle.advance_one_failed_batch();
     // a new task deletion has been enqueued
     handle.advance_one_successful_batch();
-    let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
-    let tasks =
-        index_scheduler.queue.get_task_ids(&rtxn, &Query { ..Default::default() }, &proc).unwrap();
-    let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
-    snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "after_the_second_task_deletion");
-    drop(rtxn);
-    drop(proc);
+    {
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap();
+        let tasks = index_scheduler
+            .queue
+            .get_task_ids(&rtxn, &Query { ..Default::default() }, &proc)
+            .unwrap();
+        let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "after_the_second_task_deletion");
+    }
 
     handle.advance_one_failed_batch();
     handle.advance_one_successful_batch();
-    let rtxn = index_scheduler.env.read_txn().unwrap();
-    let proc = index_scheduler.processing_tasks.read().unwrap();
-    let tasks =
-        index_scheduler.queue.get_task_ids(&rtxn, &Query { ..Default::default() }, &proc).unwrap();
-    let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
-    snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "everything_has_been_processed");
-    drop(rtxn);
-    drop(proc);
+    {
+        let rtxn = index_scheduler.env.read_txn().unwrap();
+        let proc = index_scheduler.processing_tasks.read().unwrap();
+        let tasks = index_scheduler
+            .queue
+            .get_task_ids(&rtxn, &Query { ..Default::default() }, &proc)
+            .unwrap();
+        let tasks = index_scheduler.queue.tasks.get_existing_tasks(&rtxn, tasks).unwrap();
+        snapshot!(json_string!(tasks, { "[].enqueuedAt" => "[date]", "[].startedAt" => "[date]", "[].finishedAt" => "[date]", ".**.original_filter" => "[filter]", ".**.query" => "[query]" }), name: "everything_has_been_processed");
+    }
 }
 
 #[test]

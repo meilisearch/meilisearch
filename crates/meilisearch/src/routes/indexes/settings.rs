@@ -17,6 +17,7 @@ use super::settings_analytics::*;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
@@ -76,14 +77,13 @@ macro_rules! make_setting_route {
             use meilisearch_types::index_uid::IndexUid;
             use meilisearch_types::milli::update::Setting;
             use meilisearch_types::settings::{settings, Settings};
-            use meilisearch_types::tasks::KindWithContent;
             use tracing::debug;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::policies::*;
             use $crate::extractors::authentication::GuardedData;
             use $crate::extractors::sequential_extractor::SeqHandler;
             use $crate::Opt;
-            use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
+            use $crate::routes::SummarizedTaskView;
             #[allow(unused_imports)]
             use super::*;
 
@@ -130,21 +130,7 @@ macro_rules! make_setting_route {
 
                 let new_settings = Settings { $attr: Setting::Reset.into(), ..Default::default() };
 
-                let allow_index_creation =
-                    index_scheduler.filters().allow_index_creation(&index_uid);
-
-                let task = KindWithContent::SettingsUpdate {
-                    index_uid: index_uid.to_string(),
-                    new_settings: Box::new(new_settings),
-                    is_deletion: true,
-                    allow_index_creation,
-                };
-                let uid = get_task_id(&req, &opt)?;
-                let dry_run = is_dry_run(&req, &opt)?;
-                let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-                        .await??
-                        .into();
+                let task = register_new_settings(new_settings, true, index_scheduler, &req, index_uid, opt).await?;
 
                 debug!(returns = ?task, "Delete settings");
                 Ok(HttpResponse::Accepted().json(task))
@@ -211,26 +197,7 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let new_settings = $crate::routes::indexes::settings::validate_settings(
-                    new_settings,
-                    &index_scheduler,
-                )?;
-
-                let allow_index_creation =
-                    index_scheduler.filters().allow_index_creation(&index_uid);
-
-                let task = KindWithContent::SettingsUpdate {
-                    index_uid: index_uid.to_string(),
-                    new_settings: Box::new(new_settings),
-                    is_deletion: false,
-                    allow_index_creation,
-                };
-                let uid = get_task_id(&req, &opt)?;
-                let dry_run = is_dry_run(&req, &opt)?;
-                let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-                        .await??
-                        .into();
+                let task = register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
 
                 debug!(returns = ?task, "Update settings");
                 Ok(HttpResponse::Accepted().json(task))
@@ -571,14 +538,13 @@ pub async fn update_all(
     index_uid: web::Path<String>,
     body: AwebJson<Settings<Unchecked>, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
-    analytics: web::Data<Analytics>,
+    opt: Data<Opt>,
+    analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let new_settings = body.into_inner();
+    let new_settings: Settings<Unchecked> = body.into_inner();
     debug!(parameters = ?new_settings, "Update all settings");
-    let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
     analytics.publish(
         SettingsAnalytics {
@@ -626,23 +592,62 @@ pub async fn update_all(
         &req,
     );
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
-    let task = KindWithContent::SettingsUpdate {
-        index_uid,
-        new_settings: Box::new(new_settings),
-        is_deletion: false,
-        allow_index_creation,
-    };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+    let task =
+        register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
 
     debug!(returns = ?task, "Update all settings");
     Ok(HttpResponse::Accepted().json(task))
+}
+
+async fn register_new_settings(
+    new_settings: Settings<Unchecked>,
+    is_deletion: bool,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
+    req: &HttpRequest,
+    index_uid: IndexUid,
+    opt: Data<Opt>,
+) -> Result<SummarizedTaskView, ResponseError> {
+    let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader_and_version(req, &network)?;
+
+    // validate settings unless this is a duplicated task
+    let new_settings = if task_network.is_none() {
+        validate_settings(new_settings, &index_scheduler)?
+    } else {
+        new_settings
+    };
+
+    let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+    let task = KindWithContent::SettingsUpdate {
+        index_uid: index_uid.clone(),
+        new_settings: Box::new(new_settings.clone()),
+        is_deletion,
+        allow_index_creation,
+    };
+    let uid = get_task_id(req, &opt)?;
+    let dry_run = is_dry_run(req, &opt)?;
+
+    let scheduler = index_scheduler.clone();
+    let mut task = tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+    })
+    .await??;
+
+    if let Some(task_network) = task.network.take() {
+        proxy(
+            &index_scheduler,
+            Some(&index_uid),
+            req,
+            task_network,
+            network,
+            Body::inline(new_settings),
+            &task,
+        )
+        .await?;
+    }
+
+    Ok(task.into())
 }
 
 #[utoipa::path(
@@ -731,20 +736,8 @@ pub async fn delete_all(
 
     let new_settings = Settings::cleared().into_unchecked();
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
-    let task = KindWithContent::SettingsUpdate {
-        index_uid,
-        new_settings: Box::new(new_settings),
-        is_deletion: true,
-        allow_index_creation,
-    };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+    let task =
+        register_new_settings(new_settings, true, index_scheduler, &req, index_uid, opt).await?;
 
     debug!(returns = ?task, "Delete all settings");
     Ok(HttpResponse::Accepted().json(task))

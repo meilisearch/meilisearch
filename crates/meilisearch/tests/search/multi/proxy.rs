@@ -128,29 +128,32 @@ async fn remote_sharding() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms2",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -188,8 +191,6 @@ async fn remote_sharding() {
             "url": rms2.url()
         }
     }});
-
-    println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
     let (_response, status_code) = ms0.set_network(network.clone()).await;
     snapshot!(status_code, @"200 OK");
@@ -446,29 +447,32 @@ async fn remote_sharding_retrieve_vectors() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms2.set_network(json!({"self": "ms2"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms2",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -944,20 +948,22 @@ async fn error_unregistered_remote() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -1064,20 +1070,22 @@ async fn error_no_weighted_score() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -1200,20 +1208,22 @@ async fn error_bad_response() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -1340,20 +1350,22 @@ async fn error_bad_request() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -1473,20 +1485,22 @@ async fn error_bad_request_facets_by_index() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -1617,20 +1631,22 @@ async fn error_bad_request_facets_by_index_facet() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -1770,7 +1786,7 @@ async fn error_remote_does_not_answer() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
@@ -1779,7 +1795,7 @@ async fn error_remote_does_not_answer() {
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
@@ -1973,20 +1989,22 @@ async fn error_remote_404() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -2172,20 +2190,22 @@ async fn error_remote_sharding_auth() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -2335,20 +2355,22 @@ async fn remote_sharding_auth() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -2493,20 +2515,22 @@ async fn error_remote_500() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -2676,20 +2700,22 @@ async fn error_remote_500_once() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
-      "sharding": false
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -2863,7 +2889,7 @@ async fn error_remote_timeout() {
 
     let (response, code) = ms0.set_network(json!({"self": "ms0"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms0",
       "remotes": {},
@@ -2872,7 +2898,7 @@ async fn error_remote_timeout() {
     "###);
     let (response, code) = ms1.set_network(json!({"self": "ms1"})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "ms1",
       "remotes": {},
@@ -3082,8 +3108,8 @@ impl LocalMeili {
                 let (value, code) = rt.block_on(async {
                     match req.method.as_str() {
                         "POST" => server.service.post_str(&req.url, body, headers.clone()).await,
-                        "PUT" => server.service.put_str(&req.url, body, headers).await,
-                        "PATCH" => server.service.patch(&req.url, req.body_json().unwrap()).await,
+                        "PUT" => server.service.put_str(&req.url, body, headers.clone()).await,
+                        "PATCH" => server.service.patch_str(&req.url, body, headers).await,
                         "GET" => server.service.get(&req.url).await,
                         "DELETE" => server.service.delete(&req.url).await,
                         _ => unimplemented!(),
@@ -3161,35 +3187,6 @@ async fn remote_auto_sharding() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response["network"]), @"true");
 
-    // set self & sharding
-    let (response, code) = ms0.set_network(json!({"self": "ms0", "sharding": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
-    {
-      "self": "ms0",
-      "remotes": {},
-      "sharding": true
-    }
-    "###);
-    let (response, code) = ms1.set_network(json!({"self": "ms1", "sharding": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
-    {
-      "self": "ms1",
-      "remotes": {},
-      "sharding": true
-    }
-    "###);
-    let (response, code) = ms2.set_network(json!({"self": "ms2", "sharding": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
-    {
-      "self": "ms2",
-      "remotes": {},
-      "sharding": true
-    }
-    "###);
-
     // wrap servers
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -3200,7 +3197,10 @@ async fn remote_auto_sharding() {
     let rms2 = LocalMeili::new(ms2.clone()).await;
 
     // set network
-    let network = json!({"remotes": {
+    let network = json!({
+      "self": "ms0",
+      "leader": "ms0",
+      "remotes": {
         "ms0": {
             "url": rms0.url()
         },
@@ -3214,12 +3214,99 @@ async fn remote_auto_sharding() {
 
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
-    let (_response, status_code) = ms0.set_network(network.clone()).await;
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (response, status_code) = ms0.get_network().await;
     snapshot!(status_code, @"200 OK");
-    let (_response, status_code) = ms1.set_network(network.clone()).await;
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms0",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms1.get_network().await;
     snapshot!(status_code, @"200 OK");
-    let (_response, status_code) = ms2.set_network(network.clone()).await;
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms1",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms2.get_network().await;
     snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms2",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
 
     // add documents
     let documents = SCORE_DOCUMENTS.clone();
@@ -3473,11 +3560,11 @@ async fn sharding_not_enterprise() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response["network"]), @"true");
 
-    let (response, code) = ms0.set_network(json!({"self": "ms0", "sharding": true})).await;
+    let (response, code) = ms0.set_network(json!({"self": "ms0", "leader": "ms0"})).await;
     snapshot!(code, @"451 Unavailable For Legal Reasons");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Meilisearch Enterprise Edition is required to set `network.sharding`",
+      "message": "Meilisearch Enterprise Edition is required to set `network.leader`",
       "code": "requires_enterprise_edition",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#requires_enterprise_edition"
@@ -3504,36 +3591,6 @@ async fn remote_auto_sharding_with_custom_metadata() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response["network"]), @"true");
 
-    // set self & sharding
-
-    let (response, code) = ms0.set_network(json!({"self": "ms0", "sharding": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
-    {
-      "self": "ms0",
-      "remotes": {},
-      "sharding": true
-    }
-    "###);
-    let (response, code) = ms1.set_network(json!({"self": "ms1", "sharding": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
-    {
-      "self": "ms1",
-      "remotes": {},
-      "sharding": true
-    }
-    "###);
-    let (response, code) = ms2.set_network(json!({"self": "ms2", "sharding": true})).await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response), @r###"
-    {
-      "self": "ms2",
-      "remotes": {},
-      "sharding": true
-    }
-    "###);
-
     // wrap servers
     let ms0 = Arc::new(ms0);
     let ms1 = Arc::new(ms1);
@@ -3544,7 +3601,10 @@ async fn remote_auto_sharding_with_custom_metadata() {
     let rms2 = LocalMeili::new(ms2.clone()).await;
 
     // set network
-    let network = json!({"remotes": {
+    let network = json!({
+      "self": "ms0",
+      "leader": "ms0",
+      "remotes": {
         "ms0": {
             "url": rms0.url()
         },
@@ -3558,12 +3618,99 @@ async fn remote_auto_sharding_with_custom_metadata() {
 
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
-    let (_response, status_code) = ms0.set_network(network.clone()).await;
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (response, status_code) = ms0.get_network().await;
     snapshot!(status_code, @"200 OK");
-    let (_response, status_code) = ms1.set_network(network.clone()).await;
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms0",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms1.get_network().await;
     snapshot!(status_code, @"200 OK");
-    let (_response, status_code) = ms2.set_network(network.clone()).await;
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms1",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms2.get_network().await;
     snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms2",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
 
     // add documents
     let documents = SCORE_DOCUMENTS.clone();
@@ -3586,6 +3733,7 @@ async fn remote_auto_sharding_with_custom_metadata() {
     let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
 
     let t = ms0.wait_task(t0).await.succeeded();
+
     snapshot!(t, @r###"
     {
       "uid": "[uid]",
@@ -3606,14 +3754,15 @@ async fn remote_auto_sharding_with_custom_metadata() {
       "network": {
         "remote_tasks": {
           "ms1": {
-            "taskUid": 0,
+            "taskUid": 1,
             "error": null
           },
           "ms2": {
-            "taskUid": 0,
+            "taskUid": 1,
             "error": null
           }
-        }
+        },
+        "network_version": "[version]"
       },
       "customMetadata": "remote_auto_sharding_with_custom_metadata"
     }
@@ -3640,7 +3789,8 @@ async fn remote_auto_sharding_with_custom_metadata() {
       "network": {
         "origin": {
           "remoteName": "ms0",
-          "taskUid": 0
+          "taskUid": 1,
+          "networkVersion": "[version]"
         }
       },
       "customMetadata": "remote_auto_sharding_with_custom_metadata"
@@ -3668,7 +3818,8 @@ async fn remote_auto_sharding_with_custom_metadata() {
       "network": {
         "origin": {
           "remoteName": "ms0",
-          "taskUid": 0
+          "taskUid": 1,
+          "networkVersion": "[version]"
         }
       },
       "customMetadata": "remote_auto_sharding_with_custom_metadata"

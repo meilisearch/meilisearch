@@ -8,6 +8,7 @@ use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::DocumentAdditionResult;
 use meilisearch_types::milli::{self, ChannelCongestion, Filter};
+use meilisearch_types::network::Network;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use meilisearch_types::Index;
@@ -36,6 +37,7 @@ impl IndexScheduler {
         operation: IndexOperation,
         progress: &Progress,
         embedder_stats: Arc<EmbedderStats>,
+        network: &Network,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         let indexer_alloc = Bump::new();
         let started_processing_at = std::time::Instant::now();
@@ -66,8 +68,6 @@ impl IndexScheduler {
             }
             IndexOperation::DocumentOperation { index_uid, primary_key, operations, mut tasks } => {
                 progress.update_progress(DocumentOperationProgress::RetrievingConfig);
-
-                let network = self.network();
 
                 let shards = network.shards();
 
@@ -504,6 +504,7 @@ impl IndexScheduler {
                     },
                     progress,
                     embedder_stats.clone(),
+                    network,
                 )?;
 
                 let (settings_tasks, _congestion) = self.apply_index_operation(
@@ -512,6 +513,7 @@ impl IndexScheduler {
                     IndexOperation::Settings { index_uid, settings, tasks: settings_tasks },
                     progress,
                     embedder_stats,
+                    network,
                 )?;
 
                 let mut tasks = settings_tasks;

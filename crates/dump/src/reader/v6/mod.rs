@@ -95,17 +95,26 @@ impl V6Reader {
             Err(e) => return Err(e.into()),
         };
 
-        let network = match fs::read(dump.path().join("network.json")) {
-            Ok(network_file) => Some(serde_json::from_reader(&*network_file)?),
-            Err(error) => match error.kind() {
-                // Allows the file to be missing, this will only result in all experimental features disabled.
-                ErrorKind::NotFound => {
-                    debug!("`network.json` not found in dump");
-                    None
-                }
-                _ => return Err(error.into()),
-            },
-        };
+        let mut network: Option<meilisearch_types::network::Network> =
+            match fs::read(dump.path().join("network.json")) {
+                Ok(network_file) => Some(serde_json::from_reader(&*network_file)?),
+                Err(error) => match error.kind() {
+                    // Allows the file to be missing, this will only result in all experimental features disabled.
+                    ErrorKind::NotFound => {
+                        debug!("`network.json` not found in dump");
+                        None
+                    }
+                    _ => return Err(error.into()),
+                },
+            };
+
+        if let Some(network) = &mut network {
+            // as dumps are typically imported in a different machine as the emitter (otherwise dumpless upgrade would be used),
+            // we decide to remove the self to avoid alias issues
+            network.local = None;
+            // for the same reason we disable automatic sharding
+            network.leader = None;
+        }
 
         let webhooks = match fs::read(dump.path().join("webhooks.json")) {
             Ok(webhooks_file) => Some(serde_json::from_reader(&*webhooks_file)?),
