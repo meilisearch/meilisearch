@@ -35,7 +35,7 @@ use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
 use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};
 use crate::{
-    default_criteria, CboRoaringBitmapCodec, Criterion, Deadline, DocumentId, ExternalDocumentsIds,
+    default_criteria, DeCboRoaringBitmapCodec, Criterion, Deadline, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
     FieldidsWeightsMap, FilterableAttributesRule, GeoPoint, LocalizedAttributesRule, ObkvCodec,
     Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
@@ -134,38 +134,38 @@ pub struct Index {
     pub external_documents_ids: Database<Str, BEU32>,
 
     /// A word and all the documents ids containing the word.
-    pub word_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub word_docids: Database<Str, DeCboRoaringBitmapCodec>,
 
     /// A word and all the documents ids containing the word, from attributes for which typos are not allowed.
-    pub exact_word_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub exact_word_docids: Database<Str, DeCboRoaringBitmapCodec>,
 
     /// A prefix of word and all the documents ids containing this prefix.
-    pub word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub word_prefix_docids: Database<Str, DeCboRoaringBitmapCodec>,
 
     /// A prefix of word and all the documents ids containing this prefix, from attributes for which typos are not allowed.
-    pub exact_word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+    pub exact_word_prefix_docids: Database<Str, DeCboRoaringBitmapCodec>,
 
     /// Maps the proximity between a pair of words with all the docids where this relation appears.
-    pub word_pair_proximity_docids: Database<U8StrStrCodec, CboRoaringBitmapCodec>,
+    pub word_pair_proximity_docids: Database<U8StrStrCodec, DeCboRoaringBitmapCodec>,
 
     /// Maps the word and the position with the docids that corresponds to it.
-    pub word_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    pub word_position_docids: Database<StrBEU16Codec, DeCboRoaringBitmapCodec>,
     /// Maps the word and the field id with the docids that corresponds to it.
-    pub word_fid_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    pub word_fid_docids: Database<StrBEU16Codec, DeCboRoaringBitmapCodec>,
 
     /// Maps the field id and the word count with the docids that corresponds to it.
-    pub field_id_word_count_docids: Database<FieldIdWordCountCodec, CboRoaringBitmapCodec>,
+    pub field_id_word_count_docids: Database<FieldIdWordCountCodec, DeCboRoaringBitmapCodec>,
     /// Maps the word prefix and a position with all the docids where the prefix appears at the position.
-    pub word_prefix_position_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    pub word_prefix_position_docids: Database<StrBEU16Codec, DeCboRoaringBitmapCodec>,
     /// Maps the word prefix and a field id with all the docids where the prefix appears inside the field
-    pub word_prefix_fid_docids: Database<StrBEU16Codec, CboRoaringBitmapCodec>,
+    pub word_prefix_fid_docids: Database<StrBEU16Codec, DeCboRoaringBitmapCodec>,
 
     /// Maps the facet field id and the docids for which this field exists
-    pub facet_id_exists_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
+    pub facet_id_exists_docids: Database<FieldIdCodec, DeCboRoaringBitmapCodec>,
     /// Maps the facet field id and the docids for which this field is set as null
-    pub facet_id_is_null_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
+    pub facet_id_is_null_docids: Database<FieldIdCodec, DeCboRoaringBitmapCodec>,
     /// Maps the facet field id and the docids for which this field is considered empty
-    pub facet_id_is_empty_docids: Database<FieldIdCodec, CboRoaringBitmapCodec>,
+    pub facet_id_is_empty_docids: Database<FieldIdCodec, DeCboRoaringBitmapCodec>,
 
     /// Maps the facet field id and ranges of numbers with the docids that corresponds to them.
     pub facet_id_f64_docids: Database<FacetGroupKeyCodec<OrderedF64Codec>, FacetGroupValueCodec>,
