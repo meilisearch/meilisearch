@@ -15,7 +15,7 @@ use crate::heed_codec::BytesRefCodec;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_reader};
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldId, Index, Result};
+use crate::{CboRoaringBitmapLenCodec, DeCboRoaringBitmapCodec, FieldId, Index, Result};
 
 /// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
 /// by rebuilding the database "from scratch".
@@ -162,7 +162,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                     Some(prev_value) => {
                         // prev_value is the group size for level 0, followed by the previous bitmap.
                         let old_bitmap = &prev_value[1..];
-                        CboRoaringBitmapCodec::merge_deladd_into(value, old_bitmap, &mut buffer)?;
+                        DeCboRoaringBitmapCodec::merge_deladd_into(value, old_bitmap, &mut buffer)?;
                     }
                     None => {
                         // it is safe to ignore the del in that case.
