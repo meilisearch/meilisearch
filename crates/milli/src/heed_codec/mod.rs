@@ -23,8 +23,7 @@ pub use self::field_id_word_count_codec::FieldIdWordCountCodec;
 pub use self::fst_set_codec::FstSetCodec;
 pub use self::obkv_codec::ObkvCodec;
 pub use self::roaring_bitmap::{
-    BoRoaringBitmapCodec, CboRoaringBitmapCodec, DeCboRoaringBitmapCodec, RoaringBitmapCodec,
-    DELTA_ENCODING_STATUS,
+    BoRoaringBitmapCodec, DeCboRoaringBitmapCodec, RoaringBitmapCodec, DELTA_ENCODING_STATUS,
 };
 pub use self::roaring_bitmap_length::{
     BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec, RoaringBitmapLenCodec,

@@ -9,12 +9,12 @@ use crate::update::index_documents::{
     create_sorter, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
     write_sorter_into_database, CursorClonableMmap, MergeDeladdCboRoaringBitmaps,
 };
-use crate::{CboRoaringBitmapCodec, Result};
+use crate::{DeCboRoaringBitmapCodec, Result};
 
 pub struct WordPrefixDocids<'t, 'i> {
     wtxn: &'t mut heed::RwTxn<'i>,
-    word_docids: Database<Str, CboRoaringBitmapCodec>,
-    word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+    word_docids: Database<Str, DeCboRoaringBitmapCodec>,
+    word_prefix_docids: Database<Str, DeCboRoaringBitmapCodec>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) max_nb_chunks: Option<usize>,
@@ -24,8 +24,8 @@ pub struct WordPrefixDocids<'t, 'i> {
 impl<'t, 'i> WordPrefixDocids<'t, 'i> {
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i>,
-        word_docids: Database<Str, CboRoaringBitmapCodec>,
-        word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+        word_docids: Database<Str, DeCboRoaringBitmapCodec>,
+        word_prefix_docids: Database<Str, DeCboRoaringBitmapCodec>,
     ) -> WordPrefixDocids<'t, 'i> {
         WordPrefixDocids {
             wtxn,

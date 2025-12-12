@@ -8,6 +8,7 @@ use roaring::RoaringBitmap;
 use super::cbo_roaring_bitmap_codec::CboRoaringBitmapCodec;
 use super::de_roaring_bitmap_codec::DeRoaringBitmapCodec;
 use crate::heed_codec::BytesDecodeOwned;
+use crate::update::del_add::KvReaderDelAdd;
 
 /// Defines the status of the delta encoding on whether we have enabled it or not.
 pub static DELTA_ENCODING_STATUS: DeltaEncodingStatusLock = DeltaEncodingStatusLock::new();
@@ -32,7 +33,7 @@ impl DeCboRoaringBitmapCodec {
 
     /// Writes the delta-encoded compressed version of
     /// the given roaring bitmap into the provided writer.
-    pub fn serialize_into<W: io::Write>(bitmap: &RoaringBitmap, writer: W) -> io::Result<()> {
+    pub fn serialize_into<W: io::Write>(bitmap: &RoaringBitmap, writer: &mut W) -> io::Result<()> {
         let mut tmp_buffer = Vec::new();
         Self::serialize_into_with_tmp_buffer(bitmap, writer, &mut tmp_buffer)
     }
@@ -42,7 +43,7 @@ impl DeCboRoaringBitmapCodec {
     /// Note that we always serialize the bitmap with the delta-encoded compressed version.
     pub fn serialize_into_with_tmp_buffer<W: io::Write>(
         bitmap: &RoaringBitmap,
-        writer: W,
+        writer: &mut W,
         tmp_buffer: &mut Vec<u32>,
     ) -> io::Result<()> {
         // We are stuck with this format because the CboRoaringBitmapCodec decides to write
@@ -85,6 +86,29 @@ impl DeCboRoaringBitmapCodec {
             }
             Err(e) => Err(e),
         }
+    }
+
+    pub fn merge_into<I, A>(slices: I, buffer: &mut Vec<u8>) -> io::Result<()>
+    where
+        I: IntoIterator<Item = A>,
+        A: AsRef<[u8]>,
+    {
+        todo!()
+    }
+
+    pub fn intersection_with_serialized(
+        mut bytes: &[u8],
+        other: &RoaringBitmap,
+    ) -> io::Result<RoaringBitmap> {
+        todo!()
+    }
+
+    pub fn merge_deladd_into<'a>(
+        deladd: &KvReaderDelAdd,
+        previous: &[u8],
+        buffer: &'a mut Vec<u8>,
+    ) -> io::Result<Option<&'a [u8]>> {
+        todo!()
     }
 }
 
