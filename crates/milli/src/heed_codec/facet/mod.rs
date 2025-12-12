@@ -12,7 +12,7 @@ use roaring::RoaringBitmap;
 pub use self::field_doc_id_facet_codec::FieldDocIdFacetCodec;
 pub use self::ordered_f64_codec::OrderedF64Codec;
 use super::StrRefCodec;
-use crate::{CboRoaringBitmapCodec, BEU16};
+use crate::{DeCboRoaringBitmapCodec, BEU16};
 
 pub type FieldDocIdFacetF64Codec = FieldDocIdFacetCodec<OrderedF64Codec>;
 pub type FieldDocIdFacetStringCodec = FieldDocIdFacetCodec<StrRefCodec>;
@@ -97,7 +97,7 @@ impl<'a> heed::BytesEncode<'a> for FacetGroupValueCodec {
 
     fn bytes_encode(value: &'a Self::EItem) -> Result<Cow<'a, [u8]>, BoxedError> {
         let mut v = vec![value.size];
-        CboRoaringBitmapCodec::serialize_into_vec(&value.bitmap, &mut v);
+        DeCboRoaringBitmapCodec::serialize_into(&value.bitmap, &mut v);
         Ok(Cow::Owned(v))
     }
 }
@@ -107,7 +107,7 @@ impl<'a> heed::BytesDecode<'a> for FacetGroupValueCodec {
 
     fn bytes_decode(bytes: &'a [u8]) -> Result<Self::DItem, BoxedError> {
         let size = bytes[0];
-        let bitmap = CboRoaringBitmapCodec::deserialize_from(&bytes[1..])?;
+        let bitmap = DeCboRoaringBitmapCodec::deserialize_from(&bytes[1..])?;
         Ok(FacetGroupValue { size, bitmap })
     }
 }
