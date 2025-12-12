@@ -73,7 +73,7 @@ pub use self::filterable_attributes_rules::{
 };
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
-    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,
+    CboRoaringBitmapLenCodec, DeCboRoaringBitmapCodec, FieldIdWordCountCodec, ObkvCodec,
     RoaringBitmapCodec, RoaringBitmapLenCodec, StrBEU32Codec, U8StrStrCodec,
     UncheckedU8StrStrCodec,
 };

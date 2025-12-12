@@ -82,7 +82,7 @@ use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::KvReaderDelAdd;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapCodec, Result};
+use crate::{DeCboRoaringBitmapCodec, Result};
 
 /// A cache that stores bytes keys associated to CboDelAddRoaringBitmaps.
 ///
@@ -323,6 +323,7 @@ struct SpillingCaches<'extractor> {
     spilled_entries: Vec<grenad::Sorter<MergeDeladdCboRoaringBitmaps>>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
+    tmp_buffer: Vec<u32>,
 }
 
 impl<'extractor> SpillingCaches<'extractor> {
@@ -348,6 +349,7 @@ impl<'extractor> SpillingCaches<'extractor> {
             caches,
             deladd_buffer: Vec::new(),
             cbo_buffer: Vec::new(),
+            tmp_buffer: Vec::new(),
         }
     }
 
@@ -370,6 +372,7 @@ impl<'extractor> SpillingCaches<'extractor> {
                 &mut self.spilled_entries[bucket],
                 &mut self.deladd_buffer,
                 &mut self.cbo_buffer,
+                &mut self.tmp_buffer,
                 key,
                 DelAddRoaringBitmap::new_del_u32(n),
             ),
@@ -395,6 +398,7 @@ impl<'extractor> SpillingCaches<'extractor> {
                 &mut self.spilled_entries[bucket],
                 &mut self.deladd_buffer,
                 &mut self.cbo_buffer,
+                &mut self.tmp_buffer,
                 key,
                 DelAddRoaringBitmap::new_add_u32(n),
             ),
@@ -411,6 +415,7 @@ fn spill_entry_to_sorter(
     spilled_entries: &mut grenad::Sorter<MergeDeladdCboRoaringBitmaps>,
     deladd_buffer: &mut Vec<u8>,
     cbo_buffer: &mut Vec<u8>,
+    tmp_buffer: &mut Vec<u32>,
     key: &[u8],
     deladd: DelAddRoaringBitmap,
 ) -> Result<()> {
@@ -420,21 +425,29 @@ fn spill_entry_to_sorter(
     match deladd {
         DelAddRoaringBitmap { del: Some(del), add: None } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into_vec(&del, cbo_buffer);
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
+                &del, cbo_buffer, tmp_buffer,
+            );
             value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: None, add: Some(add) } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into_vec(&add, cbo_buffer);
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
+                &add, cbo_buffer, tmp_buffer,
+            );
             value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: Some(del), add: Some(add) } => {
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into_vec(&del, cbo_buffer);
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
+                &del, cbo_buffer, tmp_buffer,
+            );
             value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
 
             cbo_buffer.clear();
-            CboRoaringBitmapCodec::serialize_into_vec(&add, cbo_buffer);
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
+                &add, cbo_buffer, tmp_buffer,
+            );
             value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: None, add: None } => return Ok(()),
@@ -640,12 +653,12 @@ impl DelAddRoaringBitmap {
         let reader = KvReaderDelAdd::from_slice(bytes);
 
         let del = match reader.get(DelAdd::Deletion) {
-            Some(bytes) => CboRoaringBitmapCodec::deserialize_from(bytes).map(Some)?,
+            Some(bytes) => DeCboRoaringBitmapCodec::deserialize_from(bytes).map(Some)?,
             None => None,
         };
 
         let add = match reader.get(DelAdd::Addition) {
-            Some(bytes) => CboRoaringBitmapCodec::deserialize_from(bytes).map(Some)?,
+            Some(bytes) => DeCboRoaringBitmapCodec::deserialize_from(bytes).map(Some)?,
             None => None,
         };
 
