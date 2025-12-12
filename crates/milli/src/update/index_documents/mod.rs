@@ -40,7 +40,7 @@ use crate::update::{
 };
 use crate::vector::db::EmbedderInfo;
 use crate::vector::{RuntimeEmbedders, VectorStore};
-use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
+use crate::{DeCboRoaringBitmapCodec, Index, Result, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
 static PREFIX_DATABASE_COUNT: usize = 4;
@@ -764,8 +764,8 @@ where
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn<'_>,
     merger: Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>,
-    word_docids_db: Database<Str, CboRoaringBitmapCodec>,
-    word_prefix_docids_db: Database<Str, CboRoaringBitmapCodec>,
+    word_docids_db: Database<Str, DeCboRoaringBitmapCodec>,
+    word_prefix_docids_db: Database<Str, DeCboRoaringBitmapCodec>,
     indexer_config: &IndexerConfig,
     new_prefix_fst_words: &[String],
     common_prefix_fst_words: &[&[String]],

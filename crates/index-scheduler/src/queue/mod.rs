@@ -14,7 +14,7 @@ use std::time::Duration;
 use file_store::FileStore;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
-use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{DeCboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
@@ -131,7 +131,7 @@ pub struct Queue {
     pub(crate) batches: batches::BatchQueue,
 
     /// Matches a batch id with the associated task ids.
-    pub(crate) batch_to_tasks_mapping: Database<BEU32, CboRoaringBitmapCodec>,
+    pub(crate) batch_to_tasks_mapping: Database<BEU32, DeCboRoaringBitmapCodec>,
 
     /// The list of files referenced by the tasks.
     pub(crate) file_store: FileStore,

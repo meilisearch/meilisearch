@@ -27,7 +27,7 @@ use crate::index::db_name;
 use crate::index::main_key::{GEO_FACETED_DOCUMENTS_IDS_KEY, GEO_RTREE_KEY};
 use crate::update::new::KvReaderFieldId;
 use crate::vector::Embedding;
-use crate::{CboRoaringBitmapCodec, DocumentId, Error, Index, InternalError};
+use crate::{DeCboRoaringBitmapCodec, DocumentId, Error, Index, InternalError};
 
 /// Note that the FrameProducer requires up to 9 bytes to
 /// encode the length, the max grant has been computed accordingly.
@@ -971,7 +971,9 @@ pub struct WordDocidsSender<'a, 'b, D> {
 
 impl<D: DatabaseType> WordDocidsSender<'_, '_, D> {
     pub fn write(&self, key: &[u8], bitmap: &RoaringBitmap) -> crate::Result<()> {
-        let value_length = CboRoaringBitmapCodec::serialized_size(bitmap);
+        let mut tmp_buffer = Vec::new();
+        let value_length =
+            DeCboRoaringBitmapCodec::serialized_size_with_tmp_buffer(bitmap, &mut tmp_buffer);
         let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
             InternalError::StorePut {
                 database_name: D::DATABASE.database_name(),
@@ -986,7 +988,10 @@ impl<D: DatabaseType> WordDocidsSender<'_, '_, D> {
             value_length,
             |key_buffer, value_buffer| {
                 key_buffer.copy_from_slice(key);
-                CboRoaringBitmapCodec::serialize_into_writer(bitmap, value_buffer)?;
+                DeCboRoaringBitmapCodec::serialize_into(
+                    bitmap,
+                    &mut io::Cursor::new(value_buffer),
+                )?;
                 Ok(())
             },
         )
@@ -1007,7 +1012,9 @@ impl FacetDocidsSender<'_, '_> {
         let (facet_kind, key) = FacetKind::extract_from_key(key);
         let database = Database::from(facet_kind);
 
-        let value_length = CboRoaringBitmapCodec::serialized_size(bitmap);
+        let mut tmp_buffer = Vec::new();
+        let value_length =
+            DeCboRoaringBitmapCodec::serialized_size_with_tmp_buffer(bitmap, &mut tmp_buffer);
         let value_length = match facet_kind {
             // We must take the facet group size into account
             // when we serialize strings and numbers.
@@ -1041,7 +1048,7 @@ impl FacetDocidsSender<'_, '_> {
                     FacetKind::Null | FacetKind::Empty | FacetKind::Exists => value_out,
                 };
 
-                CboRoaringBitmapCodec::serialize_into_writer(bitmap, value_out)?;
+                DeCboRoaringBitmapCodec::serialize_into(bitmap, &mut io::Cursor::new(value_out))?;
 
                 Ok(())
             },

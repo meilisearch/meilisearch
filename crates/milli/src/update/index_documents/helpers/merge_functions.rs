@@ -7,7 +7,7 @@ use either::Either;
 use grenad::MergeFunction;
 use roaring::RoaringBitmap;
 
-use crate::heed_codec::CboRoaringBitmapCodec;
+use crate::heed_codec::DeCboRoaringBitmapCodec;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::transform::Operation;
 use crate::Result;
@@ -200,7 +200,7 @@ impl MergeFunction for MergeCboRoaringBitmaps {
             Ok(values[0].clone())
         } else {
             let mut vec = Vec::new();
-            CboRoaringBitmapCodec::merge_into(values, &mut vec)?;
+            DeCboRoaringBitmapCodec::merge_into(values, &mut vec)?;
             Ok(Cow::from(vec))
         }
     }
@@ -232,10 +232,10 @@ impl MergeFunction for MergeDeladdCboRoaringBitmaps {
 
             let mut output_deladd_obkv = KvWriterDelAdd::memory();
             let mut buffer = Vec::new();
-            CboRoaringBitmapCodec::merge_into(del_bitmaps_bytes, &mut buffer)?;
+            DeCboRoaringBitmapCodec::merge_into(del_bitmaps_bytes, &mut buffer)?;
             output_deladd_obkv.insert(DelAdd::Deletion, &buffer)?;
             buffer.clear();
-            CboRoaringBitmapCodec::merge_into(add_bitmaps_bytes, &mut buffer)?;
+            DeCboRoaringBitmapCodec::merge_into(add_bitmaps_bytes, &mut buffer)?;
             output_deladd_obkv.insert(DelAdd::Addition, &buffer)?;
             output_deladd_obkv.into_inner().map(Cow::from).map_err(Into::into)
         }
@@ -251,7 +251,7 @@ pub fn merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap<'a>(
     previous: &[u8],
     buffer: &'a mut Vec<u8>,
 ) -> Result<Option<&'a [u8]>> {
-    Ok(CboRoaringBitmapCodec::merge_deladd_into(
+    Ok(DeCboRoaringBitmapCodec::merge_deladd_into(
         KvReaderDelAdd::from_slice(deladd_obkv),
         previous,
         buffer,
