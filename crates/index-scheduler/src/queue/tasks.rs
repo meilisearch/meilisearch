@@ -2,7 +2,7 @@ use std::ops::{Bound, RangeBounds};
 
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
-use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{DeCboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::{MultiOps, RoaringBitmap};
@@ -44,11 +44,11 @@ pub struct TaskQueue {
     /// Store the tasks that were canceled by a task uid
     pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
     /// Store the task ids of tasks which were enqueued at a specific date
-    pub(crate) enqueued_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) enqueued_at: Database<BEI128, DeCboRoaringBitmapCodec>,
     /// Store the task ids of finished tasks which started being processed at a specific date
-    pub(crate) started_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) started_at: Database<BEI128, DeCboRoaringBitmapCodec>,
     /// Store the task ids of tasks which finished at a specific date
-    pub(crate) finished_at: Database<BEI128, CboRoaringBitmapCodec>,
+    pub(crate) finished_at: Database<BEI128, DeCboRoaringBitmapCodec>,
 }
 
 impl TaskQueue {

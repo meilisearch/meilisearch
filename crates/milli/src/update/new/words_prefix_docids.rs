@@ -14,12 +14,12 @@ use thread_local::ThreadLocal;
 use super::ref_cell_ext::RefCellExt as _;
 use crate::heed_codec::StrBEU16Codec;
 use crate::update::GrenadParameters;
-use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
+use crate::{DeCboRoaringBitmapCodec, Index, Prefix, Result};
 
 struct WordPrefixDocids<'i> {
     index: &'i Index,
-    database: Database<Bytes, CboRoaringBitmapCodec>,
-    prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    database: Database<Bytes, DeCboRoaringBitmapCodec>,
+    prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
     max_memory_by_thread: Option<usize>,
     /// Do not use an experimental LMDB feature to read uncommitted data in parallel.
     no_experimental_post_processing: bool,
@@ -28,8 +28,8 @@ struct WordPrefixDocids<'i> {
 impl<'i> WordPrefixDocids<'i> {
     fn new(
         index: &'i Index,
-        database: Database<Bytes, CboRoaringBitmapCodec>,
-        prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<Bytes, DeCboRoaringBitmapCodec>,
+        prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
         grenad_parameters: &GrenadParameters,
     ) -> WordPrefixDocids<'i> {
         WordPrefixDocids {
@@ -87,12 +87,12 @@ impl<'i> WordPrefixDocids<'i> {
                     let output = self
                         .database
                         .prefix_iter(&rtxn, prefix.as_bytes())?
-                        .remap_types::<Str, CboRoaringBitmapCodec>()
+                        .remap_types::<Str, DeCboRoaringBitmapCodec>()
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
 
                     buffer.clear();
-                    CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
+                    DeCboRoaringBitmapCodec::serialize_into(&output, &mut buffer);
                     indexes.push(PrefixEntry { prefix, serialized_length: buffer.len() });
                     file.write_all(&buffer)?;
                 }
@@ -150,11 +150,11 @@ impl<'i> WordPrefixDocids<'i> {
                 .bitmaps(prefix)
                 .unwrap()
                 .iter()
-                .map(|bytes| CboRoaringBitmapCodec::deserialize_from(bytes))
+                .map(|bytes| DeCboRoaringBitmapCodec::deserialize_from(bytes))
                 .union()?;
 
             buffer.clear();
-            CboRoaringBitmapCodec::serialize_into_vec(&output, buffer);
+            DeCboRoaringBitmapCodec::serialize_into(&output, buffer);
             index.push(PrefixEntry { prefix, serialized_length: buffer.len() });
             file.write_all(buffer)
         })?;
@@ -203,7 +203,7 @@ struct FrozenPrefixBitmaps<'a, 'rtxn> {
 impl<'a, 'rtxn> FrozenPrefixBitmaps<'a, 'rtxn> {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
     pub fn from_prefixes(
-        database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<Bytes, DeCboRoaringBitmapCodec>,
         rtxn: &'rtxn RoTxn,
         prefixes: &'a BTreeSet<Prefix>,
     ) -> heed::Result<Self> {
@@ -231,8 +231,8 @@ unsafe impl Sync for FrozenPrefixBitmaps<'_, '_> {}
 
 struct WordPrefixIntegerDocids<'i> {
     index: &'i Index,
-    database: Database<Bytes, CboRoaringBitmapCodec>,
-    prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    database: Database<Bytes, DeCboRoaringBitmapCodec>,
+    prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
     max_memory_by_thread: Option<usize>,
     /// Do not use an experimental LMDB feature to read uncommitted data in parallel.
     no_experimental_post_processing: bool,
@@ -241,8 +241,8 @@ struct WordPrefixIntegerDocids<'i> {
 impl<'i> WordPrefixIntegerDocids<'i> {
     fn new(
         index: &'i Index,
-        database: Database<Bytes, CboRoaringBitmapCodec>,
-        prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<Bytes, DeCboRoaringBitmapCodec>,
+        prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
         grenad_parameters: &'_ GrenadParameters,
     ) -> WordPrefixIntegerDocids<'i> {
         WordPrefixIntegerDocids {
@@ -338,10 +338,10 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                         } else {
                             let output = bitmaps_bytes
                                 .into_iter()
-                                .map(CboRoaringBitmapCodec::deserialize_from)
+                                .map(DeCboRoaringBitmapCodec::deserialize_from)
                                 .union()?;
                             buffer.clear();
-                            CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
+                            DeCboRoaringBitmapCodec::serialize_into(&output, &mut buffer);
                             indexes.push(PrefixIntegerEntry {
                                 prefix,
                                 pos,
@@ -419,10 +419,10 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                 } else {
                     let output = bitmaps_bytes
                         .iter()
-                        .map(|bytes| CboRoaringBitmapCodec::deserialize_from(bytes))
+                        .map(|bytes| DeCboRoaringBitmapCodec::deserialize_from(bytes))
                         .union()?;
                     buffer.clear();
-                    CboRoaringBitmapCodec::serialize_into_vec(&output, buffer);
+                    DeCboRoaringBitmapCodec::serialize_into(&output, buffer);
                     index.push(PrefixIntegerEntry {
                         prefix,
                         pos,
@@ -486,7 +486,7 @@ struct FrozenPrefixIntegerBitmaps<'a, 'rtxn> {
 impl<'a, 'rtxn> FrozenPrefixIntegerBitmaps<'a, 'rtxn> {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
     pub fn from_prefixes(
-        database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<Bytes, DeCboRoaringBitmapCodec>,
         rtxn: &'rtxn RoTxn,
         prefixes: &'a BTreeSet<Prefix>,
     ) -> heed::Result<Self> {
@@ -516,7 +516,7 @@ unsafe impl Sync for FrozenPrefixIntegerBitmaps<'_, '_> {}
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
 fn delete_prefixes(
     wtxn: &mut RwTxn,
-    prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
+    prefix_database: &Database<Bytes, DeCboRoaringBitmapCodec>,
     prefixes: &BTreeSet<Prefix>,
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
