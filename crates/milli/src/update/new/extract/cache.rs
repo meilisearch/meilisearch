@@ -425,29 +425,21 @@ fn spill_entry_to_sorter(
     match deladd {
         DelAddRoaringBitmap { del: Some(del), add: None } => {
             cbo_buffer.clear();
-            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
-                &del, cbo_buffer, tmp_buffer,
-            );
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&del, cbo_buffer, tmp_buffer)?;
             value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: None, add: Some(add) } => {
             cbo_buffer.clear();
-            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
-                &add, cbo_buffer, tmp_buffer,
-            );
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&add, cbo_buffer, tmp_buffer)?;
             value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: Some(del), add: Some(add) } => {
             cbo_buffer.clear();
-            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
-                &del, cbo_buffer, tmp_buffer,
-            );
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&del, cbo_buffer, tmp_buffer)?;
             value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
 
             cbo_buffer.clear();
-            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
-                &add, cbo_buffer, tmp_buffer,
-            );
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&add, cbo_buffer, tmp_buffer)?;
             value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
         }
         DelAddRoaringBitmap { del: None, add: None } => return Ok(()),
