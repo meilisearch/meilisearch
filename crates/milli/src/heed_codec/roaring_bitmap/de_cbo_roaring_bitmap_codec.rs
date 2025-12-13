@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::io::{self, ErrorKind};
 use std::sync::OnceLock;
 
+use byteorder::{NativeEndian, ReadBytesExt as _};
 use heed::BoxedError;
 use roaring::RoaringBitmap;
 
@@ -88,12 +89,39 @@ impl DeCboRoaringBitmapCodec {
         }
     }
 
+    /// Merge serialized DeCboRoaringBitmaps in a buffer.
+    ///
+    /// If the merged values length is under the threshold, values are directly
+    /// serialized in the buffer else a delta-encoded list of integers is created
+    /// from the values and is serialized in the buffer.
     pub fn merge_into<I, A>(slices: I, buffer: &mut Vec<u8>) -> io::Result<()>
     where
         I: IntoIterator<Item = A>,
         A: AsRef<[u8]>,
     {
-        todo!()
+        let mut roaring = RoaringBitmap::new();
+        let mut vec = Vec::new();
+        let mut tmp_buffer = Vec::new();
+
+        for bytes in slices {
+            if CboRoaringBitmapCodec::bytes_deserialize_as_raw_u32s(bytes.as_ref()) {
+                let mut reader = bytes.as_ref();
+                while let Ok(integer) = reader.read_u32::<NativeEndian>() {
+                    vec.push(integer);
+                }
+            } else {
+                roaring |= DeCboRoaringBitmapCodec::deserialize_from_with_tmp_buffer(
+                    bytes.as_ref(),
+                    &mut tmp_buffer,
+                )?;
+            }
+        }
+
+        roaring.extend(vec);
+
+        DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&roaring, buffer, &mut tmp_buffer)?;
+
+        Ok(())
     }
 
     pub fn intersection_with_serialized(
