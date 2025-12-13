@@ -123,7 +123,7 @@ fn compute_level(
                             ser_buffer.push(group_len);
                             let group_docids = mem::take(&mut group_docids);
                             let docids = group_docids.into_iter().union();
-                            DeCboRoaringBitmapCodec::serialize_into(&docids, &mut ser_buffer);
+                            DeCboRoaringBitmapCodec::serialize_into(&docids, &mut ser_buffer)?;
                             writer.insert(left_bound, &ser_buffer)?;
                         }
                         left_bound = Some(key.left_bound);
@@ -142,7 +142,7 @@ fn compute_level(
                 let group_len: u8 = group_docids.len().try_into().unwrap();
                 ser_buffer.push(group_len);
                 let group_docids = group_docids.into_iter().union();
-                DeCboRoaringBitmapCodec::serialize_into(&group_docids, &mut ser_buffer);
+                DeCboRoaringBitmapCodec::serialize_into(&group_docids, &mut ser_buffer)?;
                 writer.insert(left_bound, &ser_buffer)?;
             }
 
