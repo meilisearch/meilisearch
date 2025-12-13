@@ -92,7 +92,7 @@ impl<'i> WordPrefixDocids<'i> {
                         .union()?;
 
                     buffer.clear();
-                    DeCboRoaringBitmapCodec::serialize_into(&output, &mut buffer);
+                    DeCboRoaringBitmapCodec::serialize_into(&output, &mut buffer)?;
                     indexes.push(PrefixEntry { prefix, serialized_length: buffer.len() });
                     file.write_all(&buffer)?;
                 }
@@ -154,7 +154,7 @@ impl<'i> WordPrefixDocids<'i> {
                 .union()?;
 
             buffer.clear();
-            DeCboRoaringBitmapCodec::serialize_into(&output, buffer);
+            DeCboRoaringBitmapCodec::serialize_into(&output, buffer)?;
             index.push(PrefixEntry { prefix, serialized_length: buffer.len() });
             file.write_all(buffer)
         })?;
@@ -341,7 +341,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                                 .map(DeCboRoaringBitmapCodec::deserialize_from)
                                 .union()?;
                             buffer.clear();
-                            DeCboRoaringBitmapCodec::serialize_into(&output, &mut buffer);
+                            DeCboRoaringBitmapCodec::serialize_into(&output, &mut buffer)?;
                             indexes.push(PrefixIntegerEntry {
                                 prefix,
                                 pos,
@@ -422,7 +422,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                         .map(|bytes| DeCboRoaringBitmapCodec::deserialize_from(bytes))
                         .union()?;
                     buffer.clear();
-                    DeCboRoaringBitmapCodec::serialize_into(&output, buffer);
+                    DeCboRoaringBitmapCodec::serialize_into(&output, buffer)?;
                     index.push(PrefixIntegerEntry {
                         prefix,
                         pos,
