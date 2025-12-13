@@ -23,7 +23,7 @@ impl DeCboRoaringBitmapCodec {
         // We are stuck with this format because the CboRoaringBitmapCodec decides to write
         // raw and unencoded u32s, without a header when there is at most THRESHOLD elements.
         if CboRoaringBitmapCodec::bitmap_serialize_as_raw_u32s(bitmap)
-            && DELTA_ENCODING_STATUS.is_disabled()
+            || DELTA_ENCODING_STATUS.is_disabled()
         {
             CboRoaringBitmapCodec::serialized_size(bitmap)
         } else {
@@ -49,7 +49,7 @@ impl DeCboRoaringBitmapCodec {
         // We are stuck with this format because the CboRoaringBitmapCodec decides to write
         // raw and unencoded u32s, without a header when there is at most THRESHOLD elements.
         if CboRoaringBitmapCodec::bitmap_serialize_as_raw_u32s(bitmap)
-            && DELTA_ENCODING_STATUS.is_disabled()
+            || DELTA_ENCODING_STATUS.is_disabled()
         {
             CboRoaringBitmapCodec::serialize_into_writer(bitmap, writer)
         } else {
