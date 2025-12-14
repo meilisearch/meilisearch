@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::io::{self, ErrorKind};
+use std::io::{self, Cursor, ErrorKind};
 use std::sync::OnceLock;
 
 use byteorder::{NativeEndian, ReadBytesExt as _};
@@ -78,7 +78,8 @@ impl DeCboRoaringBitmapCodec {
             return CboRoaringBitmapCodec::deserialize_from(input);
         }
 
-        match DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(input, tmp_buffer) {
+        match DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(input, |_, _| true, tmp_buffer)
+        {
             Ok(bitmap) => Ok(bitmap),
             // If the error kind is Other it means that the delta-decoder found
             // an invalid magic header. We fall back to the CboRoaringBitmap version.
@@ -124,11 +125,47 @@ impl DeCboRoaringBitmapCodec {
         Ok(())
     }
 
+    /// Do an intersection directly with a serialized delta-encoded bitmap.
+    ///
+    /// When doing the intersection we only need to deserialize the necessary
+    /// bitmap containers and avoid a lot of unnecessary allocations. We do
+    /// that by skipping entire delta-encoded blocks when possible to avoid
+    /// storing them in the bitmap we use for the final intersection.
     pub fn intersection_with_serialized(
-        mut bytes: &[u8],
+        bytes: &[u8],
         other: &RoaringBitmap,
     ) -> io::Result<RoaringBitmap> {
-        todo!()
+        if CboRoaringBitmapCodec::bytes_deserialize_as_raw_u32s(bytes) {
+            return CboRoaringBitmapCodec::intersection_with_serialized(bytes, other);
+        }
+
+        // TODO move this tmp buffer outside
+        let mut tmp_buffer = Vec::new();
+        let filter_block = |first, last| {
+            // Rank returns the number of elements less than or equal
+            // to the given value. Doing the difference between the
+            // ranks of the last and first elements gives the number
+            // of elements in the range. We don't use the range method
+            // because the ExactSizeIterator::len method always returns
+            // usize::MAX.
+            let last_rank = other.rank(last);
+            let first_rank = other.rank(first);
+            last_rank - first_rank != 0
+        };
+
+        match DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(
+            bytes,
+            filter_block,
+            &mut tmp_buffer,
+        ) {
+            Ok(bitmap) => Ok(bitmap & other),
+            // If the error kind is Other it means that the delta-decoder found
+            // an invalid magic header. We fall back to the CboRoaringBitmap version.
+            Err(e) if e.kind() == ErrorKind::Other => {
+                other.intersection_with_serialized_unchecked(Cursor::new(bytes))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     pub fn merge_deladd_into<'a>(
