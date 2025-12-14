@@ -82,14 +82,8 @@ impl DeRoaringBitmapCodec {
         size
     }
 
-    /// Writes the delta-encoded compressed version of
-    /// the given roaring bitmap into the provided writer.
-    pub fn serialize_into<W: io::Write>(bitmap: &RoaringBitmap, writer: W) -> io::Result<()> {
-        let mut tmp_buffer = Vec::new();
-        Self::serialize_into_with_tmp_buffer(bitmap, writer, &mut tmp_buffer)
-    }
-
-    /// Same as [Self::serialize_into] but accepts a buffer to avoid allocating one.
+    /// Writes the delta-encoded compressed version of the given roaring bitmap
+    /// into the provided writer. Accepts a buffer to avoid allocating one.
     pub fn serialize_into_with_tmp_buffer<W: io::Write>(
         bitmap: &RoaringBitmap,
         mut writer: W,
@@ -159,14 +153,11 @@ impl DeRoaringBitmapCodec {
         Ok(())
     }
 
-    /// Returns the delta-decoded roaring bitmap from the compressed bytes.
-    pub fn deserialize_from(compressed: &[u8]) -> io::Result<RoaringBitmap> {
-        let mut tmp_buffer = Vec::new();
-        Self::deserialize_from_with_tmp_buffer(compressed, &mut tmp_buffer)
-    }
-
     /// Same as [Self::deserialize_from] but accepts a buffer to avoid allocating one.
-    pub fn deserialize_from_with_tmp_buffer(
+    ///
+    /// The `filter_block` function is used to filter out blocks. It takes the first
+    /// and last u32 values of a block and returns `true` if the block must be kept.
+    pub fn deserialize_from_with_tmp_buffer<F>(
         input: &[u8],
         tmp_buffer: &mut Vec<u32>,
     ) -> io::Result<RoaringBitmap> {
@@ -358,8 +349,9 @@ mod tests {
         fn qc_random(xs: Vec<u32>) -> bool {
             let bitmap = RoaringBitmap::from_iter(xs);
             let mut compressed = Vec::new();
-            DeRoaringBitmapCodec::serialize_into(&bitmap, &mut compressed).unwrap();
-            let decompressed = DeRoaringBitmapCodec::deserialize_from(&compressed[..]).unwrap();
+            let mut tmp_buffer = Vec::new();
+            DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(&bitmap, &mut compressed, &mut tmp_buffer).unwrap();
+            let decompressed = DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(&compressed[..], |_, _| true, &mut tmp_buffer).unwrap();
             decompressed == bitmap
         }
     }
@@ -369,7 +361,7 @@ mod tests {
             let bitmap = RoaringBitmap::from_iter(xs);
             let mut compressed = Vec::new();
             let mut tmp_buffer = Vec::new();
-            DeRoaringBitmapCodec::serialize_into(&bitmap, &mut compressed).unwrap();
+            DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(&bitmap, &mut compressed, &mut tmp_buffer).unwrap();
             let expected_len = DeRoaringBitmapCodec::serialized_size_with_tmp_buffer(&bitmap, &mut tmp_buffer);
             compressed.len() == expected_len
         }
