@@ -159,8 +159,12 @@ impl DeRoaringBitmapCodec {
     /// and last u32 values of a block and returns `true` if the block must be kept.
     pub fn deserialize_from_with_tmp_buffer<F>(
         input: &[u8],
+        filter_block: F,
         tmp_buffer: &mut Vec<u32>,
-    ) -> io::Result<RoaringBitmap> {
+    ) -> io::Result<RoaringBitmap>
+    where
+        F: Fn(u32, u32) -> bool,
+    {
         let Some((header, mut compressed)) = input.split_at_checked(size_of_val(&MAGIC_HEADER))
         else {
             return Err(io::Error::new(ErrorKind::UnexpectedEof, "expecting a two-bytes header"));
@@ -207,9 +211,15 @@ impl DeRoaringBitmapCodec {
                         .map(|b| b.try_into().unwrap())
                         .map(u32::from_ne_bytes);
 
-                    bitmap
-                        .append(integers)
-                        .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
+                    if let Some((first, last)) =
+                        integers.clone().next().zip(integers.clone().last())
+                    {
+                        if !(filter_block)(first, last) {
+                            bitmap
+                                .append(integers)
+                                .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
+                        }
+                    }
 
                     // This is basically always the last chunk that exists in
                     // this delta-encoded format as the raw u32s are appended
@@ -228,10 +238,14 @@ impl DeRoaringBitmapCodec {
             };
 
             initial = decompressed.iter().last().copied();
-            // TODO investigate perf
-            // Safety: Bitpackers cannot output unsorter integers when
-            //         used with the compress_strictly_sorted function.
-            bitmap.append(decompressed.iter().copied()).unwrap();
+            if let Some((first, last)) = decompressed.first().copied().zip(initial) {
+                if !(filter_block)(first, last) {
+                    // TODO investigate perf
+                    // Safety: Bitpackers cannot output unsorter integers when
+                    //         used with the compress_strictly_sorted function.
+                    bitmap.append(decompressed.iter().copied()).unwrap();
+                }
+            }
             // What the delta-decoding read plus the chunk header size
             compressed = &compressed[bytes_read + 1..];
         }
