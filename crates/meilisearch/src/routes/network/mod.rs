@@ -8,7 +8,7 @@ use index_scheduler::IndexScheduler;
 use itertools::{EitherOrBoth, Itertools};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
-    InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf, InvalidNetworkSharding,
+    InvalidNetworkLeader, InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf,
     InvalidNetworkUrl, InvalidNetworkWriteApiKey,
 };
 use meilisearch_types::error::ResponseError;
@@ -20,9 +20,20 @@ use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
 
 use crate::analytics::{Aggregate, Analytics};
+use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+
+#[cfg(not(feature = "enterprise"))]
+mod community_edition;
+
+#[cfg(feature = "enterprise")]
+mod enterprise_edition;
+#[cfg(not(feature = "enterprise"))]
+use community_edition as current_edition;
+#[cfg(feature = "enterprise")]
+use enterprise_edition as current_edition;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -83,7 +94,7 @@ async fn get_network(
     Ok(HttpResponse::Ok().json(network))
 }
 
-#[derive(Debug, Deserr, ToSchema, Serialize)]
+#[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError<InvalidNetworkRemotes>, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -106,12 +117,19 @@ pub struct Remote {
     pub write_api_key: Setting<String>,
 }
 
-#[derive(Debug, Deserr, ToSchema, Serialize)]
+#[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct Network {
-    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!("http://localhost:7700"))]
+    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
+        "ms-00": {
+            "url": "http://localhost:7700"
+        },
+        "ms-01": {
+            "url": "http://localhost:7701"
+        }
+    }))]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     #[serde(default)]
     pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
@@ -119,10 +137,21 @@ pub struct Network {
     #[serde(default, rename = "self")]
     #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
     pub local: Setting<String>,
-    #[schema(value_type = Option<bool>, example = json!(true))]
+    #[schema(value_type = Option<String>, example = json!("ms-00"))]
     #[serde(default)]
-    #[deserr(default, error = DeserrJsonError<InvalidNetworkSharding>)]
-    pub sharding: Setting<bool>,
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkLeader>)]
+    pub leader: Setting<String>,
+    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
+        "ms-00": {
+            "url": "http://localhost:7700"
+        },
+        "ms-01": {
+            "url": "http://localhost:7701"
+        }
+    }))]
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
+    #[serde(default)]
+    pub previous_remotes: Setting<BTreeMap<String, Option<Remote>>>,
 }
 
 impl Remote {
@@ -206,40 +235,34 @@ async fn patch_network(
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_network("Using the /network route")?;
+    current_edition::patch_network(index_scheduler, new_network, req, analytics).await
+}
 
-    let new_network = new_network.0;
-    let old_network = index_scheduler.network();
-    debug!(parameters = ?new_network, "Patch network");
-
-    #[cfg(not(feature = "enterprise"))]
-    if new_network.sharding.set().is_some() {
-        use meilisearch_types::error::Code;
-
-        return Err(ResponseError::from_msg(
-            "Meilisearch Enterprise Edition is required to set `network.sharding`".into(),
-            Code::RequiresEnterpriseEdition,
-        ));
-    }
-
+fn merge_networks(
+    old_network: DbNetwork,
+    new_network: Network,
+) -> Result<DbNetwork, ResponseError> {
     let merged_self = match new_network.local {
         Setting::Set(new_self) => Some(new_self),
         Setting::Reset => None,
         Setting::NotSet => old_network.local,
     };
-
-    let merged_sharding = match new_network.sharding {
-        Setting::Set(new_sharding) => new_sharding,
-        Setting::Reset => false,
-        Setting::NotSet => old_network.sharding,
+    let merged_leader = match new_network.leader {
+        Setting::Set(new_leader) => Some(new_leader),
+        Setting::Reset => None,
+        Setting::NotSet => old_network.leader,
     };
-
-    if merged_sharding && merged_self.is_none() {
-        return Err(ResponseError::from_msg(
-            "`.sharding`: enabling the sharding requires `.self` to be set\n  - Hint: Disable `sharding` or set `self` to a value.".into(),
-            meilisearch_types::error::Code::InvalidNetworkSharding,
-        ));
+    match (merged_leader.as_deref(), merged_self.as_deref()) {
+        // 1. Always allowed if there is no leader
+        (None, _) => (),
+        // 2. Allowed if the leader is self
+        (Some(leader), Some(this)) if leader == this => (),
+        // 3. Any other change is disallowed
+        (Some(leader), _) => {
+            return Err(MeilisearchHttpError::NotLeader { leader: leader.to_string() }.into())
+        }
     }
-
+    let new_version = uuid::Uuid::now_v7();
     let merged_remotes = match new_network.remotes {
         Setting::Set(new_remotes) => {
             let mut merged_remotes = BTreeMap::new();
@@ -311,19 +334,11 @@ async fn patch_network(
         Setting::Reset => BTreeMap::new(),
         Setting::NotSet => old_network.remotes,
     };
-
-    analytics.publish(
-        PatchNetworkAnalytics {
-            network_size: merged_remotes.len(),
-            network_has_self: merged_self.is_some(),
-        },
-        &req,
-    );
-
-    let merged_network =
-        DbNetwork { local: merged_self, remotes: merged_remotes, sharding: merged_sharding };
-
-    index_scheduler.put_network(merged_network.clone())?;
-    debug!(returns = ?merged_network, "Patch network");
-    Ok(HttpResponse::Ok().json(merged_network))
+    let merged_network = DbNetwork {
+        local: merged_self,
+        remotes: merged_remotes,
+        leader: merged_leader,
+        version: new_version,
+    };
+    Ok(merged_network)
 }

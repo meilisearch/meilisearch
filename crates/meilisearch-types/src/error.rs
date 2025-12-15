@@ -156,7 +156,7 @@ macro_rules! make_error_codes {
             }
 
             /// return error name, used as error code
-            fn name(&self) -> String {
+            pub fn name(&self) -> String {
                 match self {
                     $(
                         Code::$code_ident => stringify!($code_ident).to_case(convert_case::Case::Snake)
@@ -214,6 +214,9 @@ ImmutableApiKeyUid                             , InvalidRequest       , BAD_REQU
 ImmutableApiKeyUpdatedAt                       , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexCreatedAt                        , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexUpdatedAt                        , InvalidRequest       , BAD_REQUEST;
+ImportTaskAlreadyReceived                      , InvalidRequest       , PRECONDITION_FAILED;
+ImportTaskUnknownRemote                        , InvalidRequest       , PRECONDITION_FAILED;
+ImportTaskWithoutNetworkTask                   , InvalidRequest       , SERVICE_UNAVAILABLE;
 IndexAlreadyExists                             , InvalidRequest       , CONFLICT ;
 IndexCreationFailed                            , Internal             , INTERNAL_SERVER_ERROR;
 IndexNotFound                                  , InvalidRequest       , NOT_FOUND;
@@ -270,9 +273,9 @@ InvalidMultiSearchQueryRankingRules            , InvalidRequest       , BAD_REQU
 InvalidMultiSearchQueryPosition                , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchRemote                       , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchWeight                       , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkLeader                           , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkRemotes                          , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSelf                             , InvalidRequest       , BAD_REQUEST ;
-InvalidNetworkSharding                         , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSearchApiKey                     , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkWriteApiKey                      , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkUrl                              , InvalidRequest       , BAD_REQUEST ;
@@ -377,7 +380,9 @@ MissingPayload                                 , InvalidRequest       , BAD_REQU
 MissingSearchHybrid                            , InvalidRequest       , BAD_REQUEST ;
 MissingSwapIndexes                             , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                             , InvalidRequest       , BAD_REQUEST ;
+NetworkVersionMismatch                         , InvalidRequest       , PRECONDITION_FAILED ;
 NoSpaceLeftOnDevice                            , System               , UNPROCESSABLE_ENTITY;
+NotLeader                                      , InvalidRequest       , BAD_REQUEST ;
 PayloadTooLarge                                , InvalidRequest       , PAYLOAD_TOO_LARGE ;
 RemoteBadResponse                              , System               , BAD_GATEWAY ;
 RemoteBadRequest                               , InvalidRequest       , BAD_REQUEST ;
@@ -391,6 +396,9 @@ TaskFileNotFound                               , InvalidRequest       , NOT_FOUN
 BatchNotFound                                  , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                               , System               , UNPROCESSABLE_ENTITY ;
 TooManyVectors                                 , InvalidRequest       , BAD_REQUEST ;
+UnexpectedNetworkPreviousRemotes               , InvalidRequest       , BAD_REQUEST ;
+NetworkVersionTooOld                           , InvalidRequest       , BAD_REQUEST ;
+UnprocessedNetworkTask                         , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                          , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                         , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                           , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;

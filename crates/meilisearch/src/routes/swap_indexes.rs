@@ -17,6 +17,7 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::Opt;
 
 #[derive(OpenApi)]
@@ -27,7 +28,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(swap_indexes))));
 }
 
-#[derive(Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
+#[derive(Deserr, Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
     /// Array of the two indexUids to be swapped
@@ -100,6 +101,10 @@ pub async fn swap_indexes(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
+
+    let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader_and_version(&req, &network)?;
+
     analytics.publish(
         IndexSwappedAnalytics {
             swap_operation_number: params.len(),
@@ -110,26 +115,36 @@ pub async fn swap_indexes(
     let filters = index_scheduler.filters();
 
     let mut swaps = vec![];
-    for SwapIndexesPayload { indexes, rename } in params.into_iter() {
+    for SwapIndexesPayload { indexes, rename } in &params {
         // TODO: switch to deserr
         let (lhs, rhs) = match indexes.as_slice() {
             [lhs, rhs] => (lhs, rhs),
             _ => {
-                return Err(MeilisearchHttpError::SwapIndexPayloadWrongLength(indexes).into());
+                return Err(
+                    MeilisearchHttpError::SwapIndexPayloadWrongLength(indexes.clone()).into()
+                );
             }
         };
         if !filters.is_index_authorized(lhs) || !filters.is_index_authorized(rhs) {
             return Err(AuthenticationError::InvalidToken.into());
         }
-        swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()), rename });
+        swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()), rename: *rename });
     }
 
     let task = KindWithContent::IndexSwap { swaps };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+    let scheduler = index_scheduler.clone();
+    let mut task = tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+    })
+    .await??;
+
+    if let Some(task_network) = task.network.take() {
+        proxy(&index_scheduler, None, &req, task_network, network, Body::inline(params), &task)
+            .await?;
+    }
+
+    let task = SummarizedTaskView::from(task);
     Ok(HttpResponse::Accepted().json(task))
 }

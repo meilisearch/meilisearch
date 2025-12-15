@@ -27,6 +27,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         queue,
         scheduler,
         persisted,
+        export_default_payload_size_bytes: _,
 
         index_mapper,
         features: _,
@@ -328,6 +329,9 @@ fn snapshot_details(d: &Details) -> String {
         }
         Details::IndexCompaction { index_uid, pre_compaction_size, post_compaction_size } => {
             format!("{{ index_uid: {index_uid:?}, pre_compaction_size: {pre_compaction_size:?}, post_compaction_size: {post_compaction_size:?} }}")
+        }
+        Details::NetworkTopologyChange { moved_documents, message } => {
+            format!("{{ moved_documents: {moved_documents:?}, message: {message:?}")
         }
     }
 }

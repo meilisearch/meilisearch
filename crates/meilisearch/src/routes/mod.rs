@@ -204,22 +204,22 @@ pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
 pub struct SummarizedTaskView {
     /// The task unique identifier.
     #[schema(value_type = u32)]
-    task_uid: TaskId,
+    pub task_uid: TaskId,
     /// The index affected by this task. May be `null` if the task is not linked to any index.
-    index_uid: Option<String>,
+    pub index_uid: Option<String>,
     /// The status of the task.
-    status: Status,
+    pub status: Status,
     /// The type of the task.
     #[serde(rename = "type")]
-    kind: Kind,
+    pub kind: Kind,
     /// The date on which the task was enqueued.
     #[serde(
         serialize_with = "time::serde::rfc3339::serialize",
         deserialize_with = "time::serde::rfc3339::deserialize"
     )]
-    enqueued_at: OffsetDateTime,
+    pub enqueued_at: OffsetDateTime,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    custom_metadata: Option<String>,
+    pub custom_metadata: Option<String>,
 }
 
 impl From<Task> for SummarizedTaskView {

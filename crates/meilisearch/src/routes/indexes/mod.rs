@@ -25,20 +25,12 @@ use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
+use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::is_dry_run;
 use crate::Opt;
 
 pub mod compact;
 pub mod documents;
-
-#[cfg(not(feature = "enterprise"))]
-mod community_edition;
-#[cfg(feature = "enterprise")]
-mod enterprise_edition;
-#[cfg(not(feature = "enterprise"))]
-use community_edition as current_edition;
-#[cfg(feature = "enterprise")]
-use enterprise_edition as current_edition;
 
 pub mod facet_search;
 pub mod search;
@@ -49,8 +41,6 @@ pub mod settings;
 mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
-
-pub use current_edition::proxy::{PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -203,7 +193,7 @@ pub async fn list_indexes(
     Ok(HttpResponse::Ok().json(ret))
 }
 
-#[derive(Deserr, Debug, ToSchema)]
+#[derive(Deserr, Serialize, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct IndexCreateRequest {
@@ -273,6 +263,10 @@ pub async fn create_index(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Create index");
+
+    let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader_and_version(&req, &network)?;
+
     let IndexCreateRequest { primary_key, uid } = body.into_inner();
 
     let allow_index_creation = index_scheduler.filters().allow_index_creation(&uid);
@@ -282,13 +276,32 @@ pub async fn create_index(
             &req,
         );
 
-        let task = KindWithContent::IndexCreation { index_uid: uid.to_string(), primary_key };
-        let uid = get_task_id(&req, &opt)?;
+        let task = KindWithContent::IndexCreation {
+            index_uid: uid.to_string(),
+            primary_key: primary_key.clone(),
+        };
+        let tuid = get_task_id(&req, &opt)?;
         let dry_run = is_dry_run(&req, &opt)?;
-        let task: SummarizedTaskView =
-            tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-                .await??
-                .into();
+        let scheduler = index_scheduler.clone();
+        let mut task = tokio::task::spawn_blocking(move || {
+            scheduler.register_with_custom_metadata(task, tuid, None, dry_run, task_network)
+        })
+        .await??;
+
+        if let Some(task_network) = task.network.take() {
+            proxy(
+                &index_scheduler,
+                None,
+                &req,
+                task_network,
+                network,
+                Body::inline(IndexCreateRequest { primary_key, uid }),
+                &task,
+            )
+            .await?;
+        }
+
+        let task = SummarizedTaskView::from(task);
         debug!(returns = ?task, "Create index");
 
         Ok(HttpResponse::Accepted().json(task))
@@ -382,7 +395,7 @@ impl Aggregate for IndexUpdatedAggregate {
     }
 }
 
-#[derive(Deserr, Debug, ToSchema)]
+#[derive(Deserr, Serialize, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 #[schema(rename_all = "camelCase")]
 pub struct UpdateIndexRequest {
@@ -434,6 +447,10 @@ pub async fn update_index(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     debug!(parameters = ?body, "Update index");
+
+    let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader_and_version(&req, &network)?;
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let body = body.into_inner();
 
@@ -448,17 +465,33 @@ pub async fn update_index(
     );
 
     let task = KindWithContent::IndexUpdate {
-        index_uid: index_uid.into_inner(),
-        primary_key: body.primary_key,
-        new_index_uid: body.uid,
+        index_uid: index_uid.clone().into_inner(),
+        primary_key: body.primary_key.clone(),
+        new_index_uid: body.uid.clone(),
     };
 
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+    let scheduler = index_scheduler.clone();
+    let mut task = tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+    })
+    .await??;
+
+    if let Some(task_network) = task.network.take() {
+        proxy(
+            &index_scheduler,
+            Some(&index_uid),
+            &req,
+            task_network,
+            network,
+            Body::inline(body),
+            &task,
+        )
+        .await?;
+    }
+
+    let task = SummarizedTaskView::from(task);
 
     debug!(returns = ?task, "Update index");
     Ok(HttpResponse::Accepted().json(task))
@@ -499,14 +532,27 @@ pub async fn delete_index(
     req: HttpRequest,
     opt: web::Data<Opt>,
 ) -> Result<HttpResponse, ResponseError> {
+    let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader_and_version(&req, &network)?;
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let task = KindWithContent::IndexDeletion { index_uid: index_uid.into_inner() };
+    let task = KindWithContent::IndexDeletion { index_uid: index_uid.clone().into_inner() };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+    let scheduler = index_scheduler.clone();
+
+    let mut task = tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+    })
+    .await??;
+
+    if let Some(task_network) = task.network.take() {
+        proxy(&index_scheduler, Some(&index_uid), &req, task_network, network, Body::none(), &task)
+            .await?;
+    }
+
+    let task = SummarizedTaskView::from(task);
+
     debug!(returns = ?task, "Delete index");
 
     Ok(HttpResponse::Accepted().json(task))

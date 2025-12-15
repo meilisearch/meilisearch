@@ -3,10 +3,13 @@ use std::fmt::Display;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::milli::index::RollbackOutcome;
+use meilisearch_types::milli::DocumentId;
+use meilisearch_types::tasks::network::ReceiveTaskError;
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use reqwest::StatusCode;
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::TaskId;
 
@@ -191,6 +194,17 @@ pub enum Error {
     #[error(transparent)]
     HeedTransaction(heed::Error),
 
+    #[error("No network topology change task is currently enqueued or processing")]
+    ImportTaskWithoutNetworkTask,
+    #[error("The network task version (`{network_task}`) does not match the import task version (`{import_task}`)")]
+    NetworkVersionMismatch { network_task: Uuid, import_task: Uuid },
+    #[error("The import task emanates from an unknown remote `{0}`")]
+    ImportTaskUnknownRemote(String),
+    #[error("The import task with key `{0}` was already received")]
+    ImportTaskAlreadyReceived(DocumentId),
+    #[error("{action} requires the Enterprise Edition")]
+    RequiresEnterpriseEdition { action: &'static str },
+
     #[cfg(test)]
     #[error("Planned failure for tests.")]
     PlannedFailure,
@@ -248,6 +262,11 @@ impl Error {
             | Error::Persist(_)
             | Error::FeatureNotEnabled(_)
             | Error::Export(_)
+            | Error::ImportTaskWithoutNetworkTask
+            | Error::NetworkVersionMismatch { .. }
+            | Error::ImportTaskAlreadyReceived(_)
+            | Error::ImportTaskUnknownRemote(_)
+            | Error::RequiresEnterpriseEdition { .. }
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
@@ -307,6 +326,11 @@ impl ErrorCode for Error {
             Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
             Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
             Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
+            Error::ImportTaskWithoutNetworkTask => Code::ImportTaskWithoutNetworkTask,
+            Error::NetworkVersionMismatch { .. } => Code::NetworkVersionMismatch,
+            Error::ImportTaskAlreadyReceived(_) => Code::ImportTaskAlreadyReceived,
+            Error::ImportTaskUnknownRemote(_) => Code::ImportTaskUnknownRemote,
+            Error::RequiresEnterpriseEdition { .. } => Code::RequiresEnterpriseEdition,
             Error::S3Error { status, .. } if status.is_client_error() => {
                 Code::InvalidS3SnapshotRequest
             }
@@ -342,6 +366,15 @@ impl ErrorCode for Error {
 
             #[cfg(test)]
             Error::PlannedFailure => Code::Internal,
+        }
+    }
+}
+
+impl From<ReceiveTaskError> for Error {
+    fn from(value: ReceiveTaskError) -> Self {
+        match value {
+            ReceiveTaskError::UnknownRemote(unknown) => Error::ImportTaskUnknownRemote(unknown),
+            ReceiveTaskError::DuplicateTask(dup) => Error::ImportTaskAlreadyReceived(dup),
         }
     }
 }

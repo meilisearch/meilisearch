@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
@@ -10,7 +11,9 @@ pub struct Network {
     #[serde(default)]
     pub remotes: BTreeMap<String, Remote>,
     #[serde(default)]
-    pub sharding: bool,
+    pub leader: Option<String>,
+    #[serde(default)]
+    pub version: Uuid,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]

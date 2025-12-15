@@ -9,8 +9,9 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
+use meilisearch_types::tasks::network::{DbTaskNetwork, NetworkTopologyChange};
 use meilisearch_types::tasks::{
-    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId, TaskNetwork,
+    Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
 };
 use meilisearch_types::InstanceUid;
 use roaring::RoaringBitmap;
@@ -95,7 +96,7 @@ pub struct TaskDump {
     )]
     pub finished_at: Option<OffsetDateTime>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub network: Option<TaskNetwork>,
+    pub network: Option<DbTaskNetwork>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_metadata: Option<String>,
 }
@@ -163,6 +164,7 @@ pub enum KindDump {
     IndexCompaction {
         index_uid: String,
     },
+    NetworkTopologyChange(NetworkTopologyChange),
 }
 
 impl From<Task> for TaskDump {
@@ -248,6 +250,9 @@ impl From<KindWithContent> for KindDump {
             }
             KindWithContent::IndexCompaction { index_uid } => {
                 KindDump::IndexCompaction { index_uid }
+            }
+            KindWithContent::NetworkTopologyChange(network_topology_change) => {
+                KindDump::NetworkTopologyChange(network_topology_change)
             }
         }
     }
@@ -560,7 +565,8 @@ pub(crate) mod test {
         Network {
             local: Some("myself".to_string()),
             remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
-            sharding: false,
+            leader: None,
+            version: Default::default(),
         }
     }
 
@@ -614,7 +620,10 @@ pub(crate) mod test {
         assert_eq!(dump.features().unwrap().unwrap(), expected);
 
         // ==== checking the network
-        let expected = create_test_network();
+        let mut expected = create_test_network();
+        // from v1.29, we drop `leader` and `local` on import
+        expected.leader = None;
+        expected.local = None;
         assert_eq!(&expected, dump.network().unwrap().unwrap());
     }
 }

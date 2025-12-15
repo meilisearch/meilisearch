@@ -434,7 +434,11 @@ pub(crate) mod test {
         // network
 
         let network = dump.network().unwrap().unwrap();
-        insta::assert_snapshot!(network.local.as_ref().unwrap(), @"ms-0");
+
+        // since v1.29 we are dropping `local` and `leader` on import
+        insta::assert_snapshot!(network.local.is_none(), @"true");
+        insta::assert_snapshot!(network.leader.is_none(), @"true");
+
         insta::assert_snapshot!(network.remotes.get("ms-0").as_ref().unwrap().url, @"http://localhost:7700");
         insta::assert_snapshot!(network.remotes.get("ms-0").as_ref().unwrap().search_api_key.is_none(), @"true");
         insta::assert_snapshot!(network.remotes.get("ms-1").as_ref().unwrap().url, @"http://localhost:7701");

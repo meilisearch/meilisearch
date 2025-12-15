@@ -74,6 +74,7 @@ impl From<KindWithContent> for AutobatchKind {
             | KindWithContent::DumpCreation { .. }
             | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. }
+            | KindWithContent::NetworkTopologyChange(_)
             | KindWithContent::SnapshotCreation => {
                 panic!("The autobatcher should never be called with tasks with special priority or that don't apply to an index.")
             }

@@ -93,6 +93,20 @@ impl Service {
         self.request(req).await
     }
 
+    pub async fn patch_str(
+        &self,
+        url: impl AsRef<str>,
+        body: impl AsRef<str>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req =
+            test::TestRequest::patch().uri(url.as_ref()).set_payload(body.as_ref().to_string());
+        for header in headers {
+            req = req.insert_header(header);
+        }
+        self.request(req).await
+    }
+
     pub async fn patch(&self, url: impl AsRef<str>, body: Value) -> (Value, StatusCode) {
         self.patch_encoded(url, body, Encoder::Plain).await
     }
