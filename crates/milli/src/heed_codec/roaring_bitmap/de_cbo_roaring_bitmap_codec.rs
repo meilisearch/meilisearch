@@ -8,6 +8,7 @@ use roaring::RoaringBitmap;
 
 use super::cbo_roaring_bitmap_codec::CboRoaringBitmapCodec;
 use super::de_roaring_bitmap_codec::DeRoaringBitmapCodec;
+use crate::heed_codec::roaring_bitmap::take_all_blocks;
 use crate::heed_codec::BytesDecodeOwned;
 use crate::update::del_add::KvReaderDelAdd;
 
@@ -78,8 +79,11 @@ impl DeCboRoaringBitmapCodec {
             return CboRoaringBitmapCodec::deserialize_from(input);
         }
 
-        match DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(input, |_, _| true, tmp_buffer)
-        {
+        match DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(
+            input,
+            take_all_blocks,
+            tmp_buffer,
+        ) {
             Ok(bitmap) => Ok(bitmap),
             // If the error kind is Other it means that the delta-decoder found
             // an invalid magic header. We fall back to the CboRoaringBitmap version.
@@ -150,7 +154,8 @@ impl DeCboRoaringBitmapCodec {
             // usize::MAX.
             let last_rank = other.rank(last);
             let first_rank = other.rank(first);
-            last_rank - first_rank != 0
+            // Equal to zero means skip/filter out this block
+            last_rank - first_rank == 0
         };
 
         match DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(
