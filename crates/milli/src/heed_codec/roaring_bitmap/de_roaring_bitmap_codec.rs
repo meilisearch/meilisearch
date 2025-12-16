@@ -212,7 +212,7 @@ impl DeRoaringBitmapCodec {
                         .map(u32::from_ne_bytes);
 
                     if let Some((first, last)) =
-                        integers.clone().next().zip(integers.clone().last())
+                        integers.clone().next().zip(integers.clone().next_back())
                     {
                         if !(filter_block)(first, last) {
                             bitmap
