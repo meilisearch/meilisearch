@@ -14,7 +14,7 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::BytesRefCodec;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_reader};
-use crate::update::MergeDeladdCboRoaringBitmaps;
+use crate::update::MergeDeladdDeCboRoaringBitmaps;
 use crate::{DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, FieldId, Index, Result};
 
 /// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
@@ -29,7 +29,7 @@ pub struct FacetsUpdateBulk<'i> {
     facet_type: FacetType,
     field_ids: Vec<FieldId>,
     // None if level 0 does not need to be updated
-    delta_data: Option<Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>>,
+    delta_data: Option<Merger<BufReader<File>, MergeDeladdDeCboRoaringBitmaps>>,
 }
 
 impl<'i> FacetsUpdateBulk<'i> {
@@ -37,7 +37,7 @@ impl<'i> FacetsUpdateBulk<'i> {
         index: &'i Index,
         field_ids: Vec<FieldId>,
         facet_type: FacetType,
-        delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
+        delta_data: Merger<BufReader<File>, MergeDeladdDeCboRoaringBitmaps>,
         group_size: u8,
         min_level_size: u8,
     ) -> FacetsUpdateBulk<'i> {
@@ -90,7 +90,7 @@ impl<'i> FacetsUpdateBulk<'i> {
 /// Implementation of `FacetsUpdateBulk` that is independent of milli's `Index` type
 pub(crate) struct FacetsUpdateBulkInner<R: std::io::Read + std::io::Seek> {
     pub db: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
-    pub delta_data: Option<Merger<R, MergeDeladdCboRoaringBitmaps>>,
+    pub delta_data: Option<Merger<R, MergeDeladdDeCboRoaringBitmaps>>,
     pub group_size: u8,
     pub min_level_size: u8,
 }
