@@ -247,6 +247,8 @@ impl IndexScheduler {
             s3_snapshot_prefix,
             s3_access_key,
             s3_secret_key,
+            s3_role_arn,
+            s3_web_identity_token_file,
             s3_max_in_flight_parts,
             s3_compression_level: level,
             s3_signature_duration,
