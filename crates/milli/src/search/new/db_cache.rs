@@ -14,7 +14,7 @@ use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
 use crate::proximity::ProximityPrecision;
 use crate::update::MergeCboRoaringBitmaps;
 use crate::{
-    CboRoaringBitmapLenCodec, DeCboRoaringBitmapCodec, Result, SearchContext, U8StrStrCodec,
+    DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, Result, SearchContext, U8StrStrCodec,
 };
 
 /// A cache storing pointers to values in the LMDB databases.
@@ -105,7 +105,7 @@ impl<'ctx> DatabaseCache<'ctx> {
             None => return Ok(None),
         };
 
-        CboRoaringBitmapLenCodec::bytes_decode_owned(bitmap_bytes)
+        DeCboRoaringBitmapLenCodec::bytes_decode_owned(bitmap_bytes)
             .map(Some)
             .map_err(heed::Error::Decoding)
             .map_err(Into::into)
