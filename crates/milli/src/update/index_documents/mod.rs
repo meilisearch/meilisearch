@@ -415,7 +415,7 @@ where
                                     let cloneable_chunk =
                                         unsafe { as_cloneable_grenad(&word_docids_reader)? };
                                     let word_docids = word_docids.get_or_insert_with(|| {
-                                        MergerBuilder::new(MergeDeladdCboRoaringBitmaps)
+                                        MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps)
                                     });
                                     word_docids.push(cloneable_chunk.into_cursor()?);
                                     let cloneable_chunk =
@@ -423,14 +423,14 @@ where
                                     let exact_word_docids =
                                         exact_word_docids.get_or_insert_with(|| {
                                             MergerBuilder::new(
-                                                MergeDeladdCboRoaringBitmaps,
+                                                MergeDeladdDeCboRoaringBitmaps,
                                             )
                                         });
                                     exact_word_docids.push(cloneable_chunk.into_cursor()?);
                                     let cloneable_chunk =
                                         unsafe { as_cloneable_grenad(&word_fid_docids_reader)? };
                                     let word_fid_docids = word_fid_docids.get_or_insert_with(|| {
-                                        MergerBuilder::new(MergeDeladdCboRoaringBitmaps)
+                                        MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps)
                                     });
                                     word_fid_docids.push(cloneable_chunk.into_cursor()?);
                                     TypedChunk::WordDocids {
@@ -444,7 +444,7 @@ where
                                     let word_position_docids =
                                         word_position_docids.get_or_insert_with(|| {
                                             MergerBuilder::new(
-                                                MergeDeladdCboRoaringBitmaps,
+                                                MergeDeladdDeCboRoaringBitmaps,
                                             )
                                         });
                                     word_position_docids.push(cloneable_chunk.into_cursor()?);
@@ -577,10 +577,10 @@ where
     )]
     pub fn execute_prefix_databases(
         self,
-        word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
-        exact_word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
-        word_position_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
-        word_fid_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
+        word_docids: Option<Merger<CursorClonableMmap, MergeDeladdDeCboRoaringBitmaps>>,
+        exact_word_docids: Option<Merger<CursorClonableMmap, MergeDeladdDeCboRoaringBitmaps>>,
+        word_position_docids: Option<Merger<CursorClonableMmap, MergeDeladdDeCboRoaringBitmaps>>,
+        word_fid_docids: Option<Merger<CursorClonableMmap, MergeDeladdDeCboRoaringBitmaps>>,
     ) -> Result<()>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
@@ -778,7 +778,7 @@ where
 )]
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn<'_>,
-    merger: Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>,
+    merger: Merger<CursorClonableMmap, MergeDeladdDeCboRoaringBitmaps>,
     word_docids_db: Database<Str, DeCboRoaringBitmapCodec>,
     word_prefix_docids_db: Database<Str, DeCboRoaringBitmapCodec>,
     indexer_config: &IndexerConfig,
