@@ -81,7 +81,7 @@ use rustc_hash::FxBuildHasher;
 use crate::update::del_add::{DelAdd, KvWriterDelAdd};
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::KvReaderDelAdd;
-use crate::update::MergeDeladdCboRoaringBitmaps;
+use crate::update::MergeDeladdDeCboRoaringBitmaps;
 use crate::{DeCboRoaringBitmapCodec, Result};
 
 /// A cache that stores bytes keys associated to CboDelAddRoaringBitmaps.
@@ -320,7 +320,7 @@ struct SpillingCaches<'extractor> {
             &'extractor Bump,
         >,
     >,
-    spilled_entries: Vec<grenad::Sorter<MergeDeladdCboRoaringBitmaps>>,
+    spilled_entries: Vec<grenad::Sorter<MergeDeladdDeCboRoaringBitmaps>>,
     deladd_buffer: Vec<u8>,
     cbo_buffer: Vec<u8>,
     tmp_buffer: Vec<u32>,
@@ -339,7 +339,7 @@ impl<'extractor> SpillingCaches<'extractor> {
     ) -> SpillingCaches<'extractor> {
         SpillingCaches {
             spilled_entries: iter::repeat_with(|| {
-                let mut builder = grenad::SorterBuilder::new(MergeDeladdCboRoaringBitmaps);
+                let mut builder = grenad::SorterBuilder::new(MergeDeladdDeCboRoaringBitmaps);
                 builder.dump_threshold(0);
                 builder.allow_realloc(false);
                 builder.build()
@@ -412,7 +412,7 @@ fn compute_bucket_from_hash(buckets: usize, hash: u64) -> usize {
 }
 
 fn spill_entry_to_sorter(
-    spilled_entries: &mut grenad::Sorter<MergeDeladdCboRoaringBitmaps>,
+    spilled_entries: &mut grenad::Sorter<MergeDeladdDeCboRoaringBitmaps>,
     deladd_buffer: &mut Vec<u8>,
     cbo_buffer: &mut Vec<u8>,
     tmp_buffer: &mut Vec<u32>,

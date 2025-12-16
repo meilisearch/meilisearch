@@ -12,7 +12,7 @@ use super::interner::Interned;
 use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
 use crate::proximity::ProximityPrecision;
-use crate::update::MergeCboRoaringBitmaps;
+use crate::update::MergeDeCboRoaringBitmaps;
 use crate::{
     DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, Result, SearchContext, U8StrStrCodec,
 };
@@ -223,7 +223,7 @@ impl<'ctx> SearchContext<'ctx> {
                     &mut self.db_cache.word_docids,
                     self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    MergeCboRoaringBitmaps,
+                    MergeDeCboRoaringBitmaps,
                 )
             }
             None => DatabaseCache::get_value(
@@ -255,7 +255,7 @@ impl<'ctx> SearchContext<'ctx> {
                     &mut self.db_cache.exact_word_docids,
                     self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    MergeCboRoaringBitmaps,
+                    MergeDeCboRoaringBitmaps,
                 )
             }
             None => DatabaseCache::get_value(
@@ -312,7 +312,7 @@ impl<'ctx> SearchContext<'ctx> {
                     &mut self.db_cache.word_prefix_docids,
                     self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    MergeCboRoaringBitmaps,
+                    MergeDeCboRoaringBitmaps,
                 )
             }
             None => DatabaseCache::get_value(
@@ -344,7 +344,7 @@ impl<'ctx> SearchContext<'ctx> {
                     &mut self.db_cache.exact_word_prefix_docids,
                     self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    MergeCboRoaringBitmaps,
+                    MergeDeCboRoaringBitmaps,
                 )
             }
             None => DatabaseCache::get_value(

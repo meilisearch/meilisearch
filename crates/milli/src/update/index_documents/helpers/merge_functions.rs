@@ -190,9 +190,9 @@ impl MergeFunction for ObkvsKeepLastAdditionMergeDeletions {
 }
 
 /// Do a union of all the CboRoaringBitmaps in the values.
-pub struct MergeCboRoaringBitmaps;
+pub struct MergeDeCboRoaringBitmaps;
 
-impl MergeFunction for MergeCboRoaringBitmaps {
+impl MergeFunction for MergeDeCboRoaringBitmaps {
     type Error = crate::Error;
 
     fn merge<'a>(&self, _key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
@@ -208,9 +208,9 @@ impl MergeFunction for MergeCboRoaringBitmaps {
 
 /// Do a union of CboRoaringBitmaps on both sides of a DelAdd obkv
 /// separately and outputs a new DelAdd with both unions.
-pub struct MergeDeladdCboRoaringBitmaps;
+pub struct MergeDeladdDeCboRoaringBitmaps;
 
-impl MergeFunction for MergeDeladdCboRoaringBitmaps {
+impl MergeFunction for MergeDeladdDeCboRoaringBitmaps {
     type Error = crate::Error;
 
     fn merge<'a>(&self, _key: &[u8], values: &[Cow<'a, [u8]>]) -> Result<Cow<'a, [u8]>> {
