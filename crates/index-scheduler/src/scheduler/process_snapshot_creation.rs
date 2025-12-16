@@ -1,5 +1,7 @@
+use std::env::VarError;
 use std::ffi::OsStr;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
 use meilisearch_types::heed::CompactionOption;
@@ -13,6 +15,34 @@ use crate::queue::TaskQueue;
 use crate::{Error, IndexScheduler, Result};
 
 const UPDATE_FILES_DIR_NAME: &str = "update_files";
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct StsCredentials {
+    #[serde(rename = "AccessKeyId")]
+    access_key_id: String,
+    #[serde(rename = "SecretAccessKey")]
+    secret_access_key: String,
+    #[serde(rename = "SessionToken")]
+    session_token: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AssumeRoleWithWebIdentityResult {
+    #[serde(rename = "Credentials")]
+    credentials: StsCredentials,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AssumeRoleWithWebIdentityResponse {
+    #[serde(rename = "AssumeRoleWithWebIdentityResult")]
+    result: AssumeRoleWithWebIdentityResult,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct StsResponse {
+    #[serde(rename = "AssumeRoleWithWebIdentityResponse")]
+    response: AssumeRoleWithWebIdentityResponse,
+}
 
 /// # Safety
 ///
@@ -232,6 +262,78 @@ impl IndexScheduler {
     }
 
     #[cfg(unix)]
+    async fn assume_role_with_web_identity(
+        role_arn: &str,
+        web_identity_token_file: &Path,
+    ) -> anyhow::Result<StsCredentials> {
+        let token = tokio::fs::read_to_string(web_identity_token_file)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read web identity token file: {e}"))?;
+
+        let duration: u32 =
+            match std::env::var("MEILI_EXPERIMENTAL_S3_WEB_IDENTITY_TOKEN_DURATION_SECONDS") {
+                Ok(s) => s.parse()?,
+                Err(VarError::NotPresent) => 3600,
+                Err(VarError::NotUnicode(e)) => {
+                    anyhow::bail!("Invalid duration: {e:?}")
+                }
+            };
+
+        let form_data = [
+            ("Action", "AssumeRoleWithWebIdentity"),
+            ("Version", "2011-06-15"),
+            ("RoleArn", role_arn),
+            ("RoleSessionName", "meilisearch-snapshot-session"),
+            ("WebIdentityToken", &token),
+            ("DurationSeconds", &duration.to_string()),
+        ];
+
+        let client = reqwest::Client::new();
+        let response = client
+            .post("https://sts.amazonaws.com/")
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .form(&form_data)
+            .send()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to send STS request: {e}"))?;
+
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read STS response body: {e}"))?;
+
+        if !status.is_success() {
+            return Err(anyhow::anyhow!("STS request failed with status {status}: {body}"));
+        }
+
+        let sts_response: StsResponse = serde_json::from_str(&body)
+            .map_err(|e| anyhow::anyhow!("Failed to deserialize STS response: {e}"))?;
+
+        Ok(sts_response.response.result.credentials)
+    }
+
+    async fn extract_credentials_from_options(
+        s3_access_key: Option<String>,
+        s3_secret_key: Option<String>,
+        s3_role_arn: Option<String>,
+        s3_web_identity_token_file: Option<PathBuf>,
+    ) -> anyhow::Result<(String, String, Option<String>)> {
+        let static_credentials = s3_access_key.zip(s3_secret_key);
+        let web_identity = s3_role_arn.zip(s3_web_identity_token_file);
+        match (static_credentials, web_identity) {
+            (Some((access_key, secret_key)), None) => Ok((access_key, secret_key, None)),
+            (None, Some((role_arn, token_file))) => {
+                let StsCredentials { access_key_id, secret_access_key, session_token } =
+                    Self::assume_role_with_web_identity(&role_arn, &token_file).await?;
+                Ok((access_key_id, secret_access_key, Some(session_token)))
+            }
+            (_, _) => anyhow::bail!("Clap must pass valid auth parameters"),
+        }
+    }
+
+    #[cfg(unix)]
     pub(super) async fn process_snapshot_to_s3(
         &self,
         progress: Progress,
@@ -247,6 +349,8 @@ impl IndexScheduler {
             s3_snapshot_prefix,
             s3_access_key,
             s3_secret_key,
+            s3_role_arn,
+            s3_web_identity_token_file,
             s3_max_in_flight_parts,
             s3_compression_level: level,
             s3_signature_duration,
@@ -262,21 +366,33 @@ impl IndexScheduler {
         };
 
         let (reader, writer) = std::io::pipe()?;
-        let uploader_task = tokio::spawn(multipart_stream_to_s3(
-            s3_bucket_url,
-            s3_bucket_region,
-            s3_bucket_name,
-            s3_snapshot_prefix,
-            s3_access_key,
-            s3_secret_key,
-            s3_max_in_flight_parts,
-            s3_signature_duration,
-            s3_multipart_part_size,
-            must_stop_processing,
-            retry_backoff,
-            db_name,
-            reader,
-        ));
+        let uploader_task = tokio::spawn(async move {
+            let (s3_access_key, s3_secret_key, s3_token) = Self::extract_credentials_from_options(
+                s3_access_key,
+                s3_secret_key,
+                s3_role_arn,
+                s3_web_identity_token_file,
+            )
+            .await?;
+
+            multipart_stream_to_s3(
+                s3_bucket_url,
+                s3_bucket_region,
+                s3_bucket_name,
+                s3_snapshot_prefix,
+                s3_access_key,
+                s3_secret_key,
+                s3_token,
+                s3_max_in_flight_parts,
+                s3_signature_duration,
+                s3_multipart_part_size,
+                must_stop_processing,
+                retry_backoff,
+                db_name,
+                reader,
+            )
+            .await
+        });
 
         let index_scheduler = IndexScheduler::private_clone(self);
         let builder_task = tokio::task::spawn_blocking(move || {
@@ -430,6 +546,7 @@ async fn multipart_stream_to_s3(
     s3_snapshot_prefix: String,
     s3_access_key: String,
     s3_secret_key: String,
+    s3_token: Option<String>,
     s3_max_in_flight_parts: std::num::NonZero<usize>,
     s3_signature_duration: std::time::Duration,
     s3_multipart_part_size: u64,
@@ -456,7 +573,10 @@ async fn multipart_stream_to_s3(
         s3_bucket_url.parse().map_err(BucketError::ParseError).map_err(Error::S3BucketError)?;
     let bucket = Bucket::new(url, UrlStyle::Path, s3_bucket_name, s3_bucket_region)
         .map_err(Error::S3BucketError)?;
-    let credential = Credentials::new(s3_access_key, s3_secret_key);
+    let credential = match s3_token {
+        Some(token) => Credentials::new_with_token(s3_access_key, s3_secret_key, token),
+        None => Credentials::new(s3_access_key, s3_secret_key),
+    };
 
     // Note for the future (rust 1.91+): use with_added_extension, it's prettier
     let object_path = s3_snapshot_prefix.join(format!("{db_name}.snapshot"));
