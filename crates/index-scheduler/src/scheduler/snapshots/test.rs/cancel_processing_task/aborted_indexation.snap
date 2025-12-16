@@ -7,7 +7,7 @@ source: crates/index-scheduler/src/scheduler/test.rs
 {uid: 0, details: {"receivedDocuments":1,"indexedDocuments":null}, stats: {"totalNbTasks":1,"status":{"processing":1},"types":{"documentAdditionOrUpdate":1},"indexUids":{"catto":1}}, stop reason: "batched all enqueued tasks", }
 ----------------------------------------------------------------------
 ### All Tasks:
-0 {uid: 0, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true }}
+0 {uid: 0, status: enqueued, details: { received_documents: 1, indexed_documents: None }, kind: DocumentAdditionOrUpdate { index_uid: "catto", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000000, documents_count: 1, allow_index_creation: true, on_missing_document: Create }}
 1 {uid: 1, status: enqueued, details: { matched_tasks: 1, canceled_tasks: None, original_filter: "test_query" }, kind: TaskCancelation { query: "test_query", tasks: RoaringBitmap<[0]> }}
 ----------------------------------------------------------------------
 ### Status:
