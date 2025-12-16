@@ -255,6 +255,7 @@ pub fn merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap<'a>(
         KvReaderDelAdd::from_slice(deladd_obkv),
         previous,
         buffer,
+        &mut Vec::new(), // tmp_buffer
     )?)
 }
 

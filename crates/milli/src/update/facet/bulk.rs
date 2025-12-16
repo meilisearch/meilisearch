@@ -15,7 +15,7 @@ use crate::heed_codec::BytesRefCodec;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::update::index_documents::{create_writer, valid_lmdb_key, writer_into_reader};
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapLenCodec, DeCboRoaringBitmapCodec, FieldId, Index, Result};
+use crate::{DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, FieldId, Index, Result};
 
 /// Algorithm to insert elememts into the `facet_id_(string/f64)_docids` databases
 /// by rebuilding the database "from scratch".
@@ -143,6 +143,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
             }
         } else {
             let mut buffer = Vec::new();
+            let mut tmp_buffer = Vec::new();
             let database = self.db.remap_types::<Bytes, Bytes>();
 
             let mut iter = delta_data.into_stream_merger_iter()?;
@@ -162,7 +163,12 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                     Some(prev_value) => {
                         // prev_value is the group size for level 0, followed by the previous bitmap.
                         let old_bitmap = &prev_value[1..];
-                        DeCboRoaringBitmapCodec::merge_deladd_into(value, old_bitmap, &mut buffer)?;
+                        DeCboRoaringBitmapCodec::merge_deladd_into(
+                            value,
+                            old_bitmap,
+                            &mut buffer,
+                            &mut tmp_buffer,
+                        )?;
                     }
                     None => {
                         // it is safe to ignore the del in that case.
@@ -176,7 +182,7 @@ impl<R: std::io::Read + std::io::Seek> FacetsUpdateBulkInner<R> {
                 };
                 let new_bitmap = &buffer[1..];
                 // if the new bitmap is empty, let's remove it
-                if CboRoaringBitmapLenCodec::bytes_decode(new_bitmap).unwrap_or_default() == 0 {
+                if DeCboRoaringBitmapLenCodec::bytes_decode(new_bitmap).unwrap_or_default() == 0 {
                     database.delete(wtxn, key)?;
                 } else {
                     database.put(wtxn, key, &buffer)?;
