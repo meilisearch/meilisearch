@@ -252,6 +252,75 @@ impl DeRoaringBitmapCodec {
 
         Ok(bitmap)
     }
+
+    /// Returns the length of the serialized DeRoaringBitmap.
+    pub fn deserialize_length_from(input: &[u8]) -> io::Result<u64> {
+        let Some((header, mut compressed)) = input.split_at_checked(size_of_val(&MAGIC_HEADER))
+        else {
+            return Err(io::Error::new(ErrorKind::UnexpectedEof, "expecting a two-bytes header"));
+        };
+
+        // Safety: This unwrap cannot happen as the header buffer is the right size
+        let header = u16::from_ne_bytes(header.try_into().unwrap());
+
+        if header != MAGIC_HEADER {
+            return Err(io::Error::other("invalid header value"));
+        }
+
+        let mut length = 0;
+        while let Some((&chunk_header, encoded)) = compressed.split_first() {
+            let (level, num_bits) = decode_chunk_header(chunk_header);
+            let bytes_read = match level {
+                BitPackerLevel::None => {
+                    if num_bits != u32::BITS as u8 {
+                        return Err(io::Error::new(
+                            ErrorKind::InvalidData,
+                            "invalid number of bits to encode non-compressed u32s",
+                        ));
+                    }
+
+                    let chunks = encoded.chunks_exact(size_of::<u32>());
+                    if !chunks.remainder().is_empty() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "expecting last chunk to be a multiple of the size of an u32",
+                        ));
+                    }
+
+                    // This call is optimized for performance
+                    // and will not iterate over the chunks.
+                    length += chunks.count() as u64;
+
+                    // This is basically always the last chunk that exists in
+                    // this delta-encoded format as the raw u32s are appended
+                    // when there is not enough of them to fit in a bitpacker.
+                    break;
+                }
+                BitPackerLevel::BitPacker1x => {
+                    length += BitPacker1x::BLOCK_LEN as u64;
+                    BitPacker1x::compressed_block_size(num_bits)
+                }
+                BitPackerLevel::BitPacker4x => {
+                    length += BitPacker4x::BLOCK_LEN as u64;
+                    BitPacker4x::compressed_block_size(num_bits)
+                }
+                BitPackerLevel::BitPacker8x => {
+                    length += BitPacker8x::BLOCK_LEN as u64;
+                    BitPacker8x::compressed_block_size(num_bits)
+                }
+            };
+
+            // What the delta-decoding read plus the chunk header size
+            compressed = &compressed[bytes_read + 1..];
+        }
+
+        Ok(length)
+    }
+}
+
+/// A utility function to take all blocks.
+pub fn take_all_blocks(_first: u32, _last: u32) -> bool {
+    false
 }
 
 /// Takes a strickly sorted list of u32s and outputs delta-encoded
@@ -377,8 +446,9 @@ mod tests {
             let mut compressed = Vec::new();
             let mut tmp_buffer = Vec::new();
             DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(&bitmap, &mut compressed, &mut tmp_buffer).unwrap();
+            let length = DeRoaringBitmapCodec::deserialize_length_from(&compressed).unwrap();
             let expected_len = DeRoaringBitmapCodec::serialized_size_with_tmp_buffer(&bitmap, &mut tmp_buffer);
-            compressed.len() == expected_len
+            length == bitmap.len() && compressed.len() == expected_len
         }
     }
 }

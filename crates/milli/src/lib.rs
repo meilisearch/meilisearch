@@ -79,7 +79,7 @@ pub use self::filterable_attributes_rules::{
 pub use self::foreign_key::ForeignKey;
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
-    CboRoaringBitmapLenCodec, DeCboRoaringBitmapCodec, FieldIdWordCountCodec, ObkvCodec,
+    DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,
     RoaringBitmapCodec, RoaringBitmapLenCodec, StrBEU32Codec, U8StrStrCodec,
     UncheckedU8StrStrCodec,
 };

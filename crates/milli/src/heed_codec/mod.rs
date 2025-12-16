@@ -26,7 +26,7 @@ pub use self::roaring_bitmap::{
     BoRoaringBitmapCodec, DeCboRoaringBitmapCodec, RoaringBitmapCodec, DELTA_ENCODING_STATUS,
 };
 pub use self::roaring_bitmap_length::{
-    BoRoaringBitmapLenCodec, CboRoaringBitmapLenCodec, RoaringBitmapLenCodec,
+    BoRoaringBitmapLenCodec, DeCboRoaringBitmapLenCodec, RoaringBitmapLenCodec,
 };
 pub use self::str_beu32_codec::{StrBEU16Codec, StrBEU32Codec};
 pub use self::str_str_u8_codec::{U8StrStrCodec, UncheckedU8StrStrCodec};
