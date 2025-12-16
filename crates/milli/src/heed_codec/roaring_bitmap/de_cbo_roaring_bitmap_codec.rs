@@ -223,7 +223,7 @@ impl heed::BytesEncode<'_> for DeCboRoaringBitmapCodec {
 
     fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         let mut tmp_buffer = Vec::new();
-        let capacity = Self::serialized_size_with_tmp_buffer(&item, &mut tmp_buffer);
+        let capacity = Self::serialized_size_with_tmp_buffer(item, &mut tmp_buffer);
         let mut output = Vec::with_capacity(capacity);
         Self::serialize_into_with_tmp_buffer(item, &mut output, &mut tmp_buffer)?;
         Ok(Cow::Owned(output))
@@ -233,6 +233,7 @@ impl heed::BytesEncode<'_> for DeCboRoaringBitmapCodec {
 /// Manages the global status of the delta encoding.
 ///
 /// Whether we must use delta encoding or not when encoding roaring bitmaps.
+#[derive(Default)]
 pub struct DeltaEncodingStatusLock(OnceLock<DeltaEncodingStatus>);
 
 impl DeltaEncodingStatusLock {
