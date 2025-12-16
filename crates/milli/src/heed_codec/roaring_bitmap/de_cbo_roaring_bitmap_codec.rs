@@ -10,7 +10,7 @@ use super::cbo_roaring_bitmap_codec::CboRoaringBitmapCodec;
 use super::de_roaring_bitmap_codec::DeRoaringBitmapCodec;
 use crate::heed_codec::roaring_bitmap::take_all_blocks;
 use crate::heed_codec::BytesDecodeOwned;
-use crate::update::del_add::KvReaderDelAdd;
+use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 
 /// Defines the status of the delta encoding on whether we have enabled it or not.
 pub static DELTA_ENCODING_STATUS: DeltaEncodingStatusLock = DeltaEncodingStatusLock::new();
@@ -177,8 +177,28 @@ impl DeCboRoaringBitmapCodec {
         deladd: &KvReaderDelAdd,
         previous: &[u8],
         buffer: &'a mut Vec<u8>,
+        tmp_buffer: &mut Vec<u32>,
     ) -> io::Result<Option<&'a [u8]>> {
-        todo!()
+        // Deserialize the bitmap that is already there
+        let mut previous = Self::deserialize_from_with_tmp_buffer(previous, tmp_buffer)?;
+
+        // Remove integers we no more want in the previous bitmap
+        if let Some(value) = deladd.get(DelAdd::Deletion) {
+            previous -= Self::deserialize_from_with_tmp_buffer(value, tmp_buffer)?;
+        }
+
+        // Insert the new integers we want in the previous bitmap
+        if let Some(value) = deladd.get(DelAdd::Addition) {
+            previous |= Self::deserialize_from_with_tmp_buffer(value, tmp_buffer)?;
+        }
+
+        if previous.is_empty() {
+            return Ok(None);
+        }
+
+        Self::serialize_into_with_tmp_buffer(&previous, buffer, tmp_buffer)?;
+
+        Ok(Some(&buffer[..]))
     }
 }
 
@@ -243,5 +263,79 @@ impl DeltaEncodingStatusLock {
 
     pub fn is_disabled(&self) -> bool {
         !self.is_enabled()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::iter::FromIterator;
+
+    use byteorder::WriteBytesExt as _;
+    use heed::{BytesDecode, BytesEncode};
+
+    use super::*;
+    use crate::heed_codec::roaring_bitmap::cbo_roaring_bitmap_codec::THRESHOLD;
+
+    #[test]
+    fn verify_encoding_decoding() {
+        let input = RoaringBitmap::from_iter(0..THRESHOLD as u32);
+        let bytes = DeCboRoaringBitmapCodec::bytes_encode(&input).unwrap();
+        let output = DeCboRoaringBitmapCodec::bytes_decode(&bytes).unwrap();
+        assert_eq!(input, output);
+    }
+
+    #[test]
+    fn verify_threshold() {
+        let input = RoaringBitmap::from_iter(0..THRESHOLD as u32);
+
+        // use roaring bitmap
+        let mut bytes = Vec::new();
+        input.serialize_into(&mut bytes).unwrap();
+        let roaring_size = bytes.len();
+
+        // use byteorder directly
+        let mut bytes = Vec::new();
+        for integer in input {
+            bytes.write_u32::<NativeEndian>(integer).unwrap();
+        }
+        let bo_size = bytes.len();
+
+        assert!(roaring_size > bo_size);
+    }
+
+    #[test]
+    fn merge_de_cbo_roaring_bitmaps() {
+        let mut buffer = Vec::new();
+
+        let small_data = [
+            RoaringBitmap::from_sorted_iter(1..4).unwrap(),
+            RoaringBitmap::from_sorted_iter(2..5).unwrap(),
+            RoaringBitmap::from_sorted_iter(4..6).unwrap(),
+            RoaringBitmap::from_sorted_iter(1..3).unwrap(),
+        ];
+
+        let small_data: Vec<_> =
+            small_data.iter().map(|b| DeCboRoaringBitmapCodec::bytes_encode(b).unwrap()).collect();
+        DeCboRoaringBitmapCodec::merge_into(small_data.as_slice(), &mut buffer).unwrap();
+        let bitmap = DeCboRoaringBitmapCodec::deserialize_from(&buffer).unwrap();
+        let expected = RoaringBitmap::from_sorted_iter(1..6).unwrap();
+        assert_eq!(bitmap, expected);
+
+        let medium_data = [
+            RoaringBitmap::from_sorted_iter(1..4).unwrap(),
+            RoaringBitmap::from_sorted_iter(2..5).unwrap(),
+            RoaringBitmap::from_sorted_iter(4..8).unwrap(),
+            RoaringBitmap::from_sorted_iter(0..3).unwrap(),
+            RoaringBitmap::from_sorted_iter(7..23).unwrap(),
+        ];
+
+        let medium_data: Vec<_> =
+            medium_data.iter().map(|b| DeCboRoaringBitmapCodec::bytes_encode(b).unwrap()).collect();
+        buffer.clear();
+        DeCboRoaringBitmapCodec::merge_into(medium_data.as_slice(), &mut buffer).unwrap();
+
+        let bitmap = DeCboRoaringBitmapCodec::deserialize_from(&buffer).unwrap();
+        let expected = RoaringBitmap::from_sorted_iter(0..23).unwrap();
+        assert_eq!(bitmap, expected);
     }
 }
