@@ -8,7 +8,7 @@ use convert_case::{Case, Casing as _};
 use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{DeCboRoaringBitmapCodec, ChannelCongestion};
+use meilisearch_types::milli::{ChannelCongestion, DeCboRoaringBitmapCodec};
 use meilisearch_types::task_view::DetailsView;
 use meilisearch_types::tasks::{
     BatchStopReason, Details, IndexSwap, Kind, KindWithContent, Status,
