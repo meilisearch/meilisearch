@@ -357,7 +357,7 @@ mod tests {
     use quickcheck::quickcheck;
     use roaring::RoaringBitmap;
 
-    use super::DeRoaringBitmapCodec;
+    use super::{take_all_blocks, DeRoaringBitmapCodec};
 
     quickcheck! {
         fn qc_random(xs: Vec<u32>) -> bool {
@@ -365,8 +365,9 @@ mod tests {
             let mut compressed = Vec::new();
             let mut tmp_buffer = Vec::new();
             DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(&bitmap, &mut compressed, &mut tmp_buffer).unwrap();
-            let decompressed = DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(&compressed[..], |_, _| true, &mut tmp_buffer).unwrap();
-            decompressed == bitmap
+            let length = DeRoaringBitmapCodec::deserialize_length_from(&compressed[..]).unwrap();
+            let decompressed = DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(&compressed[..], take_all_blocks, &mut tmp_buffer).unwrap();
+            length == bitmap.len() && decompressed == bitmap
         }
     }
 
