@@ -91,7 +91,7 @@ rhai = { version = "1.23.6", features = [
     "sync",
 ] }
 arroy = "0.6.4-nested-rtxns"
-hannoy = { version = "0.1.0-nested-rtxns", features = ["arroy"] }
+hannoy = { version = "0.1.2-nested-rtxns", features = ["arroy"] }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
