@@ -35,11 +35,11 @@ use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
 use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};
 use crate::{
-    default_criteria, DeCboRoaringBitmapCodec, Criterion, Deadline, DocumentId, ExternalDocumentsIds,
-    FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
-    FieldidsWeightsMap, FilterableAttributesRule, GeoPoint, LocalizedAttributesRule, ObkvCodec,
-    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
-    BEU64,
+    default_criteria, Criterion, DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, Deadline,
+    DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
+    FieldIdMapMissingEntry, FieldIdWordCountCodec, FieldidsWeightsMap, FilterableAttributesRule,
+    GeoPoint, LocalizedAttributesRule, ObkvCodec, Result, RoaringBitmapCodec,
+    RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -1399,7 +1399,7 @@ impl Index {
     /// Returns the number of documents ids associated with the given word,
     /// it is much faster than deserializing the bitmap and getting the length of it.
     pub fn word_documents_count(&self, rtxn: &RoTxn<'_>, word: &str) -> heed::Result<Option<u64>> {
-        self.word_docids.remap_data_type::<RoaringBitmapLenCodec>().get(rtxn, word)
+        self.word_docids.remap_data_type::<DeCboRoaringBitmapLenCodec>().get(rtxn, word)
     }
 
     /* documents */
