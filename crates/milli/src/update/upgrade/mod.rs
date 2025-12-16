@@ -64,12 +64,12 @@ where
             return Err(crate::Error::InternalError(InternalError::AbortedIndexation));
         }
         if upgrade.must_upgrade(initial_version) {
-            regenerate_stats |= upgrade.upgrade(wtxn, index, progress.clone())?;
             progress.update_progress(VariableNameStep::<UpgradeVersion>::new(
                 upgrade.description(),
                 i as u32,
                 upgrade_functions.len() as u32,
             ));
+            regenerate_stats |= upgrade.upgrade(wtxn, index, progress.clone())?;
         } else {
             progress.update_progress(VariableNameStep::<UpgradeVersion>::new(
                 "Skipping migration that must not be applied",
