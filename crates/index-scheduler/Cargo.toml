@@ -47,7 +47,7 @@ time = { version = "0.3.44", features = [
 tracing = "0.1.41"
 ureq = "2.12.1"
 uuid = { version = "1.18.1", features = ["serde", "v4"] }
-backoff = "0.4.0"
+backoff = { version = "0.4.0", features = ["futures", "tokio"] }
 reqwest = { version = "0.12.24", features = [
     "rustls-tls",
     "http2",

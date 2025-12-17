@@ -46,6 +46,7 @@ use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
 use meilisearch_types::milli::update::{
     default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
+    MissingDocumentPolicy,
 };
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
@@ -638,7 +639,7 @@ fn import_dump(
 
             let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
 
-            indexer.replace_documents(&mmap)?;
+            indexer.replace_documents(&mmap, MissingDocumentPolicy::default())?;
 
             let indexer_config = index_scheduler.indexer_config();
             let pool = &indexer_config.thread_pool;

@@ -2228,3 +2228,49 @@ async fn ranking_score_bug_with_sort() {
         )
         .await;
 }
+
+#[actix_rt::test]
+async fn test_skip_on_creation() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let documents = json!([
+        {
+            "id": 1,
+            "title": "Coffee Mug",
+        },
+        {
+            "id": 2,
+            "title": "Water Bottle",
+        },
+        {
+            "id": 3,
+            "title": "Tumbler Cup",
+        },
+    ]);
+
+    let (task, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index.delete_document(2).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (resp, code) = index.get_document(2, None).await;
+    assert_eq!(code, 404, "{resp}");
+
+    let documents = json!([
+        {
+            "id": 2,
+            "title": "Updated title",
+        },
+    ]);
+
+    let (task, code) = index.add_documents_with_skip_creation(documents, None, None, true).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (resp, code) = index.get_document(2, None).await;
+    assert_eq!(code, 404, "{resp}");
+}
