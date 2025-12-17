@@ -1,6 +1,8 @@
+#[cfg(all(unix, feature = "enterprise"))]
 use std::env::VarError;
 use std::ffi::OsStr;
 use std::fs;
+#[cfg(all(unix, feature = "enterprise"))]
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
@@ -16,6 +18,7 @@ use crate::{Error, IndexScheduler, Result};
 
 const UPDATE_FILES_DIR_NAME: &str = "update_files";
 
+#[cfg(all(unix, feature = "enterprise"))]
 #[derive(Debug, Clone, serde::Deserialize)]
 struct StsCredentials {
     #[serde(rename = "AccessKeyId")]
@@ -26,18 +29,21 @@ struct StsCredentials {
     session_token: String,
 }
 
+#[cfg(all(unix, feature = "enterprise"))]
 #[derive(Debug, serde::Deserialize)]
 struct AssumeRoleWithWebIdentityResult {
     #[serde(rename = "Credentials")]
     credentials: StsCredentials,
 }
 
+#[cfg(all(unix, feature = "enterprise"))]
 #[derive(Debug, serde::Deserialize)]
 struct AssumeRoleWithWebIdentityResponse {
     #[serde(rename = "AssumeRoleWithWebIdentityResult")]
     result: AssumeRoleWithWebIdentityResult,
 }
 
+#[cfg(all(unix, feature = "enterprise"))]
 #[derive(Debug, serde::Deserialize)]
 struct StsResponse {
     #[serde(rename = "AssumeRoleWithWebIdentityResponse")]
@@ -116,12 +122,17 @@ impl IndexScheduler {
 
         match self.scheduler.s3_snapshot_options.clone() {
             Some(options) => {
+                #[cfg(not(feature = "enterprise"))]
+                {
+                    let _ = options;
+                    panic!("You need to use the enterprise edition to use S3 snapshotting");
+                }
                 #[cfg(not(unix))]
                 {
                     let _ = options;
                     panic!("Non-unix platform does not support S3 snapshotting");
                 }
-                #[cfg(unix)]
+                #[cfg(all(unix, feature = "enterprise"))]
                 self.runtime
                     .as_ref()
                     .expect("Runtime not initialized")
@@ -261,7 +272,7 @@ impl IndexScheduler {
         Ok(tasks)
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, feature = "enterprise"))]
     async fn assume_role_with_web_identity(
         role_arn: &str,
         web_identity_token_file: &Path,
@@ -314,6 +325,7 @@ impl IndexScheduler {
         Ok(sts_response.response.result.credentials)
     }
 
+    #[cfg(all(unix, feature = "enterprise"))]
     async fn extract_credentials_from_options(
         s3_access_key: Option<String>,
         s3_secret_key: Option<String>,
@@ -333,7 +345,7 @@ impl IndexScheduler {
         }
     }
 
-    #[cfg(unix)]
+    #[cfg(all(unix, feature = "enterprise"))]
     pub(super) async fn process_snapshot_to_s3(
         &self,
         progress: Progress,
@@ -415,7 +427,7 @@ impl IndexScheduler {
 }
 
 /// Streams a tarball of the database content into a pipe.
-#[cfg(unix)]
+#[cfg(all(unix, feature = "enterprise"))]
 fn stream_tarball_into_pipe(
     progress: Progress,
     level: u32,
@@ -517,7 +529,7 @@ fn stream_tarball_into_pipe(
     Result::<_, Error>::Ok(())
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "enterprise"))]
 fn append_file_to_tarball<W, P>(
     tarball: &mut tar::Builder<W>,
     path: P,
@@ -537,7 +549,7 @@ where
 }
 
 /// Streams the content read from the given reader to S3.
-#[cfg(unix)]
+#[cfg(all(unix, feature = "enterprise"))]
 #[allow(clippy::too_many_arguments)]
 async fn multipart_stream_to_s3(
     s3_bucket_url: String,
@@ -724,7 +736,7 @@ async fn multipart_stream_to_s3(
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "enterprise"))]
 async fn join_and_map_error(
     join_handle: tokio::task::JoinHandle<Result<reqwest::Response, reqwest::Error>>,
 ) -> Result<reqwest::Response> {
@@ -740,7 +752,7 @@ async fn join_and_map_error(
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "enterprise"))]
 fn extract_and_append_etag<'b>(
     bump: &'b bumpalo::Bump,
     etags: &mut Vec<&'b str>,
