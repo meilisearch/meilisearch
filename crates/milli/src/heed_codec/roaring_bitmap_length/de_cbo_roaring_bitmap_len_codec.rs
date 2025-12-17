@@ -3,7 +3,8 @@ use std::io::ErrorKind;
 use heed::{BoxedError, BytesDecode};
 
 use super::BoRoaringBitmapLenCodec;
-use crate::heed_codec::roaring_bitmap::{CboRoaringBitmapCodec, DeRoaringBitmapCodec};
+use crate::heed_codec::roaring_bitmap::cbo_roaring_bitmap_codec::CboRoaringBitmapCodec;
+use crate::heed_codec::roaring_bitmap::de_roaring_bitmap_codec::DeRoaringBitmapCodec;
 use crate::heed_codec::roaring_bitmap_length::CboRoaringBitmapLenCodec;
 use crate::heed_codec::BytesDecodeOwned;
 
