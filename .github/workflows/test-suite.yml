@@ -58,7 +58,9 @@ jobs:
       matrix:
         os: [macos-14, windows-2022]
         features: ["", "--features enterprise"]
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: |
+      (contains(matrix.os, 'windows') && github.event_name != 'merge_group') ||
+      (contains(matrix.os, 'macos') && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'))
     steps:
       - uses: actions/checkout@v5
       - name: Cache dependencies
