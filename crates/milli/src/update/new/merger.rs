@@ -106,7 +106,7 @@ where
         }
         merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
             let current = database.get(&rtxn, key)?;
-            match merge_cbo_bitmaps(current, del, add)? {
+            match merge_de_cbo_bitmaps(current, del, add)? {
                 Operation::Write(bitmap) => docids_sender.write(key, &bitmap),
                 Operation::Delete => docids_sender.delete(key),
                 Operation::Ignore => Ok(()),
@@ -134,8 +134,8 @@ pub fn merge_and_send_facet_docids(
                 FacetFieldIdsDelta::new(max_string_count, max_number_count);
             let rtxn = index.read_txn()?;
             merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
-                let current = database.get_cbo_roaring_bytes_value(&rtxn, key)?;
-                match merge_cbo_bitmaps(current, del, add)? {
+                let current = database.get_de_cbo_roaring_bytes_value(&rtxn, key)?;
+                match merge_de_cbo_bitmaps(current, del, add)? {
                     Operation::Write(bitmap) => {
                         facet_field_ids_delta.register_from_key(key);
                         docids_sender.write(key, &bitmap)?;
@@ -166,7 +166,7 @@ impl<'a> FacetDatabases<'a> {
         Self { index }
     }
 
-    fn get_cbo_roaring_bytes_value<'t>(
+    fn get_de_cbo_roaring_bytes_value<'t>(
         &self,
         rtxn: &'t RoTxn<'_>,
         key: &[u8],
@@ -320,7 +320,7 @@ enum Operation {
 }
 
 /// A function that merges the DelAdd CboRoaringBitmaps with the current bitmap.
-fn merge_cbo_bitmaps(
+fn merge_de_cbo_bitmaps(
     current: Option<&[u8]>,
     del: Option<RoaringBitmap>,
     add: Option<RoaringBitmap>,
