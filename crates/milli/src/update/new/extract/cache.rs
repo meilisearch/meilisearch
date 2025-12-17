@@ -642,15 +642,22 @@ pub struct DelAddRoaringBitmap {
 
 impl DelAddRoaringBitmap {
     fn from_bytes(bytes: &[u8]) -> io::Result<DelAddRoaringBitmap> {
+        let mut tmp_buffer = Vec::new();
         let reader = KvReaderDelAdd::from_slice(bytes);
 
         let del = match reader.get(DelAdd::Deletion) {
-            Some(bytes) => DeCboRoaringBitmapCodec::deserialize_from(bytes).map(Some)?,
+            Some(bytes) => {
+                DeCboRoaringBitmapCodec::deserialize_from_with_tmp_buffer(bytes, &mut tmp_buffer)
+                    .map(Some)?
+            }
             None => None,
         };
 
         let add = match reader.get(DelAdd::Addition) {
-            Some(bytes) => DeCboRoaringBitmapCodec::deserialize_from(bytes).map(Some)?,
+            Some(bytes) => {
+                DeCboRoaringBitmapCodec::deserialize_from_with_tmp_buffer(bytes, &mut tmp_buffer)
+                    .map(Some)?
+            }
             None => None,
         };
 
