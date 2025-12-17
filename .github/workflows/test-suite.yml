@@ -221,7 +221,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets ${{ matrix.features }} -- --deny warnings
+          args: --all-targets ${{ matrix.features }} -- --deny warnings -D clippy::todo
 
   fmt:
     name: Run Rustfmt

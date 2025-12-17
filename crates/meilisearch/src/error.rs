@@ -271,12 +271,13 @@ impl ErrorCode for PayloadError {
             PayloadError::Payload(e) => match e {
                 ActixPayloadError::IncompleteError => Code::BadRequest,
                 ActixPayloadError::OtherError(error) => match error {
-                    aweb::error::PayloadError::EncodingCorrupted => Code::Internal,
+                    aweb::error::PayloadError::EncodingCorrupted => Code::BadRequest,
                     aweb::error::PayloadError::Overflow => Code::PayloadTooLarge,
-                    aweb::error::PayloadError::UnknownLength => Code::Internal,
-                    aweb::error::PayloadError::Http2Payload(_) => Code::Internal,
+                    aweb::error::PayloadError::UnknownLength => Code::BadRequest,
+                    aweb::error::PayloadError::Http2Payload(_) => Code::BadRequest,
                     aweb::error::PayloadError::Io(_) => Code::Internal,
-                    _ => todo!(),
+                    aweb::error::PayloadError::Incomplete(_) => Code::BadRequest,
+                    _ => Code::Internal,
                 },
             },
             PayloadError::Json(err) => match err {
