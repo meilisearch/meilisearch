@@ -506,7 +506,7 @@ impl Index {
         wtxn: &mut RwTxn<'_>,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, RoaringBitmapCodec>().put(
+        self.main.remap_types::<Str, DeCboRoaringBitmapCodec>().put(
             wtxn,
             main_key::DOCUMENTS_IDS_KEY,
             docids,
@@ -517,7 +517,7 @@ impl Index {
     pub fn documents_ids(&self, rtxn: &RoTxn<'_>) -> heed::Result<RoaringBitmap> {
         Ok(self
             .main
-            .remap_types::<Str, RoaringBitmapCodec>()
+            .remap_types::<Str, DeCboRoaringBitmapCodec>()
             .get(rtxn, main_key::DOCUMENTS_IDS_KEY)?
             .unwrap_or_default())
     }
@@ -526,7 +526,7 @@ impl Index {
     pub fn number_of_documents(&self, rtxn: &RoTxn<'_>) -> Result<u64> {
         let count = self
             .main
-            .remap_types::<Str, RoaringBitmapLenCodec>()
+            .remap_types::<Str, DeCboRoaringBitmapLenCodec>()
             .get(rtxn, main_key::DOCUMENTS_IDS_KEY)?;
         Ok(count.unwrap_or_default())
     }
@@ -727,7 +727,7 @@ impl Index {
         wtxn: &mut RwTxn<'_>,
         docids: &RoaringBitmap,
     ) -> heed::Result<()> {
-        self.main.remap_types::<Str, RoaringBitmapCodec>().put(
+        self.main.remap_types::<Str, DeCboRoaringBitmapCodec>().put(
             wtxn,
             main_key::GEO_FACETED_DOCUMENTS_IDS_KEY,
             docids,
@@ -746,7 +746,7 @@ impl Index {
     pub fn geo_faceted_documents_ids(&self, rtxn: &RoTxn<'_>) -> heed::Result<RoaringBitmap> {
         match self
             .main
-            .remap_types::<Str, RoaringBitmapCodec>()
+            .remap_types::<Str, DeCboRoaringBitmapCodec>()
             .get(rtxn, main_key::GEO_FACETED_DOCUMENTS_IDS_KEY)?
         {
             Some(docids) => Ok(docids),
