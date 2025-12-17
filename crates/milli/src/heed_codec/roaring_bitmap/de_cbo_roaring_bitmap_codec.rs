@@ -273,9 +273,12 @@ mod tests {
 
     use byteorder::WriteBytesExt as _;
     use heed::{BytesDecode, BytesEncode};
+    use quickcheck::quickcheck;
+    use roaring::RoaringBitmap;
 
+    use super::super::super::roaring_bitmap_length::DeCboRoaringBitmapLenCodec;
+    use super::super::THRESHOLD;
     use super::*;
-    use crate::heed_codec::roaring_bitmap::cbo_roaring_bitmap_codec::THRESHOLD;
 
     #[test]
     fn verify_encoding_decoding() {
@@ -338,5 +341,29 @@ mod tests {
         let bitmap = DeCboRoaringBitmapCodec::deserialize_from(&buffer).unwrap();
         let expected = RoaringBitmap::from_sorted_iter(0..23).unwrap();
         assert_eq!(bitmap, expected);
+    }
+
+    quickcheck! {
+        fn qc_random(xs: Vec<u32>) -> bool {
+            let bitmap = RoaringBitmap::from_iter(xs);
+            let mut compressed = Vec::new();
+            let mut tmp_buffer = Vec::new();
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&bitmap, &mut compressed, &mut tmp_buffer).unwrap();
+            let length = DeCboRoaringBitmapLenCodec::bytes_decode(&compressed[..]).unwrap();
+            let decompressed = DeCboRoaringBitmapCodec::deserialize_from_with_tmp_buffer(&compressed[..], &mut tmp_buffer).unwrap();
+            length == bitmap.len() && decompressed == bitmap
+        }
+    }
+
+    quickcheck! {
+        fn qc_random_check_serialized_size(xs: Vec<u32>) -> bool {
+            let bitmap = RoaringBitmap::from_iter(xs);
+            let mut compressed = Vec::new();
+            let mut tmp_buffer = Vec::new();
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&bitmap, &mut compressed, &mut tmp_buffer).unwrap();
+            let length = DeCboRoaringBitmapLenCodec::bytes_decode(&compressed).unwrap();
+            let expected_len = DeCboRoaringBitmapCodec::serialized_size_with_tmp_buffer(&bitmap, &mut tmp_buffer);
+            length == bitmap.len() && compressed.len() == expected_len
+        }
     }
 }

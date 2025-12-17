@@ -72,11 +72,11 @@ impl BytesDecodeOwned for RoaringBitmapLenCodec {
 
 #[cfg(test)]
 mod tests {
-    use heed::BytesEncode;
+    use heed::BytesEncode as _;
     use roaring::RoaringBitmap;
 
     use super::*;
-    use crate::heed_codec::RoaringBitmapCodec;
+    use crate::heed_codec::roaring_bitmap::roaring_bitmap_codec::RoaringBitmapCodec;
 
     #[test]
     fn deserialize_roaring_bitmap_length() {
