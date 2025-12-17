@@ -4122,6 +4122,7 @@ name = "meilitool"
 version = "1.30.1"
 dependencies = [
  "anyhow",
+ "bstr",
  "clap",
  "dump",
  "file-store",
