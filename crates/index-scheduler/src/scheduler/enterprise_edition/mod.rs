@@ -3,31 +3,23 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
-use std::env::VarError;
-use std::ffi::OsStr;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use bumpalo::Bump;
 use roaring::RoaringBitmap;
 
 use meilisearch_types::milli::documents::PrimaryKey;
-use meilisearch_types::milli::progress::{EmbedderStats, Progress, VariableNameStep};
+use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
 use meilisearch_types::milli::update::new::indexer::current_edition::sharding::Shards;
 use meilisearch_types::milli::{self};
 use meilisearch_types::network::Remote;
 use meilisearch_types::tasks::network::{NetworkTopologyState, Origin};
 use meilisearch_types::tasks::{KindWithContent, Status, Task};
-use meilisearch_types::VERSION_FILE_NAME;
 
 use super::create_batch::Batch;
-use crate::processing::{AtomicUpdateFileStep, SnapshotCreationProgress};
 use crate::scheduler::process_batch::ProcessBatchInfo;
 use crate::scheduler::process_export::{ExportContext, ExportOptions, TargetInstance};
-use crate::scheduler::process_snapshot_creation::UPDATE_FILES_DIR_NAME;
 use crate::utils::ProcessingBatch;
 use crate::{Error, IndexScheduler, Result};
 
@@ -315,10 +307,13 @@ impl IndexScheduler {
         Ok(())
     }
 
+    #[cfg(unix)]
     async fn assume_role_with_web_identity(
         role_arn: &str,
-        web_identity_token_file: &Path,
+        web_identity_token_file: &std::path::Path,
     ) -> anyhow::Result<StsCredentials> {
+        use std::env::VarError;
+
         let token = tokio::fs::read_to_string(web_identity_token_file)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to read web identity token file: {e}"))?;
@@ -367,11 +362,12 @@ impl IndexScheduler {
         Ok(sts_response.response.result.credentials)
     }
 
+    #[cfg(unix)]
     async fn extract_credentials_from_options(
         s3_access_key: Option<String>,
         s3_secret_key: Option<String>,
         s3_role_arn: Option<String>,
-        s3_web_identity_token_file: Option<PathBuf>,
+        s3_web_identity_token_file: Option<std::path::PathBuf>,
     ) -> anyhow::Result<(String, String, Option<String>)> {
         let static_credentials = s3_access_key.zip(s3_secret_key);
         let web_identity = s3_role_arn.zip(s3_web_identity_token_file);
@@ -386,6 +382,7 @@ impl IndexScheduler {
         }
     }
 
+    #[cfg(unix)]
     pub(super) async fn process_snapshot_to_s3(
         &self,
         progress: Progress,
@@ -393,6 +390,7 @@ impl IndexScheduler {
         mut tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {
         use meilisearch_types::milli::update::S3SnapshotOptions;
+        use std::ffi::OsStr;
 
         let S3SnapshotOptions {
             s3_bucket_url,
@@ -466,6 +464,7 @@ impl IndexScheduler {
     }
 }
 
+#[cfg(unix)]
 #[derive(Debug, Clone, serde::Deserialize)]
 struct StsCredentials {
     #[serde(rename = "AccessKeyId")]
@@ -476,18 +475,21 @@ struct StsCredentials {
     session_token: String,
 }
 
+#[cfg(unix)]
 #[derive(Debug, serde::Deserialize)]
 struct AssumeRoleWithWebIdentityResult {
     #[serde(rename = "Credentials")]
     credentials: StsCredentials,
 }
 
+#[cfg(unix)]
 #[derive(Debug, serde::Deserialize)]
 struct AssumeRoleWithWebIdentityResponse {
     #[serde(rename = "AssumeRoleWithWebIdentityResult")]
     result: AssumeRoleWithWebIdentityResult,
 }
 
+#[cfg(unix)]
 #[derive(Debug, serde::Deserialize)]
 struct StsResponse {
     #[serde(rename = "AssumeRoleWithWebIdentityResponse")]
@@ -495,6 +497,7 @@ struct StsResponse {
 }
 
 /// Streams a tarball of the database content into a pipe.
+#[cfg(unix)]
 fn stream_tarball_into_pipe(
     progress: Progress,
     level: u32,
@@ -503,6 +506,13 @@ fn stream_tarball_into_pipe(
 ) -> std::result::Result<(), Error> {
     use std::io::Write as _;
     use std::path::Path;
+    use std::sync::atomic::Ordering;
+
+    use meilisearch_types::milli::progress::VariableNameStep;
+    use meilisearch_types::VERSION_FILE_NAME;
+
+    use crate::processing::{AtomicUpdateFileStep, SnapshotCreationProgress};
+    use crate::scheduler::process_snapshot_creation::UPDATE_FILES_DIR_NAME;
 
     let writer = flate2::write::GzEncoder::new(writer, flate2::Compression::new(level));
     let mut tarball = tar::Builder::new(writer);
@@ -596,10 +606,11 @@ fn stream_tarball_into_pipe(
     Result::<_, Error>::Ok(())
 }
 
+#[cfg(unix)]
 fn append_file_to_tarball<W, P>(
     tarball: &mut tar::Builder<W>,
     path: P,
-    mut auth_env_file: fs::File,
+    mut auth_env_file: std::fs::File,
 ) -> Result<(), Error>
 where
     W: std::io::Write,
@@ -616,6 +627,7 @@ where
 
 /// Streams the content read from the given reader to S3.
 #[allow(clippy::too_many_arguments)]
+#[cfg(unix)]
 async fn multipart_stream_to_s3(
     s3_bucket_url: String,
     s3_bucket_region: String,
@@ -801,6 +813,7 @@ async fn multipart_stream_to_s3(
     }
 }
 
+#[cfg(unix)]
 async fn join_and_map_error(
     join_handle: tokio::task::JoinHandle<Result<reqwest::Response, reqwest::Error>>,
 ) -> Result<reqwest::Response> {
@@ -816,6 +829,7 @@ async fn join_and_map_error(
     }
 }
 
+#[cfg(unix)]
 fn extract_and_append_etag<'b>(
     bump: &'b bumpalo::Bump,
     etags: &mut Vec<&'b str>,
