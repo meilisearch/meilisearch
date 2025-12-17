@@ -10,6 +10,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1.0.100"
+bstr = "1.12.1"
 clap = { version = "4.5.52", features = ["derive"] }
 dump = { path = "../dump" }
 file-store = { path = "../file-store" }

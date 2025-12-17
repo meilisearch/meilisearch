@@ -19,7 +19,7 @@ use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use meilisearch_types::milli::{obkv_to_json, BEU32};
+use meilisearch_types::milli::{obkv_to_json, DeCboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::versioning::{get_version, parse_version};
 use meilisearch_types::Index;
@@ -140,6 +140,14 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         index_part: Vec<IndexPart>,
     },
+
+    /// Outputs all entries of the index in a formatted way.
+    ///
+    /// This command is useful for debugging purposes.
+    OutputFormattedEntries {
+        #[arg(long)]
+        index_name: String,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -169,7 +177,154 @@ fn main() -> anyhow::Result<()> {
         Command::HairDryer { index_name, index_part } => {
             hair_dryer(db_path, &index_name, &index_part)
         }
+        Command::OutputFormattedEntries { index_name } => {
+            output_formatted_entries(db_path, &index_name)
+        }
     }
+}
+
+fn output_formatted_entries(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
+    let index_scheduler_path = db_path.join("tasks");
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+
+    let index_mapper_rtxn = env.read_txn()?;
+    let index_mapping: Database<Str, UuidCodec> =
+        try_opening_database(&env, &index_mapper_rtxn, "index-mapping")?;
+
+    for result in index_mapping.iter(&index_mapper_rtxn)? {
+        let (uid, uuid) = result?;
+        if uid != index_name {
+            continue;
+        }
+
+        let index_path = db_path.join("indexes").join(uuid.to_string());
+        let index = Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
+            .with_context(|| {
+                format!("While trying to open the index at path {:?}", index_path.display())
+            })?;
+        let rtxn = index.read_txn()?;
+
+        let Index {
+            
+            word_docids,
+            exact_word_docids,
+            word_prefix_docids,
+            exact_word_prefix_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+            word_fid_docids,
+            field_id_word_count_docids,
+            word_prefix_position_docids,
+            word_prefix_fid_docids,
+            facet_id_exists_docids,
+            facet_id_is_null_docids,
+            facet_id_is_empty_docids,
+            
+            
+            
+            
+            
+            
+            
+            ..
+        } = index;
+
+        struct DatabaseInfo {
+            name: &'static str,
+            database: Database<Bytes, DeCboRoaringBitmapCodec>,
+        }
+
+        impl DatabaseInfo {
+            fn new(name: &'static str, database: Database<Bytes, DeCboRoaringBitmapCodec>) -> Self {
+                DatabaseInfo { name, database }
+            }
+        }
+
+        let databases = [
+            DatabaseInfo::new("word_docids", word_docids.remap_key_type()),
+            DatabaseInfo::new("exact_word_docids", exact_word_docids.remap_key_type()),
+            DatabaseInfo::new("word_prefix_docids", word_prefix_docids.remap_key_type()),
+            DatabaseInfo::new(
+                "exact_word_prefix_docids",
+                exact_word_prefix_docids.remap_key_type(),
+            ),
+            DatabaseInfo::new(
+                "word_pair_proximity_docids",
+                word_pair_proximity_docids.remap_key_type(),
+            ),
+            DatabaseInfo::new("word_position_docids", word_position_docids.remap_key_type()),
+            DatabaseInfo::new("word_fid_docids", word_fid_docids.remap_key_type()),
+            DatabaseInfo::new(
+                "field_id_word_count_docids",
+                field_id_word_count_docids.remap_key_type(),
+            ),
+            DatabaseInfo::new(
+                "word_prefix_position_docids",
+                word_prefix_position_docids.remap_key_type(),
+            ),
+            DatabaseInfo::new("word_prefix_fid_docids", word_prefix_fid_docids.remap_key_type()),
+            DatabaseInfo::new("facet_id_exists_docids", facet_id_exists_docids.remap_key_type()),
+            DatabaseInfo::new("facet_id_is_null_docids", facet_id_is_null_docids.remap_key_type()),
+            DatabaseInfo::new(
+                "facet_id_is_empty_docids",
+                facet_id_is_empty_docids.remap_key_type(),
+            ),
+            // DatabaseInfo::new("facet_id_f64_docids", facet_id_f64_docids.remap_key_type()),
+            // DatabaseInfo::new(
+            //     "facet_id_string_docids",
+            //     facet_id_string_docids.remap_key_type(),
+            // ),
+            // DatabaseInfo::new(
+            //     "facet_id_normalized_string_strings",
+            //     facet_id_normalized_string_strings.remap_key_type(),
+            // ),
+            // DatabaseInfo::new("facet_id_string_fst", facet_id_string_fst.remap_key_type()),
+            // DatabaseInfo::new(
+            //     "field_id_docid_facet_f64s",
+            //     field_id_docid_facet_f64s.remap_key_type(),
+            // ),
+            // DatabaseInfo::new(
+            //     "field_id_docid_facet_strings",
+            //     field_id_docid_facet_strings.remap_key_type(),
+            // ),
+        ];
+
+        use bstr::ByteSlice as _;
+
+        let stdout = std::io::stdout();
+        let mut stdout_lock = BufWriter::new(stdout.lock());
+
+        for DatabaseInfo { name: db_name, database } in databases {
+            for result in database.iter(&rtxn)? {
+                let (key, bitmap) = result?;
+                let value: Vec<u32> = bitmap.iter().collect();
+                writeln!(&mut stdout_lock, "{db_name}: {} -> {:?}", key.as_bstr(), value)?;
+            }
+        }
+
+        {
+            let db_name = "main";
+
+            let fst = index.words_fst(&rtxn)?;
+            writeln!(&mut stdout_lock, "{db_name}: words-fst -> {fst:?}")?;
+
+            let prefix_fst = index.words_prefixes_fst(&rtxn)?;
+            writeln!(&mut stdout_lock, "{db_name}: words-prefixes-fst -> {prefix_fst:?}")?;
+
+            let documents_ids = index.documents_ids(&rtxn)?;
+            writeln!(&mut stdout_lock, "{db_name}: documents-ids -> {documents_ids:?}")?;
+
+            let exact_words = index.exact_words(&rtxn)?;
+            writeln!(&mut stdout_lock, "{db_name}: exact-words -> {exact_words:?}")?;
+        }
+
+        break;
+    }
+
+    Ok(())
 }
 
 /// Clears the task queue located at `db_path`.
