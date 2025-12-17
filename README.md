@@ -104,6 +104,7 @@ Meilisearch is available in two editions:
 
 - Includes advanced features such as:
   - Sharding
+  - S3-streaming snapshots
 - Governed by a [commercial license](./LICENSE-EE) or the [Business Source License 1.1](https://mariadb.com/bsl11)
 - Not allowed in production without a commercial agreement with Meilisearch.
   - You may use, modify, and distribute the Licensed Work for non-production purposes only, such as testing, development, or evaluation.
