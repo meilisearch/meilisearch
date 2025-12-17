@@ -1,4 +1,3 @@
-mod bo_roaring_bitmap_codec;
 pub(super) mod cbo_roaring_bitmap_codec;
 mod de_cbo_roaring_bitmap_codec;
 pub(super) mod de_roaring_bitmap_codec;
