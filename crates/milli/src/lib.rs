@@ -78,10 +78,8 @@ pub use self::filterable_attributes_rules::{
 };
 pub use self::foreign_key::ForeignKey;
 pub use self::heed_codec::{
-    BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
-    DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,
-    RoaringBitmapCodec, RoaringBitmapLenCodec, StrBEU32Codec, U8StrStrCodec,
-    UncheckedU8StrStrCodec,
+    BEU16StrCodec, BEU32StrCodec, DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec,
+    FieldIdWordCountCodec, ObkvCodec, StrBEU32Codec, U8StrStrCodec, UncheckedU8StrStrCodec,
 };
 pub use self::index::{CreateOrOpen, Index};
 pub use self::localized_attributes_rules::LocalizedAttributesRule;

@@ -4,7 +4,7 @@ use std::fmt::Write;
 use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
-use meilisearch_types::milli::{DeCboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{DeCboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Details, Kind, Status, Task};
 use meilisearch_types::versioning::{self, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use roaring::RoaringBitmap;
@@ -339,7 +339,7 @@ fn snapshot_details(d: &Details) -> String {
 
 pub fn snapshot_status(
     rtxn: &RoTxn,
-    db: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
+    db: Database<SerdeBincode<Status>, DeCboRoaringBitmapCodec>,
 ) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
@@ -350,7 +350,10 @@ pub fn snapshot_status(
     snap
 }
 
-pub fn snapshot_kind(rtxn: &RoTxn, db: Database<SerdeBincode<Kind>, RoaringBitmapCodec>) -> String {
+pub fn snapshot_kind(
+    rtxn: &RoTxn,
+    db: Database<SerdeBincode<Kind>, DeCboRoaringBitmapCodec>,
+) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
@@ -361,7 +364,7 @@ pub fn snapshot_kind(rtxn: &RoTxn, db: Database<SerdeBincode<Kind>, RoaringBitma
     snap
 }
 
-pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>) -> String {
+pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, DeCboRoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
@@ -371,7 +374,7 @@ pub fn snapshot_index_tasks(rtxn: &RoTxn, db: Database<Str, RoaringBitmapCodec>)
     snap
 }
 
-pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, RoaringBitmapCodec>) -> String {
+pub fn snapshot_canceled_by(rtxn: &RoTxn, db: Database<BEU32, DeCboRoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
