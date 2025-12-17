@@ -11,7 +11,7 @@ use crate::heed_codec::StrBEU16Codec;
 use crate::index::main_key::WORDS_PREFIXES_FST_KEY;
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{
-    create_sorter, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
+    create_sorter, merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
     write_sorter_into_database, CursorClonableMmap, MergeDeladdDeCboRoaringBitmaps,
 };
 use crate::{DeCboRoaringBitmapCodec, Result};
@@ -164,7 +164,7 @@ impl<'t, 'i> WordPrefixIntegerDocids<'t, 'i> {
             self.wtxn,
             database_is_empty,
             deladd_serialize_add_side,
-            merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+            merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
         )?;
 
         Ok(())

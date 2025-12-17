@@ -12,7 +12,7 @@ use obkv::{KvReader, KvWriter};
 use roaring::RoaringBitmap;
 
 use super::helpers::{
-    self, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
+    self, merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
     CursorClonableMmap, KeepFirst, MergeDeladdBtreesetString, MergeDeladdDeCboRoaringBitmaps,
     MergeIgnoreValues,
 };
@@ -256,7 +256,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.field_id_word_count_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -291,7 +291,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
             let exact_word_docids_merger = exact_word_docids_builder.build();
@@ -300,7 +300,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.exact_word_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
             let word_fid_docids_merger = word_fid_docids_builder.build();
@@ -309,7 +309,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_fid_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
 
             // create fst from word docids
@@ -344,7 +344,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.word_position_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -426,7 +426,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_exists_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -450,7 +450,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_is_null_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -473,7 +473,7 @@ pub(crate) fn write_typed_chunk_into_index(
                 &index.facet_id_is_empty_docids,
                 wtxn,
                 deladd_serialize_add_side,
-                merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
             )?;
             is_merged_database = true;
         }
@@ -504,7 +504,7 @@ pub(crate) fn write_typed_chunk_into_index(
                     &index.word_pair_proximity_docids,
                     wtxn,
                     deladd_serialize_add_side,
-                    merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+                    merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
                 )?;
             }
 
