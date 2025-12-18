@@ -4,7 +4,7 @@ use std::ops::{Bound, RangeBounds};
 use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
-use meilisearch_types::milli::{DeCboRoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{DeCboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, Status};
 use roaring::{MultiOps, RoaringBitmap};
 use time::OffsetDateTime;
@@ -36,11 +36,11 @@ pub struct BatchQueue {
     pub(crate) all_batches: Database<BEU32, SerdeJson<Batch>>,
 
     /// All the batches containing a task matching the selected status.
-    pub(crate) status: Database<SerdeBincode<Status>, DeCboRoaringBitmapCodec>,
+    pub(crate) status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
     /// All the batches ids grouped by the kind of their task.
-    pub(crate) kind: Database<SerdeBincode<Kind>, DeCboRoaringBitmapCodec>,
+    pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
     /// Store the batches associated to an index.
-    pub(crate) index_tasks: Database<Str, DeCboRoaringBitmapCodec>,
+    pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
     /// Store the batches containing tasks which were enqueued at a specific date
     pub(crate) enqueued_at: Database<BEI128, DeCboRoaringBitmapCodec>,
     /// Store the batches containing finished tasks started at a specific date
