@@ -451,4 +451,24 @@ mod tests {
             length == bitmap.len() && compressed.len() == expected_len
         }
     }
+
+    quickcheck! {
+        fn qc_random_intersection_with_serialized(lhs: Vec<u32>, rhs: Vec<u32>) -> bool {
+            let mut compressed = Vec::new();
+            let mut tmp_buffer = Vec::new();
+
+            let lhs = RoaringBitmap::from_iter(lhs);
+            let rhs = RoaringBitmap::from_iter(rhs);
+            DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(&lhs, &mut compressed, &mut tmp_buffer).unwrap();
+
+            let sub_lhs = DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(&compressed, |first, last| {
+                rhs.range_cardinality(first..=last) == 0
+            }, &mut tmp_buffer).unwrap();
+
+            let intersection = sub_lhs & rhs.clone();
+            let expected_intersection = lhs & rhs;
+
+            intersection == expected_intersection
+        }
+    }
 }

@@ -145,18 +145,7 @@ impl DeCboRoaringBitmapCodec {
 
         // TODO move this tmp buffer outside
         let mut tmp_buffer = Vec::new();
-        let filter_block = |first, last| {
-            // Rank returns the number of elements less than or equal
-            // to the given value. Doing the difference between the
-            // ranks of the last and first elements gives the number
-            // of elements in the range. We don't use the range method
-            // because the ExactSizeIterator::len method always returns
-            // usize::MAX.
-            let last_rank = other.rank(last);
-            let first_rank = other.rank(first);
-            // Equal to zero means skip/filter out this block
-            last_rank - first_rank == 0
-        };
+        let filter_block = |first, last| other.range_cardinality(first..=last) == 0;
 
         match DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(
             bytes,
@@ -364,6 +353,22 @@ mod tests {
             let length = DeCboRoaringBitmapLenCodec::bytes_decode(&compressed).unwrap();
             let expected_len = DeCboRoaringBitmapCodec::serialized_size_with_tmp_buffer(&bitmap, &mut tmp_buffer);
             length == bitmap.len() && compressed.len() == expected_len
+        }
+    }
+
+    quickcheck! {
+        fn qc_random_intersection_with_serialized(lhs: Vec<u32>, rhs: Vec<u32>) -> bool {
+            let mut compressed = Vec::new();
+            let mut tmp_buffer = Vec::new();
+
+            let lhs = RoaringBitmap::from_iter(lhs);
+            let rhs = RoaringBitmap::from_iter(rhs);
+            DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&lhs, &mut compressed, &mut tmp_buffer).unwrap();
+
+            let intersection = DeCboRoaringBitmapCodec::intersection_with_serialized(&compressed, &rhs).unwrap();
+            let expected_intersection = lhs & rhs;
+
+            intersection == expected_intersection
         }
     }
 }
