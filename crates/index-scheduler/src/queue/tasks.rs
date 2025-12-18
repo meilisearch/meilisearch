@@ -2,7 +2,7 @@ use std::ops::{Bound, RangeBounds};
 
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
-use meilisearch_types::milli::{DeCboRoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{DeCboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::{MultiOps, RoaringBitmap};
@@ -36,13 +36,13 @@ pub struct TaskQueue {
 
     /// All the tasks ids grouped by their status.
     // TODO we should not be able to serialize a `Status::Processing` in this database.
-    pub(crate) status: Database<SerdeBincode<Status>, DeCboRoaringBitmapCodec>,
+    pub(crate) status: Database<SerdeBincode<Status>, RoaringBitmapCodec>,
     /// All the tasks ids grouped by their kind.
-    pub(crate) kind: Database<SerdeBincode<Kind>, DeCboRoaringBitmapCodec>,
+    pub(crate) kind: Database<SerdeBincode<Kind>, RoaringBitmapCodec>,
     /// Store the tasks associated to an index.
-    pub(crate) index_tasks: Database<Str, DeCboRoaringBitmapCodec>,
+    pub(crate) index_tasks: Database<Str, RoaringBitmapCodec>,
     /// Store the tasks that were canceled by a task uid
-    pub(crate) canceled_by: Database<BEU32, DeCboRoaringBitmapCodec>,
+    pub(crate) canceled_by: Database<BEU32, RoaringBitmapCodec>,
     /// Store the task ids of tasks which were enqueued at a specific date
     pub(crate) enqueued_at: Database<BEI128, DeCboRoaringBitmapCodec>,
     /// Store the task ids of finished tasks which started being processed at a specific date
