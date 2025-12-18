@@ -15,7 +15,7 @@ env:
 
 jobs:
   test-linux:
-    name: Tests on Ubuntu
+    name: Tests on ${{ matrix.runner }} ${{ matrix.features }} 
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
