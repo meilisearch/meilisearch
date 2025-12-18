@@ -15,7 +15,8 @@ use crate::progress::Progress;
 use crate::update::new::indexer;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{
-    self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting, Settings,
+    self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, MissingDocumentPolicy,
+    Setting, Settings,
 };
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
@@ -70,9 +71,11 @@ impl TempIndex {
         let mut indexer = indexer::DocumentOperation::new();
         match self.index_documents_config.update_method {
             IndexDocumentsMethod::ReplaceDocuments => {
-                indexer.replace_documents(&documents).unwrap()
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap()
             }
-            IndexDocumentsMethod::UpdateDocuments => indexer.update_documents(&documents).unwrap(),
+            IndexDocumentsMethod::UpdateDocuments => {
+                indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap()
+            }
         }
 
         let indexer_alloc = Bump::new();
@@ -232,7 +235,7 @@ fn aborting_indexation() {
         { "id": 2, "name": "bob", "age": 20 },
         { "id": 2, "name": "bob", "age": 20 },
     ]);
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer

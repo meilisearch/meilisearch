@@ -24,4 +24,14 @@ impl IndexScheduler {
     ) -> Result<(Vec<Task>, ProcessBatchInfo)> {
         Err(Error::RequiresEnterpriseEdition { action: "processing a network task" })
     }
+
+    #[cfg(unix)]
+    pub(super) async fn process_snapshot_to_s3(
+        &self,
+        _progress: Progress,
+        _opts: meilisearch_types::milli::update::S3SnapshotOptions,
+        _tasks: Vec<Task>,
+    ) -> Result<Vec<Task>> {
+        Err(Error::RequiresEnterpriseEdition { action: "processing an S3-streaming snapshot task" })
+    }
 }

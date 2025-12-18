@@ -1,13 +1,16 @@
+use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
+use crate::test_utils::Breakpoint::*;
+use crate::test_utils::{
+    index_creation_task, replace_document_import_task, replace_document_import_task_with_opts,
+    sample_documents, FailureLocation,
+};
+use crate::{IndexScheduler, Query};
 use meili_snap::snapshot;
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
+use meilisearch_types::milli::update::MissingDocumentPolicy;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent, Status};
 use time::{Duration, OffsetDateTime};
-
-use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
-use crate::test_utils::Breakpoint::*;
-use crate::test_utils::{index_creation_task, FailureLocation};
-use crate::{IndexScheduler, Query};
 
 #[test]
 fn query_batches_from_and_limit() {
@@ -486,4 +489,42 @@ fn query_batches_canceled_by() {
         .unwrap();
     // Return only 1 because the user is not authorized to see task 2
     snapshot!(snapshot_bitmap(&batches), @"[1,]");
+}
+
+#[test]
+fn batch_skip_creation_with_deletion() {
+    let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let kind = index_creation_task("docs", "id");
+    let _task = index_scheduler.register(kind, None, false).unwrap();
+
+    handle.advance_one_successful_batch();
+
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 1, 1);
+    let (file1, documents_count1) = sample_documents(&index_scheduler, 2, 1);
+    file0.persist().unwrap();
+    file1.persist().unwrap();
+    let kind = replace_document_import_task("docs", Some("id"), 1, documents_count0);
+    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler
+        .register(
+            KindWithContent::DocumentDeletion {
+                index_uid: "docs".to_string(),
+                documents_ids: vec!["1".to_string()],
+            },
+            None,
+            false,
+        )
+        .unwrap();
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        Some("id"),
+        2,
+        documents_count1,
+        MissingDocumentPolicy::Skip,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    handle.advance_one_successful_batch();
+
+    snapshot!(snapshot_index_scheduler(&index_scheduler));
 }

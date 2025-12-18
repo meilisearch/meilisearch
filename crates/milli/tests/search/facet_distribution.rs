@@ -4,7 +4,7 @@ use heed::EnvOpenOptions;
 use milli::documents::mmap_from_objects;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexerConfig, Settings};
+use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{FacetDistribution, FilterableAttributesRule, Index, Object, OrderBy};
 use serde_json::{from_value, json};
@@ -47,7 +47,7 @@ fn test_facet_distribution_with_no_facet_values() {
     let documents = mmap_from_objects(vec![doc1, doc2]);
 
     // index documents
-    indexer.replace_documents(&documents).unwrap();
+    indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer

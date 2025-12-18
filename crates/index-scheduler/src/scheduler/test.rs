@@ -1,9 +1,16 @@
 use std::collections::BTreeMap;
 
+use crate::insta_snapshot::snapshot_index_scheduler;
+use crate::test_utils::Breakpoint::*;
+use crate::test_utils::{
+    index_creation_task, read_json, replace_document_import_task, sample_documents,
+};
+use crate::IndexScheduler;
 use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
+use meilisearch_types::milli::update::MissingDocumentPolicy;
 use meilisearch_types::milli::{self};
 use meilisearch_types::settings::SettingEmbeddingSettings;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
@@ -294,6 +301,7 @@ fn document_addition_and_index_deletion() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -579,6 +587,7 @@ fn document_addition_and_index_deletion_on_unexisting_index() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,

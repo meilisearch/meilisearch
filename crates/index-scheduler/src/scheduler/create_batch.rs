@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::ErrorKind;
 
 use meilisearch_types::heed::RoTxn;
-use meilisearch_types::milli::update::IndexDocumentsMethod;
+use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::network::NetworkTopologyState;
 use meilisearch_types::tasks::{BatchStopReason, Kind, KindWithContent, Status, Task};
@@ -72,8 +72,8 @@ pub(crate) enum Batch {
 
 #[derive(Debug)]
 pub(crate) enum DocumentOperation {
-    Replace(Uuid),
-    Update(Uuid),
+    Replace { content_file: Uuid, on_missing_document: MissingDocumentPolicy },
+    Update { content_file: Uuid, on_missing_document: MissingDocumentPolicy },
     Delete(Vec<String>),
 }
 
@@ -311,13 +311,22 @@ impl IndexScheduler {
                 for task in tasks.iter() {
                     match task.kind {
                         KindWithContent::DocumentAdditionOrUpdate {
-                            content_file, method, ..
+                            content_file,
+                            method,
+                            on_missing_document,
+                            ..
                         } => match method {
                             IndexDocumentsMethod::ReplaceDocuments => {
-                                operations.push(DocumentOperation::Replace(content_file))
+                                operations.push(DocumentOperation::Replace {
+                                    content_file,
+                                    on_missing_document,
+                                })
                             }
                             IndexDocumentsMethod::UpdateDocuments => {
-                                operations.push(DocumentOperation::Update(content_file))
+                                operations.push(DocumentOperation::Update {
+                                    content_file,
+                                    on_missing_document,
+                                })
                             }
                             _ => unreachable!("Unknown document merging method"),
                         },

@@ -7,7 +7,7 @@ use itertools::Itertools;
 use maplit::hashset;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexerConfig, Settings};
+use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
 use rand::Rng;
@@ -319,7 +319,7 @@ fn criteria_ascdesc() {
     file.sync_all().unwrap();
 
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, MissingDocumentPolicy::default()).unwrap();
     let (document_changes, _operation_stats, primary_key) = indexer
         .into_changes(
             &indexer_alloc,

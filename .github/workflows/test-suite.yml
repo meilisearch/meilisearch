@@ -50,13 +50,38 @@ jobs:
           command: test
           args: --locked --all ${{ matrix.features }}
 
-  test-others:
+  test-windows:
     name: Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-2022]
+        os: [windows-2022]
+        features: ["", "--features enterprise"]
+    if: github.event_name != 'merge_group'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.8.0
+      - uses: dtolnay/rust-toolchain@1.91.1
+      - name: Run cargo build without any default features
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --locked --no-default-features --all
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked --all ${{ matrix.features }}
+
+  test-macos:
+    name: Tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14]
         features: ["", "--features enterprise"]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
@@ -196,7 +221,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets ${{ matrix.features }} -- --deny warnings
+          args: --all-targets ${{ matrix.features }} -- --deny warnings -D clippy::todo
 
   fmt:
     name: Run Rustfmt

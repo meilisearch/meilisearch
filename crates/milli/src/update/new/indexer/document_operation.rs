@@ -21,7 +21,7 @@ use crate::update::new::indexer::current_edition::sharding::Shards;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
-use crate::update::{AvailableIds, IndexDocumentsMethod};
+use crate::update::{AvailableIds, IndexDocumentsMethod, MissingDocumentPolicy};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
 #[derive(Default)]
@@ -37,20 +37,28 @@ impl<'pl> DocumentOperation<'pl> {
     /// Append a replacement of documents.
     ///
     /// The payload is expected to be in the NDJSON format
-    pub fn replace_documents(&mut self, payload: &'pl Mmap) -> Result<()> {
+    pub fn replace_documents(
+        &mut self,
+        payload: &'pl Mmap,
+        on_missing_document: MissingDocumentPolicy,
+    ) -> Result<()> {
         #[cfg(unix)]
         payload.advise(memmap2::Advice::Sequential)?;
-        self.operations.push(Payload::Replace(&payload[..]));
+        self.operations.push(Payload::Replace { payload: &payload[..], on_missing_document });
         Ok(())
     }
 
     /// Append an update of documents.
     ///
     /// The payload is expected to be in the NDJSON format
-    pub fn update_documents(&mut self, payload: &'pl Mmap) -> Result<()> {
+    pub fn update_documents(
+        &mut self,
+        payload: &'pl Mmap,
+        on_missing_document: MissingDocumentPolicy,
+    ) -> Result<()> {
         #[cfg(unix)]
         payload.advise(memmap2::Advice::Sequential)?;
-        self.operations.push(Payload::Update(&payload[..]));
+        self.operations.push(Payload::Update { payload: &payload[..], on_missing_document });
         Ok(())
     }
 
@@ -98,34 +106,40 @@ impl<'pl> DocumentOperation<'pl> {
 
             let mut bytes = 0;
             let result = match operation {
-                Payload::Replace(payload) => extract_addition_payload_changes(
-                    indexer,
-                    index,
-                    rtxn,
-                    primary_key_from_op,
-                    &mut primary_key,
-                    new_fields_ids_map,
-                    &mut available_docids,
-                    &mut bytes,
-                    &docids_version_offsets,
-                    IndexDocumentsMethod::ReplaceDocuments,
-                    shards,
-                    payload,
-                ),
-                Payload::Update(payload) => extract_addition_payload_changes(
-                    indexer,
-                    index,
-                    rtxn,
-                    primary_key_from_op,
-                    &mut primary_key,
-                    new_fields_ids_map,
-                    &mut available_docids,
-                    &mut bytes,
-                    &docids_version_offsets,
-                    IndexDocumentsMethod::UpdateDocuments,
-                    shards,
-                    payload,
-                ),
+                Payload::Replace { payload, on_missing_document } => {
+                    extract_addition_payload_changes(
+                        indexer,
+                        index,
+                        rtxn,
+                        primary_key_from_op,
+                        &mut primary_key,
+                        new_fields_ids_map,
+                        &mut available_docids,
+                        &mut bytes,
+                        &docids_version_offsets,
+                        IndexDocumentsMethod::ReplaceDocuments,
+                        shards,
+                        payload,
+                        on_missing_document,
+                    )
+                }
+                Payload::Update { payload, on_missing_document } => {
+                    extract_addition_payload_changes(
+                        indexer,
+                        index,
+                        rtxn,
+                        primary_key_from_op,
+                        &mut primary_key,
+                        new_fields_ids_map,
+                        &mut available_docids,
+                        &mut bytes,
+                        &docids_version_offsets,
+                        IndexDocumentsMethod::UpdateDocuments,
+                        shards,
+                        payload,
+                        on_missing_document,
+                    )
+                }
                 Payload::Deletion(to_delete) => extract_deletion_payload_changes(
                     index,
                     rtxn,
@@ -180,6 +194,7 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
     method: IndexDocumentsMethod,
     shards: Option<&Shards>,
     payload: &'pl [u8],
+    on_missing_document: MissingDocumentPolicy,
 ) -> Result<hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>> {
     use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
 
@@ -236,8 +251,12 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
                 match index.external_documents_ids().get(rtxn, external_id) {
                     Ok(Some(docid)) => match new_docids_version_offsets.entry(external_id) {
                         Entry::Occupied(mut entry) => match method {
-                            ReplaceDocuments => entry.get_mut().push_replacement(document_offset),
-                            UpdateDocuments => entry.get_mut().push_update(document_offset),
+                            ReplaceDocuments => entry
+                                .get_mut()
+                                .push_replacement(document_offset, on_missing_document),
+                            UpdateDocuments => {
+                                entry.get_mut().push_update(document_offset, on_missing_document)
+                            }
                         },
                         Entry::Vacant(entry) => {
                             match method {
@@ -260,14 +279,22 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
                     },
                     Ok(None) => match new_docids_version_offsets.entry(external_id) {
                         Entry::Occupied(mut entry) => match method {
-                            ReplaceDocuments => entry.get_mut().push_replacement(document_offset),
-                            UpdateDocuments => entry.get_mut().push_update(document_offset),
+                            ReplaceDocuments => entry
+                                .get_mut()
+                                .push_replacement(document_offset, on_missing_document),
+                            UpdateDocuments => {
+                                entry.get_mut().push_update(document_offset, on_missing_document)
+                            }
                         },
                         Entry::Vacant(entry) => {
                             let docid = match available_docids.next() {
                                 Some(docid) => docid,
                                 None => return Err(UserError::DocumentLimitReached.into()),
                             };
+
+                            if matches!(on_missing_document, MissingDocumentPolicy::Skip) {
+                                continue;
+                            }
 
                             match method {
                                 ReplaceDocuments => {
@@ -292,25 +319,37 @@ fn extract_addition_payload_changes<'r, 'pl: 'r>(
             }
             Some(payload_operations) => match new_docids_version_offsets.entry(external_id) {
                 Entry::Occupied(mut entry) => match method {
-                    ReplaceDocuments => entry.get_mut().push_replacement(document_offset),
-                    UpdateDocuments => entry.get_mut().push_update(document_offset),
-                },
-                Entry::Vacant(entry) => match method {
                     ReplaceDocuments => {
-                        entry.insert(PayloadOperations::new_replacement(
-                            payload_operations.docid,
-                            payload_operations.is_new,
-                            document_offset,
-                        ));
+                        entry.get_mut().push_replacement(document_offset, on_missing_document)
                     }
                     UpdateDocuments => {
-                        entry.insert(PayloadOperations::new_update(
-                            payload_operations.docid,
-                            payload_operations.is_new,
-                            document_offset,
-                        ));
+                        entry.get_mut().push_update(document_offset, on_missing_document)
                     }
                 },
+                Entry::Vacant(entry) => {
+                    if payload_operations.is_new
+                        && matches!(on_missing_document, MissingDocumentPolicy::Skip)
+                    {
+                        continue;
+                    }
+
+                    match method {
+                        ReplaceDocuments => {
+                            entry.insert(PayloadOperations::new_replacement(
+                                payload_operations.docid,
+                                payload_operations.is_new,
+                                document_offset,
+                            ));
+                        }
+                        UpdateDocuments => {
+                            entry.insert(PayloadOperations::new_update(
+                                payload_operations.docid,
+                                payload_operations.is_new,
+                                document_offset,
+                            ));
+                        }
+                    }
+                }
             },
         }
     }
@@ -448,8 +487,8 @@ pub struct DocumentOperationChanges<'pl> {
 }
 
 pub enum Payload<'pl> {
-    Replace(&'pl [u8]),
-    Update(&'pl [u8]),
+    Replace { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
+    Update { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
     Deletion(&'pl [&'pl str]),
 }
 
@@ -483,12 +522,38 @@ impl<'pl> PayloadOperations<'pl> {
 }
 
 impl<'pl> PayloadOperations<'pl> {
-    fn push_replacement(&mut self, offset: DocumentOffset<'pl>) {
+    fn push_replacement(
+        &mut self,
+        offset: DocumentOffset<'pl>,
+        on_missing_document: MissingDocumentPolicy,
+    ) {
+        // If the last operation was a deletion, we can safely ignore the replacement if the policy
+        // is set on skip.
+        if matches!(
+            (self.operations.last(), on_missing_document),
+            (Some(InnerDocOp::Deletion), MissingDocumentPolicy::Skip)
+        ) {
+            return;
+        }
+
         self.operations.clear();
         self.operations.push(InnerDocOp::Replace(offset))
     }
 
-    fn push_update(&mut self, offset: DocumentOffset<'pl>) {
+    fn push_update(
+        &mut self,
+        offset: DocumentOffset<'pl>,
+        on_missing_document: MissingDocumentPolicy,
+    ) {
+        // If the last operation was a deletion, we can safely ignore the update if the policy is
+        // set on skip.
+        if matches!(
+            (self.operations.last(), on_missing_document),
+            (Some(InnerDocOp::Deletion), MissingDocumentPolicy::Skip)
+        ) {
+            return;
+        }
+
         self.operations.push(InnerDocOp::Update(offset))
     }
 
