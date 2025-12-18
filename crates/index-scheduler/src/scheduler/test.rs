@@ -5,7 +5,7 @@ use crate::test_utils::Breakpoint::*;
 use crate::test_utils::{
     index_creation_task, read_json, replace_document_import_task, sample_documents,
 };
-use crate::IndexScheduler;
+use crate::{IndexScheduler, Query};
 use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_auth::AuthFilter;
@@ -16,13 +16,6 @@ use meilisearch_types::settings::SettingEmbeddingSettings;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use milli::vector::db::IndexEmbeddingConfig;
 use roaring::RoaringBitmap;
-
-use crate::insta_snapshot::snapshot_index_scheduler;
-use crate::test_utils::Breakpoint::*;
-use crate::test_utils::{
-    index_creation_task, read_json, replace_document_import_task, sample_documents,
-};
-use crate::{IndexScheduler, Query};
 
 #[test]
 fn insert_task_while_another_task_is_processing() {
