@@ -208,7 +208,6 @@ fn output_formatted_entries(db_path: PathBuf, index_name: &str) -> anyhow::Resul
         let rtxn = index.read_txn()?;
 
         let Index {
-            
             word_docids,
             exact_word_docids,
             word_prefix_docids,
@@ -222,13 +221,6 @@ fn output_formatted_entries(db_path: PathBuf, index_name: &str) -> anyhow::Resul
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
-            
-            
-            
-            
-            
-            
-            
             ..
         } = index;
 
