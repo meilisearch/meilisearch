@@ -437,7 +437,7 @@ impl IndexScheduler {
         let mut index_count = budget / base_map_size;
         if index_count < 2 {
             // take a bit less than half than the budget to make sure we can always afford to open an index
-            let map_size = (budget * 2) / 5;
+            let map_size = clamp_to_page_size((budget * 2) / 5);
             // single index of max budget
             tracing::debug!("1 index of {map_size}B can be opened simultaneously.");
             return IndexBudget { map_size, index_count: 1, task_db_size };
