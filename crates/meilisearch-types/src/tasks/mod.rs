@@ -203,6 +203,9 @@ pub struct IndexSwap {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
+    /// Optional target index name. Use `$name` to reference the original index name.
+    /// If omitted, uses the original index name.
+    pub name: Option<String>,
     /// Filter expression to select documents for export
     pub filter: Option<Value>,
     /// Whether to override settings on the destination index

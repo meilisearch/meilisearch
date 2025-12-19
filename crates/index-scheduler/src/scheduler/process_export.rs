@@ -77,7 +77,10 @@ impl IndexScheduler {
                 indexes.len() as u32,
             ));
 
-            let ExportIndexSettings { filter, override_settings } = export_settings;
+            let ExportIndexSettings { name, filter, override_settings } = export_settings;
+
+            // Resolve target index name: apply $name substitution or use original
+            let target_uid = resolve_target_index_name(name.as_deref(), uid);
 
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
@@ -97,7 +100,7 @@ impl IndexScheduler {
                 must_stop_processing: &must_stop_processing,
             };
             let options = ExportOptions {
-                index_uid: uid,
+                index_uid: &target_uid,
                 payload_size,
                 override_settings: *override_settings,
                 export_mode: ExportMode::ExportRoute,
@@ -616,6 +619,18 @@ fn response_error_into_error(error: ResponseError) -> Error {
             Err(e) => io::Error::other(e.into_io()).into(),
         },
         ResponseError::Transport(error) => io::Error::other(error.into_io()).into(),
+    }
+}
+
+/// Resolves the target index name based on the optional name template.
+///
+/// If `name` is None, returns the original index uid.
+/// If `name` contains `$name`, replaces it with the original index uid.
+/// Otherwise, returns the name as-is (static target name).
+fn resolve_target_index_name(name: Option<&str>, original_uid: &str) -> String {
+    match name {
+        None => original_uid.to_string(),
+        Some(template) => template.replace("$name", original_uid),
     }
 }
 
