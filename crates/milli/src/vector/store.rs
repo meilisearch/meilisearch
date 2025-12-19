@@ -246,6 +246,32 @@ impl VectorStore {
         Ok(())
     }
 
+    pub fn rebuild_graph<R: rand::Rng + rand::SeedableRng>(
+        &mut self,
+        wtxn: &mut RwTxn,
+        progress: Progress,
+        rng: &mut R,
+        dimension: usize,
+        cancel: &(impl Fn() -> bool + Sync + Send),
+    ) -> Result<(), crate::Error> {
+        for index in vector_store_range_for_embedder(self.embedder_index) {
+            if self.backend == VectorStoreBackend::Hannoy {
+                if self.quantized {
+                    let writer = hannoy::Writer::new(self._hannoy_quantized_db(), index, dimension);
+                    if !writer.is_empty(wtxn)? {
+                        hannoy_rebuild_graph(wtxn, &progress, rng, cancel, &writer)?;
+                    }
+                } else {
+                    let writer = hannoy::Writer::new(self._hannoy_angular_db(), index, dimension);
+                    if !writer.is_empty(wtxn)? {
+                        hannoy_rebuild_graph(wtxn, &progress, rng, cancel, &writer)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     /// Overwrite all the embeddings associated with the index and item ID.
     /// /!\ It won't remove embeddings after the last passed embedding, which can leave stale embeddings.
     ///     You should call `del_items` on the `item_id` before calling this method.
@@ -1182,6 +1208,25 @@ where
         .cancel(cancel)
         .ef_construction(HANNOY_EF_CONSTRUCTION)
         .build::<HANNOY_M, HANNOY_M0>(wtxn)?;
+    Ok(())
+}
+
+fn hannoy_rebuild_graph<R, D>(
+    wtxn: &mut RwTxn<'_>,
+    progress: &Progress,
+    rng: &mut R,
+    cancel: &(impl Fn() -> bool + Sync + Send),
+    writer: &hannoy::Writer<D>,
+) -> Result<(), crate::Error>
+where
+    R: rand::Rng + rand::SeedableRng,
+    D: hannoy::Distance,
+{
+    let mut builder = writer.builder(rng).progress(progress.clone());
+    builder
+        .cancel(cancel)
+        .ef_construction(HANNOY_EF_CONSTRUCTION)
+        .force_rebuild::<HANNOY_M, HANNOY_M0>(wtxn)?;
     Ok(())
 }
 
