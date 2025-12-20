@@ -109,23 +109,28 @@ async fn export(
     Ok(HttpResponse::Ok().json(task))
 }
 
+/// Request body for exporting data to a remote Meilisearch instance
 #[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct Export {
+    /// URL of the destination Meilisearch instance
     #[schema(value_type = Option<String>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportUrl>)]
     pub url: String,
+    /// API key for authenticating with the destination instance
     #[schema(value_type = Option<String>, example = json!("1234abcd"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportApiKey>)]
     pub api_key: Option<String>,
+    /// Maximum payload size per request
     #[schema(value_type = Option<String>, example = json!("24MiB"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportPayloadSize>)]
     pub payload_size: Option<ByteWithDeserr>,
+    /// Index patterns to export with their settings
     #[schema(value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
     #[deserr(default)]
     #[serde(default)]
@@ -167,15 +172,18 @@ where
     }
 }
 
+/// Export settings for a specific index
 #[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
+    /// Filter expression to select which documents to export
     #[schema(value_type = Option<String>, example = json!("genres = action"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportIndexFilter>)]
     pub filter: Option<Value>,
+    /// Whether to override settings on the destination index
     #[schema(value_type = Option<bool>, example = json!(true))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportIndexOverrideSettings>)]

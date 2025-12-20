@@ -3,11 +3,21 @@ use milli::{AttributePatterns, LocalizedAttributesRule};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+/// Defines a rule for associating specific locales (languages) with
+/// attributes. This allows Meilisearch to use language-specific tokenization
+/// and processing for matched attributes, improving search quality for
+/// multilingual content.
 #[derive(Debug, Clone, PartialEq, Eq, Deserr, Serialize, Deserialize, ToSchema)]
 #[deserr(rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalizedAttributesRuleView {
+    /// Patterns to match attribute names. Use `*` as a wildcard to match any
+    /// characters. For example, `["title_*", "description"]` matches
+    /// `title_en`, `title_fr`, and `description`.
     pub attribute_patterns: AttributePatterns,
+    /// The list of locales (languages) to apply to matching attributes. When
+    /// these attributes are indexed, Meilisearch will use language-specific
+    /// tokenization rules. Examples: `["en", "fr"]` or `["jpn", "zho"]`.
     pub locales: Vec<Locale>,
 }
 

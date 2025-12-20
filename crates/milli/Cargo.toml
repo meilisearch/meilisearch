@@ -106,6 +106,7 @@ enum-iterator = "2.3.0"
 bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
 flume = { version = "0.11.1", default-features = false }
 utoipa = { version = "5.4.0", features = [
+    "macros",
     "non_strict_integers",
     "preserve_order",
     "uuid",

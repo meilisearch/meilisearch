@@ -72,28 +72,40 @@ pub struct BatchEnqueuedAt {
     pub oldest: OffsetDateTime,
 }
 
+/// Statistics for a batch of tasks
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct BatchStats {
+    /// Total number of tasks in the batch
     pub total_nb_tasks: BatchId,
+    /// Count of tasks by status
     pub status: BTreeMap<Status, u32>,
+    /// Count of tasks by type
     pub types: BTreeMap<Kind, u32>,
+    /// Count of tasks by index UID
     pub index_uids: BTreeMap<String, u32>,
+    /// Detailed progress trace information
     #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub progress_trace: serde_json::Map<String, serde_json::Value>,
+    /// Write channel congestion metrics
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write_channel_congestion: Option<serde_json::Map<String, serde_json::Value>>,
+    /// Internal database size information
     #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub internal_database_sizes: serde_json::Map<String, serde_json::Value>,
 }
 
+/// Statistics for embedder requests
 #[derive(Default, Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct EmbedderStatsView {
+    /// Total number of embedder requests
     pub total: usize,
+    /// Number of failed embedder requests
     pub failed: usize,
+    /// Last error message from the embedder
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub last_error: Option<String>,
 }

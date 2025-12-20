@@ -44,7 +44,14 @@ time = { version = "0.3.44", features = [
 ] }
 tokio = "1.48"
 urlencoding = "2.1.3"
-utoipa = { version = "5.4.0", features = ["macros"] }
+utoipa = { version = "5.4.0", features = [
+    "macros",
+    "non_strict_integers",
+    "preserve_order",
+    "uuid",
+    "time",
+    "openapi_extensions",
+] }
 uuid = { version = "1.18.1", features = ["serde", "v4"] }
 
 [dev-dependencies]

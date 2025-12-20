@@ -105,20 +105,28 @@ async fn get_batch(
     }
 }
 
+/// Response containing a paginated list of batches
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AllBatches {
+    /// Array of batch objects
     results: Vec<BatchView>,
+    /// Total number of batches
     total: u64,
+    /// Maximum number of batches returned
     limit: u32,
+    /// The first batch uid returned
     from: Option<u32>,
+    /// Value to send in from to fetch the next slice of results
     next: Option<u32>,
 }
 
 /// Get batches
 ///
-/// List all batches, regardless of index. The batch objects are contained in the results array.
-/// Batches are always returned in descending order of uid. This means that by default, the most recently created batch objects appear first.
-/// Batch results are paginated and can be filtered with query parameters.
+/// List all batches, regardless of index. The batch objects are contained in
+/// the results array. Batches are always returned in descending order of uid.
+/// This means that by default, the most recently created batch objects appear
+/// first. Batch results are paginated and can be filtered with query
+/// parameters.
 #[utoipa::path(
     get,
     path = "",
