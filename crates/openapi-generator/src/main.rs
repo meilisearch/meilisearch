@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -8,7 +9,14 @@ use meilisearch::routes::MeilisearchApi;
 use serde_json::{json, Value};
 use utoipa::OpenApi;
 
+/// HTTP methods supported in OpenAPI specifications.
 const HTTP_METHODS: &[&str] = &["get", "post", "put", "patch", "delete"];
+
+/// Type alias for the mapping from OpenAPI keys to their code samples.
+type CodeSamplesMap = HashMap<String, Vec<CodeSample>>;
+
+/// Type alias for the mapping from OpenAPI keys to sample IDs.
+type KeyMapping = HashMap<String, String>;
 
 /// Language used in the documentation repository (contains the key mapping)
 const DOCS_LANG: &str = "cURL";
@@ -28,7 +36,6 @@ const CODE_SAMPLES: &[(&str, &str)] = &[
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-rust/refs/heads/main/.code-samples.meilisearch.yaml", "Rust"),
     ("https://raw.githubusercontent.com/meilisearch/meilisearch-swift/refs/heads/main/.code-samples.meilisearch.yaml", "Swift"),
 ];
-
 
 #[derive(Parser)]
 #[command(name = "openapi-generator")]
@@ -96,16 +103,18 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Code sample for a specific language
-#[derive(Debug, Clone)]
+/// Code sample for a specific language.
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct CodeSample {
     lang: String,
     source: String,
 }
 
-/// Fetch and parse code samples from all repositories
-/// Returns a map from OpenAPI key (e.g., "get_indexes") to a list of code samples for different languages
-fn fetch_all_code_samples(debug: bool) -> Result<HashMap<String, Vec<CodeSample>>> {
+/// Fetches and parses code samples from all SDK repositories.
+///
+/// Returns a map from OpenAPI key (e.g., `"get_indexes"`) to a list of code samples
+/// for different languages.
+fn fetch_all_code_samples(debug: bool) -> Result<CodeSamplesMap> {
     // First, fetch the documentation file to get the OpenAPI key -> code sample ID mapping
     let (docs_url, _) = CODE_SAMPLES
         .iter()
@@ -121,7 +130,7 @@ fn fetch_all_code_samples(debug: bool) -> Result<HashMap<String, Vec<CodeSample>
     let openapi_key_to_sample_id = build_openapi_key_mapping(&docs_content);
 
     // Build final result
-    let mut all_samples: HashMap<String, Vec<CodeSample>> = HashMap::new();
+    let mut all_samples: CodeSamplesMap = HashMap::new();
 
     // Loop through all CODE_SAMPLES files
     for (url, lang) in CODE_SAMPLES {
@@ -144,10 +153,10 @@ fn fetch_all_code_samples(debug: bool) -> Result<HashMap<String, Vec<CodeSample>
         // Add to result using the mapping
         for (openapi_key, sample_id) in &openapi_key_to_sample_id {
             if let Some(source) = sample_id_to_code.get(sample_id) {
-                all_samples.entry(openapi_key.clone()).or_default().push(CodeSample {
-                    lang: lang.to_string(),
-                    source: source.clone(),
-                });
+                all_samples
+                    .entry(openapi_key.clone())
+                    .or_default()
+                    .push(CodeSample { lang: lang.to_string(), source: source.clone() });
             }
         }
     }
@@ -175,14 +184,15 @@ fn fetch_all_code_samples(debug: bool) -> Result<HashMap<String, Vec<CodeSample>
     Ok(all_samples)
 }
 
-/// Build a mapping from OpenAPI key to code sample ID from the documentation file.
+/// Builds a mapping from OpenAPI key to code sample ID from the documentation file.
 ///
 /// The OpenAPI key is found on a line starting with `# ` (hash + space), containing a single word
 /// that starts with an HTTP method followed by an underscore (e.g., `# get_indexes`).
 /// The code sample ID is the first word of the next line.
 /// Only keeps the first code sample ID per OpenAPI key.
 ///
-/// Example input:
+/// # Example
+///
 /// ```yaml
 /// # get_indexes
 /// get_indexes_1: |-
@@ -197,57 +207,44 @@ fn fetch_all_code_samples(debug: bool) -> Result<HashMap<String, Vec<CodeSample>
 ///     -X POST 'MEILISEARCH_URL/indexes'
 /// ```
 ///
-/// This produces: {"get_indexes": "get_indexes_1", "post_indexes": "create_indexes_1"}
-fn build_openapi_key_mapping(content: &str) -> HashMap<String, String> {
-    let mut mapping: HashMap<String, String> = HashMap::new();
-    let lines: Vec<&str> = content.lines().collect();
+/// This produces: `{"get_indexes": "get_indexes_1", "post_indexes": "create_indexes_1"}`
+fn build_openapi_key_mapping(content: &str) -> KeyMapping {
+    let mut mapping = KeyMapping::new();
+    let lines: Vec<_> = content.lines().collect();
 
-    for i in 0..lines.len() {
-        let line = lines[i];
+    for window in lines.windows(2) {
+        let [line, next_line] = window else { continue };
 
-        // Check if line starts with "# " and contains exactly one word
-        let Some(rest) = line.strip_prefix("# ") else {
+        // Check if line starts with "# " and extract the word
+        let Some(word) = line.strip_prefix("# ").map(str::trim) else {
             continue;
         };
 
-        let word = rest.trim();
-
-        // Must be a single word (no spaces)
-        if word.contains(' ') {
+        // Must be a single word (no spaces) starting with an HTTP method prefix
+        if word.contains(' ') || !is_http_method_prefixed(word) {
             continue;
         }
 
-        // Must start with an HTTP method followed by underscore
-        let starts_with_http_method =
-            HTTP_METHODS.iter().any(|method| word.starts_with(&format!("{}_", method)));
+        // Extract sample ID from next line (first word before `:`)
+        let sample_id = next_line.split(':').next().map(str::trim).filter(|s| !s.is_empty());
 
-        if !starts_with_http_method {
-            continue;
-        }
-
-        let openapi_key = word.to_string();
-
-        // Only keep first match per key
-        if mapping.contains_key(&openapi_key) {
-            continue;
-        }
-
-        // Get the code sample ID from the next line (first word before `:`)
-        if i + 1 < lines.len() {
-            let next_line = lines[i + 1];
-            if let Some(sample_id) = next_line.split(':').next() {
-                let sample_id = sample_id.trim();
-                if !sample_id.is_empty() {
-                    mapping.insert(openapi_key, sample_id.to_string());
-                }
-            }
+        // Only insert if key doesn't exist (keeps first match)
+        if let (Entry::Vacant(entry), Some(id)) = (mapping.entry(word.to_string()), sample_id) {
+            entry.insert(id.to_string());
         }
     }
 
     mapping
 }
 
-/// Parse all code samples from a file.
+/// Checks if a word starts with an HTTP method followed by an underscore.
+fn is_http_method_prefixed(word: &str) -> bool {
+    HTTP_METHODS
+        .iter()
+        .any(|&method| word.strip_prefix(method).is_some_and(|rest| rest.starts_with('_')))
+}
+
+/// Parses all code samples from a YAML-like file.
 ///
 /// A code sample ID is found when a line contains `: |-`.
 /// The code sample value is everything between `: |-` and:
@@ -255,7 +252,8 @@ fn build_openapi_key_mapping(content: &str) -> HashMap<String, String> {
 /// - OR a line starting with `#` at column 0 (indented `#` is part of the code sample)
 /// - OR the end of file
 ///
-/// Example input:
+/// # Example
+///
 /// ```yaml
 /// get_indexes_1: |-
 ///   client.getIndexes()
@@ -266,8 +264,8 @@ fn build_openapi_key_mapping(content: &str) -> HashMap<String, String> {
 /// ```
 ///
 /// This produces:
-/// - get_indexes_1 -> "client.getIndexes()\n# I write something"
-/// - get_indexes_2 -> "client.getIndexes({ limit: 3 })"
+/// - `get_indexes_1` → `"client.getIndexes()\n# I write something"`
+/// - `get_indexes_2` → `"client.getIndexes({ limit: 3 })"`
 fn parse_code_samples_from_file(content: &str) -> HashMap<String, String> {
     let mut samples: HashMap<String, String> = HashMap::new();
     let mut current_sample_id: Option<String> = None;
@@ -334,10 +332,13 @@ fn parse_code_samples_from_file(content: &str) -> HashMap<String, String> {
     samples
 }
 
-/// Convert an OpenAPI path to a code sample key
-/// Path: /indexes/{index_uid}/documents/{document_id}
-/// Method: GET
-/// Key: get_indexes_indexUid_documents_documentId
+/// Converts an OpenAPI path and HTTP method to a code sample key.
+///
+/// # Example
+///
+/// - Path: `/indexes/{index_uid}/documents/{document_id}`
+/// - Method: `GET`
+/// - Result: `get_indexes_indexUid_documents_documentId`
 fn path_to_key(path: &str, method: &str) -> String {
     let method_lower = method.to_lowercase();
 
@@ -365,7 +366,13 @@ fn path_to_key(path: &str, method: &str) -> String {
     }
 }
 
-/// Convert snake_case to camelCase
+/// Converts a `snake_case` string to `camelCase`.
+///
+/// # Example
+///
+/// ```
+/// assert_eq!(to_camel_case("index_uid"), "indexUid");
+/// ```
 fn to_camel_case(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut capitalize_next = false;
@@ -385,10 +392,10 @@ fn to_camel_case(s: &str) -> String {
     result
 }
 
-/// Add code samples to the OpenAPI specification
+/// Adds code samples to the OpenAPI specification as `x-codeSamples` extensions.
 fn add_code_samples_to_openapi(
     openapi: &mut Value,
-    code_samples: &HashMap<String, Vec<CodeSample>>,
+    code_samples: &CodeSamplesMap,
     debug: bool,
 ) -> Result<()> {
     let paths = openapi
@@ -467,9 +474,10 @@ fn add_code_samples_to_openapi(
     Ok(())
 }
 
-/// Clean up null descriptions in tags to make Mintlify work
-/// Removes any "description" fields with null values (both JSON null and "null" string)
-/// from the tags array and all nested objects
+/// Cleans up null descriptions in tags to make Mintlify work.
+///
+/// Removes any `"description"` fields with null values (both JSON `null` and `"null"` string)
+/// from the tags array and all nested objects.
 fn clean_null_descriptions(openapi: &mut Value) {
     if let Some(tags) = openapi.get_mut("tags").and_then(|t| t.as_array_mut()) {
         for tag in tags.iter_mut() {
@@ -478,7 +486,7 @@ fn clean_null_descriptions(openapi: &mut Value) {
     }
 }
 
-/// Recursively remove all "description" fields that are null or "null" string
+/// Recursively removes all `"description"` fields that are `null` or the `"null"` string.
 fn remove_null_descriptions_recursive(value: &mut Value) {
     if let Some(obj) = value.as_object_mut() {
         // Check and remove description if it's null or "null" string
@@ -500,7 +508,8 @@ fn remove_null_descriptions_recursive(value: &mut Value) {
     }
 }
 
-/// Check that all routes have a summary field.
+/// Checks that all routes have a summary field.
+///
 /// Returns an error if any route is missing a summary.
 fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
     let paths = openapi
@@ -520,10 +529,8 @@ fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
                 continue;
             };
 
-            let has_summary = operation
-                .get("summary")
-                .and_then(|s| s.as_str())
-                .is_some_and(|s| !s.is_empty());
+            let has_summary =
+                operation.get("summary").and_then(|s| s.as_str()).is_some_and(|s| !s.is_empty());
 
             if !has_summary {
                 missing_summaries.push(format!("{} {}", method.to_uppercase(), path));
@@ -540,9 +547,7 @@ fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
         for route in &missing_summaries {
             eprintln!("  - {}", route);
         }
-        eprintln!(
-            "\nTo fix this, add a doc-comment (///) above the route handler function."
-        );
+        eprintln!("\nTo fix this, add a doc-comment (///) above the route handler function.");
         eprintln!("The first line becomes the summary, subsequent lines become the description.");
         eprintln!("\nExample:");
         eprintln!("  /// List webhooks");
@@ -670,10 +675,7 @@ complex_block: |-
         assert_eq!(samples["get_indexes_2"], "client.getIndexes({ limit: 3 })");
 
         // update_document contains a blank line and some code
-        assert_eq!(
-            samples["update_document"],
-            "// Code with blank line\n\nupdateDoc(doc)\n// End"
-        );
+        assert_eq!(samples["update_document"], "// Code with blank line\n\nupdateDoc(doc)\n// End");
 
         // delete_document_1
         assert_eq!(samples["delete_document_1"], "client.deleteDocument(1)");
@@ -740,17 +742,11 @@ complex_block: |-
 
         // Test4: both tag description and externalDocs description should be removed
         assert!(!tags[3].as_object().unwrap().contains_key("description"));
-        assert!(!tags[3]["externalDocs"]
-            .as_object()
-            .unwrap()
-            .contains_key("description"));
+        assert!(!tags[3]["externalDocs"].as_object().unwrap().contains_key("description"));
         assert_eq!(tags[3]["externalDocs"]["url"], "https://example.com");
 
         // Test5: externalDocs description "null" should be removed
-        assert!(!tags[4]["externalDocs"]
-            .as_object()
-            .unwrap()
-            .contains_key("description"));
+        assert!(!tags[4]["externalDocs"].as_object().unwrap().contains_key("description"));
         assert_eq!(tags[4]["externalDocs"]["url"], "https://example.com");
     }
 }
