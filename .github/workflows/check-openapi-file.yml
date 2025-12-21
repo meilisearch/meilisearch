@@ -35,10 +35,10 @@ jobs:
         run: npm install -g @apidevtools/swagger-cli @stoplight/spectral-cli
 
       - name: Generate OpenAPI specification
-        run: cargo run -p openapi-generator -- -o /tmp/openapi.json
+        run: cargo run --release -p openapi-generator -- -o /tmp/openapi.json
 
       - name: Check all routes have summaries
-        run: cargo run -p openapi-generator -- --check-summaries
+        run: cargo run --release -p openapi-generator -- --check-summaries
 
       - name: Validate OpenAPI schema
         run: swagger-cli validate /tmp/openapi.json
