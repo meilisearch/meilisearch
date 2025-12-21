@@ -5,6 +5,9 @@ on:
   pull_request:
   merge_group:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -41,4 +44,4 @@ jobs:
         run: swagger-cli validate /tmp/openapi.json
 
       - name: Lint OpenAPI specification
-        run: spectral lint /tmp/openapi.json --ruleset spectral:oas
+        run: spectral lint /tmp/openapi.json

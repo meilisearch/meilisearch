@@ -31,7 +31,7 @@ pub struct TaskView {
     /// The unique identifier of the batch that processed this task. Multiple
     /// tasks may share the same batch UID if they were processed together
     /// for efficiency. This is `null` for tasks that haven't been processed.
-    #[schema(value_type = Option<u32>, example = json!("movies"))]
+    #[schema(value_type = Option<u32>, example = json!(12))]
     pub batch_uid: Option<BatchId>,
     /// The unique identifier of the index this task operates on. This is
     /// `null` for global tasks like `dumpCreation` or `taskDeletion` that

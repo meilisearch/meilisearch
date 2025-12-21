@@ -1,0 +1,9 @@
+extends: ["spectral:oas"]
+
+rules:
+  # Disable the security scopes warning
+  # Meilisearch uses Bearer authentication with API key permissions that work like scopes,
+  # but OpenAPI 3.0 doesn't support scopes with HTTP Bearer authentication (only OAuth2).
+  # The security annotations document required permissions but are not OAuth2 scopes.
+  oas3-operation-security-defined: off
+

@@ -7,6 +7,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: read
+
 jobs:
   check-version:
     name: Check the version validity
