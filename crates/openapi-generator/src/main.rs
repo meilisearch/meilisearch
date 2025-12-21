@@ -49,6 +49,10 @@ struct Cli {
     /// Debug mode: display the mapping table and code samples
     #[arg(long)]
     debug: bool,
+
+    /// Check that all routes have a summary (useful for CI)
+    #[arg(long)]
+    check_summaries: bool,
 }
 
 fn main() -> Result<()> {
@@ -68,6 +72,11 @@ fn main() -> Result<()> {
 
     // Clean up null descriptions in tags
     clean_null_descriptions(&mut openapi_value);
+
+    // Check that all routes have summaries if requested
+    if cli.check_summaries {
+        check_all_routes_have_summaries(&openapi_value)?;
+    }
 
     // Determine output path
     let output_path = cli.output.unwrap_or_else(|| PathBuf::from("meilisearch-openapi.json"));
@@ -488,6 +497,60 @@ fn remove_null_descriptions_recursive(value: &mut Value) {
         for item in arr.iter_mut() {
             remove_null_descriptions_recursive(item);
         }
+    }
+}
+
+/// Check that all routes have a summary field.
+/// Returns an error if any route is missing a summary.
+fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
+    let paths = openapi
+        .get("paths")
+        .and_then(|p| p.as_object())
+        .context("OpenAPI spec missing 'paths' object")?;
+
+    let mut missing_summaries: Vec<String> = Vec::new();
+
+    for (path, path_item) in paths.iter() {
+        let Some(path_item) = path_item.as_object() else {
+            continue;
+        };
+
+        for method in HTTP_METHODS {
+            let Some(operation) = path_item.get(*method) else {
+                continue;
+            };
+
+            let has_summary = operation
+                .get("summary")
+                .and_then(|s| s.as_str())
+                .is_some_and(|s| !s.is_empty());
+
+            if !has_summary {
+                missing_summaries.push(format!("{} {}", method.to_uppercase(), path));
+            }
+        }
+    }
+
+    if missing_summaries.is_empty() {
+        println!("All routes have summaries.");
+        Ok(())
+    } else {
+        missing_summaries.sort();
+        eprintln!("The following routes are missing a summary:");
+        for route in &missing_summaries {
+            eprintln!("  - {}", route);
+        }
+        eprintln!(
+            "\nTo fix this, add a doc-comment (///) above the route handler function."
+        );
+        eprintln!("The first line becomes the summary, subsequent lines become the description.");
+        eprintln!("\nExample:");
+        eprintln!("  /// List webhooks");
+        eprintln!("  ///");
+        eprintln!("  /// Get the list of all registered webhooks.");
+        eprintln!("  #[utoipa::path(...)]");
+        eprintln!("  async fn get_webhooks(...) {{ ... }}");
+        anyhow::bail!("{} route(s) missing summary", missing_summaries.len());
     }
 }
 

@@ -1,0 +1,44 @@
+name: Check OpenAPI file
+
+on:
+  workflow_dispatch:
+  pull_request:
+  merge_group:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  check-openapi:
+    name: Check OpenAPI specification
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.91.1
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.8.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenAPI tools
+        run: npm install -g @apidevtools/swagger-cli @stoplight/spectral-cli
+
+      - name: Generate OpenAPI specification
+        run: cargo run -p openapi-generator -- -o /tmp/openapi.json
+
+      - name: Check all routes have summaries
+        run: cargo run -p openapi-generator -- --check-summaries
+
+      - name: Validate OpenAPI schema
+        run: swagger-cli validate /tmp/openapi.json
+
+      - name: Lint OpenAPI specification
+        run: spectral lint /tmp/openapi.json --ruleset spectral:oas
