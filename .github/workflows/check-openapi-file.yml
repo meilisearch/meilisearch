@@ -40,8 +40,11 @@ jobs:
       - name: Check all routes have summaries
         run: cargo run --release -p openapi-generator -- --check-summaries
 
+      # Validates that the OpenAPI file is syntactically correct and conforms to the OpenAPI specification
       - name: Validate OpenAPI schema
         run: swagger-cli validate /tmp/openapi.json
 
+      # Lints the OpenAPI file for best practices (descriptions, examples, naming conventions, etc.)
+      # Ruleset is defined in crates/openapi-generator/.spectral.yaml
       - name: Lint OpenAPI specification
-        run: spectral lint /tmp/openapi.json
+        run: spectral lint /tmp/openapi.json --ruleset crates/openapi-generator/.spectral.yaml

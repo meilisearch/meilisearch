@@ -6,4 +6,3 @@ rules:
   # but OpenAPI 3.0 doesn't support scopes with HTTP Bearer authentication (only OAuth2).
   # The security annotations document required permissions but are not OAuth2 scopes.
   oas3-operation-security-defined: off
-
