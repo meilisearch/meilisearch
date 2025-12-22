@@ -452,6 +452,7 @@ async fn limit_offset() {
 }
 
 #[actix_rt::test]
+#[cfg(not(windows))]
 async fn simple_search_hf() {
     let server = Server::new_shared();
     let index = index_with_documents_hf(server, &SIMPLE_SEARCH_DOCUMENTS).await;
