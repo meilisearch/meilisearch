@@ -630,6 +630,34 @@ impl From<Infallible> for Error {
     }
 }
 
+/// Converts an MdbError to an InternalError, ignoring MdbMapFull errors.
+/// This allows MdbMapFull errors to flow through the system and be handled
+/// by the existing error conversion logic instead of being caught and converted
+/// to StorePut/StoreDelete errors prematurely.
+pub fn convert_mdb_error_ignore_map_full(
+    error: MdbError,
+    database_name: &'static str,
+    key: &[u8],
+    value_length: Option<usize>,
+) -> Option<InternalError> {
+    match error {
+        MdbError::MapFull => None, // Let it flow through
+        _ => Some(match value_length {
+            Some(len) => InternalError::StorePut {
+                database_name,
+                key: key.into(),
+                value_length: len,
+                error: error.into(),
+            },
+            None => InternalError::StoreDeletion {
+                database_name,
+                key: key.into(),
+                error: error.into(),
+            },
+        }),
+    }
+}
+
 impl From<HeedError> for Error {
     fn from(error: HeedError) -> Error {
         use self::Error::*;
