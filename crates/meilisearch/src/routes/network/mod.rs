@@ -99,11 +99,7 @@ async fn get_network(
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct Remote {
-    #[schema(value_type = Option<String>, example = json!({
-        "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset, write_api_key: Setting::Reset },
-        "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()), write_api_key: Setting::Set("bar".into()) },
-        "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
-    }))]
+    #[schema(value_type = Option<String>, example = "http://localhost:7700")]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkUrl>)]
     #[serde(default)]
     pub url: Setting<String>,

@@ -99,6 +99,8 @@ mod webhooks;
     paths(get_health, get_version, get_stats),
     tags(
         (name = "Stats", description = "Stats gives extended information and metrics about indexes and the Meilisearch database."),
+        (name = "Health", description = "The health check endpoint enables you to periodically test the health of your Meilisearch instance."),
+        (name = "Version", description = "Returns the version of the running Meilisearch instance."),
     ),
     modifiers(&OpenApiAuth),
     servers((

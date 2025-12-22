@@ -190,6 +190,7 @@ pub enum KindWithContent {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
+    #[schema(value_type = Vec<String>, example = json!(["indexA", "indexB"]))]
     pub indexes: (String, String),
     #[serde(default)]
     pub rename: bool,
@@ -607,7 +608,7 @@ impl std::error::Error for ParseTaskStatusError {}
     ToSchema,
 )]
 #[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase", example = json!(enum_iterator::all::<Kind>().collect::<Vec<_>>()))]
+#[schema(rename_all = "camelCase", example = "documentAdditionOrUpdate")]
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentEdition,

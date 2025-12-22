@@ -78,48 +78,48 @@ pub struct TasksFilterQuery {
 
     /// Permits to filter tasks by their uid. By default, when the uids query parameter is not set, all task uids are returned. It's possible to specify several uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
-    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598, "*"]))]
+    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598]))]
     pub uids: OptionStarOrList<u32>,
     /// Permits to filter tasks using the uid of the task that canceled them. It's possible to specify several task uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskCanceledBy>)]
-    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([374, "*"]))]
+    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([374]))]
     pub canceled_by: OptionStarOrList<u32>,
     /// Permits to filter tasks by their related type. By default, when `types` query parameter is not set, all task types are returned. It's possible to specify several types by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskTypes>)]
-    #[param(required = false, value_type = Option<Vec<String>>, example = json!([Kind::DocumentAdditionOrUpdate, "*"]))]
+    #[param(required = false, value_type = Option<Vec<String>>, example = json!([Kind::DocumentAdditionOrUpdate]))]
     pub types: OptionStarOrList<Kind>,
     /// Permits to filter tasks by their status. By default, when `statuses` query parameter is not set, all task statuses are returned. It's possible to specify several statuses by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskStatuses>)]
-    #[param(required = false, value_type = Option<Vec<Status>>, example = json!([Status::Succeeded, Status::Failed, Status::Canceled, Status::Enqueued, Status::Processing, "*"]))]
+    #[param(required = false, value_type = Option<Vec<Status>>, example = json!([Status::Succeeded, Status::Failed, Status::Canceled, Status::Enqueued, Status::Processing]))]
     pub statuses: OptionStarOrList<Status>,
     /// Permits to filter tasks by their related index. By default, when `indexUids` query parameter is not set, the tasks of all the indexes are returned. It is possible to specify several indexes by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexUid>)]
-    #[param(required = false, value_type = Option<Vec<String>>, example = json!(["movies", "theater", "*"]))]
+    #[param(required = false, value_type = Option<Vec<String>>, example = json!(["movies", "theater"]))]
     pub index_uids: OptionStarOrList<IndexUid>,
 
     /// Permits to filter tasks based on their enqueuedAt time. Matches tasks enqueued after the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub after_enqueued_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their enqueuedAt time. Matches tasks enqueued before the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub before_enqueued_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their startedAt time. Matches tasks started after the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub after_started_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their startedAt time. Matches tasks started before the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub before_started_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their finishedAt time. Matches tasks finished after the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub after_finished_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their finishedAt time. Matches tasks finished before the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub before_finished_at: OptionStarOr<OffsetDateTime>,
 }
 
@@ -173,52 +173,52 @@ impl TaskDeletionOrCancelationQuery {
 pub struct TaskDeletionOrCancelationQuery {
     /// Permits to filter tasks by their uid. By default, when the `uids` query parameter is not set, all task uids are returned. It's possible to specify several uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
-    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598, "*"]))]
+    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598]))]
     pub uids: OptionStarOrList<u32>,
     /// Lets you filter tasks by their `batchUid`.
     #[deserr(default, error = DeserrQueryParamError<InvalidBatchUids>)]
-    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598, "*"]))]
+    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598]))]
     pub batch_uids: OptionStarOrList<BatchId>,
     /// Permits to filter tasks using the uid of the task that canceled them. It's possible to specify several task uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskCanceledBy>)]
-    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([374, "*"]))]
+    #[param(required = false, value_type = Option<Vec<u32>>, example = json!([374]))]
     pub canceled_by: OptionStarOrList<u32>,
     /// Permits to filter tasks by their related type. By default, when `types` query parameter is not set, all task types are returned. It's possible to specify several types by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskTypes>)]
-    #[param(required = false, value_type = Option<Vec<Kind>>, example = json!([Kind::DocumentDeletion, "*"]))]
+    #[param(required = false, value_type = Option<Vec<Kind>>, example = json!([Kind::DocumentDeletion]))]
     pub types: OptionStarOrList<Kind>,
     /// Permits to filter tasks by their status. By default, when `statuses` query parameter is not set, all task statuses are returned. It's possible to specify several statuses by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskStatuses>)]
-    #[param(required = false, value_type = Option<Vec<Status>>, example = json!([Status::Succeeded, Status::Failed, Status::Canceled, "*"]))]
+    #[param(required = false, value_type = Option<Vec<Status>>, example = json!([Status::Succeeded, Status::Failed, Status::Canceled]))]
     pub statuses: OptionStarOrList<Status>,
     /// Permits to filter tasks by their related index. By default, when `indexUids` query parameter is not set, the tasks of all the indexes are returned. It is possible to specify several indexes by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexUid>)]
-    #[param(required = false, value_type = Option<Vec<String>>, example = json!(["movies", "theater", "*"]))]
+    #[param(required = false, value_type = Option<Vec<String>>, example = json!(["movies", "theater"]))]
     pub index_uids: OptionStarOrList<IndexUid>,
 
     /// Permits to filter tasks based on their enqueuedAt time. Matches tasks enqueued after the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterEnqueuedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub after_enqueued_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their enqueuedAt time. Matches tasks enqueued before the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeEnqueuedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub before_enqueued_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their startedAt time. Matches tasks started after the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterStartedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub after_started_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their startedAt time. Matches tasks started before the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeStartedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub before_started_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their finishedAt time. Matches tasks finished after the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskAfterFinishedAt>, try_from(OptionStarOr<String>) = deserialize_date_after -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub after_finished_at: OptionStarOr<OffsetDateTime>,
     /// Permits to filter tasks based on their finishedAt time. Matches tasks finished before the given date. Supports RFC 3339 date format.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskBeforeFinishedAt>, try_from(OptionStarOr<String>) = deserialize_date_before -> InvalidTaskDateError)]
-    #[param(required = false, value_type = Option<String>, example = json!(["2024-08-08T16:37:09.971Z", "*"]))]
+    #[param(required = false, value_type = Option<String>, example = "2024-08-08T16:37:09.971Z")]
     pub before_finished_at: OptionStarOr<OffsetDateTime>,
 }
 
@@ -519,15 +519,9 @@ pub struct AllTasks {
                         "uid": 144,
                         "indexUid": "mieli",
                         "status": "succeeded",
-                        "type": "settingsUpdate",
+                        "type": "indexCreation",
                         "canceledBy": null,
-                        "details": {
-                            "settings": {
-                                "filterableAttributes": [
-                                    "play_count"
-                                ]
-                            }
-                        },
+                        "details": null,
                         "error": null,
                         "duration": "PT0.009330S",
                         "enqueuedAt": "2024-08-08T09:01:13.348471Z",
@@ -583,19 +577,16 @@ async fn get_tasks(
     path = "/{taskUid}",
     tag = "Tasks",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
-    params(("taskUid", format = UInt32, example = 0, description = "The task identifier", nullable = false)),
+    params(("taskUid", format = UInt32, example = "0", description = "The task identifier", nullable = false)),
     responses(
         (status = 200, description = "Task successfully retrieved", body = TaskView, content_type = "application/json", example = json!(
             {
                 "uid": 1,
                 "indexUid": "movies",
                 "status": "succeeded",
-                "type": "documentAdditionOrUpdate",
+                "type": "indexCreation",
                 "canceledBy": null,
-                "details": {
-                    "receivedDocuments": 79000,
-                    "indexedDocuments": 79000
-                },
+                "details": null,
                 "error": null,
                 "duration": "PT1S",
                 "enqueuedAt": "2021-01-01T09:39:00.000000Z",
@@ -654,7 +645,7 @@ async fn get_task(
     path = "/{taskUid}/documents",
     tag = "Tasks",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
-    params(("taskUid", format = UInt32, example = 0, description = "The task identifier", nullable = false)),
+    params(("taskUid", format = UInt32, example = "0", description = "The task identifier", nullable = false)),
     responses(
         (status = 200, description = "The content of the task update", body = serde_json::Value, content_type = "application/x-ndjson"),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
