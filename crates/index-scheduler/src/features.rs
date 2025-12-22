@@ -175,6 +175,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_foreign_keys_setting(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.foreign_keys {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "foreign_keys",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/873",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {

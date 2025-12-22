@@ -10,12 +10,17 @@ use actix_http::StatusCode;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
-use meilisearch_types::milli::{self, DocumentId, OrderBy, TimeBudget, DEFAULT_VALUES_PER_FACET};
+use meilisearch_types::milli::{
+    self, DocumentId, ForeignKey, OrderBy, TimeBudget, DEFAULT_VALUES_PER_FACET,
+};
 use meilisearch_types::network::{Network, Remote};
+use permissive_json_pointer::map_leaf_values;
 use roaring::RoaringBitmap;
+use serde_json::Value;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
@@ -1075,7 +1080,7 @@ impl SearchByIndex {
                     },
                 )
                 .collect();
-        let merged_result = merged_result?;
+        let mut merged_result = merged_result?;
         let estimated_total_hits = candidates.len() as usize;
         let facets = facets_by_index
             .map(|facets_by_index| {
@@ -1100,6 +1105,9 @@ impl SearchByIndex {
                 );
                 error
             })?;
+
+        let foreign_keys = index.foreign_keys(&rtxn)?;
+        hydrate_documents(&mut merged_result, &foreign_keys, &params.index_scheduler)?;
         self.results_by_index.push(SearchResultByIndex {
             index: index_uid,
             primary_key,
@@ -1271,4 +1279,88 @@ impl FacetOrder {
         };
         (facet_distribution, facet_stats, facets_by_index)
     }
+}
+
+fn hydrate_documents(
+    documents: &mut Vec<SearchHitByIndex>,
+    foreign_keys: &[ForeignKey],
+    index_scheduler: &IndexScheduler,
+) -> Result<(), ResponseError> {
+    for foreign_key in foreign_keys {
+        let index = index_scheduler.index(&foreign_key.foreign_index_uid)?;
+        let rtxn = index.read_txn()?;
+
+        // TODO: replace with a simpler formatter
+        let attributes_format = AttributesFormat {
+            attributes_to_retrieve: None,
+            retrieve_vectors: RetrieveVectors::Hide,
+            attributes_to_highlight: None,
+            attributes_to_crop: None,
+            crop_length: 0,
+            crop_marker: "".to_string(),
+            highlight_pre_tag: "".to_string(),
+            highlight_post_tag: "".to_string(),
+            show_matches_position: false,
+            sort: None,
+            show_ranking_score: false,
+            show_ranking_score_details: false,
+            locales: None,
+        };
+        let tokenizer = HitMaker::tokenizer(None, None);
+        let formatter_builder =
+            HitMaker::formatter_builder(milli::MatchingWords::default(), tokenizer);
+        let hit_maker = HitMaker::new(&index, &rtxn, attributes_format, formatter_builder)?;
+
+        for document in documents.iter_mut() {
+            let mut res = Ok(());
+            map_leaf_values(
+                &mut document.hit.document,
+                [foreign_key.field_name.as_str()],
+                |_key, _array_indices, value| {
+                    res = hydrate_document_value(
+                        &rtxn,
+                        &hit_maker,
+                        &index.external_documents_ids(),
+                        value,
+                    );
+                },
+            );
+
+            // TODO: Trick to avoid modifying the map_leaf_values signature, we may use a custom map_leaf_values that returns a Result
+            res?;
+        }
+    }
+
+    Ok(())
+}
+
+fn hydrate_document_value(
+    rtxn: &RoTxn,
+    hit_maker: &HitMaker,
+    external_documents_ids: &milli::ExternalDocumentsIds,
+    value: &mut Value,
+) -> Result<(), ResponseError> {
+    match value {
+        Value::String(inner_value) => {
+            let Some(docid) = external_documents_ids.get(rtxn, inner_value)? else {
+                todo!("Document not found")
+            };
+            let SearchHit { document, .. } = hit_maker.make_hit(docid, &[])?;
+            *value = Value::Object(document);
+        }
+        Value::Number(inner_value) => {
+            let Some(docid) = external_documents_ids.get(rtxn, inner_value.to_string())? else {
+                todo!("Document not found")
+            };
+            let SearchHit { document, .. } = hit_maker.make_hit(docid, &[])?;
+            *value = Value::Object(document);
+        }
+        Value::Array(values) => {
+            for value in values {
+                hydrate_document_value(rtxn, hit_maker, external_documents_ids, value)?;
+            }
+        }
+        _ => unreachable!("Invalid foreign key value type: {value:?}"),
+    }
+    Ok(())
 }

@@ -318,6 +318,7 @@ async fn secrets_are_hidden_in_settings() {
       ],
       "filterableAttributes": [],
       "sortableAttributes": [],
+      "foreignKeys": [],
       "rankingRules": [
         "words",
         "typo",

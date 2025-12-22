@@ -15,7 +15,10 @@ pub use milli::update::ChatSettings;
 use milli::update::Setting;
 use milli::vector::db::IndexEmbeddingConfig;
 use milli::vector::VectorStoreBackend;
-use milli::{Criterion, CriterionError, FilterableAttributesRule, Index, DEFAULT_VALUES_PER_FACET};
+use milli::{
+    Criterion, CriterionError, FilterableAttributesRule, ForeignKey, Index,
+    DEFAULT_VALUES_PER_FACET,
+};
 use serde::{Deserialize, Serialize, Serializer};
 use utoipa::ToSchema;
 
@@ -221,6 +224,12 @@ pub struct Settings<T> {
     #[schema(value_type = Option<Vec<String>>, example = json!(["release_date"]))]
     pub sortable_attributes: Setting<BTreeSet<String>>,
 
+    /// Foreign keys to use for cross-index filtering search.
+    #[serde(default, skip_serializing_if = "Setting::is_not_set")]
+    #[deserr(default, error = DeserrJsonError<InvalidSettingsForeignKeys>)]
+    #[schema(value_type = Option<Vec<ForeignKey>>, example = json!([{"foreignIndexUid": "products", "fieldName": "productId"}]))]
+    pub foreign_keys: Setting<Vec<ForeignKey>>,
+
     /// List of ranking rules sorted by order of importance. The order is customizable.
     /// [A list of ordered built-in ranking rules](https://www.meilisearch.com/docs/learn/relevancy/relevancy).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
@@ -376,6 +385,7 @@ impl Settings<Checked> {
             displayed_attributes: Setting::Reset.into(),
             searchable_attributes: Setting::Reset.into(),
             filterable_attributes: Setting::Reset,
+            foreign_keys: Setting::Reset,
             sortable_attributes: Setting::Reset,
             ranking_rules: Setting::Reset,
             stop_words: Setting::Reset,
@@ -404,6 +414,7 @@ impl Settings<Checked> {
             displayed_attributes,
             searchable_attributes,
             filterable_attributes,
+            foreign_keys,
             sortable_attributes,
             ranking_rules,
             stop_words,
@@ -431,6 +442,7 @@ impl Settings<Checked> {
             searchable_attributes,
             filterable_attributes,
             sortable_attributes,
+            foreign_keys,
             ranking_rules,
             stop_words,
             non_separator_tokens,
@@ -482,6 +494,7 @@ impl Settings<Unchecked> {
             displayed_attributes: displayed_attributes.into(),
             searchable_attributes: searchable_attributes.into(),
             filterable_attributes: self.filterable_attributes,
+            foreign_keys: self.foreign_keys,
             sortable_attributes: self.sortable_attributes,
             ranking_rules: self.ranking_rules,
             stop_words: self.stop_words,
@@ -543,6 +556,7 @@ impl Settings<Unchecked> {
                 .sortable_attributes
                 .clone()
                 .or(self.sortable_attributes.clone()),
+            foreign_keys: other.foreign_keys.clone().or(self.foreign_keys.clone()),
             ranking_rules: other.ranking_rules.clone().or(self.ranking_rules.clone()),
             stop_words: other.stop_words.clone().or(self.stop_words.clone()),
             non_separator_tokens: other
@@ -604,6 +618,7 @@ pub fn apply_settings_to_builder(
         searchable_attributes,
         filterable_attributes,
         sortable_attributes,
+        foreign_keys,
         ranking_rules,
         stop_words,
         non_separator_tokens,
@@ -648,6 +663,12 @@ pub fn apply_settings_to_builder(
     match sortable_attributes {
         Setting::Set(ref fields) => builder.set_sortable_fields(fields.iter().cloned().collect()),
         Setting::Reset => builder.reset_sortable_fields(),
+        Setting::NotSet => (),
+    }
+
+    match foreign_keys {
+        Setting::Set(ref keys) => builder.set_foreign_keys(keys.clone().into_iter().collect()),
+        Setting::Reset => builder.reset_foreign_keys(),
         Setting::NotSet => (),
     }
 
@@ -868,6 +889,8 @@ pub fn settings(
 
     let sortable_attributes = index.sortable_fields(rtxn)?.into_iter().collect();
 
+    let foreign_keys = index.foreign_keys(rtxn)?.into_iter().collect();
+
     let criteria = index.criteria(rtxn)?;
 
     let stop_words = index
@@ -965,6 +988,7 @@ pub fn settings(
         .into(),
         filterable_attributes: Setting::Set(filterable_attributes),
         sortable_attributes: Setting::Set(sortable_attributes),
+        foreign_keys: Setting::Set(foreign_keys),
         ranking_rules: Setting::Set(criteria.iter().map(|c| c.clone().into()).collect()),
         stop_words: Setting::Set(stop_words),
         non_separator_tokens: Setting::Set(non_separator_tokens),
@@ -1207,6 +1231,7 @@ pub(crate) mod test {
             searchable_attributes: Setting::Set(vec![String::from("hello")]).into(),
             filterable_attributes: Setting::NotSet,
             sortable_attributes: Setting::NotSet,
+            foreign_keys: Setting::NotSet,
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
             non_separator_tokens: Setting::NotSet,
@@ -1240,6 +1265,7 @@ pub(crate) mod test {
                 .into(),
             filterable_attributes: Setting::NotSet,
             sortable_attributes: Setting::NotSet,
+            foreign_keys: Setting::NotSet,
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
             non_separator_tokens: Setting::NotSet,

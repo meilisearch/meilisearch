@@ -53,6 +53,7 @@ pub mod main_key {
     pub const HIDDEN_FACETED_FIELDS_KEY: &str = "hidden-faceted-fields";
     pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
+    pub const FOREIGN_KEYS_KEY: &str = "foreign-keys";
     pub const FIELD_DISTRIBUTION_KEY: &str = "fields-distribution";
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
     pub const FIELDIDS_WEIGHTS_MAP_KEY: &str = "fieldids-weights-map";
