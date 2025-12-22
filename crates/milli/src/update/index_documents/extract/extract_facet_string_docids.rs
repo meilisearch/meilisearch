@@ -14,7 +14,7 @@ use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
 use crate::heed_codec::{BEU16StrCodec, StrRefCodec};
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::helpers::{
-    MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
+    MergeDeladdBtreesetString, MergeDeladdDeCboRoaringBitmaps,
 };
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
@@ -54,7 +54,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        MergeDeladdCboRoaringBitmaps,
+        MergeDeladdDeCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -154,7 +154,7 @@ fn extract_facet_string_docids_settings<R: io::Read + io::Seek>(
 
     let mut facet_string_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Stable,
-        MergeDeladdCboRoaringBitmaps,
+        MergeDeladdDeCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
