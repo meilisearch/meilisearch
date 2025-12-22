@@ -86,18 +86,19 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// An index containing searchable documents
 #[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexView {
-    /// Unique identifier for the index
+    /// Unique identifier for the index. Once created, it cannot be changed
     pub uid: String,
-    /// An `RFC 3339` format for date/time/duration.
+    /// Creation date of the index, represented in RFC 3339 format
     #[serde(with = "time::serde::rfc3339")]
     pub created_at: OffsetDateTime,
-    /// An `RFC 3339` format for date/time/duration.
+    /// Latest date of index update, represented in RFC 3339 format
     #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
-    /// Custom primaryKey for documents
+    /// Primary key of the index
     pub primary_key: Option<String>,
 }
 
@@ -193,15 +194,16 @@ pub async fn list_indexes(
     Ok(HttpResponse::Ok().json(ret))
 }
 
+/// Request body for creating a new index
 #[derive(Deserr, Serialize, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct IndexCreateRequest {
-    /// The name of the index
+    /// Unique identifier for the index
     #[schema(example = "movies")]
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     uid: IndexUid,
-    /// The primary key of the index
+    /// Primary key of the index
     #[schema(example = "id")]
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
@@ -395,14 +397,15 @@ impl Aggregate for IndexUpdatedAggregate {
     }
 }
 
+/// Request body for updating an existing index
 #[derive(Deserr, Serialize, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 #[schema(rename_all = "camelCase")]
 pub struct UpdateIndexRequest {
-    /// The new primary key of the index
+    /// New primary key of the index
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
-    /// The new uid of the index (for renaming)
+    /// New uid for the index (for renaming)
     #[deserr(default, error = DeserrJsonError<InvalidIndexUid>)]
     uid: Option<String>,
 }
@@ -410,7 +413,8 @@ pub struct UpdateIndexRequest {
 /// Update index
 ///
 /// Update the `primaryKey` of an index.
-/// Return an error if the index doesn't exists yet or if it contains documents.
+/// Return an error if the index doesn't exists yet or if it contains
+/// documents.
 #[utoipa::path(
     patch,
     path = "/{indexUid}",
@@ -576,7 +580,8 @@ pub struct IndexStats {
     /// Number of embedded documents in the index
     #[serde(skip_serializing_if = "Option::is_none")]
     pub number_of_embedded_documents: Option<u64>,
-    /// Association of every field name with the number of times it occurs in the documents.
+    /// Association of every field name with the number of times it occurs in
+    /// the documents.
     #[schema(value_type = HashMap<String, u64>)]
     pub field_distribution: FieldDistribution,
 }

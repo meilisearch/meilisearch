@@ -189,7 +189,8 @@ pub fn is_dry_run(req: &HttpRequest, opt: &Opt) -> Result<bool, ResponseError> {
 
 /// Parse the `Meili-Include-Metadata` header from an HTTP request.
 ///
-/// Returns `true` if the header is present and set to "true" or "1" (case-insensitive).
+/// Returns `true` if the header is present and set to "true" or "1"
+/// (case-insensitive).
 /// Returns `false` if the header is not present or has any other value.
 pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
     req.headers()
@@ -199,25 +200,30 @@ pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
         .unwrap_or(false)
 }
 
+/// A summarized view of a task, returned when a task is enqueued
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
-    /// The task unique identifier.
+    /// Unique sequential identifier of the task
     #[schema(value_type = u32)]
     pub task_uid: TaskId,
-    /// The index affected by this task. May be `null` if the task is not linked to any index.
+    /// Unique identifier of the targeted index. Null for global tasks
     pub index_uid: Option<String>,
-    /// The status of the task.
+    /// Status of the task. Possible values are enqueued, processing,
+    /// succeeded, failed, and canceled
     pub status: Status,
-    /// The type of the task.
+    /// Type of operation performed by the task
     #[serde(rename = "type")]
     pub kind: Kind,
-    /// The date on which the task was enqueued.
+    /// Date and time when the task was enqueued
     #[serde(
         serialize_with = "time::serde::rfc3339::serialize",
         deserialize_with = "time::serde::rfc3339::deserialize"
     )]
     pub enqueued_at: OffsetDateTime,
+    /// Custom metadata string that was attached to this task when it was
+    /// created. This can be used to associate tasks with external systems or
+    /// add application-specific information.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_metadata: Option<String>,
 }
@@ -240,13 +246,18 @@ pub struct Pagination {
     pub limit: usize,
 }
 
+/// Paginated response wrapper
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct PaginationView<T> {
+    /// Array of items for the current page
     pub results: Vec<T>,
+    /// Number of items skipped
     pub offset: usize,
+    /// Maximum number of items returned
     pub limit: usize,
+    /// Total number of items matching the query
     pub total: usize,
 }
 
@@ -264,7 +275,8 @@ impl Pagination {
         self.format_with(total, content)
     }
 
-    /// Given an iterator and the total number of elements, returns the selected section.
+    /// Given an iterator and the total number of elements, returns the
+    /// selected section.
     pub fn auto_paginate_unsized<T>(
         self,
         total: usize,
@@ -277,7 +289,8 @@ impl Pagination {
         self.format_with(total, content)
     }
 
-    /// Given the data already paginated + the total number of elements, it stores
+    /// Given the data already paginated + the total number of elements, it
+    /// stores
     /// everything in a [PaginationResult].
     pub fn format_with<T>(self, total: usize, results: Vec<T>) -> PaginationView<T>
     where
@@ -398,17 +411,19 @@ pub async fn running() -> HttpResponse {
     HttpResponse::Ok().json(serde_json::json!({ "status": "Meilisearch is running" }))
 }
 
+/// Global statistics for the Meilisearch instance
 #[derive(Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
-    /// The disk space used by the database, in bytes.
+    /// Total disk space used by the database in bytes
     pub database_size: u64,
-    /// The size of the database, in bytes.
+    /// Actual size of the data in the database in bytes
     pub used_database_size: u64,
-    /// The date of the last update in the RFC 3339 formats. Can be `null` if no update has ever been processed.
+    /// Date of the last update in RFC 3339 format. Null if no update has been
+    /// processed
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     pub last_update: Option<OffsetDateTime>,
-    /// The stats of every individual index your API key lets you access.
+    /// Statistics for each index
     #[schema(value_type = HashMap<String, indexes::IndexStats>)]
     pub indexes: BTreeMap<String, indexes::IndexStats>,
 }
@@ -573,7 +588,8 @@ enum HealthStatus {
 
 /// Get Health
 ///
-/// The health check endpoint enables you to periodically test the health of your Meilisearch instance.
+/// The health check endpoint enables you to periodically test the health of
+/// your Meilisearch instance.
 #[utoipa::path(
     get,
     path = "/health",

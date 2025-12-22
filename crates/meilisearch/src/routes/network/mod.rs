@@ -94,11 +94,13 @@ async fn get_network(
     Ok(HttpResponse::Ok().json(network))
 }
 
+/// Configuration for a remote Meilisearch instance
 #[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError<InvalidNetworkRemotes>, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct Remote {
+    /// URL of the remote instance
     #[schema(value_type = Option<String>, example = json!({
         "ms-0": Remote { url: Setting::Set("http://localhost:7700".into()), search_api_key: Setting::Reset, write_api_key: Setting::Reset },
         "ms-1": Remote { url: Setting::Set("http://localhost:7701".into()), search_api_key: Setting::Set("foo".into()), write_api_key: Setting::Set("bar".into()) },
@@ -107,21 +109,25 @@ pub struct Remote {
     #[deserr(default, error = DeserrJsonError<InvalidNetworkUrl>)]
     #[serde(default)]
     pub url: Setting<String>,
+    /// API key for search operations on this remote
     #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkSearchApiKey>)]
     #[serde(default)]
     pub search_api_key: Setting<String>,
+    /// API key for write operations on this remote
     #[schema(value_type = Option<String>, example = json!("XWnBI8QHUc-4IlqbKPLUDuhftNq19mQtjc6JvmivzJU"))]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkWriteApiKey>)]
     #[serde(default)]
     pub write_api_key: Setting<String>,
 }
 
+/// Network topology configuration for distributed Meilisearch
 #[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct Network {
+    /// Map of remote instance names to their configurations
     #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
@@ -133,14 +139,17 @@ pub struct Network {
     #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     #[serde(default)]
     pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
+    /// Name of this instance in the network
     #[schema(value_type = Option<String>, example = json!("ms-00"), rename = "self")]
     #[serde(default, rename = "self")]
     #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
     pub local: Setting<String>,
+    /// Name of the leader instance in the network
     #[schema(value_type = Option<String>, example = json!("ms-00"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkLeader>)]
     pub leader: Setting<String>,
+    /// Previous remote configurations (for rollback)
     #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"

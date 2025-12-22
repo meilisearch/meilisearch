@@ -121,13 +121,16 @@ fn push_steps_durations(
 }
 
 /// This trait lets you use the AtomicSubStep defined right below.
-/// The name must be a const that never changed but that can't be enforced by the type system because it make the trait non object-safe.
-/// By forcing the Default trait + the &'static str we make it harder to miss-use the trait.
+/// The name must be a const that never changed but that can't be enforced
+/// by the type system because it make the trait non object-safe. By forcing
+/// the Default trait + the &'static str we make it harder to miss-use the
+/// trait.
 pub trait NamedStep: 'static + Send + Sync + Default {
     fn name(&self) -> &'static str;
 }
 
-/// Structure to quickly define steps that need very quick, lockless updating of their current step.
+/// Structure to quickly define steps that need very quick, lockless
+/// updating of their current step.
 /// You can use this struct if:
 /// - The name of the step doesn't change
 /// - The total number of steps doesn't change
@@ -223,25 +226,46 @@ make_enum_progress! {
     }
 }
 
+/// Real-time progress information for a batch or task that is currently
+/// being processed. Use this to display progress bars or status updates to
+/// users.
 #[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ProgressView {
+    /// A hierarchical list of processing steps currently being executed.
+    /// Steps are listed from outermost to innermost, with each step
+    /// representing a more granular operation within its parent step.
     pub steps: Vec<ProgressStepView>,
+    /// The overall completion percentage of the operation (0.0 to 100.0).
+    /// This is calculated by combining the progress of all nested steps,
+    /// weighted by their relative importance.
     pub percentage: f32,
 }
 
+/// Information about a single processing step within a batch or task. Each
+/// step has a name, current progress, and total items to process.
 #[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ProgressStepView {
+    /// A human-readable name describing what this processing step is doing.
+    /// Examples include "indexing documents", "computing embeddings",
+    /// "building word cache", etc.
     pub current_step: Cow<'static, str>,
+    /// The number of items that have been processed so far in this step.
+    /// Compare with `total` to calculate the percentage complete for this
+    /// specific step.
     pub finished: u32,
+    /// The total number of items to process in this step. When `finished`
+    /// equals `total`, this step is complete and processing moves to the
+    /// next step.
     pub total: u32,
 }
 
 /// Used when the name can change but it's still the same step.
-/// To avoid conflicts on the `TypeId`, create a unique type every time you use this step:
+/// To avoid conflicts on the `TypeId`, create a unique type every time you
+/// use this step:
 /// ```text
 /// enum UpgradeVersion {}
 ///

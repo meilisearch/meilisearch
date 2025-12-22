@@ -28,8 +28,9 @@ impl FilterableAttributesRule {
 
     /// Check if the rule is a geo field.
     ///
-    /// prefer using `index.is_geo_enabled`, `index.is_geo_filtering_enabled` or `index.is_geo_sorting_enabled`
-    /// to check if the geo feature is enabled.
+    /// prefer using `index.is_geo_enabled`, `index.is_geo_filtering_enabled`
+    /// or `index.is_geo_sorting_enabled` to check if the geo feature is
+    /// enabled.
     pub fn has_geo(&self) -> bool {
         matches!(self, FilterableAttributesRule::Field(field_name) if field_name == RESERVED_GEO_FIELD_NAME)
     }
@@ -49,11 +50,20 @@ impl FilterableAttributesRule {
     }
 }
 
+/// Defines a set of attribute patterns with specific filtering and faceting
+/// features. This allows fine-grained control over which operations are
+/// allowed on matched attributes.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FilterableAttributesPatterns {
+    /// Patterns to match attribute names. Use `*` as a wildcard to match any
+    /// characters. For example, `["price_*", "stock"]` matches `price_usd`,
+    /// `price_eur`, and `stock`.
     pub attribute_patterns: AttributePatterns,
+    /// The filtering and faceting features enabled for attributes matching
+    /// these patterns. If not specified, defaults to equality filtering
+    /// enabled.
     #[serde(default)]
     #[deserr(default)]
     pub features: FilterableAttributesFeatures,
@@ -69,24 +79,34 @@ impl FilterableAttributesPatterns {
     }
 }
 
+/// Controls which filtering and faceting operations are enabled for matching
+/// attributes. This allows restricting certain operations on specific fields
+/// for security or performance reasons.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 #[derive(Default)]
 pub struct FilterableAttributesFeatures {
+    /// When `true`, allows searching within facet values for matching
+    /// attributes. This enables the facet search feature which lets users
+    /// search for specific facet values. Defaults to `false`.
     #[serde(default)]
     #[deserr(default)]
     facet_search: bool,
+    /// Controls which filter operators are allowed for matching attributes.
+    /// See `FilterFeatures` for available options.
     #[serde(default)]
     #[deserr(default)]
     filter: FilterFeatures,
 }
 
 impl FilterableAttributesFeatures {
-    /// Create a new `FilterableAttributesFeatures` with the legacy default features.
+    /// Create a new `FilterableAttributesFeatures` with the legacy default
+    /// features.
     ///
     /// This is the default behavior for `FilterableAttributesRule::Field`.
-    /// This will set the facet search to true and activate all the filter operators.
+    /// This will set the facet search to true and activate all the filter
+    /// operators.
     pub fn legacy_default() -> Self {
         Self { facet_search: true, filter: FilterFeatures::legacy_default() }
     }
@@ -150,13 +170,22 @@ impl<E: DeserializeError> Deserr<E> for FilterableAttributesRule {
     }
 }
 
+/// Controls which filter operators are allowed for an attribute. This
+/// provides fine-grained control over filtering capabilities.
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, Debug, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct FilterFeatures {
+    /// When `true`, enables equality operators: `=`, `!=`, and `IN`. These
+    /// allow filtering for exact matches or membership in a set of values.
+    /// Also enables `IS EMPTY`, `IS NULL`, and `EXISTS` operators. Defaults
+    /// to `true`.
     #[serde(default = "default_true")]
     #[deserr(default = true)]
     equality: bool,
+    /// When `true`, enables comparison operators: `<`, `>`, `<=`, `>=`, and
+    /// `TO` (range). These allow filtering based on numeric or string
+    /// comparisons. Defaults to `false`.
     #[serde(default)]
     #[deserr(default)]
     comparison: bool,
@@ -243,12 +272,15 @@ impl Default for FilterFeatures {
 
 /// Match a field against a set of filterable attributes rules.
 ///
-/// This function will return the set of patterns that match the given filter.
+/// This function will return the set of patterns that match the given
+/// filter.
 ///
 /// # Arguments
 ///
-/// * `filterable_attributes` - The set of filterable attributes rules to match against.
-/// * `filter` - The filter function to apply to the filterable attributes rules.
+/// * `filterable_attributes` - The set of filterable attributes rules to
+///   match against.
+/// * `filter` - The filter function to apply to the filterable attributes
+///   rules.
 pub fn filtered_matching_patterns<'patterns>(
     filterable_attributes: &'patterns [FilterableAttributesRule],
     filter: &impl Fn(FilterableAttributesFeatures) -> bool,
@@ -280,11 +312,13 @@ pub fn filtered_matching_patterns<'patterns>(
 /// # Arguments
 ///
 /// * `field_name` - The field name to match against.
-/// * `filterable_attributes` - The set of filterable attributes rules to match against.
+/// * `filterable_attributes` - The set of filterable attributes rules to
+///   match against.
 ///
 /// # Returns
 ///
-/// * `Some((rule_index, features))` - The features of the matching rule and the index of the rule in the `filterable_attributes` array.
+/// * `Some((rule_index, features))` - The features of the matching rule and
+///   the index of the rule in the `filterable_attributes` array.
 /// * `None` - No matching rule was found.
 pub fn matching_features(
     field_name: &str,
@@ -298,7 +332,8 @@ pub fn matching_features(
     None
 }
 
-/// Match a field against a set of filterable, facet searchable fields, distinct field, sortable fields, and asc_desc fields.
+/// Match a field against a set of filterable, facet searchable fields,
+/// distinct field, sortable fields, and asc_desc fields.
 pub fn match_faceted_field(
     field_name: &str,
     filterable_fields: &[FilterableAttributesRule],

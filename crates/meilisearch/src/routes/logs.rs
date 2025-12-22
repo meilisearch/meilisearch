@@ -47,24 +47,27 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     .service(web::resource("stderr").route(web::post().to(SeqHandler(update_stderr_target))));
 }
 
+/// Format for log output
 #[derive(Debug, Default, Clone, Copy, Deserr, Serialize, PartialEq, Eq, ToSchema)]
 #[deserr(rename_all = camelCase)]
 #[schema(rename_all = "camelCase")]
 pub enum LogMode {
-    /// Output the logs in a human readable form.
+    /// Output the logs in a human readable form
     #[default]
     Human,
-    /// Output the logs in json.
+    /// Output the logs in JSON format
     Json,
-    /// Output the logs in the firefox profiler format. They can then be loaded and visualized at https://profiler.firefox.com/
+    /// Output the logs in Firefox profiler format for visualization
     Profile,
 }
 
-/// Simple wrapper around the `Targets` from `tracing_subscriber` to implement `MergeWithError` on it.
+/// Simple wrapper around the `Targets` from `tracing_subscriber` to
+/// implement `MergeWithError` on it.
 #[derive(Clone, Debug)]
 struct MyTargets(Targets);
 
-/// Simple wrapper around the `ParseError` from `tracing_subscriber` to implement `MergeWithError` on it.
+/// Simple wrapper around the `ParseError` from `tracing_subscriber` to
+/// implement `MergeWithError` on it.
 #[derive(Debug, thiserror::Error)]
 enum MyParseError {
     #[error(transparent)]
@@ -101,24 +104,26 @@ impl MergeWithError<MyParseError> for DeserrJsonError<BadRequest> {
     }
 }
 
+/// Request body for streaming logs
 #[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields, validate = validate_get_logs -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 #[schema(rename_all = "camelCase")]
 pub struct GetLogs {
-    /// Lets you specify which parts of the code you want to inspect and is formatted like that: code_part=log_level,code_part=log_level
-    /// - If the `code_part` is missing, then the `log_level` will be applied to everything.
-    /// - If the `log_level` is missing, then the `code_part` will be selected in `info` log level.
+    /// Log targets to filter. Format: code_part=log_level (e.g.,
+    /// milli=trace,actix_web=off)
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
     #[schema(value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
     target: MyTargets,
 
-    /// Lets you customize the format of the logs.
+    /// Output format for log entries. `human` provides readable text output,
+    /// `json` provides structured JSON for parsing, and `profile` outputs
+    /// Firefox profiler format for performance visualization.
     #[deserr(default, error = DeserrJsonError<BadRequest>)]
     #[schema(default = LogMode::default)]
     mode: LogMode,
 
-    /// A boolean to indicate if you want to profile the memory as well. This is only useful while using the `profile` mode.
-    /// Be cautious, though; it slows down the engine a lot.
+    /// Enable memory profiling (only useful with profile mode, significantly
+    /// slows down the engine)
     #[deserr(default = false, error = DeserrJsonError<BadRequest>)]
     #[schema(default = false)]
     profile_memory: bool,
@@ -157,7 +162,8 @@ impl Write for LogWriter {
 }
 
 struct HandleGuard {
-    /// We need to keep an handle on the logs to make it available again when the streamer is dropped
+    /// We need to keep an handle on the logs to make it available again when
+    /// the streamer is dropped
     logs: Arc<LogRouteHandle>,
 }
 
@@ -278,11 +284,14 @@ fn entry_stream(
 
 /// Retrieve logs
 ///
-/// Stream logs over HTTP. The format of the logs depends on the configuration specified in the payload.
-/// The logs are sent as multi-part, and the stream never stops, so make sure your clients correctly handle that.
-/// To make the server stop sending you logs, you can call the `DELETE /logs/stream` route.
+/// Stream logs over HTTP. The format of the logs depends on the
+/// configuration specified in the payload. The logs are sent as multi-part,
+/// and the stream never stops, so make sure your clients correctly handle
+/// that. To make the server stop sending you logs, you can call the `DELETE
+/// /logs/stream` route.
 ///
-/// There can only be one listener at a timeand an error will be returned if you call this route while it's being used by another client.
+/// There can only be one listener at a timeand an error will be returned if
+/// you call this route while it's being used by another client.
 #[utoipa::path(
     post,
     path = "/stream",
@@ -350,7 +359,8 @@ pub async fn get_logs(
 
 /// Stop retrieving logs
 ///
-/// Call this route to make the engine stops sending logs through the `POST /logs/stream` route.
+/// Call this route to make the engine stops sending logs through the `POST
+/// /logs/stream` route.
 #[utoipa::path(
     delete,
     path = "/stream",
@@ -381,12 +391,12 @@ pub async fn cancel_logs(
     Ok(HttpResponse::NoContent().finish())
 }
 
+/// Request body for updating stderr log configuration
 #[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateStderrLogs {
-    /// Lets you specify which parts of the code you want to inspect and is formatted like that: code_part=log_level,code_part=log_level
-    /// - If the `code_part` is missing, then the `log_level` will be applied to everything.
-    /// - If the `log_level` is missing, then the `code_part` will be selected in `info` log level.
+    /// Log targets to filter. Format: code_part=log_level (e.g.,
+    /// milli=trace,actix_web=off)
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
     #[schema(value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
     target: MyTargets,
@@ -394,7 +404,8 @@ pub struct UpdateStderrLogs {
 
 /// Update target of the console logs
 ///
-/// This route lets you specify at runtime the level of the console logs outputted on stderr.
+/// This route lets you specify at runtime the level of the console logs
+/// outputted on stderr.
 #[utoipa::path(
     post,
     path = "/stderr",

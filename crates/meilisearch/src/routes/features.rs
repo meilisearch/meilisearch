@@ -38,7 +38,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get all experimental features
 ///
-/// Get a list of all experimental features that can be activated via the /experimental-features route and whether or not they are currently activated.
+/// Get a list of all experimental features that can be activated via the
+/// /experimental-features route and whether or not they are currently
+/// activated.
 #[utoipa::path(
     get,
     path = "",
@@ -81,29 +83,40 @@ async fn get_features(
     HttpResponse::Ok().json(features)
 }
 
+/// Experimental features that can be toggled at runtime
 #[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct RuntimeTogglableFeatures {
+    /// Enable the /metrics endpoint for Prometheus metrics
     #[deserr(default)]
     pub metrics: Option<bool>,
+    /// Enable the /logs route for log configuration
     #[deserr(default)]
     pub logs_route: Option<bool>,
+    /// Enable document editing via JavaScript functions
     #[deserr(default)]
     pub edit_documents_by_function: Option<bool>,
+    /// Enable the CONTAINS filter operator
     #[deserr(default)]
     pub contains_filter: Option<bool>,
+    /// Enable network features for distributed search
     #[deserr(default)]
     pub network: Option<bool>,
+    /// Enable the route to get documents from tasks
     #[deserr(default)]
     pub get_task_documents_route: Option<bool>,
+    /// Enable composite embedders for multi-source embeddings
     #[deserr(default)]
     pub composite_embedders: Option<bool>,
+    /// Enable chat completion capabilities
     #[deserr(default)]
     pub chat_completions: Option<bool>,
+    /// Enable multimodal search with images and other media
     #[deserr(default)]
     pub multimodal: Option<bool>,
+    /// Enable vector store settings configuration
     #[deserr(default)]
     pub vector_store_setting: Option<bool>,
 }
