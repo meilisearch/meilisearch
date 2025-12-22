@@ -4023,6 +4023,7 @@ dependencies = [
  "siphasher",
  "slice-group-by",
  "static-files",
+ "strsim",
  "sysinfo",
  "tar",
  "temp-env",

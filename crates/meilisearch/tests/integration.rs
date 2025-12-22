@@ -7,6 +7,7 @@ mod dumps;
 mod features;
 mod index;
 mod logs;
+mod mcp;
 mod network;
 mod search;
 mod settings;

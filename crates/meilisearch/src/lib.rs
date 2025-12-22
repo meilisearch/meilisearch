@@ -17,6 +17,8 @@ pub mod routes;
 pub mod search;
 pub mod search_queue;
 
+pub mod mcp;
+
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
@@ -707,6 +709,7 @@ pub fn configure_data(config: &mut web::ServiceConfig, services: ServicesData, o
         logs_route_handle,
         logs_stderr_handle,
         analytics,
+        mcp_session_store,
     } = services;
 
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
@@ -742,6 +745,8 @@ pub fn configure_data(config: &mut web::ServiceConfig, services: ServicesData, o
         .app_data(
             web::QueryConfig::default().error_handler(|err, _req| PayloadError::from(err).into()),
         );
+
+    config.app_data(mcp_session_store);
 }
 
 #[cfg(feature = "mini-dashboard")]
@@ -788,4 +793,5 @@ pub struct ServicesData {
     pub logs_route_handle: Data<LogRouteHandle>,
     pub logs_stderr_handle: Data<LogStderrHandle>,
     pub analytics: Data<Analytics>,
+    pub mcp_session_store: Data<mcp::McpSessionStore>,
 }
