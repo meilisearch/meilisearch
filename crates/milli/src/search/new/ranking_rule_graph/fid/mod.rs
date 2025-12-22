@@ -79,16 +79,27 @@ impl RankingRuleGraphTrait for FidGraph {
 
         let mut edges = vec![];
         for fid in all_fields.iter().copied() {
-            let weight = weights_map
-                .weight(fid)
-                .ok_or(InternalError::FieldidsWeightsMapMissingEntry { key: fid })?;
-            if weight > current_max_weight {
-                current_max_weight = weight;
+            match weights_map.weight(fid) {
+                Some(weight) => {
+                    if weight > current_max_weight {
+                        current_max_weight = weight;
+                    }
+
+                    edges.push((
+                        weight as u32 * term.term_ids.len() as u32,
+                        conditions_interner
+                            .insert(FidCondition { term: term.clone(), fid: Some(fid) }),
+                    ));
+                }
+                None => {
+                    // Hotfix: this is a temporary solution to handle the case where the weight is not found in the weights map.
+                    // This is due to a database corruption in word_fid_docids database.
+                    tracing::warn!(
+                        "{:?}",
+                        InternalError::FieldidsWeightsMapMissingEntry { key: fid }
+                    );
+                }
             }
-            edges.push((
-                weight as u32 * term.term_ids.len() as u32,
-                conditions_interner.insert(FidCondition { term: term.clone(), fid: Some(fid) }),
-            ));
         }
 
         // always lookup the max_fid if we don't already and add an artificial condition for max scoring
