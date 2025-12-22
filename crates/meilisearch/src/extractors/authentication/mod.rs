@@ -1,17 +1,18 @@
 mod error;
 
-use std::marker::PhantomData;
-use std::ops::Deref;
-use std::pin::Pin;
-
+use actix_http::Payload;
 use actix_web::http::header::AUTHORIZATION;
 use actix_web::web::Data;
-use actix_web::FromRequest;
+use actix_web::{FromRequest, HttpRequest};
 pub use error::AuthenticationError;
 use futures::future::err;
 use futures::Future;
+use futures_util::future::ok;
 use meilisearch_auth::{AuthController, AuthFilter};
 use meilisearch_types::error::{Code, ResponseError};
+use std::marker::PhantomData;
+use std::ops::Deref;
+use std::pin::Pin;
 
 use self::policies::AuthError;
 
@@ -109,6 +110,70 @@ impl<P: Policy + 'static, D: 'static + Clone> FromRequest for GuardedData<P, D> 
                 Ok(None) => Box::pin(Self::auth_token(auth, req.app_data::<D>().cloned())),
                 Err(e) => Box::pin(err(e.into())),
             },
+            None => Box::pin(err(AuthenticationError::IrretrievableState.into())),
+        }
+    }
+}
+
+pub struct OptionallyGuardedData<P, D> {
+    data: D,
+    filters: AuthFilter,
+    _marker: PhantomData<P>,
+}
+
+impl<P, D> OptionallyGuardedData<P, D> {
+    pub fn filters(&self) -> &AuthFilter {
+        &self.filters
+    }
+}
+
+impl<P, D> Deref for OptionallyGuardedData<P, D> {
+    type Target = D;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl<P: Policy + 'static, D: 'static + Clone> FromRequest for OptionallyGuardedData<P, D> {
+    type Error = ResponseError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self, Self::Error>>>>;
+
+    fn from_request(req: &HttpRequest, _payload: &mut Payload) -> Self::Future {
+        let data = if let Some(d) = req.app_data::<D>().cloned() {
+            d
+        } else {
+            return Box::pin(err(AuthenticationError::IrretrievableState.into()));
+        };
+
+        match req.app_data::<Data<AuthController>>().cloned() {
+            Some(auth) => match extract_token_from_request(req) {
+                Ok(Some(token)) => {
+                    let token = token.to_owned();
+
+                    let index = req.match_info().get("index_uid").map(String::from);
+                    // TODO: find a less hardcoded way?
+                    Box::pin(async move {
+                        let guarded =
+                            GuardedData::<P, D>::auth_bearer(auth, token, index, Some(data))
+                                .await?;
+
+                        Ok(OptionallyGuardedData {
+                            data: guarded.data,
+                            filters: guarded.filters,
+                            _marker: PhantomData,
+                        })
+                    })
+                }
+
+                Ok(None) => Box::pin(ok(OptionallyGuardedData {
+                    data,
+                    filters: AuthFilter::default(),
+                    _marker: PhantomData,
+                })),
+                Err(e) => Box::pin(err(e.into())),
+            },
+
             None => Box::pin(err(AuthenticationError::IrretrievableState.into())),
         }
     }
