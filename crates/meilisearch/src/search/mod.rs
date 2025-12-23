@@ -17,11 +17,13 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
+use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, TimeBudget,
+    FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
+    TimeBudget,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -1024,11 +1026,13 @@ pub fn prepare_search<'t>(
     search_kind: &SearchKind,
     time_budget: TimeBudget,
     features: RoFeatures,
+    progress: &'t Progress,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
+    let _step = progress.update_progress_scoped(SearchStep::PrepareSearch);
     if query.media.is_some() {
         features.check_multimodal("passing `media` in a search query")?;
     }
-    let mut search = index.search(rtxn);
+    let mut search = index.search(rtxn, progress);
     search.time_budget(time_budget);
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
@@ -1048,6 +1052,7 @@ pub fn prepare_search<'t>(
             let vector = match query.vector.clone() {
                 Some(vector) => vector,
                 None => {
+                    let _step = progress.update_progress_scoped(SearchStep::Embed);
                     let span = tracing::trace_span!(target: "search::vector", "embed_one");
                     let _entered = span.enter();
 
@@ -1173,6 +1178,7 @@ pub struct SearchParams {
 pub fn perform_search(
     params: SearchParams,
     index: &Index,
+    progress: &Progress,
 ) -> Result<(SearchResult, TimeBudget), ResponseError> {
     let SearchParams {
         index_uid,
@@ -1191,8 +1197,15 @@ pub fn perform_search(
         None => TimeBudget::default(),
     };
 
-    let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, &search_kind, time_budget.clone(), features)?;
+    let (search, is_finite_pagination, max_total_hits, offset) = prepare_search(
+        index,
+        &rtxn,
+        &query,
+        &search_kind,
+        time_budget.clone(),
+        features,
+        progress,
+    )?;
 
     let (
         milli::SearchResult {
@@ -1275,6 +1288,7 @@ pub fn perform_search(
         format,
         matching_words,
         documents_ids.iter().copied().zip(document_scores.iter()),
+        progress,
     )?;
 
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
@@ -1297,6 +1311,7 @@ pub fn perform_search(
 
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
+            let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
             compute_facet_distribution_stats(&facets, index, &rtxn, candidates, Route::Search)
         })
         .transpose()?
@@ -1580,7 +1595,13 @@ impl<'a> HitMaker<'a> {
         })
     }
 
-    pub fn make_hit(&self, id: u32, score: &[ScoreDetails]) -> milli::Result<SearchHit> {
+    pub fn make_hit(
+        &self,
+        id: u32,
+        score: &[ScoreDetails],
+        progress: &Progress,
+    ) -> milli::Result<SearchHit> {
+        let _step = progress.update_progress_scoped(SearchStep::Format);
         let (_, obkv) =
             self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
 
@@ -1669,6 +1690,7 @@ fn make_hits<'a>(
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
+    progress: &Progress,
 ) -> milli::Result<Vec<SearchHit>> {
     let mut documents = Vec::new();
 
@@ -1686,7 +1708,7 @@ fn make_hits<'a>(
     let hit_maker = HitMaker::new(index, rtxn, format, formatter_builder)?;
 
     for (id, score) in documents_ids_scores {
-        documents.push(hit_maker.make_hit(id, score)?);
+        documents.push(hit_maker.make_hit(id, score, progress)?);
     }
     Ok(documents)
 }
@@ -1701,6 +1723,7 @@ pub fn perform_facet_search(
     locales: Option<Vec<Language>>,
 ) -> Result<FacetSearchResult, ResponseError> {
     let before_search = Instant::now();
+    let progress = Progress::default();
     let rtxn = index.read_txn()?;
     let time_budget = match index.search_cutoff(&rtxn)? {
         Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
@@ -1729,8 +1752,15 @@ pub fn perform_facet_search(
             .collect()
     });
 
-    let (search, _, _, _) =
-        prepare_search(index, &rtxn, &search_query, &search_kind, time_budget, features)?;
+    let (search, _, _, _) = prepare_search(
+        index,
+        &rtxn,
+        &search_query,
+        &search_kind,
+        time_budget,
+        features,
+        &progress,
+    )?;
     let mut facet_search = SearchForFacetValues::new(
         facet_name,
         search,
@@ -1762,6 +1792,7 @@ pub fn perform_similar(
     quantized: bool,
     retrieve_vectors: RetrieveVectors,
     features: RoFeatures,
+    progress: &Progress,
 ) -> Result<SimilarResult, ResponseError> {
     let before_search = Instant::now();
     let rtxn = index.read_txn()?;
@@ -1802,6 +1833,7 @@ pub fn perform_similar(
         embedder_name,
         embedder,
         quantized,
+        &progress,
     );
 
     if let Some(ref filter) = query.filter {
@@ -1851,6 +1883,7 @@ pub fn perform_similar(
         format,
         Default::default(),
         documents_ids.iter().copied().zip(document_scores.iter()),
+        progress,
     )?;
 
     let max_total_hits = index

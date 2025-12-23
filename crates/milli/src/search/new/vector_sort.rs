@@ -6,7 +6,10 @@ use roaring::RoaringBitmap;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use super::VectorStoreStats;
+use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
+use crate::search::new::ranking_rules::RankingRuleId;
+use crate::search::steps::RankingRuleStep;
 use crate::vector::{DistributionShift, Embedder, VectorStore};
 use crate::{DocumentId, Result, SearchContext, SearchLogger, TimeBudget};
 
@@ -94,8 +97,8 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
 }
 
 impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
-    fn id(&self) -> String {
-        "vector_sort".to_owned()
+    fn id(&self) -> RankingRuleId {
+        RankingRuleId::VectorSort
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
@@ -106,7 +109,9 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         universe: &RoaringBitmap,
         query: &Q,
         time_budget: &TimeBudget,
+        progress: &Progress,
     ) -> Result<()> {
+        let _step = progress.update_progress_scoped(RankingRuleStep::StartIteration);
         assert!(self.query.is_none());
 
         self.query = Some(query.clone());
@@ -123,7 +128,9 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
         time_budget: &TimeBudget,
+        progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
+        let _step = progress.update_progress_scoped(RankingRuleStep::NextBucket);
         let query = self.query.as_ref().unwrap().clone();
         let vector_candidates = &self.vector_candidates & universe;
 
@@ -158,7 +165,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             }));
         }
 
-        self.next_bucket(ctx, _logger, universe, time_budget)
+        self.next_bucket(ctx, _logger, universe, time_budget, progress)
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
@@ -171,7 +178,9 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
+        progress: &Progress,
     ) -> Result<Poll<RankingRuleOutput<Q>>> {
+        let _step = progress.update_progress_scoped(RankingRuleStep::NonBlockingNextBucket);
         let query = self.query.as_ref().unwrap().clone();
         let vector_candidates = &self.vector_candidates & universe;
 

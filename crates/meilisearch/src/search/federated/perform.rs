@@ -11,9 +11,13 @@ use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::order_by_map::OrderByMap;
+use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
-use meilisearch_types::milli::{self, DocumentId, OrderBy, TimeBudget, DEFAULT_VALUES_PER_FACET};
+use meilisearch_types::milli::{
+    self, DocumentId, FederatingResultsStep, OrderBy, SearchStep, TimeBudget,
+    DEFAULT_VALUES_PER_FACET,
+};
 use meilisearch_types::network::{Network, Remote};
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
@@ -43,6 +47,7 @@ pub async fn perform_federated_search(
     is_proxy: bool,
     request_uid: Uuid,
     include_metadata: bool,
+    progress: &Progress,
 ) -> Result<FederatedSearchResult, ResponseError> {
     if is_proxy {
         features.check_network("Performing a remote federated search")?;
@@ -111,7 +116,7 @@ pub async fn perform_federated_search(
 
     for (index_uid, queries) in partitioned_queries.local_queries_by_index {
         // note: this is the only place we open `index_uid`
-        search_by_index.execute(index_uid, queries, &params)?;
+        search_by_index.execute(index_uid, queries, &params, progress)?;
     }
 
     // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
@@ -126,6 +131,8 @@ pub async fn perform_federated_search(
         facet_order,
     } = search_by_index;
 
+    progress.update_progress(SearchStep::Federation);
+    progress.update_progress(FederatingResultsStep::WaitForRemoteResults);
     let before_waiting_remote_results = std::time::Instant::now();
 
     // 2.3. Wait for proxy search requests to complete
@@ -134,7 +141,7 @@ pub async fn perform_federated_search(
     let after_waiting_remote_results = std::time::Instant::now();
 
     // 3. merge hits and metadata across indexes and hosts
-
+    progress.update_progress(FederatingResultsStep::MergeResults);
     // 3.1. Build metadata in the same order as the original queries
     let query_metadata = precomputed_query_metadata.map(|precomputed_query_metadata| {
         // If a remote is present, set the local remote name
@@ -187,6 +194,7 @@ pub async fn perform_federated_search(
     };
 
     // 3.5. merge facets
+    progress.update_progress(FederatingResultsStep::MergeFacets);
     let (facet_distribution, facet_stats, facets_by_index) =
         facet_order.merge(federation.merge_facets, remote_results, facets);
 
@@ -831,6 +839,7 @@ impl SearchByIndex {
         index_uid: String,
         queries: Vec<QueryByIndex>,
         params: &SearchByIndexParams<'_>,
+        progress: &Progress,
     ) -> Result<(), ResponseError> {
         let first_query_index = queries.first().map(|query| query.query_index);
         let index = match params.index_scheduler.index(&index_uid) {
@@ -957,6 +966,7 @@ impl SearchByIndex {
                     // clones of `TimeBudget` share the budget rather than restart it
                     time_budget.clone(),
                     params.features,
+                    progress,
                 )?;
 
                 search.scoring_strategy(milli::score_details::ScoringStrategy::Detailed);
@@ -1044,7 +1054,7 @@ impl SearchByIndex {
                          hit_maker,
                          query_index,
                      }| {
-                        let mut hit = hit_maker.make_hit(docid, &score)?;
+                        let mut hit = hit_maker.make_hit(docid, &score, progress)?;
                         let weighted_score = ScoreDetails::global_score(score.iter()) * (*weight);
 
                         let mut _federation = serde_json::json!(

@@ -6,6 +6,8 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::TotalProcessingTimeStep;
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
@@ -153,7 +155,10 @@ pub async fn multi_search_with_post(
 ) -> Result<HttpResponse, ResponseError> {
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
+    let progress = Progress::default();
+    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
     let permit = search_queue.try_get_search_permit().await?;
+    progress.update_progress(TotalProcessingTimeStep::Search);
     let request_uid = Uuid::now_v7();
 
     let federated_search = params.into_inner();
@@ -213,6 +218,7 @@ pub async fn multi_search_with_post(
                 is_proxy,
                 request_uid,
                 include_metadata,
+                &progress,
             )
             .await;
             permit.drop().await;
@@ -288,6 +294,7 @@ pub async fn multi_search_with_post(
                     .with_index(query_index)?;
                     let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
+                    let progress_clone = progress.clone();
                     let (mut search_result, time_budget) = tokio::task::spawn_blocking(move || {
                         perform_search(
                             SearchParams {
@@ -300,6 +307,7 @@ pub async fn multi_search_with_post(
                                 include_metadata,
                             },
                             &index,
+                            &progress_clone,
                         )
                     })
                     .await
@@ -314,6 +322,7 @@ pub async fn multi_search_with_post(
                                 personalize,
                                 personalize_query.as_deref(),
                                 time_budget,
+                                &progress,
                             )
                             .await
                             .with_index(query_index)?;

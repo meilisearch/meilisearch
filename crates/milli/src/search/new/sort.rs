@@ -5,8 +5,11 @@ use super::logger::SearchLogger;
 use super::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait, SearchContext};
 use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::{BytesRefCodec, StrRefCodec};
+use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
+use crate::search::new::ranking_rules::RankingRuleId;
+use crate::search::steps::RankingRuleStep;
 use crate::{FieldId, Index, Result, TimeBudget};
 
 pub trait RankingRuleOutputIter<'ctx, Query> {
@@ -84,9 +87,13 @@ impl<'ctx, Query> Sort<'ctx, Query> {
 }
 
 impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx, Query> {
-    fn id(&self) -> String {
+    fn id(&self) -> RankingRuleId {
         let Self { field_name, is_ascending, .. } = self;
-        format!("{field_name}:{}", if *is_ascending { "asc" } else { "desc" })
+        if *is_ascending {
+            RankingRuleId::Asc(field_name.clone())
+        } else {
+            RankingRuleId::Desc(field_name.clone())
+        }
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::sort")]
@@ -97,7 +104,9 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         parent_candidates: &RoaringBitmap,
         parent_query: &Query,
         _time_budget: &TimeBudget,
+        progress: &Progress,
     ) -> Result<()> {
+        let _step = progress.update_progress_scoped(RankingRuleStep::StartIteration);
         let iter: RankingRuleOutputIterWrapper<'ctx, Query> = match self.field_id {
             Some(field_id) => {
                 let number_db = ctx
@@ -196,7 +205,9 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         _logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
         _time_budget: &TimeBudget,
+        progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
+        let _step = progress.update_progress_scoped(RankingRuleStep::NextBucket);
         let iter = self.iter.as_mut().unwrap();
         if let Some(mut bucket) = iter.next_bucket()? {
             bucket.candidates &= universe;

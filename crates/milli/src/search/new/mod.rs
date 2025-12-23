@@ -56,8 +56,10 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::GeoSortParameter;
 use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
+use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
+use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
     AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, TimeBudget,
@@ -294,7 +296,9 @@ fn resolve_universe(
     query_graph: &QueryGraph,
     matching_strategy: TermsMatchingStrategy,
     logger: &mut dyn SearchLogger<QueryGraph>,
+    progress: &Progress,
 ) -> Result<RoaringBitmap> {
+    let _step = progress.update_progress_scoped(SearchStep::ResolveUniverse);
     resolve_maximally_reduced_query_graph(
         ctx,
         initial_universe,
@@ -632,8 +636,10 @@ pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
     filters: &Option<Filter<'_>>,
+    progress: &Progress,
 ) -> Result<RoaringBitmap> {
     Ok(if let Some(filters) = filters {
+        let _step = progress.update_progress_scoped(SearchStep::Filter);
         filters.evaluate(txn, index)?
     } else {
         index.documents_ids(txn)?
@@ -658,6 +664,7 @@ pub fn execute_vector_search(
     quantized: bool,
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
+    progress: &Progress,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -678,6 +685,7 @@ pub fn execute_vector_search(
     let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =
         &mut placeholder_search_logger;
 
+    let _step = progress.update_progress_scoped(SearchStep::SemanticSearch);
     let BucketSortOutput { docids, scores, all_candidates, degraded } = bucket_sort(
         ctx,
         ranking_rules,
@@ -692,6 +700,7 @@ pub fn execute_vector_search(
         ranking_score_threshold,
         exhaustive_number_hits,
         max_total_hits,
+        progress,
     )?;
 
     Ok(PartialSearchResult {
@@ -725,12 +734,14 @@ pub fn execute_search(
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
     locales: Option<&Vec<Language>>,
+    progress: &Progress,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
     let mut used_negative_operator = false;
     let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
+        let _step = progress.update_progress_scoped(SearchStep::Tokenize);
         let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
         let entered = span.enter();
 
@@ -834,9 +845,16 @@ pub fn execute_search(
             terms_matching_strategy,
         )?;
 
-        universe &=
-            resolve_universe(ctx, &universe, &graph, terms_matching_strategy, query_graph_logger)?;
+        universe &= resolve_universe(
+            ctx,
+            &universe,
+            &graph,
+            terms_matching_strategy,
+            query_graph_logger,
+            progress,
+        )?;
 
+        let _step = progress.update_progress_scoped(SearchStep::KeywordSearch);
         bucket_sort(
             ctx,
             ranking_rules,
@@ -851,10 +869,12 @@ pub fn execute_search(
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
+            progress,
         )?
     } else {
         let ranking_rules =
             get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;
+        let _step = progress.update_progress_scoped(SearchStep::PlaceholderSearch);
         bucket_sort(
             ctx,
             ranking_rules,
@@ -869,6 +889,7 @@ pub fn execute_search(
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
+            progress,
         )?
     };
 

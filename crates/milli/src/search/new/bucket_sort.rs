@@ -3,10 +3,12 @@ use roaring::RoaringBitmap;
 use super::logger::SearchLogger;
 use super::ranking_rules::{BoxRankingRule, RankingRuleQueryTrait};
 use super::SearchContext;
+use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::{
     apply_distinct_rule, distinct_fid, distinct_single_docid, DistinctOutput,
 };
+use crate::search::steps::ComputingBucketSortStep;
 use crate::{Result, TimeBudget};
 
 pub struct BucketSortOutput {
@@ -34,6 +36,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ranking_score_threshold: Option<f64>,
     exhaustive_number_hits: bool,
     max_total_hits: Option<usize>,
+    progress: &Progress,
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -95,15 +98,18 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     let ranking_rules_len = ranking_rules.len();
 
+    let step =
+        progress.update_progress_scoped(ComputingBucketSortStep::from(ranking_rules[0].id()));
     logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query, universe);
 
-    ranking_rules[0].start_iteration(ctx, logger, universe, query, &time_budget)?;
+    ranking_rules[0].start_iteration(ctx, logger, universe, query, &time_budget, progress)?;
 
     let mut ranking_rule_scores: Vec<ScoreDetails> = vec![];
 
     let mut ranking_rule_universes: Vec<RoaringBitmap> =
         vec![RoaringBitmap::default(); ranking_rules_len];
     ranking_rule_universes[0].clone_from(universe);
+    drop(step);
     let mut cur_ranking_rule_index = 0;
 
     /// Finish iterating over the current ranking rule, yielding
@@ -157,6 +163,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 distinct_fid,
                 &ranking_rule_scores,
                 $candidates,
+                progress,
             )?;
         };
     }
@@ -168,6 +175,9 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
 
     while valid_docids.len() < max_len_to_evaluate {
+        let _step = progress.update_progress_scoped(ComputingBucketSortStep::from(
+            ranking_rules[cur_ranking_rule_index].id(),
+        ));
         // The universe for this bucket is zero, so we don't need to sort
         // anything, just go back to the parent ranking rule.
         if ranking_rule_universes[cur_ranking_rule_index].is_empty()
@@ -185,6 +195,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 ctx,
                 logger,
                 &ranking_rule_universes[cur_ranking_rule_index],
+                progress,
             )? {
                 std::task::Poll::Ready(bucket) => bucket,
                 std::task::Poll::Pending => {
@@ -231,6 +242,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 logger,
                 &ranking_rule_universes[cur_ranking_rule_index],
                 &time_budget,
+                progress,
             )?
             else {
                 back!();
@@ -289,6 +301,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             &next_bucket.candidates,
             &next_bucket.query,
             &time_budget,
+            progress,
         )?;
     }
 
@@ -323,9 +336,11 @@ fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
     distinct_fid: Option<u16>,
     ranking_rule_scores: &[ScoreDetails],
     candidates: RoaringBitmap,
+    progress: &Progress,
 ) -> Result<()> {
     // First apply the distinct rule on the candidates, reducing the universes if necessary
     let candidates = if let Some(distinct_fid) = distinct_fid {
+        progress.update_progress(ComputingBucketSortStep::Distinct);
         let DistinctOutput { remaining, excluded } =
             apply_distinct_rule(ctx, distinct_fid, &candidates)?;
         for universe in ranking_rule_universes.iter_mut() {
@@ -336,6 +351,8 @@ fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
     } else {
         candidates.clone()
     };
+
+    progress.update_progress(ComputingBucketSortStep::MergeCandidates);
     *all_candidates |= &candidates;
 
     // if the candidates are empty, there is nothing to do;
