@@ -172,7 +172,8 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     |b, &query| {
                         b.iter(|| {
                             let rtxn = index.read_txn().unwrap();
-                            let mut search = index.search(&rtxn);
+                            let progress = Progress::default();
+                            let mut search = index.search(&rtxn, &progress);
                             search
                                 .query(query)
                                 .terms_matching_strategy(TermsMatchingStrategy::default());
