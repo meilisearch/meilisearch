@@ -1292,7 +1292,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // testing the simple query search
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = index.search(&rtxn);
         search.query("document");
         search.terms_matching_strategy(TermsMatchingStrategy::default());
         // all documents should be returned
@@ -1333,7 +1333,7 @@ mod tests {
         assert!(documents_ids.is_empty()); // nested is not searchable
 
         // testing the filters
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = index.search(&rtxn);
         search.filter(crate::Filter::from_str(r#"title = "The first document""#).unwrap().unwrap());
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
@@ -1358,6 +1358,7 @@ mod tests {
     #[test]
     fn index_documents_with_nested_primary_key() {
         let index = TempIndex::new();
+        let progress = Progress::default();
 
         index
             .update_settings(|settings| {
@@ -1397,7 +1398,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // testing the simple query search
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = crate::Search::new(&rtxn, &index, &progress);
         search.query("document");
         search.terms_matching_strategy(TermsMatchingStrategy::default());
         // all documents should be returned
@@ -1453,6 +1454,7 @@ mod tests {
     #[test]
     fn test_facets_generation() {
         let index = TempIndex::new();
+        let progress = Progress::default();
 
         index
             .add_documents(documents!([
@@ -1507,7 +1509,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
-            let mut search = crate::Search::new(&rtxn, &index);
+            let mut search = crate::Search::new(&rtxn, &index, &progress);
             let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
             search.filter(crate::Filter::from_str(&filter).unwrap().unwrap());
             let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
@@ -1545,7 +1547,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = crate::Search::new(&rtxn, &index, &progress);
         search.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
             "dog.race.bernese mountain",
         )))]);
@@ -3601,6 +3603,7 @@ mod tests {
     #[test]
     fn delete_words_exact_attributes() {
         let index = TempIndex::new();
+        let progress = Progress::default();
 
         index
             .update_settings(|settings| {
@@ -3639,7 +3642,7 @@ mod tests {
         let words = index.words_fst(&txn).unwrap().into_stream().into_strs().unwrap();
         insta::assert_snapshot!(format!("{words:?}"), @r###"["hello"]"###);
 
-        let mut s = Search::new(&txn, &index);
+        let mut s = Search::new(&txn, &index, &progress);
         s.query("hello");
         let crate::SearchResult { documents_ids, .. } = s.execute().unwrap();
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");

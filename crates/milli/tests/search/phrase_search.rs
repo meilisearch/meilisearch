@@ -24,7 +24,8 @@ fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
     // Phrase search containing stop words
     let txn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&txn, &index);
+    let progress = Progress::default();
+    let mut search = Search::new(&txn, &index, &progress);
     search.query("\"the use of force\"");
     search.limit(10);
     search.terms_matching_strategy(TermsMatchingStrategy::All);

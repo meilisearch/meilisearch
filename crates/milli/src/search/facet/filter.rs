@@ -1165,7 +1165,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = index.search(&rtxn);
         // this filter is copy pasted from #2380 with the exact same espace sequence
         search.filter(Filter::from_str("monitor_diagonal = '27\" to 30\\''").unwrap().unwrap());
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
@@ -1225,7 +1225,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = index.search(&rtxn);
 
         search.filter(Filter::from_str("_geoRadius(45.4777599, 9.1967508, 0)").unwrap().unwrap());
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();

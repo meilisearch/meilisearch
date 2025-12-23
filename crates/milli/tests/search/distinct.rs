@@ -25,7 +25,8 @@ macro_rules! test_distinct {
 
             let rtxn = index.read_txn().unwrap();
 
-            let mut search = Search::new(&rtxn, &index);
+            let progress = Progress::default();
+            let mut search = Search::new(&rtxn, &index, &progress);
             search.query(search::TEST_QUERY);
             search.limit($limit);
             search.offset($offset);

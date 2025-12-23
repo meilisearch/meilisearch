@@ -26,6 +26,7 @@ pub(crate) struct TempIndex {
     pub inner: Index,
     pub indexer_config: IndexerConfig,
     pub index_documents_config: IndexDocumentsConfig,
+    pub progress: Progress,
     _tempdir: TempDir,
 }
 
@@ -47,7 +48,9 @@ impl TempIndex {
         let inner = Index::new(options, _tempdir.path(), true).unwrap();
         let indexer_config = IndexerConfig::default();
         let index_documents_config = IndexDocumentsConfig::default();
-        Self { inner, indexer_config, index_documents_config, _tempdir }
+        let progress = Progress::default();
+
+        Self { inner, indexer_config, index_documents_config, progress, _tempdir }
     }
     /// Creates a temporary index, with a default `4096 * 2000` size. This should be enough for
     /// most tests.
@@ -209,6 +212,10 @@ impl TempIndex {
 
     pub fn delete_document(&self, external_document_id: &str) {
         self.delete_documents(vec![external_document_id.to_string()])
+    }
+
+    pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn<'a>) -> Search<'a> {
+        self.inner.search(rtxn, &self.progress)
     }
 }
 
@@ -1095,7 +1102,7 @@ fn bug_3021_fourth() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let search = Search::new(&rtxn, &index);
+    let search = index.search(&rtxn);
     let SearchResult {
         matching_words: _,
         candidates: _,
