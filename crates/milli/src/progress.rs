@@ -95,7 +95,15 @@ impl Progress {
         let now = Instant::now();
         push_steps_durations(steps, &mut durations, now, 0);
 
-        durations.drain(..).map(|(name, duration)| (name, format!("{duration:.2?}"))).collect()
+        let mut accumulated_durations = IndexMap::new();
+        for (name, duration) in durations.drain(..) {
+            accumulated_durations.entry(name).and_modify(|d| *d += duration).or_insert(duration);
+        }
+
+        accumulated_durations
+            .into_iter()
+            .map(|(name, duration)| (name, format!("{duration:.2?}")))
+            .collect()
     }
 
     // TODO: ideally we should expose the progress in a way that let arroy use it directly
