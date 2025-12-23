@@ -475,7 +475,7 @@ impl ErrorCode for milli::Error {
                     | UserError::DocumentLimitReached
                     | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
                     UserError::InvalidStoreFile => Code::InvalidStoreFile,
-                    UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
+                    UserError::NoSpaceLeftOnDevice { .. } => Code::NoSpaceLeftOnDevice,
                     UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
                     UserError::InvalidFilter(_) => Code::InvalidSearchFilter,
