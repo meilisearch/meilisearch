@@ -232,6 +232,7 @@ pub async fn multi_search_with_post(
             debug!(
                 request_uid = ?request_uid,
                 returns = ?search_result,
+                progress = ?progress.accumulated_durations(),
                 "Federated-search"
             );
 
@@ -354,6 +355,7 @@ pub async fn multi_search_with_post(
             debug!(
                 request_uid = ?request_uid,
                 returns = ?search_results,
+                progress = ?progress.accumulated_durations(),
                 "Multi-search"
             );
 

@@ -406,7 +406,7 @@ pub async fn search_with_url_query(
             .await?;
     }
 
-    debug!(request_uid = ?request_uid, returns = ?search_result, "Search get");
+    debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
     Ok(HttpResponse::Ok().json(search_result))
 }
 
@@ -549,7 +549,7 @@ pub async fn search_with_post(
             .await?;
     }
 
-    debug!(request_uid = ?request_uid, returns = ?search_result, "Search post");
+    debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
     Ok(HttpResponse::Ok().json(search_result))
 }
 

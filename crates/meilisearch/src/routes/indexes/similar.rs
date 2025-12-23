@@ -253,6 +253,8 @@ async fn similar(
     })
     .await;
 
+    debug!(progress = ?progress.accumulated_durations(), "Similar");
+
     result?
 }
 
