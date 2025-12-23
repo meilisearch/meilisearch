@@ -14,7 +14,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::update::Setting;
 use crate::vector::settings::EmbeddingSettings;
 use crate::vector::{Embedder, EmbedderOptions};
-use crate::{Criterion, Filter, FilterableAttributesRule, Search, TimeBudget};
+use crate::{Criterion, Filter, FilterableAttributesRule, TimeBudget};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -61,7 +61,7 @@ fn basic_degraded_search() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&rtxn, &index);
+    let mut search = index.search(&rtxn);
     search.query("hello puppy kefir");
     search.limit(3);
     search.time_budget(TimeBudget::new(Duration::from_millis(0)));
@@ -75,7 +75,7 @@ fn degraded_search_cannot_skip_filter() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&rtxn, &index);
+    let mut search = index.search(&rtxn);
     search.query("hello puppy kefir");
     search.limit(100);
     search.time_budget(TimeBudget::new(Duration::from_millis(0)));
@@ -96,7 +96,7 @@ fn degraded_search_and_score_details() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&rtxn, &index);
+    let mut search = index.search(&rtxn);
     search.query("hello puppy kefir");
     search.limit(4);
     search.scoring_strategy(ScoringStrategy::Detailed);
@@ -560,7 +560,7 @@ fn degraded_search_and_score_details_vector() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = Search::new(&rtxn, &index);
+    let mut search = index.search(&rtxn);
 
     let embedder = Arc::new(
         Embedder::new(

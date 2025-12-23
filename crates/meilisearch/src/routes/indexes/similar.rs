@@ -8,6 +8,8 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::TotalProcessingTimeStep;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
@@ -217,7 +219,7 @@ async fn similar(
     mut query: SimilarQuery,
 ) -> Result<SimilarResult, ResponseError> {
     let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
-
+    let progress = Progress::default();
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
@@ -234,7 +236,10 @@ async fn similar(
         Route::Similar,
     )?;
 
-    tokio::task::spawn_blocking(move || {
+    let progress_clone = progress.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let _step = progress_clone.update_progress_scoped(TotalProcessingTimeStep::Search);
+
         perform_similar(
             &index,
             query,
@@ -243,9 +248,14 @@ async fn similar(
             quantized,
             retrieve_vectors,
             index_scheduler.features(),
+            &progress_clone,
         )
     })
-    .await?
+    .await;
+
+    debug!(progress = ?progress.accumulated_durations(), "Similar");
+
+    result?
 }
 
 #[derive(Debug, deserr::Deserr, IntoParams)]

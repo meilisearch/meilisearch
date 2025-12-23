@@ -14,7 +14,7 @@ use crate::search::new::ranking_rule_graph::{
     ProximityGraph, RankingRuleGraph, RankingRuleGraphTrait, TypoCondition, TypoGraph,
     WordsCondition, WordsGraph,
 };
-use crate::search::new::ranking_rules::BoxRankingRule;
+use crate::search::new::ranking_rules::{BoxRankingRule, RankingRuleId};
 use crate::search::new::{QueryGraph, QueryNode, RankingRule, SearchContext, SearchLogger};
 use crate::Result;
 
@@ -45,13 +45,26 @@ enum Location {
     Other,
 }
 
+impl From<RankingRuleId> for Location {
+    fn from(ranking_rule_id: RankingRuleId) -> Self {
+        match ranking_rule_id {
+            RankingRuleId::Words => Self::Words,
+            RankingRuleId::Typo => Self::Typo,
+            RankingRuleId::Proximity => Self::Proximity,
+            RankingRuleId::AttributePosition => Self::Fid,
+            RankingRuleId::WordPosition => Self::Position,
+            _ => Self::Other,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct VisualSearchLogger {
     initial_query: Option<QueryGraph>,
     initial_query_time: Option<Instant>,
     query_for_universe: Option<QueryGraph>,
     initial_universe: Option<RoaringBitmap>,
-    ranking_rules_ids: Option<Vec<String>>,
+    ranking_rules_ids: Option<Vec<RankingRuleId>>,
     events: Vec<SearchEvents>,
     location: Vec<Location>,
 }
@@ -84,14 +97,7 @@ impl SearchLogger<QueryGraph> for VisualSearchLogger {
             ranking_rule_idx,
             universe_len: universe.len(),
         });
-        self.location.push(match ranking_rule.id().as_str() {
-            "words" => Location::Words,
-            "typo" => Location::Typo,
-            "proximity" => Location::Proximity,
-            "fid" => Location::Fid,
-            "position" => Location::Position,
-            _ => Location::Other,
-        });
+        self.location.push(ranking_rule.id().into());
     }
 
     fn next_bucket_ranking_rule(

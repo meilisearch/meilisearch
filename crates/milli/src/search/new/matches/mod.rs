@@ -498,12 +498,14 @@ mod tests {
 
     use super::*;
     use crate::index::tests::TempIndex;
+    use crate::progress::Progress;
     use crate::{execute_search, filtered_universe, SearchContext, TimeBudget};
 
     impl<'a> MatcherBuilder<'a> {
         fn new_test(rtxn: &'a heed::RoTxn<'a>, index: &'a TempIndex, query: &str) -> Self {
+            let progress = Progress::default();
             let mut ctx = SearchContext::new(index, rtxn).unwrap();
-            let universe = filtered_universe(ctx.index, ctx.txn, &None).unwrap();
+            let universe = filtered_universe(ctx.index, ctx.txn, &None, &progress).unwrap();
             let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
                 &mut ctx,
                 Some(query),
@@ -523,6 +525,7 @@ mod tests {
                 TimeBudget::max(),
                 None,
                 None,
+                &progress,
             )
             .unwrap();
 

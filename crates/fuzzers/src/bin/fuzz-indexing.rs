@@ -153,7 +153,8 @@ fn main() {
                             .unwrap();
 
                             // after executing a batch we check if the database is corrupted
-                            let res = index.search(&wtxn).execute().unwrap();
+                            let progress = Progress::default();
+                            let res = index.search(&wtxn, &progress).execute().unwrap();
                             index.documents(&wtxn, res.documents_ids).unwrap();
                             progression.fetch_add(1, Ordering::Relaxed);
                         }

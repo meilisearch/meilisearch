@@ -27,7 +27,8 @@ macro_rules! test_criterion {
             let index = search::setup_search_index_with_criteria(&criteria);
             let rtxn = index.read_txn().unwrap();
 
-            let mut search = Search::new(&rtxn, &index);
+            let progress = Progress::default();
+            let mut search = Search::new(&rtxn, &index, &progress);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.terms_matching_strategy($optional_word);
@@ -241,7 +242,8 @@ fn criteria_mixup() {
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&rtxn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&rtxn, &index, &progress);
         search.query(search::TEST_QUERY);
         search.limit(EXTERNAL_DOCUMENTS_IDS.len());
         search.terms_matching_strategy(ALLOW_OPTIONAL_WORDS);
@@ -365,7 +367,8 @@ fn criteria_ascdesc() {
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&rtxn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&rtxn, &index, &progress);
         search.limit(ASC_DESC_CANDIDATES_THRESHOLD + 1);
 
         let SearchResult { documents_ids, .. } = search.execute().unwrap();

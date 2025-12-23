@@ -30,7 +30,10 @@ use meilisearch_types::features::{
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
-use meilisearch_types::milli::{all_obkv_to_json, obkv_to_json, OrderBy, PatternMatch, TimeBudget};
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{
+    all_obkv_to_json, obkv_to_json, OrderBy, PatternMatch, TimeBudget, TotalProcessingTimeStep,
+};
 use meilisearch_types::{Document, Index};
 use serde::Deserialize;
 use serde_json::json;
@@ -262,6 +265,7 @@ async fn process_search_request(
     filter: Option<String>,
 ) -> Result<(Index, Vec<Document>, String), ResponseError> {
     let index = index_scheduler.index(&index_uid)?;
+    let progress = Progress::default();
     let rtxn = index.static_read_txn()?;
     let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
     let mut query = SearchQuery {
@@ -285,7 +289,9 @@ async fn process_search_request(
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
 
+    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
     let permit = search_queue.try_get_search_permit().await?;
+    progress.update_progress(TotalProcessingTimeStep::Search);
     let features = index_scheduler.features();
     let index_cloned = index.clone();
     let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
@@ -297,8 +303,15 @@ async fn process_search_request(
             None => TimeBudget::default(),
         };
 
-        let (search, _is_finite_pagination, _max_total_hits, _offset) =
-            prepare_search(&index_cloned, &rtxn, &query, &search_kind, time_budget, features)?;
+        let (search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
+            &index_cloned,
+            &rtxn,
+            &query,
+            &search_kind,
+            time_budget,
+            features,
+            &progress,
+        )?;
 
         match search_from_kind(index_uid, search_kind, search) {
             Ok((search_results, _)) => Ok((rtxn, Ok(search_results))),

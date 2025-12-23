@@ -4,7 +4,9 @@ use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::{QueryGraph, SearchContext};
+use crate::progress::Progress;
 use crate::score_details::ScoreDetails;
+use crate::search::steps::ComputingBucketSortStep;
 use crate::{Result, TimeBudget};
 
 /// An internal trait implemented by only [`PlaceholderQuery`] and [`QueryGraph`]
@@ -24,7 +26,7 @@ pub type BoxRankingRule<'ctx, Query> = Box<dyn RankingRule<'ctx, Query> + 'ctx>;
 /// (i.e. the read transaction and the cache) and over `Query`, which
 /// can be either [`PlaceholderQuery`] or [`QueryGraph`].
 pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
-    fn id(&self) -> String;
+    fn id(&self) -> RankingRuleId;
 
     /// Prepare the ranking rule such that it can start iterating over its
     /// buckets using [`next_bucket`](RankingRule::next_bucket).
@@ -39,6 +41,7 @@ pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
         universe: &RoaringBitmap,
         query: &Query,
         time_budget: &TimeBudget,
+        progress: &Progress,
     ) -> Result<()>;
 
     /// Return the next bucket of this ranking rule.
@@ -56,6 +59,7 @@ pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
         logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
         time_budget: &TimeBudget,
+        progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<Query>>>;
 
     /// Return the next bucket of this ranking rule, if doing so can be done without blocking
@@ -69,6 +73,7 @@ pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
         _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Query>,
         _universe: &RoaringBitmap,
+        _progress: &Progress,
     ) -> Result<Poll<RankingRuleOutput<Query>>> {
         Ok(Poll::Pending)
     }
@@ -92,4 +97,55 @@ pub struct RankingRuleOutput<Q> {
     pub candidates: RoaringBitmap,
     /// The score for the candidates of the current bucket
     pub score: ScoreDetails,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RankingRuleId {
+    Words,
+    Typo,
+    Proximity,
+    AttributePosition,
+    WordPosition,
+    Exactness,
+    Sort,
+    GeoSort,
+    VectorSort,
+    Asc(String),
+    Desc(String),
+}
+
+impl std::fmt::Display for RankingRuleId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RankingRuleId::Words => write!(f, "words"),
+            RankingRuleId::Typo => write!(f, "typo"),
+            RankingRuleId::Proximity => write!(f, "proximity"),
+            RankingRuleId::AttributePosition => write!(f, "attribute_position"),
+            RankingRuleId::WordPosition => write!(f, "word_position"),
+            RankingRuleId::Exactness => write!(f, "exactness"),
+            RankingRuleId::Sort => write!(f, "sort"),
+            RankingRuleId::GeoSort => write!(f, "geo_sort"),
+            RankingRuleId::VectorSort => write!(f, "vector_sort"),
+            RankingRuleId::Asc(field_name) => write!(f, "asc:{}", field_name),
+            RankingRuleId::Desc(field_name) => write!(f, "desc:{}", field_name),
+        }
+    }
+}
+
+impl From<RankingRuleId> for ComputingBucketSortStep {
+    fn from(ranking_rule_id: RankingRuleId) -> Self {
+        match ranking_rule_id {
+            RankingRuleId::Words => Self::Words,
+            RankingRuleId::Typo => Self::Typo,
+            RankingRuleId::Proximity => Self::Proximity,
+            RankingRuleId::AttributePosition => Self::AttributePosition,
+            RankingRuleId::WordPosition => Self::WordPosition,
+            RankingRuleId::Exactness => Self::Exactness,
+            RankingRuleId::Sort => Self::Sort,
+            RankingRuleId::GeoSort => Self::GeoSort,
+            RankingRuleId::VectorSort => Self::VectorSort,
+            RankingRuleId::Asc(_) => Self::Asc,
+            RankingRuleId::Desc(_) => Self::Desc,
+        }
+    }
 }

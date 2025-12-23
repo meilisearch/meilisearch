@@ -1,5 +1,7 @@
 use either::{Either, Left, Right};
+use milli::progress::Progress;
 use milli::{Criterion, Filter, Search, SearchResult, TermsMatchingStrategy};
+
 use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
@@ -15,7 +17,8 @@ macro_rules! test_filter {
             let filter_conditions =
                 Filter::from_array::<Vec<Either<Vec<&str>, &str>>, _>($filter).unwrap().unwrap();
 
-            let mut search = Search::new(&rtxn, &index);
+            let progress = Progress::default();
+            let mut search = Search::new(&rtxn, &index, &progress);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 

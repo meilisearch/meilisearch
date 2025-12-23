@@ -12,6 +12,7 @@ use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::documents::GeoSortParameter;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
+use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::{Embedder, Embedding};
 use crate::{
@@ -29,6 +30,7 @@ mod fst_utils;
 pub mod hybrid;
 pub mod new;
 pub mod similar;
+pub mod steps;
 
 #[derive(Debug, Clone)]
 pub struct SemanticSearch {
@@ -61,10 +63,11 @@ pub struct Search<'a> {
     time_budget: TimeBudget,
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
+    progress: &'a Progress,
 }
 
 impl<'a> Search<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index) -> Search<'a> {
+    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index, progress: &'a Progress) -> Search<'a> {
         Search {
             query: None,
             filter: None,
@@ -86,6 +89,7 @@ impl<'a> Search<'a> {
             locales: None,
             time_budget: TimeBudget::max(),
             ranking_score_threshold: None,
+            progress,
         }
     }
 
@@ -198,7 +202,7 @@ impl<'a> Search<'a> {
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
             let ctx = SearchContext::new(self.index, self.rtxn)?;
-            filtered_universe(ctx.index, ctx.txn, &self.filter)
+            filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)
         } else {
             Ok(self.execute()?.candidates)
         }
@@ -239,7 +243,7 @@ impl<'a> Search<'a> {
             }
         }
 
-        let universe = filtered_universe(ctx.index, ctx.txn, &self.filter)?;
+        let universe = filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)?;
         let mut query_vector = None;
         let PartialSearchResult {
             located_query_terms,
@@ -276,6 +280,7 @@ impl<'a> Search<'a> {
                     *quantized,
                     self.time_budget.clone(),
                     self.ranking_score_threshold,
+                    self.progress,
                 )?
             }
             _ => execute_search(
@@ -297,6 +302,7 @@ impl<'a> Search<'a> {
                 self.time_budget.clone(),
                 self.ranking_score_threshold,
                 self.locales.as_ref(),
+                self.progress,
             )?,
         };
 
@@ -347,6 +353,7 @@ impl fmt::Debug for Search<'_> {
             time_budget,
             ranking_score_threshold,
             locales,
+            progress: _,
         } = self;
         f.debug_struct("Search")
             .field("query", query)

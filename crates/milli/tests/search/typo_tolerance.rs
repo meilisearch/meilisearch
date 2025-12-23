@@ -22,7 +22,8 @@ fn test_typo_tolerance_one_typo() {
     {
         let txn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&txn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&txn, &index, &progress);
         search.query("zeal");
         search.limit(10);
 
@@ -31,7 +32,8 @@ fn test_typo_tolerance_one_typo() {
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
 
-        let mut search = Search::new(&txn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&txn, &index, &progress);
         search.query("zean");
         search.limit(10);
 
@@ -49,7 +51,8 @@ fn test_typo_tolerance_one_typo() {
     builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
 
     // typo is now supported for 4 letters words
-    let mut search = Search::new(&txn, &index);
+    let progress = Progress::default();
+    let mut search = Search::new(&txn, &index, &progress);
     search.query("zean");
     search.limit(10);
 
@@ -68,7 +71,8 @@ fn test_typo_tolerance_two_typo() {
     {
         let txn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&txn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&txn, &index, &progress);
         search.query("zealand");
         search.limit(10);
 
@@ -77,7 +81,8 @@ fn test_typo_tolerance_two_typo() {
         let result = search.execute().unwrap();
         assert_eq!(result.documents_ids.len(), 1);
 
-        let mut search = Search::new(&txn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&txn, &index, &progress);
         search.query("zealemd");
         search.limit(10);
 
@@ -95,7 +100,8 @@ fn test_typo_tolerance_two_typo() {
     builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
 
     // typo is now supported for 4 letters words
-    let mut search = Search::new(&txn, &index);
+    let progress = Progress::default();
+    let mut search = Search::new(&txn, &index, &progress);
     search.query("zealemd");
     search.limit(10);
 
@@ -164,7 +170,8 @@ fn test_typo_disabled_on_word() {
     {
         let txn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&txn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&txn, &index, &progress);
         search.query("zealand");
         search.limit(10);
 
@@ -184,7 +191,8 @@ fn test_typo_disabled_on_word() {
     builder.set_exact_words(exact_words);
     builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
 
-    let mut search = Search::new(&txn, &index);
+    let progress = Progress::default();
+    let mut search = Search::new(&txn, &index, &progress);
     search.query("zealand");
     search.limit(10);
 
@@ -203,7 +211,8 @@ fn test_disable_typo_on_attribute() {
     {
         let txn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&txn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&txn, &index, &progress);
         // typo in `antebel(l)um`
         search.query("antebelum");
         search.limit(10);
@@ -222,7 +231,8 @@ fn test_disable_typo_on_attribute() {
     builder.set_exact_attributes(vec!["description".to_string()].into_iter().collect());
     builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
 
-    let mut search = Search::new(&txn, &index);
+    let progress = Progress::default();
+    let mut search = Search::new(&txn, &index, &progress);
     search.query("antebelum");
     search.limit(10);
 

@@ -1,5 +1,5 @@
 use crate::index::tests::TempIndex;
-use crate::{db_snap, Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{db_snap, Criterion, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -119,7 +119,7 @@ fn test_attribute_fid_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -147,7 +147,7 @@ fn test_attribute_fid_ngrams() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);

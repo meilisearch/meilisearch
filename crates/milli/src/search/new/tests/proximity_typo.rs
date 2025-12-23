@@ -8,7 +8,7 @@ implemented.
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{Criterion, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -57,7 +57,7 @@ fn test_trap_basic() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("summer holiday");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
