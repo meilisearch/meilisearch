@@ -39,6 +39,7 @@ use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
     index_scheduler: &IndexScheduler,
     queries: Vec<SearchQueryWithIndex>,

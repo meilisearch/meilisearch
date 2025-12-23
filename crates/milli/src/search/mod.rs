@@ -14,7 +14,6 @@ use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_fe
 use crate::index::MatchingStrategy;
 use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
-use crate::search::steps::SearchStep;
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, Error, Index,

@@ -1784,6 +1784,7 @@ pub fn perform_facet_search(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn perform_similar(
     index: &Index,
     query: SimilarQuery,
@@ -1833,7 +1834,7 @@ pub fn perform_similar(
         embedder_name,
         embedder,
         quantized,
-        &progress,
+        progress,
     );
 
     if let Some(ref filter) = query.filter {
