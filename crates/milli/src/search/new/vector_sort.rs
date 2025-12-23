@@ -9,7 +9,7 @@ use super::VectorStoreStats;
 use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::search::steps::RankingRuleStep;
+use crate::search::steps::{ComputingBucketSortStep, RankingRuleStep};
 use crate::vector::{DistributionShift, Embedder, VectorStore};
 use crate::{DocumentId, Result, SearchContext, SearchLogger, TimeBudget};
 
@@ -111,6 +111,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         time_budget: &TimeBudget,
         progress: &Progress,
     ) -> Result<()> {
+        progress.update_progress(ComputingBucketSortStep::from(self.id()));
         let _step = progress.update_progress_scoped(RankingRuleStep::StartIteration);
         assert!(self.query.is_none());
 
@@ -130,6 +131,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         time_budget: &TimeBudget,
         progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
+        progress.update_progress(ComputingBucketSortStep::from(self.id()));
         let _step = progress.update_progress_scoped(RankingRuleStep::NextBucket);
         let query = self.query.as_ref().unwrap().clone();
         let vector_candidates = &self.vector_candidates & universe;

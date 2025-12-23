@@ -1028,7 +1028,6 @@ pub fn prepare_search<'t>(
     features: RoFeatures,
     progress: &'t Progress,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
-    let _step = progress.update_progress_scoped(SearchStep::PrepareSearch);
     if query.media.is_some() {
         features.check_multimodal("passing `media` in a search query")?;
     }

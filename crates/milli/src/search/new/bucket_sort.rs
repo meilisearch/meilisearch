@@ -98,8 +98,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     let ranking_rules_len = ranking_rules.len();
 
-    let step =
-        progress.update_progress_scoped(ComputingBucketSortStep::from(ranking_rules[0].id()));
     logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query, universe);
 
     ranking_rules[0].start_iteration(ctx, logger, universe, query, &time_budget, progress)?;
@@ -109,7 +107,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     let mut ranking_rule_universes: Vec<RoaringBitmap> =
         vec![RoaringBitmap::default(); ranking_rules_len];
     ranking_rule_universes[0].clone_from(universe);
-    drop(step);
     let mut cur_ranking_rule_index = 0;
 
     /// Finish iterating over the current ranking rule, yielding
@@ -175,9 +172,6 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
 
     while valid_docids.len() < max_len_to_evaluate {
-        let _step = progress.update_progress_scoped(ComputingBucketSortStep::from(
-            ranking_rules[cur_ranking_rule_index].id(),
-        ));
         // The universe for this bucket is zero, so we don't need to sort
         // anything, just go back to the parent ranking rule.
         if ranking_rule_universes[cur_ranking_rule_index].is_empty()

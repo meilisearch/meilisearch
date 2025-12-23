@@ -9,7 +9,7 @@ use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::search::steps::RankingRuleStep;
+use crate::search::steps::{ComputingBucketSortStep, RankingRuleStep};
 use crate::{FieldId, Index, Result, TimeBudget};
 
 pub trait RankingRuleOutputIter<'ctx, Query> {
@@ -106,6 +106,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         _time_budget: &TimeBudget,
         progress: &Progress,
     ) -> Result<()> {
+        progress.update_progress(ComputingBucketSortStep::from(self.id()));
         let _step = progress.update_progress_scoped(RankingRuleStep::StartIteration);
         let iter: RankingRuleOutputIterWrapper<'ctx, Query> = match self.field_id {
             Some(field_id) => {
@@ -207,6 +208,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         _time_budget: &TimeBudget,
         progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
+        progress.update_progress(ComputingBucketSortStep::from(self.id()));
         let _step = progress.update_progress_scoped(RankingRuleStep::NextBucket);
         let iter = self.iter.as_mut().unwrap();
         if let Some(mut bucket) = iter.next_bucket()? {
