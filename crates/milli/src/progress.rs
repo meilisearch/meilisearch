@@ -64,6 +64,30 @@ impl Progress {
         steps.push((step_type, Box::new(sub_progress), now));
     }
 
+    /// End a step that has been started without having to start a new step.
+    fn end_progress_step<P: Step>(&self, sub_progress: P) {
+        let mut inner = self.steps.write().unwrap();
+        let InnerProgress { steps, durations } = &mut *inner;
+
+        let now = Instant::now();
+        let step_type = TypeId::of::<P>();
+        debug_assert!(
+            steps.iter().any(|(id, s, _)| *id == step_type && s.name() == sub_progress.name()),
+            "Step `{}` must have been started",
+            sub_progress.name()
+        );
+        if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
+            push_steps_durations(steps, durations, now, idx);
+            steps.truncate(idx);
+        }
+    }
+
+    /// Update the progress and return a scoped progress step that will end the progress step when dropped.
+    pub fn update_progress_scoped<P: Step + Copy>(&self, step: P) -> ScopedProgressStep<'_, P> {
+        self.update_progress(step);
+        ScopedProgressStep { progress: self, step }
+    }
+
     // TODO: This code should be in meilisearch_types but cannot because milli can't depend on meilisearch_types
     pub fn as_progress_view(&self) -> ProgressView {
         let inner = self.steps.read().unwrap();
@@ -349,5 +373,16 @@ impl<T: steppe::Step> Step for Compat<T> {
 
     fn total(&self) -> u32 {
         self.0.total().try_into().unwrap_or(u32::MAX)
+    }
+}
+
+pub struct ScopedProgressStep<'a, P: Step + Copy> {
+    progress: &'a Progress,
+    step: P,
+}
+
+impl<'a, P: Step + Copy> Drop for ScopedProgressStep<'a, P> {
+    fn drop(&mut self) {
+        self.progress.end_progress_step(self.step);
     }
 }
