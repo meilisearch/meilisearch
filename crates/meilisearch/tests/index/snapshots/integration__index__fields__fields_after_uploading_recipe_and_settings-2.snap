@@ -1,0 +1,14 @@
+---
+source: crates/meilisearch/tests/index/fields.rs
+expression: "(code.as_u16(), &task)"
+---
+[
+  202,
+  {
+    "taskUid": "[uid]",
+    "indexUid": "[uid]",
+    "status": "enqueued",
+    "type": "documentAdditionOrUpdate",
+    "enqueuedAt": "[date]"
+  }
+]
