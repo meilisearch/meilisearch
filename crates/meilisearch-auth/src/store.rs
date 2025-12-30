@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use hmac::{Hmac, Mac};
 use meilisearch_types::heed::{BoxedError, WithoutTls};
+use subtle::ConstantTimeEq;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::keys::KeyId;
 use meilisearch_types::milli::heed;
@@ -193,7 +194,7 @@ impl HeedAuthStore {
                 Ok((uid, _)) => {
                     let (uid, _) = try_split_array_at(uid)?;
                     let uid = Uuid::from_bytes(*uid);
-                    if generate_key_as_hexa(uid, master_key).as_bytes() == encoded_key {
+                    if generate_key_as_hexa(uid, master_key).as_bytes().ct_eq(encoded_key).into() {
                         Some(uid)
                     } else {
                         None
