@@ -9,7 +9,7 @@ use indexmap::map::Entry;
 use indexmap::IndexMap;
 use memmap2::Mmap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use rayon::slice::ParallelSlice;
+use rayon::slice::{ParallelSlice, ParallelSliceMut as _};
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 use serde_json::Deserializer;
@@ -175,7 +175,7 @@ impl<'pl> IndexOperations<'pl> {
         // And finally sort them. This clearly speeds up reading the update files.
         progress.update_progress(IndexingStep::ReorderingPayloadOffsets);
         docids_version_offsets
-            .sort_unstable_by_key(|(_, po)| first_update_pointer(&po.operations).unwrap_or(0));
+            .par_sort_unstable_by_key(|(_, po)| first_update_pointer(&po.operations).unwrap_or(0));
 
         let docids_version_offsets = docids_version_offsets.into_bump_slice();
         Ok((DocumentOperationChanges { docids_version_offsets }, payload_stats, Some(primary_key)))
