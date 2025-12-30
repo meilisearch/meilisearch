@@ -193,7 +193,7 @@ impl HeedAuthStore {
                 Ok((uid, _)) => {
                     let (uid, _) = try_split_array_at(uid)?;
                     let uid = Uuid::from_bytes(*uid);
-                    if generate_key_as_hexa(uid, master_key).as_bytes() == encoded_key {
+                    if verify_key_matches(uid, master_key, encoded_key) {
                         Some(uid)
                     } else {
                         None
@@ -353,6 +353,46 @@ pub fn generate_key_as_hexa(uid: Uuid, master_key: &[u8]) -> String {
 
     let result = mac.finalize();
     format!("{:x}", result.into_bytes())
+}
+
+/// Verifies if an encoded API key matches the expected HMAC for the given uid.
+/// Uses constant-time comparison to prevent timing attacks (CVE mitigation).
+pub fn verify_key_matches(uid: Uuid, master_key: &[u8], encoded_key: &[u8]) -> bool {
+    // Decode hex-encoded key to raw bytes
+    let Some(key_bytes) = decode_hex(encoded_key) else {
+        return false;
+    };
+
+    // Compute expected HMAC
+    let mut uid_buffer = [0; Hyphenated::LENGTH];
+    let uid_str = uid.hyphenated().encode_lower(&mut uid_buffer);
+
+    let mut mac = Hmac::<Sha256>::new_from_slice(master_key).unwrap();
+    mac.update(uid_str.as_bytes());
+
+    // verify_slice uses constant-time comparison internally
+    mac.verify_slice(&key_bytes).is_ok()
+}
+
+/// Decodes a hex-encoded byte slice into raw bytes.
+/// Returns None if the input is invalid hex.
+fn decode_hex(hex: &[u8]) -> Option<Vec<u8>> {
+    if hex.len() % 2 != 0 {
+        return None;
+    }
+
+    fn hex_val(byte: u8) -> Option<u8> {
+        match byte {
+            b'0'..=b'9' => Some(byte - b'0'),
+            b'a'..=b'f' => Some(byte - b'a' + 10),
+            b'A'..=b'F' => Some(byte - b'A' + 10),
+            _ => None,
+        }
+    }
+
+    hex.chunks_exact(2)
+        .map(|pair| Some(hex_val(pair[0])? << 4 | hex_val(pair[1])?))
+        .collect()
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.
