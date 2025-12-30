@@ -27,12 +27,13 @@ use crate::update::new::{DocumentIdentifiers, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod, MissingDocumentPolicy};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
+/// The set of operations to be applied to multiple documents in an index.
 #[derive(Default)]
-pub struct DocumentOperation<'pl> {
+pub struct IndexOperations<'pl> {
     operations: Vec<Payload<'pl>>,
 }
 
-impl<'pl> DocumentOperation<'pl> {
+impl<'pl> IndexOperations<'pl> {
     pub fn new() -> Self {
         Self { operations: Default::default() }
     }
@@ -209,8 +210,6 @@ struct IndexedPayloadOperations<'pl> {
     /// Represents the operations that will be applied to the documents of this payload.
     ///
     /// The key corresponds to the external document id.
-    // TODO use an IndexMap to make sure we keep the order of discovery of the documents.
-    //      This way we are sure that the internal documents IDs are stable.
     document_operations: IndexMap<String, DocumentOperations<'pl>>,
 
     /// The local fields ids map for this payload or a union of payloads.
@@ -281,7 +280,10 @@ impl ops::BitOr for IndexedPayloadOperations<'_> {
                     // Unfortunately we don't have the OccupiedEntry::replace_entry_with method
                     // on the IndexMap entry. This operation would be much more elegant otherwise.
                     let lhs_docops = mem::replace(entry.get_mut(), DocumentOperations::empty());
-                    match DocumentOperations::from_iter(lhs_docops.into_iter().chain(rhs_docops)) {
+                    match DocumentOperations::from_iter(
+                        lhs_docops.into_iter().chain(rhs_docops),
+                        DocumentExistence::Unknown,
+                    ) {
                         Some(operations) => entry.insert(operations),
                         None => entry.shift_remove(),
                     };
@@ -302,8 +304,8 @@ impl ops::BitOr for IndexedPayloadOperations<'_> {
     }
 }
 
-/// A set of operations applied on a particular document in a particular order.
-struct DocumentOperations<'pl>(Vec<NewDocumentOperation<'pl>>);
+/// A set of operations applied to a single document in a particular order.
+struct DocumentOperations<'pl>(Vec<DocumentOperation<'pl>>);
 
 impl<'pl> DocumentOperations<'pl> {
     /// Creates an empty set of operations.
@@ -315,7 +317,7 @@ impl<'pl> DocumentOperations<'pl> {
     }
 
     fn one_deletion() -> Self {
-        DocumentOperations(vec![NewDocumentOperation::Deletion])
+        DocumentOperations(vec![DocumentOperation::Deletion])
     }
 
     fn from_raw_value(
@@ -323,8 +325,8 @@ impl<'pl> DocumentOperations<'pl> {
         document: &'pl RawValue,
         on_missing_document: MissingDocumentPolicy,
     ) -> Self {
+        use DocumentOperation::*;
         use IndexDocumentsMethod::*;
-        use NewDocumentOperation::*;
 
         let operation = match method {
             ReplaceDocuments => Replacement { document, on_missing_document },
@@ -334,21 +336,14 @@ impl<'pl> DocumentOperations<'pl> {
         DocumentOperations(vec![operation])
     }
 
-    fn from_iter<I>(operations: I) -> Option<Self>
+    fn from_iter<I>(operations: I, document_existence: DocumentExistence) -> Option<Self>
     where
-        I: IntoIterator<Item = NewDocumentOperation<'pl>>,
-    {
-        Self::from_iter_advanced(operations, DocumentExistence::Unknown)
-    }
-
-    fn from_iter_advanced<I>(operations: I, document_existence: DocumentExistence) -> Option<Self>
-    where
-        I: IntoIterator<Item = NewDocumentOperation<'pl>>,
+        I: IntoIterator<Item = DocumentOperation<'pl>>,
     {
         let mut document_operations = Vec::new();
         for operation in operations {
+            use DocumentOperation::*;
             use MissingDocumentPolicy::*;
-            use NewDocumentOperation::*;
 
             match (document_operations.last(), &operation) {
                 (
@@ -356,7 +351,7 @@ impl<'pl> DocumentOperations<'pl> {
                     Replacement { on_missing_document, .. } | Update { on_missing_document, .. },
                 ) => match (document_existence, on_missing_document) {
                     (DocumentExistence::Missing, Skip) => continue,
-                    _ => (),
+                    (_, _) => (),
                 },
                 (_, Deletion) => document_operations.clear(),
                 (Some(Replacement { .. } | Update { .. }), Replacement { .. }) => {
@@ -390,11 +385,11 @@ impl<'pl> DocumentOperations<'pl> {
         docid: DocumentId,
     ) -> Option<PayloadOperations<'pl>> {
         use DocumentExistence::*;
-        use NewDocumentOperation::*;
+        use DocumentOperation::*;
 
         let document_existence = if was_missing { Missing } else { Exists };
-        Self::from_iter_advanced(self.0, document_existence).map(
-            |DocumentOperations(operations)| PayloadOperations {
+        Self::from_iter(self.0, document_existence).map(|DocumentOperations(operations)| {
+            PayloadOperations {
                 docid,
                 is_new: was_missing, // same thing
                 operations: operations
@@ -409,8 +404,8 @@ impl<'pl> DocumentOperations<'pl> {
                         Deletion => InnerDocOp::Deletion,
                     })
                     .collect(),
-            },
-        )
+            }
+        })
     }
 
     fn push_raw_value(
@@ -419,8 +414,8 @@ impl<'pl> DocumentOperations<'pl> {
         raw_value: &'pl RawValue,
         on_missing_document: MissingDocumentPolicy,
     ) {
+        use DocumentOperation::*;
         use IndexDocumentsMethod::*;
-        use NewDocumentOperation::*;
 
         let operation = match method {
             ReplaceDocuments => Replacement { document: raw_value, on_missing_document },
@@ -432,7 +427,7 @@ impl<'pl> DocumentOperations<'pl> {
 }
 
 impl<'pl> IntoIterator for DocumentOperations<'pl> {
-    type Item = NewDocumentOperation<'pl>;
+    type Item = DocumentOperation<'pl>;
     type IntoIter = vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -448,9 +443,7 @@ enum DocumentExistence {
 }
 
 /// Represents an operation to be performed on a document.
-///
-/// TODO rename me
-enum NewDocumentOperation<'pl> {
+enum DocumentOperation<'pl> {
     Replacement { document: &'pl RawValue, on_missing_document: MissingDocumentPolicy },
     Update { document: &'pl RawValue, on_missing_document: MissingDocumentPolicy },
     Deletion,
@@ -462,7 +455,6 @@ fn extract_payload_changes<'pl>(
     primary_key: &PrimaryKey<'_>,
     method: IndexDocumentsMethod,
     shards: Option<&Shards>,
-    // TODO Replace document id String by Cow<str>
 ) -> Result<(IndexMap<String, DocumentOperations<'pl>>, PayloadStats, FieldsIdsMap)> {
     let mut new_docids_version_offsets = IndexMap::<_, DocumentOperations>::new();
     let mut fids_map = FieldsIdsMap::new();

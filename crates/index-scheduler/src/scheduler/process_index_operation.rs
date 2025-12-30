@@ -92,7 +92,7 @@ impl IndexScheduler {
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
                 let mut content_files_iter = content_files.iter();
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let embedders = index
                     .embedding_configs()
                     .embedding_configs(index_wtxn)

@@ -68,7 +68,7 @@ impl TempIndex {
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
         let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         match self.index_documents_config.update_method {
             IndexDocumentsMethod::ReplaceDocuments => {
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap()
@@ -157,7 +157,7 @@ impl TempIndex {
 
         let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
 
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         let external_document_ids: Vec<_> =
             external_document_ids.iter().map(AsRef::as_ref).collect();
         indexer.delete_documents(external_document_ids.as_slice());
@@ -229,7 +229,7 @@ fn aborting_indexation() {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = RuntimeEmbedders::default();
-    let mut indexer = indexer::DocumentOperation::new();
+    let mut indexer = indexer::IndexOperations::new();
     let payload = documents!([
         { "id": 1, "name": "kevin" },
         { "id": 2, "name": "bob", "age": 20 },

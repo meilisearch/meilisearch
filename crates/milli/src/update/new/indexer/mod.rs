@@ -6,7 +6,7 @@ use std::thread::{self, Builder};
 use big_s::S;
 use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
-pub use document_operation::{DocumentOperation, PayloadStats};
+pub use document_operation::{IndexOperations, PayloadStats};
 use hashbrown::HashMap;
 use heed::types::DecodeIgnore;
 use heed::{BytesDecode, Database, RoTxn, RwTxn};

@@ -124,7 +124,7 @@ fn test_typo_disabled_on_word() {
     let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
     let mut new_fields_ids_map = db_fields_ids_map.clone();
     let embedders = RuntimeEmbedders::default();
-    let mut indexer = indexer::DocumentOperation::new();
+    let mut indexer = indexer::IndexOperations::new();
 
     indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 

@@ -633,7 +633,7 @@ fn import_dump(
             let primary_key = index.primary_key(&rtxn)?;
             let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-            let mut indexer = indexer::DocumentOperation::new();
+            let mut indexer = indexer::IndexOperations::new();
             let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
             let embedders = index_scheduler.embedders(uid.clone(), embedders)?;
 

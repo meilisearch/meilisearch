@@ -90,7 +90,7 @@ fn main() {
 
                             let indexer_alloc = Bump::new();
                             let embedders = RuntimeEmbedders::default();
-                            let mut indexer = indexer::DocumentOperation::new();
+                            let mut indexer = indexer::IndexOperations::new();
 
                             let mut operations = Vec::new();
                             for op in batch.0 {
