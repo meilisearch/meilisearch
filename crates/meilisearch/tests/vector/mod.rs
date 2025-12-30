@@ -873,3 +873,152 @@ async fn change_backend() {
     assert_eq!(stable_embeddings, experimental_embeddings);
     assert_eq!(experimental_embeddings, back_to_stable_embeddings);
 }
+
+#[actix_rt::test]
+async fn eq_with_sort() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    let (response, code) = index
+        .update_settings(json!({
+          "sortableAttributes": ["value"],
+          "rankingRules": ["words", "value:asc"],
+          "embedders": {
+              "manual": {
+                  "source": "userProvided",
+                  "dimensions": 3,
+              }
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let documents = json!([
+      {"id": 0, "name": "first with highest value", "value": 1000, "_vectors": { "manual": [1,1,1] }},
+      {"id": 1, "name": "second with intermediate value", "value": 499, "_vectors": { "manual": [1, 1, 1] }},
+      {"id": 2, "name": "third with other vec value", "value": 200, "_vectors": { "manual": [-1, 1, -1] }},
+      {"id": 3, "name": "fourth with lowest value", "value": 1, "_vectors": { "manual": [1, 1, 1] }},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(value.uid()).await.succeeded();
+
+    let (documents, _code) = index
+        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
+        .await;
+    snapshot!(json_string!(documents), @r#"
+    {
+      "results": [
+        {
+          "id": 0,
+          "name": "first with highest value",
+          "value": 1000,
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "id": 1,
+          "name": "second with intermediate value",
+          "value": 499,
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "id": 2,
+          "name": "third with other vec value",
+          "value": 200,
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  -1.0,
+                  1.0,
+                  -1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        },
+        {
+          "id": 3,
+          "name": "fourth with lowest value",
+          "value": 1,
+          "_vectors": {
+            "manual": {
+              "embeddings": [
+                [
+                  1.0,
+                  1.0,
+                  1.0
+                ]
+              ],
+              "regenerate": false
+            }
+          }
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "#);
+
+    let (value, code) =
+        index.search_post(json!({"vector": [1, 1, 1], "hybrid":{"embedder": "manual"}})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, {".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r#"
+    {
+      "hits": [
+        {
+          "id": 3,
+          "name": "fourth with lowest value",
+          "value": 1
+        },
+        {
+          "id": 1,
+          "name": "second with intermediate value",
+          "value": 499
+        },
+        {
+          "id": 0,
+          "name": "first with highest value",
+          "value": 1000
+        },
+        {
+          "id": 2,
+          "name": "third with other vec value",
+          "value": 200
+        }
+      ],
+      "query": "",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
+      "semanticHitCount": 4
+    }
+    "#);
+}
