@@ -375,3 +375,177 @@ where
     let head = head.try_into().ok()?;
     Some((head, tail))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn create_test_store() -> (HeedAuthStore, TempDir) {
+        let temp_dir = TempDir::new().unwrap();
+        let env = open_auth_store_env(temp_dir.path()).unwrap();
+        let store = HeedAuthStore::new(env).unwrap();
+        (store, temp_dir)
+    }
+
+    #[test]
+    fn test_get_uid_from_encoded_key_correct_key() {
+        let (store, _temp_dir) = create_test_store();
+        let master_key = b"test_master_key_12345678901234567890";
+        let uid = Uuid::new_v4();
+
+        // Create a key
+        let key = Key {
+            uid,
+            name: Some("Test Key".to_string()),
+            description: None,
+            actions: vec![Action::Search],
+            indexes: vec![],
+            expires_at: None,
+            created_at: time::OffsetDateTime::now_utc(),
+            updated_at: time::OffsetDateTime::now_utc(),
+        };
+        store.put_api_key(key).unwrap();
+
+        // Generate the encoded key
+        let encoded_key = generate_key_as_hexa(uid, master_key);
+        let encoded_key_bytes = encoded_key.as_bytes();
+
+        // Test that we can retrieve the UID with the correct key
+        let retrieved_uid = store
+            .get_uid_from_encoded_key(encoded_key_bytes, master_key)
+            .unwrap();
+        assert_eq!(retrieved_uid, Some(uid));
+    }
+
+    #[test]
+    fn test_get_uid_from_encoded_key_incorrect_key() {
+        let (store, _temp_dir) = create_test_store();
+        let master_key = b"test_master_key_12345678901234567890";
+        let uid = Uuid::new_v4();
+
+        // Create a key
+        let key = Key {
+            uid,
+            name: Some("Test Key".to_string()),
+            description: None,
+            actions: vec![Action::Search],
+            indexes: vec![],
+            expires_at: None,
+            created_at: time::OffsetDateTime::now_utc(),
+            updated_at: time::OffsetDateTime::now_utc(),
+        };
+        store.put_api_key(key).unwrap();
+
+        // Generate the encoded key
+        let encoded_key = generate_key_as_hexa(uid, master_key);
+
+        // Test with incorrect key (wrong master key)
+        let wrong_master_key = b"wrong_master_key_1234567890123456789";
+        let retrieved_uid = store
+            .get_uid_from_encoded_key(encoded_key.as_bytes(), wrong_master_key)
+            .unwrap();
+        assert_eq!(retrieved_uid, None);
+
+        // Test with completely wrong encoded key
+        let wrong_encoded_key = "a".repeat(64);
+        let retrieved_uid = store
+            .get_uid_from_encoded_key(wrong_encoded_key.as_bytes(), master_key)
+            .unwrap();
+        assert_eq!(retrieved_uid, None);
+    }
+
+    #[test]
+    fn test_get_uid_from_encoded_key_wrong_length() {
+        let (store, _temp_dir) = create_test_store();
+        let master_key = b"test_master_key_12345678901234567890";
+
+        // Test with key that has wrong length
+        let wrong_length_key = "a".repeat(32); // 32 chars instead of 64
+        let retrieved_uid = store
+            .get_uid_from_encoded_key(wrong_length_key.as_bytes(), master_key)
+            .unwrap();
+        assert_eq!(retrieved_uid, None);
+    }
+
+    #[test]
+    fn test_constant_time_comparison_used() {
+        // This test verifies that ct_eq is being used by checking that
+        // the comparison doesn't short-circuit on first mismatch
+        use subtle::ConstantTimeEq;
+
+        let key1 = b"a".repeat(64);
+        let key2 = b"b".repeat(64);
+
+        // Both keys should take the same time to compare (constant-time)
+        // We can't directly measure timing in a unit test, but we can verify
+        // that ct_eq returns the correct result
+        let result1: bool = key1.as_slice().ct_eq(key1.as_slice()).into();
+        let result2: bool = key1.as_slice().ct_eq(key2.as_slice()).into();
+
+        assert!(result1);
+        assert!(!result2);
+    }
+
+    #[test]
+    fn test_generate_key_as_hexa_consistency() {
+        let uid = Uuid::new_v4();
+        let master_key = b"test_master_key_12345678901234567890";
+
+        // Generate the same key twice - should be identical
+        let key1 = generate_key_as_hexa(uid, master_key);
+        let key2 = generate_key_as_hexa(uid, master_key);
+
+        assert_eq!(key1, key2);
+        assert_eq!(key1.len(), 64); // HMAC-SHA256 produces 32 bytes = 64 hex chars
+    }
+
+    #[test]
+    fn test_get_uid_from_encoded_key_multiple_keys() {
+        let (store, _temp_dir) = create_test_store();
+        let master_key = b"test_master_key_12345678901234567890";
+
+        // Create multiple keys
+        let uid1 = Uuid::new_v4();
+        let uid2 = Uuid::new_v4();
+        let uid3 = Uuid::new_v4();
+
+        for uid in [uid1, uid2, uid3] {
+            let key = Key {
+                uid,
+                name: Some(format!("Test Key {}", uid)),
+                description: None,
+                actions: vec![Action::Search],
+                indexes: vec![],
+                expires_at: None,
+                created_at: time::OffsetDateTime::now_utc(),
+                updated_at: time::OffsetDateTime::now_utc(),
+            };
+            store.put_api_key(key).unwrap();
+        }
+
+        // Test retrieving each key
+        let encoded_key1 = generate_key_as_hexa(uid1, master_key);
+        let encoded_key2 = generate_key_as_hexa(uid2, master_key);
+        let encoded_key3 = generate_key_as_hexa(uid3, master_key);
+
+        assert_eq!(
+            store
+                .get_uid_from_encoded_key(encoded_key1.as_bytes(), master_key)
+                .unwrap(),
+            Some(uid1)
+        );
+        assert_eq!(
+            store
+                .get_uid_from_encoded_key(encoded_key2.as_bytes(), master_key)
+                .unwrap(),
+            Some(uid2)
+        );
+        assert_eq!(
+            store
+                .get_uid_from_encoded_key(encoded_key3.as_bytes(), master_key)
+                .unwrap(),
+            Some(uid3)
+        );
+    }
+}

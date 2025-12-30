@@ -25,3 +25,6 @@ subtle = "2.5"
 thiserror = "2.0.17"
 time = { version = "0.3.44", features = ["serde-well-known", "formatting", "parsing", "macros"] }
 uuid = { version = "1.18.1", features = ["serde", "v4"] }
+
+[dev-dependencies]
+tempfile = "3.23.0"
