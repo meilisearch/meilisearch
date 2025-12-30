@@ -527,4 +527,8 @@ fn batch_skip_creation_with_deletion() {
     handle.advance_one_successful_batch();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+    let index = index_scheduler.index("docs").unwrap();
+    let rtxn = index.read_txn().unwrap();
+    snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
 }
