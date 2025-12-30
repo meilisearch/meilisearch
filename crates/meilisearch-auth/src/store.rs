@@ -359,7 +359,7 @@ pub fn generate_key_as_hexa(uid: Uuid, master_key: &[u8]) -> String {
 /// Uses constant-time comparison to prevent timing attacks (CVE mitigation).
 pub fn verify_key_matches(uid: Uuid, master_key: &[u8], encoded_key: &[u8]) -> bool {
     // Decode hex-encoded key to raw bytes
-    let Some(key_bytes) = decode_hex(encoded_key) else {
+    let Ok(key_bytes) = hex::decode(encoded_key) else {
         return false;
     };
 
@@ -372,25 +372,6 @@ pub fn verify_key_matches(uid: Uuid, master_key: &[u8], encoded_key: &[u8]) -> b
 
     // verify_slice uses constant-time comparison internally
     mac.verify_slice(&key_bytes).is_ok()
-}
-
-/// Decodes a hex-encoded byte slice into raw bytes.
-/// Returns None if the input is invalid hex.
-fn decode_hex(hex: &[u8]) -> Option<Vec<u8>> {
-    if !hex.len().is_multiple_of(2) {
-        return None;
-    }
-
-    fn hex_val(byte: u8) -> Option<u8> {
-        match byte {
-            b'0'..=b'9' => Some(byte - b'0'),
-            b'a'..=b'f' => Some(byte - b'a' + 10),
-            b'A'..=b'F' => Some(byte - b'A' + 10),
-            _ => None,
-        }
-    }
-
-    hex.chunks_exact(2).map(|pair| Some(hex_val(pair[0])? << 4 | hex_val(pair[1])?)).collect()
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.
@@ -416,27 +397,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_decode_hex_valid() {
-        assert_eq!(decode_hex(b""), Some(vec![]));
-        assert_eq!(decode_hex(b"00"), Some(vec![0x00]));
-        assert_eq!(decode_hex(b"ff"), Some(vec![0xff]));
-        assert_eq!(decode_hex(b"FF"), Some(vec![0xff]));
-        assert_eq!(decode_hex(b"a1b2c3"), Some(vec![0xa1, 0xb2, 0xc3]));
-        assert_eq!(decode_hex(b"deadbeef"), Some(vec![0xde, 0xad, 0xbe, 0xef]));
-    }
-
-    #[test]
-    fn test_decode_hex_invalid() {
-        // Odd length
-        assert_eq!(decode_hex(b"a"), None);
-        assert_eq!(decode_hex(b"abc"), None);
-        // Invalid characters
-        assert_eq!(decode_hex(b"gg"), None);
-        assert_eq!(decode_hex(b"zz"), None);
-        assert_eq!(decode_hex(b".."), None);
-    }
 
     #[test]
     fn test_verify_key_matches_valid() {
