@@ -3,6 +3,8 @@ use crate::make_enum_progress;
 make_enum_progress! {
     pub enum IndexingStep {
         PreparingPayloads,
+        AssigningDocumentsIds,
+        ReorderingPayloadOffsets,
         ExtractingDocuments,
         ExtractingFacets,
         ExtractingWords,

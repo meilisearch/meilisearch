@@ -160,6 +160,7 @@ make_enum_progress! {
     pub enum DocumentOperationProgress {
         RetrievingConfig,
         ComputingDocumentChanges,
+        ReadingPayloadStats,
         Indexing,
     }
 }

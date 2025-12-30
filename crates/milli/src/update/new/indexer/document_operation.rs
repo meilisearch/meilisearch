@@ -151,6 +151,7 @@ impl<'pl> IndexOperations<'pl> {
         let mut available_docids = AvailableIds::new(&documents_ids);
 
         // We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
+        progress.update_progress(IndexingStep::AssigningDocumentsIds);
         let external_documents_ids = index.external_documents_ids();
         for (external_id, ops) in document_operations {
             let (docid, is_missing) = match external_documents_ids.get(rtxn, &external_id)? {
@@ -172,6 +173,7 @@ impl<'pl> IndexOperations<'pl> {
 
         // Reorder the offsets to make sure we iterate on the file sequentially
         // And finally sort them. This clearly speeds up reading the update files.
+        progress.update_progress(IndexingStep::ReorderingPayloadOffsets);
         docids_version_offsets
             .sort_unstable_by_key(|(_, po)| first_update_pointer(&po.operations).unwrap_or(0));
 

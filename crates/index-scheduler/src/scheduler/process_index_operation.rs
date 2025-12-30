@@ -139,6 +139,7 @@ impl IndexScheduler {
                     )
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
 
+                progress.update_progress(DocumentOperationProgress::ReadingPayloadStats);
                 let mut candidates_count = 0;
                 for (stats, task) in operation_stats.into_iter().zip(&mut tasks) {
                     candidates_count += stats.document_count;
