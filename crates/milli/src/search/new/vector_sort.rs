@@ -2,6 +2,7 @@ use std::iter::FromIterator;
 use std::task::Poll;
 use std::time::Instant;
 
+use itertools::Itertools;
 use roaring::RoaringBitmap;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
@@ -17,7 +18,11 @@ pub struct VectorSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
     target: Vec<f32>,
     vector_candidates: RoaringBitmap,
-    cached_sorted_docids: std::vec::IntoIter<(DocumentId, f32)>,
+    cached_sorted_docids: itertools::ChunkBy<
+        f32,
+        std::vec::IntoIter<(DocumentId, f32)>,
+        for<'a> fn(&'a (DocumentId, f32)) -> f32,
+    >,
     limit: usize,
     distribution_shift: Option<DistributionShift>,
     embedder_index: u8,
@@ -44,7 +49,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             query: None,
             target,
             vector_candidates,
-            cached_sorted_docids: Default::default(),
+            cached_sorted_docids: vec![].into_iter().chunk_by(by_distance),
             limit,
             distribution_shift: embedder.distribution(),
             embedder_index,
@@ -57,7 +62,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         ctx: &mut SearchContext<'_>,
         vector_candidates: &RoaringBitmap,
         time_budget: &TimeBudget,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         let target = &self.target;
         let backend = ctx.index.get_vector_store(ctx.txn)?.unwrap_or_default();
 
@@ -71,29 +76,34 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             Some(vector_candidates),
             time_budget,
         )?;
-        self.cached_sorted_docids = results.into_iter();
-        *ctx.vector_store_stats.get_or_insert_default() += VectorStoreStats {
-            total_time: before.elapsed(),
-            total_queries: 1,
-            total_results: self.cached_sorted_docids.len(),
-        };
+        let total_results = results.len();
+        self.cached_sorted_docids = results.into_iter().chunk_by(by_distance);
+        *ctx.vector_store_stats.get_or_insert_default() +=
+            VectorStoreStats { total_time: before.elapsed(), total_queries: 1, total_results };
 
-        Ok(())
+        Ok(total_results)
     }
 
-    fn next_result(&mut self, vector_candidates: &RoaringBitmap) -> Option<(DocumentId, f32)> {
-        for (docid, distance) in self.cached_sorted_docids.by_ref() {
-            if vector_candidates.contains(docid) {
+    fn next_results(&mut self, vector_candidates: &RoaringBitmap) -> Option<(RoaringBitmap, f32)> {
+        for (distance, group) in &self.cached_sorted_docids {
+            let mut candidates = RoaringBitmap::from_iter(group.map(|(docid, _)| docid));
+            candidates &= vector_candidates;
+
+            if !candidates.is_empty() {
                 let score = 1.0 - distance;
                 let score = self
                     .distribution_shift
                     .map(|distribution| distribution.shift(score))
                     .unwrap_or(score);
-                return Some((docid, score));
+                return Some((candidates, score));
             }
         }
         None
     }
+}
+
+fn by_distance((_docid, distance): &(DocumentId, f32)) -> f32 {
+    *distance
 }
 
 impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
@@ -144,22 +154,22 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             }));
         }
 
-        if let Some((docid, score)) = self.next_result(&vector_candidates) {
+        if let Some((candidates, score)) = self.next_results(&vector_candidates) {
             return Ok(Some(RankingRuleOutput {
                 query,
-                candidates: RoaringBitmap::from_iter([docid]),
+                candidates,
                 score: ScoreDetails::Vector(score_details::Vector { similarity: Some(score) }),
             }));
         }
 
         // if we got out of this loop it means we've exhausted our cache.
         // we need to refill it and run the function again.
-        self.fill_buffer(ctx, &vector_candidates, time_budget)?;
+        let total_results = self.fill_buffer(ctx, &vector_candidates, time_budget)?;
 
         // we tried filling the buffer, but it remained empty 😢
         // it means we don't actually have any document remaining in the universe with a vector.
         // => exit
-        if self.cached_sorted_docids.len() == 0 {
+        if total_results == 0 {
             return Ok(Some(RankingRuleOutput {
                 query,
                 candidates: universe.clone(),
@@ -194,10 +204,10 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             }));
         }
 
-        if let Some((docid, score)) = self.next_result(&vector_candidates) {
+        if let Some((candidates, score)) = self.next_results(&vector_candidates) {
             Ok(Poll::Ready(RankingRuleOutput {
                 query,
-                candidates: RoaringBitmap::from_iter([docid]),
+                candidates,
                 score: ScoreDetails::Vector(score_details::Vector { similarity: Some(score) }),
             }))
         } else {
