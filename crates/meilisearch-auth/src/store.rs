@@ -414,3 +414,83 @@ where
     let head = head.try_into().ok()?;
     Some((head, tail))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_hex_valid() {
+        assert_eq!(decode_hex(b""), Some(vec![]));
+        assert_eq!(decode_hex(b"00"), Some(vec![0x00]));
+        assert_eq!(decode_hex(b"ff"), Some(vec![0xff]));
+        assert_eq!(decode_hex(b"FF"), Some(vec![0xff]));
+        assert_eq!(decode_hex(b"a1b2c3"), Some(vec![0xa1, 0xb2, 0xc3]));
+        assert_eq!(decode_hex(b"deadbeef"), Some(vec![0xde, 0xad, 0xbe, 0xef]));
+    }
+
+    #[test]
+    fn test_decode_hex_invalid() {
+        // Odd length
+        assert_eq!(decode_hex(b"a"), None);
+        assert_eq!(decode_hex(b"abc"), None);
+        // Invalid characters
+        assert_eq!(decode_hex(b"gg"), None);
+        assert_eq!(decode_hex(b"zz"), None);
+        assert_eq!(decode_hex(b".."), None);
+    }
+
+    #[test]
+    fn test_verify_key_matches_valid() {
+        let uid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let master_key = b"my-secret-master-key";
+
+        // Generate a valid key
+        let valid_key = generate_key_as_hexa(uid, master_key);
+
+        // Should match
+        assert!(verify_key_matches(uid, master_key, valid_key.as_bytes()));
+    }
+
+    #[test]
+    fn test_verify_key_matches_invalid_key() {
+        let uid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let master_key = b"my-secret-master-key";
+
+        // Wrong key (valid hex but wrong value)
+        let wrong_key = "0000000000000000000000000000000000000000000000000000000000000000";
+        assert!(!verify_key_matches(uid, master_key, wrong_key.as_bytes()));
+
+        // Invalid hex
+        assert!(!verify_key_matches(uid, master_key, b"not-valid-hex"));
+
+        // Wrong length
+        assert!(!verify_key_matches(uid, master_key, b"deadbeef"));
+    }
+
+    #[test]
+    fn test_verify_key_matches_wrong_uid() {
+        let uid1 = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let uid2 = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
+        let master_key = b"my-secret-master-key";
+
+        // Generate key for uid1
+        let key = generate_key_as_hexa(uid1, master_key);
+
+        // Should not match uid2
+        assert!(!verify_key_matches(uid2, master_key, key.as_bytes()));
+    }
+
+    #[test]
+    fn test_verify_key_matches_wrong_master_key() {
+        let uid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let master_key1 = b"master-key-1";
+        let master_key2 = b"master-key-2";
+
+        // Generate key with master_key1
+        let key = generate_key_as_hexa(uid, master_key1);
+
+        // Should not match with master_key2
+        assert!(!verify_key_matches(uid, master_key2, key.as_bytes()));
+    }
+}
