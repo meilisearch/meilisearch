@@ -8,7 +8,8 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use meilisearch_types::milli;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{self, TotalProcessingTimeStep};
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
@@ -336,6 +337,10 @@ pub async fn search_with_url_query(
 ) -> Result<HttpResponse, ResponseError> {
     let request_uid = Uuid::now_v7();
     debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
+    let progress = Progress::default();
+    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    let permit = search_queue.try_get_search_permit().await?;
+    progress.update_progress(TotalProcessingTimeStep::Search);
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let mut query: SearchQuery = params.into_inner().try_into()?;
@@ -359,9 +364,9 @@ pub async fn search_with_url_query(
     // Save the query string for personalization if requested
     let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
-    let permit = search_queue.try_get_search_permit().await?;
     let include_metadata = parse_include_metadata_header(&req);
 
+    let progress_clone = progress.clone();
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
             SearchParams {
@@ -374,11 +379,13 @@ pub async fn search_with_url_query(
                 include_metadata,
             },
             &index,
+            &progress_clone,
         )
     })
     .await;
     permit.drop().await;
     let search_result = search_result?;
+
     if let Ok((search_result, _)) = search_result.as_ref() {
         aggregate.succeed(search_result);
     }
@@ -394,11 +401,12 @@ pub async fn search_with_url_query(
                 personalize,
                 personalize_query.as_deref(),
                 time_budget,
+                &progress,
             )
             .await?;
     }
 
-    debug!(request_uid = ?request_uid, returns = ?search_result, "Search get");
+    debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
     Ok(HttpResponse::Ok().json(search_result))
 }
 
@@ -470,6 +478,11 @@ pub async fn search_with_post(
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let request_uid = Uuid::now_v7();
 
+    let progress = Progress::default();
+    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    let permit = search_queue.try_get_search_permit().await?;
+    progress.update_progress(TotalProcessingTimeStep::Search);
+
     let mut query = params.into_inner();
     debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
 
@@ -494,7 +507,7 @@ pub async fn search_with_post(
     // Save the query string for personalization if requested
     let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
-    let permit = search_queue.try_get_search_permit().await?;
+    let progress_clone = progress.clone();
     let search_result = tokio::task::spawn_blocking(move || {
         perform_search(
             SearchParams {
@@ -507,6 +520,7 @@ pub async fn search_with_post(
                 include_metadata,
             },
             &index,
+            &progress_clone,
         )
     })
     .await;
@@ -530,11 +544,12 @@ pub async fn search_with_post(
                 personalize,
                 personalize_query.as_deref(),
                 time_budget,
+                &progress,
             )
             .await?;
     }
 
-    debug!(request_uid = ?request_uid, returns = ?search_result, "Search post");
+    debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
     Ok(HttpResponse::Ok().json(search_result))
 }
 

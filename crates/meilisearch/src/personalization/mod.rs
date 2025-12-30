@@ -1,7 +1,8 @@
 use std::time::Duration;
 
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
-use meilisearch_types::milli::TimeBudget;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{SearchStep, TimeBudget};
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -346,9 +347,11 @@ impl PersonalizationService {
         personalize: &Personalize,
         query: Option<&str>,
         time_budget: TimeBudget,
+        progress: &Progress,
     ) -> Result<SearchResult, ResponseError> {
         match self {
             Self::Cohere(cohere_service) => {
+                let _step = progress.update_progress_scoped(SearchStep::Personalization);
                 cohere_service
                     .rerank_search_results(search_result, personalize, query, time_budget)
                     .await

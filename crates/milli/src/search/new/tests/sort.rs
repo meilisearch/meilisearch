@@ -17,9 +17,7 @@ use meili_snap::insta;
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{
-    score_details, AscDesc, Criterion, Member, Search, SearchResult, TermsMatchingStrategy,
-};
+use crate::{score_details, AscDesc, Criterion, Member, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -184,7 +182,7 @@ fn test_sort() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("letter")))]);
@@ -219,7 +217,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("rank")))]);
@@ -254,7 +252,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Asc(Member::Field(S("vague")))]);
@@ -289,7 +287,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("vague")))]);
@@ -338,7 +336,7 @@ fn test_redacted() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![

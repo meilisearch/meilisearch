@@ -6,6 +6,7 @@ use roaring::RoaringBitmap;
 
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
 use crate::search::new::{distinct_fid, distinct_single_docid};
+use crate::search::steps::SearchStep;
 use crate::search::SemanticSearch;
 use crate::vector::{Embedding, SearchQuery};
 use crate::{Index, MatchingWords, Result, Search, SearchResult};
@@ -221,6 +222,7 @@ impl Search<'_> {
             time_budget: self.time_budget.clone(),
             ranking_score_threshold: self.ranking_score_threshold,
             locales: self.locales.clone(),
+            progress: self.progress,
         };
 
         let semantic = search.semantic.take();
@@ -241,6 +243,7 @@ impl Search<'_> {
             Some(vector_query) => vector_query,
             None => {
                 // attempt to embed the vector
+                self.progress.update_progress(SearchStep::Embed);
                 let span = tracing::trace_span!(target: "search::hybrid", "embed_one");
                 let _entered = span.enter();
 

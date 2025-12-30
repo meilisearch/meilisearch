@@ -1,4 +1,5 @@
 use big_s::S;
+use milli::progress::Progress;
 use milli::Criterion::{Attribute, Exactness, Proximity, Typo, Words};
 use milli::{AscDesc, Error, Member, Search, TermsMatchingStrategy, UserError};
 
@@ -11,7 +12,8 @@ fn sort_ranking_rule_missing() {
     let index = search::setup_search_index_with_criteria(&criteria);
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&rtxn, &index);
+    let progress = Progress::default();
+    let mut search = Search::new(&rtxn, &index, &progress);
     search.query(search::TEST_QUERY);
     search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 

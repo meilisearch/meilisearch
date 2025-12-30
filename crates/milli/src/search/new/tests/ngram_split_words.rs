@@ -19,7 +19,7 @@ This module tests the following properties:
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{Criterion, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -78,7 +78,7 @@ fn test_2gram_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.query("sun flower");
@@ -109,7 +109,7 @@ fn test_3gram_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sun flower s are");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -129,7 +129,7 @@ fn test_2gram_typo() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sun flawer");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -159,7 +159,7 @@ fn test_no_disable_ngrams() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sun flower ");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -185,7 +185,7 @@ fn test_2gram_prefix() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sun flow");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -214,7 +214,7 @@ fn test_3gram_prefix() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("su nf l");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -237,7 +237,7 @@ fn test_split_words() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sunflower ");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -266,7 +266,7 @@ fn test_disable_split_words() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sunflower ");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -286,7 +286,7 @@ fn test_2gram_split_words() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sunf lower");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -310,7 +310,7 @@ fn test_3gram_no_split_words() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sunf lo wer");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -333,7 +333,7 @@ fn test_3gram_no_typos() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("sunf la wer");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -352,7 +352,7 @@ fn test_no_ngram_phrases() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("\"sun\" flower");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -366,7 +366,7 @@ fn test_no_ngram_phrases() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("\"sun\" \"flower\"");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -385,7 +385,7 @@ fn test_short_split_words() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("xyz");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
@@ -412,7 +412,7 @@ fn test_split_words_never_disabled() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::All);
     s.query("the sunflower is tall");
     let SearchResult { documents_ids, .. } = s.execute().unwrap();

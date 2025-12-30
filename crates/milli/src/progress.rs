@@ -50,18 +50,58 @@ struct InnerProgress {
 }
 
 impl Progress {
-    pub fn update_progress<P: Step>(&self, sub_progress: P) {
+    /// Update the progress and return `true` if the step was started, `false` if it was already started.
+    pub fn update_progress<P: Step>(&self, sub_progress: P) -> bool {
         let mut inner = self.steps.write().unwrap();
         let InnerProgress { steps, durations } = &mut *inner;
 
         let now = Instant::now();
         let step_type = TypeId::of::<P>();
         if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
+            if steps[idx].1.name() == sub_progress.name() {
+                // The step is already started, so we don't need to start it again.
+                return false;
+            }
+
             push_steps_durations(steps, durations, now, idx);
             steps.truncate(idx);
         }
 
         steps.push((step_type, Box::new(sub_progress), now));
+        true
+    }
+
+    /// End a step that has been started without having to start a new step.
+    fn end_progress_step<P: Step>(&self, sub_progress: P) {
+        let mut inner = self.steps.write().unwrap();
+        let InnerProgress { steps, durations } = &mut *inner;
+
+        let now = Instant::now();
+        let step_type = TypeId::of::<P>();
+
+        debug_assert!(
+            steps.iter().any(|(id, s, _)| *id == step_type && s.name() == sub_progress.name()),
+            "Step `{}` must have been started",
+            sub_progress.name()
+        );
+
+        if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
+            push_steps_durations(steps, durations, now, idx);
+            steps.truncate(idx);
+        }
+    }
+
+    /// Update the progress and return a scoped progress step that will end the progress step when dropped.
+    pub fn update_progress_scoped<P: Step + Copy>(&self, step: P) -> ScopedProgressStep<'_, P> {
+        let started = self.update_progress(step);
+
+        debug_assert!(
+            started,
+            "Step `{}` can't be scoped because it was already started",
+            step.name()
+        );
+
+        ScopedProgressStep { progress: self, step: started.then_some(step) }
     }
 
     // TODO: This code should be in meilisearch_types but cannot because milli can't depend on meilisearch_types
@@ -95,7 +135,15 @@ impl Progress {
         let now = Instant::now();
         push_steps_durations(steps, &mut durations, now, 0);
 
-        durations.drain(..).map(|(name, duration)| (name, format!("{duration:.2?}"))).collect()
+        let mut accumulated_durations = IndexMap::new();
+        for (name, duration) in durations.drain(..) {
+            accumulated_durations.entry(name).and_modify(|d| *d += duration).or_insert(duration);
+        }
+
+        accumulated_durations
+            .into_iter()
+            .map(|(name, duration)| (name, format!("{duration:.2?}")))
+            .collect()
     }
 
     // TODO: ideally we should expose the progress in a way that let arroy use it directly
@@ -341,5 +389,18 @@ impl<T: steppe::Step> Step for Compat<T> {
 
     fn total(&self) -> u32 {
         self.0.total().try_into().unwrap_or(u32::MAX)
+    }
+}
+
+pub struct ScopedProgressStep<'a, P: Step + Copy> {
+    progress: &'a Progress,
+    step: Option<P>,
+}
+
+impl<'a, P: Step + Copy> Drop for ScopedProgressStep<'a, P> {
+    fn drop(&mut self) {
+        if let Some(step) = self.step {
+            self.progress.end_progress_step(step);
+        }
     }
 }

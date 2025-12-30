@@ -21,7 +21,7 @@ This module tests the following properties about the exactness ranking rule:
 
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use crate::{Criterion, SearchResult, TermsMatchingStrategy};
 
 fn create_index_simple_ordered() -> TempIndex {
     let index = TempIndex::new();
@@ -471,7 +471,7 @@ fn test_exactness_simple_ordered() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -503,7 +503,7 @@ fn test_exactness_simple_reversed() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -526,7 +526,7 @@ fn test_exactness_simple_reversed() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -556,7 +556,7 @@ fn test_exactness_simple_random() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -585,7 +585,7 @@ fn test_exactness_attribute_starts_with_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("this balcony");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -611,7 +611,7 @@ fn test_exactness_attribute_starts_with_phrase() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("\"overlooking the sea\" is a beautiful balcony");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -631,7 +631,7 @@ fn test_exactness_attribute_starts_with_phrase() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("overlooking the sea is a beautiful balcony");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -660,7 +660,7 @@ fn test_exactness_all_candidates_with_typo() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("overlocking the sea is a beautiful balcony");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -696,7 +696,7 @@ fn test_exactness_after_words() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -744,7 +744,7 @@ fn test_words_after_exactness() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -792,7 +792,7 @@ fn test_proximity_after_exactness() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -829,7 +829,7 @@ fn test_proximity_after_exactness() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("the quick brown fox jumps over the lazy dog");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -862,7 +862,7 @@ fn test_exactness_followed_by_typo_prefer_no_typo_prefix() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("quick brown fox extra");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
@@ -897,7 +897,7 @@ fn test_typo_followed_by_exactness() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.query("extraordinarily quick brown fox");
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);

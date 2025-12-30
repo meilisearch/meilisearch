@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use roaring::RoaringBitmap;
 
+use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
 use crate::vector::{Embedder, VectorStore};
 use crate::{filtered_universe, DocumentId, Filter, Index, Result, SearchResult};
@@ -18,6 +19,7 @@ pub struct Similar<'a> {
     embedder: Arc<Embedder>,
     ranking_score_threshold: Option<f64>,
     quantized: bool,
+    progress: &'a Progress,
 }
 
 impl<'a> Similar<'a> {
@@ -31,6 +33,7 @@ impl<'a> Similar<'a> {
         embedder_name: String,
         embedder: Arc<Embedder>,
         quantized: bool,
+        progress: &'a Progress,
     ) -> Self {
         Self {
             id,
@@ -43,6 +46,7 @@ impl<'a> Similar<'a> {
             embedder,
             ranking_score_threshold: None,
             quantized,
+            progress,
         }
     }
 
@@ -57,7 +61,7 @@ impl<'a> Similar<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut universe = filtered_universe(self.index, self.rtxn, &self.filter)?;
+        let mut universe = filtered_universe(self.index, self.rtxn, &self.filter, self.progress)?;
 
         // we never want to receive the docid
         universe.remove(self.id);

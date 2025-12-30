@@ -28,6 +28,7 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
+use crate::progress::Progress;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::update::new::StdResult;
@@ -1477,8 +1478,8 @@ impl Index {
         FacetDistribution::new(rtxn, self)
     }
 
-    pub fn search<'a>(&'a self, rtxn: &'a RoTxn<'a>) -> Search<'a> {
-        Search::new(rtxn, self)
+    pub fn search<'a>(&'a self, rtxn: &'a RoTxn<'a>, progress: &'a Progress) -> Search<'a> {
+        Search::new(rtxn, self, progress)
     }
 
     /// Returns the index creation time.
