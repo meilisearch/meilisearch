@@ -377,7 +377,7 @@ pub fn verify_key_matches(uid: Uuid, master_key: &[u8], encoded_key: &[u8]) -> b
 /// Decodes a hex-encoded byte slice into raw bytes.
 /// Returns None if the input is invalid hex.
 fn decode_hex(hex: &[u8]) -> Option<Vec<u8>> {
-    if hex.len() % 2 != 0 {
+    if !hex.len().is_multiple_of(2) {
         return None;
     }
 
@@ -390,9 +390,7 @@ fn decode_hex(hex: &[u8]) -> Option<Vec<u8>> {
         }
     }
 
-    hex.chunks_exact(2)
-        .map(|pair| Some(hex_val(pair[0])? << 4 | hex_val(pair[1])?))
-        .collect()
+    hex.chunks_exact(2).map(|pair| Some(hex_val(pair[0])? << 4 | hex_val(pair[1])?)).collect()
 }
 
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.
