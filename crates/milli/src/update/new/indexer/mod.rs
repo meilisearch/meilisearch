@@ -512,36 +512,62 @@ where
     SD: SettingsDelta + Sync,
     MSP: Fn() -> bool + Sync,
 {
-    let fids_to_delete: Option<BTreeSet<_>> = {
-        let rtxn = index.read_txn()?;
-        let fields_ids_map = index.fields_ids_map(&rtxn)?;
-        let old_searchable_attributes = settings_delta.old_searchable_attributes().as_ref();
-        let new_searchable_attributes = settings_delta.new_searchable_attributes().as_ref();
-        old_searchable_attributes.zip(new_searchable_attributes).map(|(old, new)| {
-            old.iter()
-                // Ignore the field if it is not searchable anymore
-                // or if it was never referenced in any document
-                .filter_map(|name| if new.contains(name) { None } else { fields_ids_map.id(name) })
-                .collect()
-        })
+    // Get the fids to delete from the settings delta.
+    // Compare the old and new fields ids map to find the fids that are no longer searchable.
+    let fids_to_delete: BTreeSet<_> = {
+        let old_fields_ids_map = settings_delta.old_fields_ids_map();
+        let new_fields_ids_map = settings_delta.new_fields_ids_map();
+        old_fields_ids_map
+            .iter_id_metadata()
+            .filter_map(|(id, metadata)| {
+                if metadata.is_searchable()
+                    && new_fields_ids_map
+                        .metadata(id)
+                        .map_or(true, |metadata| !metadata.is_searchable())
+                {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     };
 
-    let Some(fids_to_delete) = fids_to_delete else {
+    if fids_to_delete.is_empty() {
         return Ok(());
     };
 
+    delete_old_fid_based_databases_from_fids(
+        wtxn,
+        index,
+        must_stop_processing,
+        &fids_to_delete,
+        progress,
+    )
+}
+
+pub fn delete_old_fid_based_databases_from_fids<MSP>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    must_stop_processing: &MSP,
+    fids_to_delete: &BTreeSet<u16>,
+    progress: &Progress,
+) -> Result<()>
+where
+    MSP: Fn() -> bool + Sync,
+{
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
-    delete_old_word_fid_docids(wtxn, index.word_fid_docids, must_stop_processing, &fids_to_delete)?;
+    delete_old_word_fid_docids(wtxn, index.word_fid_docids, must_stop_processing, fids_to_delete)?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldFidWordCountDocids);
-    delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, &fids_to_delete)?;
+    delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, fids_to_delete)?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldWordPrefixFidDocids);
     delete_old_word_fid_docids(
         wtxn,
         index.word_prefix_fid_docids,
         must_stop_processing,
-        &fids_to_delete,
+        fids_to_delete,
     )?;
 
     Ok(())
