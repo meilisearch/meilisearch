@@ -188,9 +188,7 @@ fn fetch_first_document<'b, 'pl: 'b>(
     operations
         .iter()
         .find_map(|payload| {
-            let Some(payload) = payload.bytes() else {
-                return None;
-            };
+            let payload = payload.bytes()?;
             Deserializer::from_slice(payload)
                 .into_iter::<&RawValue>()
                 .next()
@@ -349,10 +347,13 @@ impl<'pl> DocumentOperations<'pl> {
                 (
                     None,
                     Replacement { on_missing_document, .. } | Update { on_missing_document, .. },
-                ) => match (document_existence, on_missing_document) {
-                    (DocumentExistence::Missing, Skip) => continue,
-                    (_, _) => (),
-                },
+                ) => {
+                    if let (DocumentExistence::Missing, Skip) =
+                        (document_existence, on_missing_document)
+                    {
+                        continue;
+                    }
+                }
                 (_, Deletion) => document_operations.clear(),
                 (Some(Replacement { .. } | Update { .. }), Replacement { .. }) => {
                     document_operations.clear()
@@ -458,12 +459,12 @@ fn extract_payload_changes<'pl>(
 ) -> Result<(IndexMap<String, DocumentOperations<'pl>>, PayloadStats, FieldsIdsMap)> {
     let mut new_docids_version_offsets = IndexMap::<_, DocumentOperations>::new();
     let mut fids_map = FieldsIdsMap::new();
-    let mut bump = bumpalo::Bump::new();
+    let bump = bumpalo::Bump::new();
 
     let mut iter = Deserializer::from_slice(payload).into_iter::<&RawValue>();
     while let Some(doc) = iter.next().transpose().map_err(InternalError::SerdeJson)? {
         let external_document_id =
-            match primary_key.extract_fields_and_docid(doc, &mut fids_map, &mut bump) {
+            match primary_key.extract_fields_and_docid(doc, &mut fids_map, &bump) {
                 Ok(external_document_id) => external_document_id.to_de(),
                 Err(Error::UserError(user_error)) => {
                     let payload_stats = PayloadStats {
@@ -511,7 +512,7 @@ fn extract_payload_deletions<'pl>(
 ) -> (IndexMap<String, DocumentOperations<'pl>>, PayloadStats) {
     let docops: IndexMap<_, _> = external_document_ids
         .iter()
-        .filter(|id| !shards.is_some_and(|shards| !shards.must_process(id)))
+        .filter(|id| shards.is_none_or(|shards| shards.must_process(id)))
         .map(|id| (id.to_string(), DocumentOperations::one_deletion()))
         .collect();
     let payload_stats = PayloadStats { bytes: 0, document_count: docops.len() as u64, error: None };
