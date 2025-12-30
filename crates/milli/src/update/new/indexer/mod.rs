@@ -501,7 +501,7 @@ where
 
 /// Deletes entries refering the provided
 /// fids from the fid-based databases.
-fn delete_old_fid_based_databases<SD, MSP>(
+pub fn delete_old_fid_based_databases<SD, MSP>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     settings_delta: &SD,
