@@ -5,16 +5,16 @@ on:
   workflow_dispatch:
     inputs:
       docker_image:
-        description: 'The Meilisearch Docker image used'
+        description: "The Meilisearch Docker image used"
         required: false
         default: nightly
   schedule:
-    - cron: '0 6 * * *' # Every day at 6:00am
+    - cron: "0 6 * * *" # Every day at 6:00am
 
 env:
-  MEILI_MASTER_KEY: 'masterKey'
-  MEILI_NO_ANALYTICS: 'true'
-  DISABLE_COVERAGE: 'true'
+  MEILI_MASTER_KEY: "masterKey"
+  MEILI_NO_ANALYTICS: "true"
+  DISABLE_COVERAGE: "true"
 
 jobs:
   define-docker-image:
@@ -38,9 +38,9 @@ jobs:
           DOCKER_IMAGE: ${{ steps.define-image.outputs.docker-image }}
         run: echo "Docker image is $DOCKER_IMAGE"
 
-##########
-## SDKs ##
-##########
+  ##########
+  ## SDKs ##
+  ##########
 
   meilisearch-dotnet-tests:
     needs: define-docker-image
@@ -77,14 +77,14 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-dart
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: 'latest'
+          sdk: "latest"
       - name: Install dependencies
         run: dart pub get
       - name: Run integration tests
@@ -101,7 +101,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -131,7 +131,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -140,7 +140,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           java-version: 17
-          distribution: 'temurin'
+          distribution: "temurin"
           cache: gradle
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -158,7 +158,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -166,21 +166,21 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v5
         with:
-          cache: 'yarn'
+          cache: "pnpm"
       - name: Install dependencies
-        run: yarn --dev
+        run: pnpm install
       - name: Run tests
-        run: yarn test
+        run: pnpm test
       - name: Build project
-        run: yarn build
+        run: pnpm build
       - name: Run ESM env
-        run: yarn test:env:esm
+        run: pnpm test:env:esm
       - name: Run Node.js env
-        run: yarn test:env:nodejs
+        run: pnpm test:env:nodejs
       - name: Run node typescript env
-        run: yarn test:env:node-ts
+        run: pnpm test:env:node-ts
       - name: Run Browser env
-        run: yarn test:env:browser
+        run: pnpm test:env:browser
 
   meilisearch-php-tests:
     needs: define-docker-image
@@ -193,7 +193,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -222,7 +222,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -247,7 +247,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -272,7 +272,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -293,7 +293,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -301,9 +301,9 @@ jobs:
       - name: Run tests
         run: swift test
 
-########################
-## FRONT-END PLUGINS ##
-########################
+  ########################
+  ## FRONT-END PLUGINS ##
+  ########################
 
   meilisearch-js-plugins-tests:
     needs: define-docker-image
@@ -316,7 +316,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -324,17 +324,17 @@ jobs:
       - name: Setup node
         uses: actions/setup-node@v5
         with:
-          cache: yarn
+          cache: pnpm
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: Run tests
-        run: yarn test
+        run: pnpm test
       - name: Build all the playgrounds and the packages
-        run: yarn build
+        run: pnpm build
 
-########################
-## BACK-END PLUGINS ###
-########################
+  ########################
+  ## BACK-END PLUGINS ###
+  ########################
 
   meilisearch-rails-tests:
     needs: define-docker-image
@@ -347,9 +347,9 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     env:
-      RAILS_VERSION: '7.0'
+      RAILS_VERSION: "7.0"
     steps:
       - uses: actions/checkout@v5
         with:
@@ -379,7 +379,7 @@ jobs:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - uses: actions/checkout@v5
         with:
