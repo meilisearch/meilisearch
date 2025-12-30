@@ -1,12 +1,11 @@
 use std::sync::atomic::Ordering;
-use std::{mem, ops, ptr, vec};
+use std::{ops, ptr, vec};
 
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
+use hashbrown::hash_map::Entry;
 use heed::RoTxn;
-use indexmap::map::Entry;
-use indexmap::IndexMap;
 use memmap2::Mmap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::slice::{ParallelSlice, ParallelSliceMut as _};
@@ -24,7 +23,7 @@ use crate::update::new::indexer::current_edition::sharding::Shards;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
-use crate::update::{AvailableIds, IndexDocumentsMethod, MissingDocumentPolicy};
+use crate::update::{ConcurrentAvailableIds, IndexDocumentsMethod, MissingDocumentPolicy};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
 /// The set of operations to be applied to multiple documents in an index.
@@ -143,21 +142,44 @@ impl<'pl> IndexOperations<'pl> {
 
         step.store(payload_count as u32, Ordering::Relaxed);
 
-        let IndexedPayloadOperations { document_operations, fields_ids_map, payload_stats } =
+        let IndexedPayloadOperations { mut document_operations, fields_ids_map, payload_stats } =
             indexed_document_operations;
 
         let capacity = document_operations.len();
-        let mut docids_version_offsets = BumpVec::with_capacity_in(capacity, indexer);
-        let mut available_docids = AvailableIds::new(&documents_ids);
 
         // We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
         progress.update_progress(IndexingStep::AssigningDocumentsIds);
         let external_documents_ids = index.external_documents_ids();
-        for (external_id, ops) in document_operations {
-            let (docid, is_missing) = match external_documents_ids.get(rtxn, &external_id)? {
-                Some(docid) => (docid, false),
-                None => (available_docids.next().ok_or(UserError::DocumentLimitReached)?, true),
-            };
+
+        let rtxn_id = rtxn.id();
+        let available_ids = ConcurrentAvailableIds::new(documents_ids);
+        // Note that assigning internal IDs in parallel
+        // makes us loose the original order of the documents.
+        let documents_with_ids = rayon::broadcast(|context| -> Result<Vec<_>, crate::Error> {
+            let local_rtxn = index.read_txn()?;
+            assert_eq!(rtxn_id, local_rtxn.id(), "sub-read txns must see the same database state");
+            document_operations
+                .keys()
+                .enumerate()
+                .filter(|(index, _)| *index % context.num_threads() == context.index())
+                .map(|(_, external_id)| {
+                    match external_documents_ids.get(&local_rtxn, external_id)? {
+                        // TODO remove those clones...
+                        Some(docid) => Ok((external_id.clone(), docid, false)),
+                        None => {
+                            let id = available_ids.next().ok_or(UserError::DocumentLimitReached)?;
+                            Ok((external_id.clone(), id, true))
+                        }
+                    }
+                })
+                .collect()
+        });
+
+        let documents_with_ids = documents_with_ids.into_iter().collect::<Result<Vec<_>>>()?;
+        let mut docids_version_offsets = BumpVec::with_capacity_in(capacity, indexer);
+        for (external_id, docid, is_missing) in documents_with_ids.into_iter().flatten() {
+            // TODO avoid doing mutable operations here
+            let ops = document_operations.remove(&external_id).unwrap();
             if let Some(ops) = ops.into_payload_operations(is_missing, docid) {
                 let external_id = &*indexer.alloc_str(&external_id);
                 docids_version_offsets.push((external_id, ops));
@@ -210,7 +232,7 @@ struct IndexedPayloadOperations<'pl> {
     /// Represents the operations that will be applied to the documents of this payload.
     ///
     /// The key corresponds to the external document id.
-    document_operations: IndexMap<String, DocumentOperations<'pl>>,
+    document_operations: hashbrown::HashMap<String, DocumentOperations<'pl>>,
 
     /// The local fields ids map for this payload or a union of payloads.
     fields_ids_map: FieldsIdsMap,
@@ -276,17 +298,13 @@ impl ops::BitOr for IndexedPayloadOperations<'_> {
 
         for (external_document_id, rhs_docops) in rhs_document_operations {
             match document_operations.entry(external_document_id) {
-                Entry::Occupied(mut entry) => {
-                    // Unfortunately we don't have the OccupiedEntry::replace_entry_with method
-                    // on the IndexMap entry. This operation would be much more elegant otherwise.
-                    let lhs_docops = mem::replace(entry.get_mut(), DocumentOperations::empty());
-                    match DocumentOperations::from_iter(
-                        lhs_docops.into_iter().chain(rhs_docops),
-                        DocumentExistence::Unknown,
-                    ) {
-                        Some(operations) => entry.insert(operations),
-                        None => entry.shift_remove(),
-                    };
+                Entry::Occupied(entry) => {
+                    entry.replace_entry_with(|_, lhs_docops| {
+                        DocumentOperations::from_iter(
+                            lhs_docops.into_iter().chain(rhs_docops),
+                            DocumentExistence::Unknown,
+                        )
+                    });
                 }
                 Entry::Vacant(vacant_entry) => {
                     vacant_entry.insert(rhs_docops);
@@ -308,14 +326,6 @@ impl ops::BitOr for IndexedPayloadOperations<'_> {
 struct DocumentOperations<'pl>(Vec<DocumentOperation<'pl>>);
 
 impl<'pl> DocumentOperations<'pl> {
-    /// Creates an empty set of operations.
-    ///
-    /// This is useful mostly when merging documents operations retrieved
-    /// from payload and shouldn't be considered a valid state otherwise.
-    fn empty() -> Self {
-        DocumentOperations(Vec::new())
-    }
-
     fn one_deletion() -> Self {
         DocumentOperations(vec![DocumentOperation::Deletion])
     }
@@ -458,8 +468,8 @@ fn extract_payload_changes<'pl>(
     primary_key: &PrimaryKey<'_>,
     method: IndexDocumentsMethod,
     shards: Option<&Shards>,
-) -> Result<(IndexMap<String, DocumentOperations<'pl>>, PayloadStats, FieldsIdsMap)> {
-    let mut new_docids_version_offsets = IndexMap::<_, DocumentOperations>::new();
+) -> Result<(hashbrown::HashMap<String, DocumentOperations<'pl>>, PayloadStats, FieldsIdsMap)> {
+    let mut new_docids_version_offsets = hashbrown::HashMap::<_, DocumentOperations>::new();
     let mut fids_map = FieldsIdsMap::new();
     let bump = bumpalo::Bump::new();
 
@@ -476,7 +486,7 @@ fn extract_payload_changes<'pl>(
                     };
                     // In case of a user error, we immediately return
                     // it and ignore the documents from this payload.
-                    return Ok((IndexMap::new(), payload_stats, FieldsIdsMap::new()));
+                    return Ok((hashbrown::HashMap::new(), payload_stats, FieldsIdsMap::new()));
                 }
                 Err(error) => return Err(error),
             };
@@ -511,8 +521,8 @@ fn extract_payload_changes<'pl>(
 fn extract_payload_deletions<'pl>(
     external_document_ids: &[&str],
     shards: Option<&Shards>,
-) -> (IndexMap<String, DocumentOperations<'pl>>, PayloadStats) {
-    let docops: IndexMap<_, _> = external_document_ids
+) -> (hashbrown::HashMap<String, DocumentOperations<'pl>>, PayloadStats) {
+    let docops: hashbrown::HashMap<_, _> = external_document_ids
         .iter()
         .filter(|id| shards.is_none_or(|shards| shards.must_process(id)))
         .map(|id| (id.to_string(), DocumentOperations::one_deletion()))
