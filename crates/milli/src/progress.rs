@@ -62,7 +62,6 @@ impl Progress {
         };
         let InnerProgress { steps, durations } = &mut *inner;
 
-        let now = Instant::now();
         let step_type = TypeId::of::<P>();
         if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
             if steps[idx].1.name() == sub_progress.name() {
@@ -70,11 +69,14 @@ impl Progress {
                 return UpdateStepStatus::NotUpdated;
             }
 
+            let now = Instant::now();
             push_steps_durations(steps, durations, now, idx);
             steps.truncate(idx);
+            steps.push((step_type, Box::new(sub_progress), now));
+        } else {
+            steps.push((step_type, Box::new(sub_progress), Instant::now()));
         }
 
-        steps.push((step_type, Box::new(sub_progress), now));
         UpdateStepStatus::Updated
     }
 
@@ -92,14 +94,13 @@ impl Progress {
 
         let InnerProgress { steps, durations } = &mut *inner;
 
-        let now = Instant::now();
         let step_type = TypeId::of::<P>();
-
         match steps
             .iter()
             .position(|(id, s, _)| *id == step_type && s.name() == sub_progress.name())
         {
             Some(idx) => {
+                let now = Instant::now();
                 push_steps_durations(steps, durations, now, idx);
                 steps.truncate(idx);
                 UpdateStepStatus::Updated
