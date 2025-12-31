@@ -523,7 +523,7 @@ where
                 if metadata.is_searchable()
                     && new_fields_ids_map
                         .metadata(id)
-                        .map_or(true, |metadata| !metadata.is_searchable())
+                        .is_none_or(|metadata| !metadata.is_searchable())
                 {
                     Some(id)
                 } else {
