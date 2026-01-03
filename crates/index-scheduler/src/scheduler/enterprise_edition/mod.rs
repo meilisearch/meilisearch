@@ -128,7 +128,16 @@ impl IndexScheduler {
         must_stop_processing: &crate::scheduler::MustStopProcessing,
     ) -> crate::Result<u64> {
         // TECHDEBT: this spawns a `ureq` agent additionally to `reqwest`. We probably want to harmonize all of this.
-        let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(5)).build();
+        let config = http_client::ureq::config::Config::builder()
+            .prepare(|config| config.timeout_global(Some(Duration::from_secs(5))))
+            .build();
+
+        /// FIXME: breaks use of internal IPs
+        let agent = http_client::ureq::Agent::new_with_config(
+            config,
+            http_client::policy::Policy::deny_all_local_ips(),
+        )
+        ;
 
         let mut indexer_alloc = Bump::new();
 

@@ -1009,6 +1009,12 @@ impl IndexScheduler {
                 return;
             }
         };
+        let config = http_client::ureq::config::Config::builder()
+            .prepare(|config| config.timeout_global(Some(Duration::from_secs(30)))).build();
+        let client = http_client::ureq::Agent::new_with_config(
+            config,
+            http_client::policy::Policy::deny_all_local_ips(),
+        );
 
         std::thread::spawn(move || {
             for (uuid, Webhook { url, headers }) in webhooks.iter() {
@@ -1020,17 +1026,15 @@ impl IndexScheduler {
                     written: 0,
                 };
 
-                let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
+                let mut reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
 
-                let mut request = ureq::post(url)
-                    .timeout(Duration::from_secs(30))
-                    .set("Content-Encoding", "gzip")
-                    .set("Content-Type", "application/x-ndjson");
+                let mut request = client.post(url)
+                    .header("Content-Encoding", "gzip")
+                    .header("Content-Type", "application/x-ndjson");
                 for (header_name, header_value) in headers.iter() {
-                    request = request.set(header_name, header_value);
+                    request = request.header(header_name, header_value);
                 }
-
-                if let Err(e) = request.send(reader) {
+                if let Err(e) = request.send(http_client::ureq::SendBody::from_reader(&mut reader)) {
                     tracing::error!("While sending data to the webhook {uuid}: {e}");
                 }
             }

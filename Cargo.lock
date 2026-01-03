@@ -3298,7 +3298,6 @@ dependencies = [
  "time",
  "tokio",
  "tracing",
- "ureq 2.12.1",
  "urlencoding",
  "uuid",
 ]
@@ -4258,6 +4257,7 @@ dependencies = [
  "hashbrown 0.15.5",
  "heed",
  "hf-hub",
+ "http-client",
  "indexmap",
  "insta",
  "itertools 0.14.0",
