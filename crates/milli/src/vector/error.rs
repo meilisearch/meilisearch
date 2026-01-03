@@ -63,7 +63,7 @@ pub enum EmbedErrorKind {
     #[error("model not found. Meilisearch will not automatically download models from the Ollama library, please pull the model manually{}", option_info(.0.as_deref(), "server replied with "))]
     OllamaModelNotFoundError(Option<String>),
     #[error("error deserializing the response body as JSON:\n  - {0}")]
-    RestResponseDeserialization(std::io::Error),
+    RestResponseDeserialization(http_client::ureq::Error),
     #[error("expected a response containing {0} embeddings, got only {1}")]
     RestResponseEmbeddingCount(usize, usize),
     #[error("could not authenticate against {embedding} server{server_reply}{hint}", embedding=match *.1 {
@@ -93,7 +93,7 @@ pub enum EmbedErrorKind {
     #[error("received unexpected HTTP {} from embedding server{}", .0, option_info(.1.as_deref(), "server replied with "))]
     RestOtherStatusCode(u16, Option<String>),
     #[error("could not reach embedding server:\n  - {0}")]
-    RestNetwork(ureq::Transport),
+    RestNetwork(http_client::ureq::Error),
     #[error("error extracting embeddings from the response:\n  - {0}")]
     RestExtractionError(String),
     #[error("was expecting embeddings of dimension `{0}`, got embeddings of dimensions `{1}`")]
@@ -162,7 +162,7 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::OllamaModelNotFoundError(inner), fault: FaultSource::User }
     }
 
-    pub(crate) fn rest_response_deserialization(error: std::io::Error) -> EmbedError {
+    pub(crate) fn rest_response_deserialization(error: http_client::ureq::Error) -> EmbedError {
         Self {
             kind: EmbedErrorKind::RestResponseDeserialization(error),
             fault: FaultSource::Runtime,
@@ -220,7 +220,7 @@ impl EmbedError {
         }
     }
 
-    pub(crate) fn rest_network(transport: ureq::Transport) -> EmbedError {
+    pub(crate) fn rest_network(transport: http_client::ureq::Error) -> EmbedError {
         Self { kind: EmbedErrorKind::RestNetwork(transport), fault: FaultSource::Runtime }
     }
 

@@ -46,7 +46,6 @@ time = { version = "0.3.44", features = [
     "macros",
 ] }
 tracing = "0.1.41"
-ureq = "2.12.1"
 uuid = { version = "1.18.1", features = ["serde", "v4"] }
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
 rusty-s3 = "0.8.1"
