@@ -19,7 +19,7 @@ members = [
     "crates/tracing-trace",
     "crates/xtask",
     "crates/build-info",
-    "crates/openapi-generator",
+    "crates/openapi-generator", "crates/http-client",
 ]
 
 [workspace.package]
