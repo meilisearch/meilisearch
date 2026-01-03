@@ -10,7 +10,7 @@ use milli::vector::RuntimeEmbedders;
 use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
 use serde_json::from_value;
 use tempfile::tempdir;
-use ureq::json;
+use serde_json::json;
 use Criterion::*;
 
 #[test]

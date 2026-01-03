@@ -247,10 +247,11 @@ impl Embedder {
                     })
                     .map_err(NewEmbedderError::api_get)?
             };
+
             let pooling = match api.get("1_Pooling/config.json") {
                 Ok(pooling) => Some(pooling),
                 Err(hf_hub::api::sync::ApiError::RequestError(error))
-                    if matches!(*error, ureq::Error::Status(404, _,)) =>
+                    if matches!(*error, danger_ureq::Error::Status(404, _)) =>
                 {
                     // ignore the error if the file simply doesn't exist
                     None
