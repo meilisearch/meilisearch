@@ -147,7 +147,7 @@ async fn patch_network_without_origin(
                     // 1. check that the experimental feature is enabled
                     let remote_features: RuntimeTogglableFeatures = match proxy::send_request(
                         "/experimental-features",
-                        reqwest::Method::GET,
+                        http_client::reqwest::Method::GET,
                         None,
                         Body::none(),
                         remote_name,
@@ -174,7 +174,7 @@ async fn patch_network_without_origin(
                     // 2. check whether there are any unfinished network task
                     let network_tasks: AllTasks = match proxy::send_request(
                         "/tasks?types=networkTopologyChange&statuses=enqueued,processing&limit=1",
-                        reqwest::Method::GET,
+                        http_client::reqwest::Method::GET,
                         None,
                         Body::none(),
                         remote_name,

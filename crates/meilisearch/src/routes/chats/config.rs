@@ -1,6 +1,6 @@
 use async_openai::config::{AzureConfig, OpenAIConfig};
 use meilisearch_types::features::ChatCompletionSettings as DbChatSettings;
-use reqwest::header::HeaderMap;
+use http_client::reqwest::header::HeaderMap;
 use secrecy::SecretString;
 
 #[derive(Debug, Clone)]

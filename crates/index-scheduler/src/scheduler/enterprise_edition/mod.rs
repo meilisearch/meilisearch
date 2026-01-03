@@ -335,12 +335,18 @@ impl IndexScheduler {
             ("DurationSeconds", &duration.to_string()),
         ];
 
-        let client = reqwest::Client::new();
+        let client = http_client::reqwest::Client::builder().build().unwrap();
         let response = client
             .post("https://sts.amazonaws.com/")
-            .header(reqwest::header::ACCEPT, "application/json")
-            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .form(&form_data)
+            .prepare(|inner| {
+                inner
+                    .header(http_client::reqwest::header::ACCEPT, "application/json")
+                    .header(
+                        http_client::reqwest::header::CONTENT_TYPE,
+                        "application/x-www-form-urlencoded",
+                    )
+                    .form(&form_data)
+            })
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send STS request: {e}"))?;
@@ -650,7 +656,7 @@ async fn multipart_stream_to_s3(
     use std::path::PathBuf;
 
     use bytes::{Bytes, BytesMut};
-    use reqwest::{Client, Response};
+    use http_client::reqwest::{Client, Response};
     use rusty_s3::actions::CreateMultipartUpload;
     use rusty_s3::{Bucket, BucketError, Credentials, S3Action as _, UrlStyle};
     use tokio::task::JoinHandle;
@@ -676,12 +682,16 @@ async fn multipart_stream_to_s3(
     let action = bucket.create_multipart_upload(Some(&credential), &object);
     let url = action.sign(s3_signature_duration);
 
-    let client = Client::new();
+    let client = Client::builder().build().unwrap();
     let resp = client.post(url).send().await.map_err(Error::S3HttpError)?;
     let status = resp.status();
 
     let body = match resp.error_for_status_ref() {
-        Ok(_) => resp.text().await.map_err(Error::S3HttpError)?,
+        Ok(_) => resp
+            .text()
+            .await
+            .map_err(http_client::reqwest::Error::from)
+            .map_err(Error::S3HttpError)?,
         Err(_) => {
             return Err(Error::S3Error { status, body: resp.text().await.unwrap_or_default() })
         }
@@ -694,9 +704,10 @@ async fn multipart_stream_to_s3(
     // We use this bumpalo for etags strings.
     let bump = bumpalo::Bump::new();
     let mut etags = Vec::<&str>::new();
-    let mut in_flight = VecDeque::<(JoinHandle<reqwest::Result<Response>>, Bytes)>::with_capacity(
-        s3_max_in_flight_parts.get(),
-    );
+    let mut in_flight =
+        VecDeque::<(JoinHandle<http_client::reqwest::Result<Response>>, Bytes)>::with_capacity(
+            s3_max_in_flight_parts.get(),
+        );
 
     // Part numbers start at 1 and cannot be larger than 10k
     for part_number in 1u16.. {
@@ -757,10 +768,11 @@ async fn multipart_stream_to_s3(
                 let url = url.clone();
                 let body = body.clone();
                 async move {
-                    match client.put(url).body(body).send().await {
-                        Ok(resp) if resp.status().is_client_error() => {
-                            resp.error_for_status().map_err(backoff::Error::Permanent)
-                        }
+                    match client.put(url).prepare(|inner| inner.body(body)).send().await {
+                        Ok(resp) if resp.status().is_client_error() => resp
+                            .error_for_status()
+                            .map_err(http_client::reqwest::Error::from)
+                            .map_err(backoff::Error::Permanent),
                         Ok(resp) => Ok(resp),
                         Err(e) => Err(backoff::Error::transient(e)),
                     }
@@ -790,7 +802,7 @@ async fn multipart_stream_to_s3(
         let url = url.clone();
         let body = body.clone();
         async move {
-            match client.post(url).body(body).send().await {
+            match client.post(url).prepare(|inner| inner.body(body)).send().await {
                 Ok(resp) if resp.status().is_client_error() => {
                     Err(backoff::Error::Permanent(Error::S3Error {
                         status: resp.status(),
@@ -815,8 +827,10 @@ async fn multipart_stream_to_s3(
 
 #[cfg(unix)]
 async fn join_and_map_error(
-    join_handle: tokio::task::JoinHandle<Result<reqwest::Response, reqwest::Error>>,
-) -> Result<reqwest::Response> {
+    join_handle: tokio::task::JoinHandle<
+        Result<http_client::reqwest::Response, http_client::reqwest::Error>,
+    >,
+) -> Result<http_client::reqwest::Response> {
     // safety: Panic happens if the task (JoinHandle) was aborted, cancelled, or panicked
     let request = join_handle.await.unwrap();
     let resp = request.map_err(Error::S3HttpError)?;
@@ -833,9 +847,9 @@ async fn join_and_map_error(
 fn extract_and_append_etag<'b>(
     bump: &'b bumpalo::Bump,
     etags: &mut Vec<&'b str>,
-    headers: &reqwest::header::HeaderMap,
+    headers: &http_client::reqwest::header::HeaderMap,
 ) -> Result<()> {
-    use reqwest::header::ETAG;
+    use http_client::reqwest::header::ETAG;
 
     let etag = headers.get(ETAG).ok_or_else(|| Error::S3XmlError("Missing ETag header".into()))?;
     let etag = etag.to_str().map_err(|e| Error::S3XmlError(Box::new(e)))?;

@@ -25,6 +25,7 @@ enum-iterator = "2.3.0"
 file-store = { path = "../file-store" }
 flate2 = "1.1.5"
 hashbrown = "0.15.5"
+http-client = { path = "../http-client" }
 indexmap = "2.12.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
@@ -48,10 +49,6 @@ tracing = "0.1.41"
 ureq = "2.12.1"
 uuid = { version = "1.18.1", features = ["serde", "v4"] }
 backoff = { version = "0.4.0", features = ["futures", "tokio"] }
-reqwest = { version = "0.12.24", features = [
-    "rustls-tls",
-    "http2",
-], default-features = false }
 rusty-s3 = "0.8.1"
 tokio = { version = "1.48.0", features = ["full"] }
 urlencoding = "2.1.3"
