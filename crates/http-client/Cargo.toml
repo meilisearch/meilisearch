@@ -1,0 +1,21 @@
+[package]
+name = "http-client"
+edition = "2024"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+readme.workspace = true
+license.workspace = true
+
+[dependencies]
+ureq = { version = "3.1.4", features = ["json"] }
+reqwest = { version = "0.12.24", features = [
+    "rustls-tls",
+    "json",
+], default-features = false }
+hyper-util = { version = "0.1.19", features = ["client", "client-legacy", "tokio"] }
+tower-service = "0.3.3"
+
+[dev-dependencies]
+tokio = { version = "1.48.0", features = ["full"] }
