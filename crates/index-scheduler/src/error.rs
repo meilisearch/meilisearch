@@ -7,7 +7,7 @@ use meilisearch_types::milli::DocumentId;
 use meilisearch_types::tasks::network::ReceiveTaskError;
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
-use reqwest::StatusCode;
+use http_client::reqwest::StatusCode;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -134,7 +134,7 @@ pub enum Error {
     #[error("S3 error: status: {status}, body: {body}")]
     S3Error { status: StatusCode, body: String },
     #[error("S3 HTTP error: {0}")]
-    S3HttpError(reqwest::Error),
+    S3HttpError(http_client::reqwest::Error),
     #[error("S3 XML error: {0}")]
     S3XmlError(Box<dyn std::error::Error + Send + Sync>),
     #[error("S3 bucket error: {0}")]

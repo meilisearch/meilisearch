@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::atomic::AtomicUsize;
 use std::time::Duration;
 
+use http_client::reqwest::{redirect, IntoUrl};
 use meili_snap::{json_string, snapshot};
-use reqwest::IntoUrl;
 use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
@@ -372,8 +372,20 @@ async fn create_faulty_mock_raw(sender: mpsc::Sender<()>) -> (&'static MockServe
     (mock_server, embedder_settings)
 }
 
-pub async fn post<T: IntoUrl>(url: T, text: &str) -> reqwest::Result<reqwest::Response> {
-    reqwest::Client::builder().build()?.post(url).json(&json!(text)).send().await
+pub async fn post<T: IntoUrl>(
+    url: T,
+    text: &str,
+) -> http_client::reqwest::Result<http_client::reqwest::Response> {
+    http_client::reqwest::Client::builder()
+        .build_with_policy(
+            // NO DANGER: tests
+            http_client::policy::Policy::danger_always_allow(),
+            redirect::Policy::default(),
+        )?
+        .post(url)
+        .prepare(|request| request.json(&json!(text)))
+        .send()
+        .await
 }
 
 #[actix_rt::test]

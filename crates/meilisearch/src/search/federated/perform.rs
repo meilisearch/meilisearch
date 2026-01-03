@@ -777,8 +777,8 @@ impl RemoteSearch {
         include_metadata: bool,
     ) -> Self {
         let mut in_flight_remote_queries = BTreeMap::new();
-        let client = reqwest::ClientBuilder::new()
-            .connect_timeout(std::time::Duration::from_millis(200))
+        let client = http_client::reqwest::ClientBuilder::new()
+            .prepare(|client| client.connect_timeout(std::time::Duration::from_millis(200)))
             .build()
             .unwrap();
         let params =
