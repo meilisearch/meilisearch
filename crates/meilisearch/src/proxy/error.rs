@@ -1,5 +1,5 @@
 use meilisearch_types::error::{ErrorCode as _, ResponseError};
-use reqwest::StatusCode;
+use http_client::reqwest::StatusCode;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyError {
@@ -44,9 +44,9 @@ impl ProxyError {
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct ReqwestErrorWithoutUrl(reqwest::Error);
+pub struct ReqwestErrorWithoutUrl(http_client::reqwest::Error);
 impl ReqwestErrorWithoutUrl {
-    pub fn new(inner: reqwest::Error) -> Self {
+    pub fn new(inner: http_client::reqwest::Error) -> Self {
         Self(inner.without_url())
     }
 }

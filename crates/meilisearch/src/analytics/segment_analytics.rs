@@ -125,7 +125,10 @@ impl SegmentAnalytics {
         let instance_uid = instance_uid.unwrap_or_else(Uuid::new_v4);
         write_user_id(&opt.db_path, &instance_uid);
 
-        let client = reqwest::Client::builder().connect_timeout(Duration::from_secs(10)).build();
+        let client = http_client::reqwest::Client::builder()
+            .prepare(|inner| inner.connect_timeout(Duration::from_secs(10)))
+            // NO DANGER: we send requests to an owned and fixed domain
+            .danger_build_no_ip_policy();
 
         // if reqwest throws an error we won't be able to send analytics
         if client.is_err() {

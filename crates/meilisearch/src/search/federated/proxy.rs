@@ -1,8 +1,8 @@
 pub use error::ProxySearchError;
 use error::ReqwestErrorWithoutUrl;
+use http_client::reqwest::{Client, Response, StatusCode};
 use meilisearch_types::network::Remote;
 use rand::Rng as _;
-use reqwest::{Client, Response, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
@@ -13,8 +13,8 @@ pub const PROXY_SEARCH_HEADER: &str = "Meili-Proxy-Search";
 pub const PROXY_SEARCH_HEADER_VALUE: &str = "true";
 
 mod error {
+    use http_client::reqwest::StatusCode;
     use meilisearch_types::error::ResponseError;
-    use reqwest::StatusCode;
 
     #[derive(Debug, thiserror::Error)]
     pub enum ProxySearchError {
@@ -66,9 +66,9 @@ mod error {
 
     #[derive(Debug, thiserror::Error)]
     #[error(transparent)]
-    pub struct ReqwestErrorWithoutUrl(reqwest::Error);
+    pub struct ReqwestErrorWithoutUrl(http_client::reqwest::Error);
     impl ReqwestErrorWithoutUrl {
-        pub fn new(inner: reqwest::Error) -> Self {
+        pub fn new(inner: http_client::reqwest::Error) -> Self {
             Self(inner.without_url())
         }
     }
@@ -89,7 +89,7 @@ mod error {
 pub struct ProxySearchParams {
     pub deadline: Option<std::time::Instant>,
     pub try_count: u32,
-    pub client: reqwest::Client,
+    pub client: http_client::reqwest::Client,
 }
 
 /// Performs a federated search on a remote host and returns the results
@@ -152,15 +152,21 @@ async fn try_proxy_search(
 ) -> Result<FederatedSearchResult, Retry> {
     let timeout = deadline.saturating_duration_since(std::time::Instant::now());
 
-    let request = client.post(url).json(&federated).timeout(timeout);
-    let request = if let Some(search_api_key) = search_api_key {
-        request.bearer_auth(search_api_key)
-    } else {
+    let request = client.post(url).prepare(|request| {
+        let request = request.json(&federated).timeout(timeout);
+        let request = if let Some(search_api_key) = search_api_key {
+            request.bearer_auth(search_api_key)
+        } else {
+            request
+        };
+        let request = request.header(PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE);
+        let request = if include_metadata {
+            request.header(INCLUDE_METADATA_HEADER, "true")
+        } else {
+            request
+        };
         request
-    };
-    let request = request.header(PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE);
-    let request =
-        if include_metadata { request.header(INCLUDE_METADATA_HEADER, "true") } else { request };
+    });
 
     let response = request.send().await;
     let response = match response {
@@ -211,7 +217,7 @@ async fn try_proxy_search(
 async fn parse_error(response: Response) -> Result<String, ReqwestErrorWithoutUrl> {
     let bytes = match response.bytes().await {
         Ok(bytes) => bytes,
-        Err(error) => return Err(ReqwestErrorWithoutUrl::new(error)),
+        Err(error) => return Err(ReqwestErrorWithoutUrl::new(error.into())),
     };
 
     Ok(parse_bytes_as_error(&bytes))
@@ -229,7 +235,7 @@ async fn parse_response<T: DeserializeOwned>(
 ) -> Result<T, Result<String, ReqwestErrorWithoutUrl>> {
     let bytes = match response.bytes().await {
         Ok(bytes) => bytes,
-        Err(error) => return Err(Err(ReqwestErrorWithoutUrl::new(error))),
+        Err(error) => return Err(Err(ReqwestErrorWithoutUrl::new(error.into()))),
     };
 
     match serde_json::from_slice::<T>(&bytes) {
