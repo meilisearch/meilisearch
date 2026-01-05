@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use heed::RwTxn;
+use rand::SeedableRng as _;
 
 use super::UpgradeIndex;
 use crate::progress::Progress;
