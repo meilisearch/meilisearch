@@ -108,6 +108,12 @@ impl<'pl> IndexOperations<'pl> {
         let primary_key = match primary_key_result.map_err(Some) {
             Ok((primary_key, _)) => primary_key,
             Err(mut user_error) => {
+                if operations.iter().all(|p| p.bytes().is_none_or(|b| b.is_empty())) {
+                    // We do not consider errors when all payloads are empty and
+                    // especially when it is an issue guessing the primary key.
+                    user_error = None;
+                }
+
                 let payload_stats = operations
                     .iter()
                     .map(|payload| PayloadStats {
