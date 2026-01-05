@@ -218,7 +218,7 @@ where
         target = "indexing::details",
         name = "index_documents_raw"
     )]
-    pub fn execute_raw(self, output: TransformOutput) -> Result<u64>
+    pub fn execute_raw(mut self, output: TransformOutput) -> Result<u64>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
@@ -566,6 +566,17 @@ where
             word_fid_docids.map(MergerBuilder::build),
         )?;
 
+        // Delete the old fid-based databases.
+        // this may not be the most efficient way to do it in this indexer,
+        // but we are in the legacy indexer, so it is the easiest way to do it until the new indexer is ready.
+        crate::update::new::indexer::delete_old_fid_based_databases(
+            self.wtxn,
+            self.index,
+            &*settings_diff,
+            &self.should_abort,
+            &Progress::default(),
+        )?;
+
         Ok(number_of_documents)
     }
 
@@ -576,7 +587,7 @@ where
         name = "index_documents_prefix_databases"
     )]
     pub fn execute_prefix_databases(
-        self,
+        &mut self,
         word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
         exact_word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
         word_position_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
