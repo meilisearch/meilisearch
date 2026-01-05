@@ -1628,7 +1628,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "A document cannot contain more than 65,535 fields.",
+        "message": "Index `[uuid]`: A document cannot contain more than 65,535 fields.",
         "code": "max_fields_limit_exceeded",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
