@@ -3,12 +3,10 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use super::query_graph::QueryGraph;
 use super::ranking_rules::{RankingRule, RankingRuleOutput};
-use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::ExactTerm;
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::search::steps::{ComputingBucketSortStep, RankingRuleStep};
 use crate::{CboRoaringBitmapCodec, Result, SearchContext, SearchLogger, TimeBudget};
 
 /// A ranking rule that produces 3 disjoint buckets:
@@ -39,10 +37,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for ExactAttribute {
         universe: &roaring::RoaringBitmap,
         query: &QueryGraph,
         _time_budget: &TimeBudget,
-        progress: &Progress,
     ) -> Result<()> {
-        progress.update_progress(ComputingBucketSortStep::from(self.id()));
-        let _step = progress.update_progress_scoped(RankingRuleStep::StartIteration);
         self.state = State::start_iteration(ctx, universe, query)?;
         Ok(())
     }
@@ -54,10 +49,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for ExactAttribute {
         _logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &roaring::RoaringBitmap,
         _time_budget: &TimeBudget,
-        progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
-        progress.update_progress(ComputingBucketSortStep::from(self.id()));
-        let _step = progress.update_progress_scoped(RankingRuleStep::NextBucket);
         let state = std::mem::take(&mut self.state);
         let (state, output) = State::next(state, universe);
         self.state = state;
