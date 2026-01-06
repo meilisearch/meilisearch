@@ -7,10 +7,8 @@ use roaring::RoaringBitmap;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use super::VectorStoreStats;
-use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::search::steps::{ComputingBucketSortStep, RankingRuleStep};
 use crate::vector::{DistributionShift, Embedder, VectorStore};
 use crate::{DocumentId, Result, SearchContext, SearchLogger, TimeBudget};
 
@@ -119,10 +117,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         universe: &RoaringBitmap,
         query: &Q,
         time_budget: &TimeBudget,
-        progress: &Progress,
     ) -> Result<()> {
-        progress.update_progress(ComputingBucketSortStep::from(self.id()));
-        let _step = progress.update_progress_scoped(RankingRuleStep::StartIteration);
         assert!(self.query.is_none());
 
         self.query = Some(query.clone());
@@ -139,10 +134,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
         time_budget: &TimeBudget,
-        progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
-        progress.update_progress(ComputingBucketSortStep::from(self.id()));
-        let _step = progress.update_progress_scoped(RankingRuleStep::NextBucket);
         let query = self.query.as_ref().unwrap().clone();
         let vector_candidates = &self.vector_candidates & universe;
 
@@ -177,7 +169,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             }));
         }
 
-        self.next_bucket(ctx, _logger, universe, time_budget, progress)
+        self.next_bucket(ctx, _logger, universe, time_budget)
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
@@ -190,9 +182,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
-        progress: &Progress,
     ) -> Result<Poll<RankingRuleOutput<Q>>> {
-        let _step = progress.update_progress_scoped(RankingRuleStep::NonBlockingNextBucket);
         let query = self.query.as_ref().unwrap().clone();
         let vector_candidates = &self.vector_candidates & universe;
 

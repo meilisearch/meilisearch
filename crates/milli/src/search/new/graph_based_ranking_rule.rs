@@ -50,12 +50,10 @@ use super::ranking_rule_graph::{
 };
 use super::small_bitmap::SmallBitmap;
 use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
-use crate::progress::Progress;
 use crate::score_details::Rank;
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::PathVisitor;
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::search::steps::{ComputingBucketSortStep, RankingRuleStep};
 use crate::{Result, TermsMatchingStrategy, TimeBudget};
 
 pub type Words = GraphBasedRankingRule<WordsGraph>;
@@ -142,10 +140,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         _universe: &RoaringBitmap,
         query_graph: &QueryGraph,
         _time_budget: &TimeBudget,
-        progress: &Progress,
     ) -> Result<()> {
-        progress.update_progress(ComputingBucketSortStep::from(self.id()));
-        let _step = progress.update_progress_scoped(RankingRuleStep::StartIteration);
         // the `next_max_cost` is the successor integer to the maximum cost of the paths in the graph.
         //
         // When there is a matching strategy, it also factors the additional costs of:
@@ -228,10 +223,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
         _time_budget: &TimeBudget,
-        progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
-        progress.update_progress(ComputingBucketSortStep::from(self.id()));
-        let _step = progress.update_progress_scoped(RankingRuleStep::NextBucket);
         // Will crash if `next_bucket` is called before `start_iteration` or after `end_iteration`,
         // should never happen
         let mut state = self.state.take().unwrap();

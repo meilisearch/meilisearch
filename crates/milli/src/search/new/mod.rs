@@ -700,7 +700,6 @@ pub fn execute_vector_search(
         ranking_score_threshold,
         exhaustive_number_hits,
         max_total_hits,
-        progress,
     )?;
 
     Ok(PartialSearchResult {
@@ -869,7 +868,6 @@ pub fn execute_search(
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
-            progress,
         )?
     } else {
         let ranking_rules =
@@ -889,7 +887,6 @@ pub fn execute_search(
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
-            progress,
         )?
     };
 
