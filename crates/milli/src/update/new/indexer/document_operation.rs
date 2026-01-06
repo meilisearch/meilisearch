@@ -131,9 +131,8 @@ impl<'pl> IndexOperations<'pl> {
             }
         };
 
-        let payload_count = operations.len();
-        let (step, progress_step) =
-            AtomicPayloadStep::new(payload_count.min(u32::MAX as usize) as u32);
+        let payload_count: u32 = operations.len().try_into().unwrap();
+        let (step, progress_step) = AtomicPayloadStep::new(payload_count);
         progress.update_progress(progress_step);
 
         let indexed_document_operations = operations
@@ -143,12 +142,12 @@ impl<'pl> IndexOperations<'pl> {
                 if must_stop_processing() {
                     return Err(InternalError::AbortedIndexation.into());
                 }
-                step.store(payload_index.min(u32::MAX as usize) as u32, Ordering::Relaxed);
+                step.store(payload_index as u32, Ordering::Relaxed);
                 IndexedPayloadOperations::from_payload(payload, &primary_key, shards)
             })
             .try_reduce(IndexedPayloadOperations::default, |lhs, rhs| lhs | rhs)?;
 
-        step.store(payload_count as u32, Ordering::Relaxed);
+        step.store(payload_count, Ordering::Relaxed);
 
         let IndexedPayloadOperations { document_operations, fields_ids_map, payload_stats } =
             indexed_document_operations;
