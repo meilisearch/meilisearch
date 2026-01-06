@@ -157,9 +157,9 @@ impl<'pl> IndexOperations<'pl> {
         progress.update_progress(IndexingStep::AssigningDocumentsIds);
         let external_documents_ids = index.external_documents_ids();
 
-        // We broadcast database reads to retrieve the internal IDs of the existing
-        // documents and mark the ones that needs a new one. To avoid creating a lot of
-        // read transactions we prefer broadcasting the work and creating one by thread.
+        // We read the database in parallel to retrieve the internal IDs of the existing
+        // documents and mark the ones that need a new ID. To avoid creating a lot of
+        // read transactions we prefer store the read transactions in a thread-local variable.
         let thread_local_rtxns = ThreadLocal::new();
         let rtxn_id = rtxn.id();
         let extracted_docids = document_operations
