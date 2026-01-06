@@ -630,6 +630,31 @@ impl From<Infallible> for Error {
     }
 }
 
+pub fn handle_store_mdb_error(
+    database_name: &'static str,
+    key: &[u8],
+    value_length: Option<usize>,
+    error: heed::Error,
+) -> Error {
+    match error {
+        heed::Error::Mdb(MdbError::MapFull) => Error::from(error),
+        heed::Error::Mdb(mdb_error) => match value_length {
+            Some(len) => Error::InternalError(InternalError::StorePut {
+                database_name,
+                key: key.into(),
+                value_length: len,
+                error: mdb_error.into(),
+            }),
+            None => Error::InternalError(InternalError::StoreDeletion {
+                database_name,
+                key: key.into(),
+                error: mdb_error.into(),
+            }),
+        },
+        non_mdb_error => Error::from(non_mdb_error),
+    }
+}
+
 impl From<HeedError> for Error {
     fn from(error: HeedError) -> Error {
         use self::Error::*;
