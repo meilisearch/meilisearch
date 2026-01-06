@@ -57,7 +57,7 @@ impl Progress {
             Ok(inner) => inner,
             Err(error) => {
                 tracing::error!("Failed to start progress step `{}`: {error}", sub_progress.name());
-                return UpdateStepStatus::Failed;
+                return UpdateStepStatus::NotUpdated;
             }
         };
         let InnerProgress { steps, durations } = &mut *inner;
@@ -88,7 +88,7 @@ impl Progress {
             Ok(inner) => inner,
             Err(error) => {
                 tracing::error!("Failed to end progress step `{}`: {error}", sub_progress.name());
-                return UpdateStepStatus::Failed;
+                return UpdateStepStatus::NotUpdated;
             }
         };
 
@@ -120,13 +120,18 @@ impl Progress {
                 );
                 ScopedProgressStep { progress: self, step: None }
             }
-            UpdateStepStatus::Failed => ScopedProgressStep { progress: self, step: None },
         }
     }
 
     // TODO: This code should be in meilisearch_types but cannot because milli can't depend on meilisearch_types
-    pub fn as_progress_view(&self) -> ProgressView {
-        let inner = self.steps.read().unwrap();
+    pub fn as_progress_view(&self) -> Option<ProgressView> {
+        let inner = match self.steps.read() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to read progress: {error}");
+                return None;
+            }
+        };
         let InnerProgress { steps, .. } = &*inner;
 
         let mut percentage = 0.0;
@@ -144,11 +149,17 @@ impl Progress {
             });
         }
 
-        ProgressView { steps: step_view, percentage: percentage * 100.0 }
+        Some(ProgressView { steps: step_view, percentage: percentage * 100.0 })
     }
 
     pub fn accumulated_durations(&self) -> IndexMap<String, String> {
-        let inner = self.steps.read().unwrap();
+        let inner = match self.steps.read() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to read progress: {error}");
+                return IndexMap::new();
+            }
+        };
         let InnerProgress { steps, durations, .. } = &*inner;
         let mut durations = durations.clone();
 
@@ -433,6 +444,4 @@ pub enum UpdateStepStatus {
     Updated,
     /// The step did not change.
     NotUpdated,
-    /// The step failed to update because the RWLock failed to lock.
-    Failed,
 }
