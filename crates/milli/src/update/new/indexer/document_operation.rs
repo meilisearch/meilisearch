@@ -161,13 +161,11 @@ impl<'pl> IndexOperations<'pl> {
         // documents and mark the ones that need a new ID. To avoid creating a lot of
         // read transactions we prefer store the read transactions in a thread-local variable.
         let thread_local_rtxns = ThreadLocal::new();
-        let rtxn_id = rtxn.id();
         let extracted_docids = document_operations
             .par_keys()
             .enumerate()
             .map(|(_, external_id)| {
                 let local_rtxn = thread_local_rtxns.get_or_try(|| index.read_txn())?;
-                assert_eq!(local_rtxn.id(), rtxn_id);
                 external_documents_ids.get(local_rtxn, external_id)
             })
             .collect_vec_list();
