@@ -120,6 +120,7 @@ async fn patch_network_without_origin(
         }
 
         let mut kept_leader = false;
+        let ip_policy = index_scheduler.ip_policy().clone();
 
         futures::stream::iter(
             old_network
@@ -142,6 +143,7 @@ async fn patch_network_without_origin(
                 }),
         )
         .try_for_each_concurrent(Some(40), |(remote_name, remote, allow_unreachable)| {
+            let ip_policy = ip_policy.clone();
             async move {
                 {
                     // 1. check that the experimental feature is enabled
@@ -152,6 +154,7 @@ async fn patch_network_without_origin(
                         Body::none(),
                         remote_name,
                         remote,
+                        ip_policy.clone(),
                     )
                     .await
                     {
@@ -179,6 +182,7 @@ async fn patch_network_without_origin(
                         Body::none(),
                         remote_name,
                         remote,
+                        ip_policy,
                     )
                     .await
                     {

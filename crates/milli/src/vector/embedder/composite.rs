@@ -74,6 +74,7 @@ impl Embedder {
     pub fn new(
         EmbedderOptions { search: search_options, index: index_options }: EmbedderOptions,
         cache_cap: usize,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> Result<Self, NewEmbedderError> {
         // don't check similarity if one child is a rest embedder with fragments
         // FIXME: skipping the check isn't ideal but we are unsure how to handle fragments in this context
@@ -87,9 +88,9 @@ impl Embedder {
             }
         }
 
-        let search = SubEmbedder::new(search_options, cache_cap)?;
+        let search = SubEmbedder::new(search_options, cache_cap, ip_policy.clone())?;
         // cache is only used at search
-        let index = SubEmbedder::new(index_options, 0)?;
+        let index = SubEmbedder::new(index_options, 0, ip_policy)?;
 
         // check dimensions
         if search.dimensions() != index.dimensions() {
@@ -157,16 +158,17 @@ impl SubEmbedder {
     pub fn new(
         options: SubEmbedderOptions,
         cache_cap: usize,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
             SubEmbedderOptions::HuggingFace(options) => {
                 Self::HuggingFace(hf::Embedder::new(options, cache_cap)?)
             }
             SubEmbedderOptions::OpenAi(options) => {
-                Self::OpenAi(openai::Embedder::new(options, cache_cap)?)
+                Self::OpenAi(openai::Embedder::new(options, cache_cap, ip_policy)?)
             }
             SubEmbedderOptions::Ollama(options) => {
-                Self::Ollama(ollama::Embedder::new(options, cache_cap)?)
+                Self::Ollama(ollama::Embedder::new(options, cache_cap, ip_policy)?)
             }
             SubEmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
@@ -175,6 +177,7 @@ impl SubEmbedder {
                 options,
                 cache_cap,
                 rest::ConfigurationSource::User,
+                ip_policy,
             )?),
         })
     }
