@@ -106,7 +106,7 @@ fn degraded_search_and_score_details() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [4, 1, 0, 3]
-    Scores: 1.0000 0.9167 0.8333 0.6667
+    Scores: 1.0000 0.9167 0.8333 0.6667 
     Score Details:
     [
         [
@@ -586,7 +586,7 @@ fn degraded_search_and_score_details_vector() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [2, 0, 3, 1]
-    Scores: 1.0000 0.5000 0.5000 0.0000
+    Scores: 1.0000 0.5000 0.5000 0.0000 
     Score Details:
     [
         [
