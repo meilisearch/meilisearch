@@ -4,6 +4,7 @@ use std::ops::Deref;
 use big_s::S;
 use bumpalo::Bump;
 use heed::{EnvOpenOptions, RwTxn};
+use http_client::policy::IpPolicy;
 use maplit::btreemap;
 use memmap2::Mmap;
 use tempfile::TempDir;
@@ -70,7 +71,14 @@ impl TempIndex {
         let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
+        let embedders = InnerIndexSettings::from_index(
+            &self.inner,
+            &rtxn,
+            // NO DANGER: test code
+            &IpPolicy::danger_always_allow(),
+            None,
+        )?
+        .runtime_embedders;
         let mut indexer = indexer::IndexOperations::new();
         match self.index_documents_config.update_method {
             IndexDocumentsMethod::ReplaceDocuments => {
@@ -110,6 +118,8 @@ impl TempIndex {
                 embedders,
                 &|| false,
                 &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
                 &Default::default(),
             )
         })
@@ -142,7 +152,13 @@ impl TempIndex {
     ) -> Result<(), crate::error::Error> {
         let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
         update(&mut builder);
-        builder.execute(&|| false, &Progress::default(), Default::default())?;
+        builder.execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )?;
         Ok(())
     }
 
@@ -158,7 +174,14 @@ impl TempIndex {
         let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
+        let embedders = InnerIndexSettings::from_index(
+            &self.inner,
+            &rtxn,
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            None,
+        )?
+        .runtime_embedders;
 
         let mut indexer = indexer::IndexOperations::new();
         let external_document_ids: Vec<_> =
@@ -194,6 +217,8 @@ impl TempIndex {
                 embedders,
                 &|| false,
                 &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
                 &Default::default(),
             )
         })
@@ -274,6 +299,8 @@ fn aborting_indexation() {
                 embedders,
                 &|| should_abort.load(Relaxed),
                 &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
                 &Default::default(),
             )
         })

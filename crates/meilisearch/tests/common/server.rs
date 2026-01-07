@@ -510,6 +510,7 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             experimental_no_edition_2024_for_facet_post_processing: false,
         },
         experimental_enable_metrics: false,
+        experimental_allowed_ip_networks: vec![cidr::AnyIpCidr::Any],
         ..Parser::parse_from(None as Option<&str>)
     }
 }

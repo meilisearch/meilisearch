@@ -1,6 +1,7 @@
 use big_s::S;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
+use http_client::policy::IpPolicy;
 use milli::documents::mmap_from_objects;
 use milli::progress::Progress;
 use milli::update::new::indexer;
@@ -25,7 +26,15 @@ fn test_facet_distribution_with_no_facet_values() {
         FilterableAttributesRule::Field(S("genres")),
         FilterableAttributesRule::Field(S("tags")),
     ]);
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
     wtxn.commit().unwrap();
 
     // index documents
@@ -75,6 +84,8 @@ fn test_facet_distribution_with_no_facet_values() {
         embedders,
         &|| false,
         &Progress::default(),
+        // NO DANGER: test
+        &IpPolicy::danger_always_allow(),
         &Default::default(),
     )
     .unwrap();

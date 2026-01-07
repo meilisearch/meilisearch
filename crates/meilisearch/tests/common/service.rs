@@ -8,6 +8,7 @@ use actix_web::http::StatusCode;
 use actix_web::test;
 use actix_web::test::TestRequest;
 use actix_web::web::Data;
+use http_client::policy::IpPolicy;
 use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
 use meilisearch::personalization::PersonalizationService;
@@ -154,7 +155,13 @@ impl Service {
             .options
             .experimental_personalization_api_key
             .clone()
-            .map(PersonalizationService::cohere)
+            .map(|api_key| {
+                PersonalizationService::cohere(
+                    api_key,
+                    // NO DANGER: test
+                    IpPolicy::danger_always_allow(),
+                )
+            })
             .unwrap_or_else(PersonalizationService::disabled);
 
         actix_web::test::init_service(create_app(
