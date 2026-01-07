@@ -1,9 +1,9 @@
 use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
-use crate::test_utils::Breakpoint::*;
 use crate::test_utils::{
     index_creation_task, replace_document_import_task, replace_document_import_task_with_opts,
     sample_documents, FailureLocation,
 };
+use crate::test_utils::{read_json, Breakpoint::*};
 use crate::{IndexScheduler, Query};
 use meili_snap::snapshot;
 use meilisearch_auth::AuthFilter;
@@ -525,6 +525,57 @@ fn batch_skip_creation_with_deletion() {
     index_scheduler.register(kind, None, false).unwrap();
 
     handle.advance_one_successful_batch();
+
+    snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+    let index = index_scheduler.index("docs").unwrap();
+    let rtxn = index.read_txn().unwrap();
+    snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
+}
+
+#[test]
+fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
+    let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+    let _task = index_scheduler
+        .register(
+            KindWithContent::IndexCreation { index_uid: "docs".to_string(), primary_key: None },
+            None,
+            false,
+        )
+        .unwrap();
+
+    handle.advance_one_successful_batch();
+
+    // First register a deletion task
+    index_scheduler
+        .register(
+            KindWithContent::DocumentDeletion {
+                index_uid: "docs".to_string(),
+                documents_ids: vec!["1".to_string()],
+            },
+            None,
+            false,
+        )
+        .unwrap();
+
+    // non-guessable pk
+    let content = format!(r#"{{ "id" : "Hello!", "noid" : "World!" }}"#);
+
+    let (_uuid, mut file0) = index_scheduler.queue.create_update_file_with_uuid(1).unwrap();
+    let documents_count0 = read_json(content.as_bytes(), &mut file0).unwrap();
+    file0.persist().unwrap();
+
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        None,
+        1,
+        documents_count0,
+        MissingDocumentPolicy::Create,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    handle.advance_one_failed_batch();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 
