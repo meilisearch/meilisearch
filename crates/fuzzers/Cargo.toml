@@ -16,6 +16,7 @@ bumpalo = "3.19.0"
 clap = { version = "4.5.52", features = ["derive"] }
 either = "1.15.0"
 fastrand = "2.3.0"
+http-client = { path = "../http-client" }
 milli = { path = "../milli" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
