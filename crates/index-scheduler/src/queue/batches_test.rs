@@ -559,13 +559,12 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
         )
         .unwrap();
 
-    // non-guessable pk
-    let content = format!(r#"{{ "id" : "Hello!", "noid" : "World!" }}"#);
+    // conflicting pk
+    let content = r#"{ "id": "Hello!", "noid": "World!" }"#.to_string();
 
     let (_uuid, mut file0) = index_scheduler.queue.create_update_file_with_uuid(1).unwrap();
     let documents_count0 = read_json(content.as_bytes(), &mut file0).unwrap();
     file0.persist().unwrap();
-
     let kind = replace_document_import_task_with_opts(
         "docs",
         None,
@@ -575,7 +574,54 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
     );
     index_scheduler.register(kind, None, false).unwrap();
 
-    handle.advance_one_failed_batch();
+    // no primary
+    let content = r#"{ "toto": "Hello!", "titi": "World!" }"#.to_string();
+
+    let (_uuid, mut file1) = index_scheduler.queue.create_update_file_with_uuid(2).unwrap();
+    let documents_count1 = read_json(content.as_bytes(), &mut file1).unwrap();
+    file1.persist().unwrap();
+
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        None,
+        2,
+        documents_count1,
+        MissingDocumentPolicy::Create,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    // actually guessing the pk
+    let content = r#"{ "id": "1234", "content": "Hello World!" }"#.to_string();
+
+    let (_uuid, mut file2) = index_scheduler.queue.create_update_file_with_uuid(3).unwrap();
+    let documents_count2 = read_json(content.as_bytes(), &mut file2).unwrap();
+    file2.persist().unwrap();
+
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        None,
+        3,
+        documents_count2,
+        MissingDocumentPolicy::Create,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    // We now know the pk, GG!
+    let content = r#"{ "id": "12345", "noid": "World!" }"#.to_string();
+
+    let (_uuid, mut file3) = index_scheduler.queue.create_update_file_with_uuid(4).unwrap();
+    let documents_count0 = read_json(content.as_bytes(), &mut file3).unwrap();
+    file3.persist().unwrap();
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        None,
+        4,
+        documents_count0,
+        MissingDocumentPolicy::Create,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    handle.advance_one_successful_batch();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
 

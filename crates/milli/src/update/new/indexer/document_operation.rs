@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 use std::{mem, ops, ptr, vec};
 
+use bstr::ByteSlice;
 use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
@@ -93,64 +94,62 @@ impl<'pl> IndexOperations<'pl> {
         progress.update_progress(IndexingStep::PreparingPayloads);
         let Self { operations } = self;
 
-        let documents_ids = index.documents_ids(rtxn)?;
-        let first_document = fetch_first_document(indexer, &operations)?;
-        let primary_key_result = retrieve_or_guess_primary_key(
+        // We first fetch the primary key from the index...
+        let primary_key = retrieve_or_guess_primary_key(
             rtxn,
             index,
             new_fields_ids_map,
             primary_key_from_op,
-            first_document,
-        )?;
+            None,
+        )?
+        .map(|(pk, _)| pk);
 
-        // Whenever retrieving the primary key fails with a user
-        // error we return it as a sub error for the first payload.
-        let primary_key = match primary_key_result.map_err(Some) {
-            Ok((primary_key, _)) => primary_key,
-            Err(mut user_error) => {
-                if operations.iter().all(|p| p.bytes().is_none_or(|b| b.is_empty())) {
-                    // We do not consider errors when all payloads are empty and
-                    // especially when it is an issue guessing the primary key.
-                    user_error = None;
+        // ...and if not present we try to guess it from
+        // the operations and ignore the useless ones.
+        let (primary_key, pre_payload_stats, remaining_operations) = match primary_key {
+            Ok(pk) => (pk, Vec::new(), operations),
+            Err(_user_error) => {
+                let (primary_key, pre_payload_stats, operations) =
+                    fetch_primary_and_ignore_payloads(
+                        indexer,
+                        index,
+                        rtxn,
+                        primary_key_from_op,
+                        new_fields_ids_map,
+                        operations,
+                    )?;
+
+                match primary_key {
+                    Some(pk) => (pk, pre_payload_stats, operations),
+                    None => {
+                        return Ok((
+                            DocumentOperationChanges { docids_version_offsets: &[] },
+                            pre_payload_stats,
+                            None,
+                        ));
+                    }
                 }
-
-                let payload_stats = operations
-                    .iter()
-                    .map(|payload| PayloadStats {
-                        bytes: payload.bytes().map_or(0, |p| p.len() as u64),
-                        document_count: 0,
-                        error: user_error.take(),
-                    })
-                    .collect();
-
-                return Ok((
-                    DocumentOperationChanges { docids_version_offsets: &[] },
-                    payload_stats,
-                    None,
-                ));
             }
         };
 
-        let payload_count: u32 = operations.len().try_into().unwrap();
+        let payload_count: u32 = remaining_operations.len().try_into().unwrap();
         let (step, progress_step) = AtomicPayloadStep::new(payload_count);
         progress.update_progress(progress_step);
 
-        let indexed_document_operations = operations
-            .into_par_iter()
-            .enumerate()
-            .map(|(payload_index, payload)| {
-                if must_stop_processing() {
-                    return Err(InternalError::AbortedIndexation.into());
-                }
-                step.store(payload_index as u32, Ordering::Relaxed);
-                IndexedPayloadOperations::from_payload(payload, &primary_key, shards)
-            })
-            .try_reduce(IndexedPayloadOperations::default, |lhs, rhs| lhs | rhs)?;
+        let IndexedPayloadOperations { document_operations, fields_ids_map, payload_stats } =
+            remaining_operations
+                .into_par_iter()
+                .enumerate()
+                .map(|(payload_index, payload)| {
+                    if must_stop_processing() {
+                        return Err(InternalError::AbortedIndexation.into());
+                    }
+                    step.store(payload_index as u32, Ordering::Relaxed);
+                    IndexedPayloadOperations::from_payload(payload, &primary_key, shards)
+                })
+                .try_reduce(IndexedPayloadOperations::default, |lhs, rhs| lhs | rhs)?;
 
         step.store(payload_count, Ordering::Relaxed);
-
-        let IndexedPayloadOperations { document_operations, fields_ids_map, payload_stats } =
-            indexed_document_operations;
 
         // We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
         progress.update_progress(IndexingStep::AssigningDocumentsIds);
@@ -169,6 +168,7 @@ impl<'pl> IndexOperations<'pl> {
             })
             .collect_vec_list();
 
+        let documents_ids = index.documents_ids(rtxn)?;
         let mut available_ids = AvailableIds::new(&documents_ids);
         let number_of_operations = document_operations.len();
         let mut docids_version_offsets = BumpVec::with_capacity_in(number_of_operations, indexer);
@@ -199,29 +199,84 @@ impl<'pl> IndexOperations<'pl> {
         docids_version_offsets
             .par_sort_unstable_by_key(|(_, po)| first_update_pointer(&po.operations).unwrap_or(0));
 
-        let docids_version_offsets = docids_version_offsets.into_bump_slice();
-        Ok((DocumentOperationChanges { docids_version_offsets }, payload_stats, Some(primary_key)))
+        Ok((
+            DocumentOperationChanges {
+                docids_version_offsets: docids_version_offsets.into_bump_slice(),
+            },
+            // Once we got the payload stats for the valid operations
+            // we must prepend the stats from skipped ones.
+            pre_payload_stats.into_iter().chain(payload_stats).collect(),
+            Some(primary_key),
+        ))
     }
 }
 
-/// Fetches the first document from the set of payloads.
-fn fetch_first_document<'b, 'pl: 'b>(
-    bump: &'b Bump,
-    operations: &[Payload<'pl>],
-) -> Result<Option<RawMap<'b, FxBuildHasher>>, InternalError> {
-    operations
-        .iter()
-        .find_map(|payload| {
-            let payload = payload.bytes()?;
-            Deserializer::from_slice(payload)
-                .into_iter::<&RawValue>()
-                .next()
-                .map(|v| v.and_then(|v| RawMap::from_raw_value_and_hasher(v, FxBuildHasher, bump)))
-                .transpose()
-                .map_err(InternalError::SerdeJson)
-                .transpose()
-        })
-        .transpose()
+/// Fetches the primary key from the operations and removes the ignored ones.
+/// Collecting the stats and the useful payloads for future use.
+fn fetch_primary_and_ignore_payloads<'pl>(
+    bump: &'pl Bump,
+    index: &Index,
+    rtxn: &'pl RoTxn<'pl>,
+    primary_key_from_op: Option<&'pl str>,
+    new_fields_ids_map: &mut FieldsIdsMap,
+    operations: Vec<Payload<'pl>>,
+) -> Result<(Option<PrimaryKey<'pl>>, Vec<PayloadStats>, Vec<Payload<'pl>>)> {
+    let mut payload_stats = Vec::new();
+    let mut remaining_operations = Vec::new();
+    let mut primary_key = None;
+
+    for operation in operations {
+        if primary_key.is_some() {
+            remaining_operations.push(operation);
+            continue;
+        }
+
+        let stats = match operation {
+            Payload::Replace { payload: p, .. } | Payload::Update { payload: p, .. } => {
+                // Fetches the first document from payload bytes.
+                let first_document = Deserializer::from_slice(p)
+                    .into_iter::<&RawValue>()
+                    .next()
+                    .map(|v| {
+                        v.and_then(|v| RawMap::from_raw_value_and_hasher(v, FxBuildHasher, bump))
+                    })
+                    .transpose()
+                    .map_err(InternalError::SerdeJson)?;
+
+                let primary_key_result = retrieve_or_guess_primary_key(
+                    rtxn,
+                    index,
+                    new_fields_ids_map,
+                    primary_key_from_op,
+                    first_document,
+                )?;
+
+                match primary_key_result {
+                    Ok((pk, _)) => {
+                        primary_key = Some(pk);
+                        // From now on, we will collect the remaining
+                        // operations in a vector to manage them later on.
+                        remaining_operations.push(operation);
+                        continue;
+                    }
+                    Err(error) => PayloadStats {
+                        bytes: p.len() as u64,
+                        document_count: 0,
+                        // We do not consider errors when payloads are empty.
+                        error: if p.trim().is_empty() { None } else { Some(error) },
+                    },
+                }
+            }
+            Payload::Deletion(_) => {
+                // We reach this when we don't have a primary key so it's impossible to delete documents.
+                PayloadStats { bytes: 0, document_count: 0, error: None }
+            }
+        };
+
+        payload_stats.push(stats);
+    }
+
+    Ok((primary_key, payload_stats, remaining_operations))
 }
 
 /// The correctly ordered operations that were extracted from the payload.
@@ -573,16 +628,6 @@ pub enum Payload<'pl> {
     Replace { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
     Update { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
     Deletion(&'pl [&'pl str]),
-}
-
-impl<'pl> Payload<'pl> {
-    fn bytes(&self) -> Option<&'pl [u8]> {
-        match self {
-            Payload::Replace { payload, .. } => Some(payload),
-            Payload::Update { payload, .. } => Some(payload),
-            Payload::Deletion(_) => None,
-        }
-    }
 }
 
 pub struct PayloadStats {
