@@ -22,6 +22,7 @@ mod filterable_attributes_rules;
 pub mod heed_codec;
 pub mod index;
 mod localized_attributes_rules;
+pub mod must_stop_processing;
 pub mod order_by_map;
 pub mod prompt;
 pub mod proximity;
@@ -48,6 +49,7 @@ pub use documents::GeoSortStrategy;
 pub use filter_parser::{Condition, FilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
+pub use must_stop_processing::MustStopProcessing;
 pub use search::new::{
     execute_search, filtered_universe, DefaultSearchLogger, SearchContext, SearchLogger,
     VisualSearchLogger,

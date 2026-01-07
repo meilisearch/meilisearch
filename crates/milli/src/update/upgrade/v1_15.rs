@@ -5,12 +5,18 @@ use serde::Deserialize;
 use super::UpgradeIndex;
 use crate::progress::Progress;
 use crate::update::new::indexer::recompute_word_fst_from_word_docids_database;
-use crate::{Index, Result};
+use crate::{Index, MustStopProcessing, Result};
 
 pub(super) struct RecomputeWordFst();
 
 impl UpgradeIndex for RecomputeWordFst {
-    fn upgrade(&self, wtxn: &mut RwTxn, index: &Index, progress: Progress) -> Result<bool> {
+    fn upgrade(
+        &self,
+        wtxn: &mut RwTxn,
+        index: &Index,
+        _must_stop_processing: &MustStopProcessing,
+        progress: Progress,
+    ) -> Result<bool> {
         // Recompute the word FST from the word docids database.
         recompute_word_fst_from_word_docids_database(index, wtxn, &progress)?;
 

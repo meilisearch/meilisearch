@@ -11,18 +11,24 @@ use v1_13::AddNewStats;
 use v1_14::UpgradeArroyVersion;
 use v1_15::RecomputeWordFst;
 use v1_16::SwitchToMultimodal;
-use v1_32::CleanupFidBasedDatabases;
+use v1_32::{CleanupFidBasedDatabases, RebuildHannoyGraph};
 
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use crate::progress::{Progress, VariableNameStep};
-use crate::{Index, InternalError, Result};
+use crate::{Index, InternalError, MustStopProcessing, Result};
 
 trait UpgradeIndex {
     /// Returns `true` if `upgrade` should be called when the index started with version `initial_version`.
     fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool;
 
     /// Returns `true` if the index scheduler must regenerate its cached stats.
-    fn upgrade(&self, wtxn: &mut RwTxn, index: &Index, progress: Progress) -> Result<bool>;
+    fn upgrade(
+        &self,
+        wtxn: &mut RwTxn,
+        index: &Index,
+        must_stop_processing: &MustStopProcessing,
+        progress: Progress,
+    ) -> Result<bool>;
 
     /// Description of the upgrade for progress display purposes.
     fn description(&self) -> &'static str;
@@ -36,19 +42,17 @@ const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
     &RecomputeWordFst {},
     &SwitchToMultimodal {},
     &CleanupFidBasedDatabases {},
+    &RebuildHannoyGraph {},
 ];
 
 /// Return true if the cached stats of the index must be regenerated
-pub fn upgrade<MSP>(
+pub fn upgrade(
     wtxn: &mut RwTxn,
     index: &Index,
     db_version: (u32, u32, u32),
-    must_stop_processing: MSP,
+    must_stop_processing: &MustStopProcessing,
     progress: Progress,
-) -> Result<bool>
-where
-    MSP: Fn() -> bool + Sync,
-{
+) -> Result<bool> {
     let upgrade_functions = UPGRADE_FUNCTIONS;
 
     let initial_version = index.get_version(wtxn)?.unwrap_or(db_version);
@@ -57,16 +61,18 @@ where
 
     let mut regenerate_stats = false;
     for (i, upgrade) in upgrade_functions.iter().enumerate() {
-        if (must_stop_processing)() {
+        if must_stop_processing.get() {
             return Err(crate::Error::InternalError(InternalError::AbortedIndexation));
         }
+
         if upgrade.must_upgrade(initial_version) {
-            regenerate_stats |= upgrade.upgrade(wtxn, index, progress.clone())?;
             progress.update_progress(VariableNameStep::<UpgradeVersion>::new(
                 upgrade.description(),
                 i as u32,
                 upgrade_functions.len() as u32,
             ));
+            regenerate_stats |=
+                upgrade.upgrade(wtxn, index, must_stop_processing, progress.clone())?;
         } else {
             progress.update_progress(VariableNameStep::<UpgradeVersion>::new(
                 "Skipping migration that must not be applied",
