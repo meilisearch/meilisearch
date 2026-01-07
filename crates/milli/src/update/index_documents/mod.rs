@@ -109,6 +109,7 @@ where
     FP: Fn(UpdateIndexingStep) + Sync + Send,
     FA: Fn() -> bool + Sync + Send,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i>,
         index: &'i Index,
