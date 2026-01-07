@@ -165,6 +165,7 @@ pub(super) fn update_index(
     new_fields_ids_map: FieldIdMapWithMetadata,
     new_primary_key: Option<PrimaryKey<'_>>,
     embedders: RuntimeEmbedders,
+    embedder_ip_policy: &http_client::policy::IpPolicy,
     field_distribution: std::collections::BTreeMap<String, u64>,
     document_ids: roaring::RoaringBitmap,
 ) -> Result<()> {
@@ -172,7 +173,8 @@ pub(super) fn update_index(
     if let Some(new_primary_key) = new_primary_key {
         index.put_primary_key(wtxn, new_primary_key.name())?;
     }
-    let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn, Some(embedders))?;
+    let mut inner_index_settings =
+        InnerIndexSettings::from_index(index, wtxn, embedder_ip_policy, Some(embedders))?;
     inner_index_settings.recompute_searchables(wtxn, index)?;
     index.put_field_distribution(wtxn, &field_distribution)?;
     index.put_documents_ids(wtxn, &document_ids)?;

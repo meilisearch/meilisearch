@@ -117,12 +117,14 @@ where
         progress: FP,
         should_abort: FA,
         embedder_stats: &'t Arc<EmbedderStats>,
+        embedder_ip_policy: &'a http_client::policy::IpPolicy,
     ) -> Result<IndexDocuments<'t, 'i, 'a, FP, FA>> {
         let transform = Some(Transform::new(
             wtxn,
             index,
             indexer_config,
             config.update_method,
+            embedder_ip_policy,
             config.autogenerate_docids,
         )?);
 
@@ -814,6 +816,7 @@ mod tests {
     use bumpalo::Bump;
     use fst::IntoStreamer;
     use heed::RwTxn;
+    use http_client::policy::IpPolicy;
     use maplit::hashset;
 
     use super::*;
@@ -2087,6 +2090,8 @@ mod tests {
             RuntimeEmbedders::default(),
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2176,6 +2181,8 @@ mod tests {
             RuntimeEmbedders::default(),
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2363,6 +2370,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2427,6 +2436,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2482,6 +2493,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2536,6 +2549,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2592,6 +2607,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2653,6 +2670,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2707,6 +2726,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2761,6 +2782,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2884,7 +2907,13 @@ mod tests {
         "###);
 
         let embedder = std::sync::Arc::new(
-            crate::vector::Embedder::new(embedder.embedder_options, 0).unwrap(),
+            crate::vector::Embedder::new(
+                embedder.embedder_options,
+                0,
+                // NO DANGER: test code
+                IpPolicy::danger_always_allow(),
+            )
+            .unwrap(),
         );
         let res = index
             .search(&rtxn)
@@ -2973,6 +3002,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -3034,6 +3065,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -3092,6 +3125,8 @@ mod tests {
             embedders,
             &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();

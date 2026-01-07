@@ -126,16 +126,17 @@ impl Embedder {
     pub fn new(
         options: EmbedderOptions,
         cache_cap: usize,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> std::result::Result<Self, NewEmbedderError> {
         Ok(match options {
             EmbedderOptions::HuggingFace(options) => {
                 Self::HuggingFace(hf::Embedder::new(options, cache_cap)?)
             }
             EmbedderOptions::OpenAi(options) => {
-                Self::OpenAi(openai::Embedder::new(options, cache_cap)?)
+                Self::OpenAi(openai::Embedder::new(options, cache_cap, ip_policy)?)
             }
             EmbedderOptions::Ollama(options) => {
-                Self::Ollama(ollama::Embedder::new(options, cache_cap)?)
+                Self::Ollama(ollama::Embedder::new(options, cache_cap, ip_policy)?)
             }
             EmbedderOptions::UserProvided(options) => {
                 Self::UserProvided(manual::Embedder::new(options))
@@ -144,9 +145,10 @@ impl Embedder {
                 options,
                 cache_cap,
                 rest::ConfigurationSource::User,
+                ip_policy,
             )?),
             EmbedderOptions::Composite(options) => {
-                Self::Composite(composite::Embedder::new(options, cache_cap)?)
+                Self::Composite(composite::Embedder::new(options, cache_cap, ip_policy)?)
             }
         })
     }

@@ -158,6 +158,8 @@ pub struct IndexSchedulerOptions {
     ///
     /// 0 disables the cache.
     pub embedding_cache_cap: usize,
+    /// IP policy for requests performed by the index scheduler.
+    pub ip_policy: http_client::policy::IpPolicy,
     /// Snapshot compaction status.
     pub experimental_no_snapshot_compaction: bool,
 }
@@ -1010,11 +1012,10 @@ impl IndexScheduler {
             }
         };
         let config = http_client::ureq::config::Config::builder()
-            .prepare(|config| config.timeout_global(Some(Duration::from_secs(30)))).build();
-        let client = http_client::ureq::Agent::new_with_config(
-            config,
-            http_client::policy::Policy::deny_all_local_ips(),
-        );
+            .prepare(|config| config.timeout_global(Some(Duration::from_secs(30))))
+            .build();
+        let client =
+            http_client::ureq::Agent::new_with_config(config, self.scheduler.ip_policy.clone());
 
         std::thread::spawn(move || {
             for (uuid, Webhook { url, headers }) in webhooks.iter() {
@@ -1026,15 +1027,18 @@ impl IndexScheduler {
                     written: 0,
                 };
 
-                let mut reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
+                let mut reader =
+                    GzEncoder::new(BufReader::new(task_reader), Compression::default());
 
-                let mut request = client.post(url)
+                let mut request = client
+                    .post(url)
                     .header("Content-Encoding", "gzip")
                     .header("Content-Type", "application/x-ndjson");
                 for (header_name, header_value) in headers.iter() {
                     request = request.header(header_name, header_value);
                 }
-                if let Err(e) = request.send(http_client::ureq::SendBody::from_reader(&mut reader)) {
+                if let Err(e) = request.send(http_client::ureq::SendBody::from_reader(&mut reader))
+                {
                     tracing::error!("While sending data to the webhook {uuid}: {e}");
                 }
             }
@@ -1047,6 +1051,10 @@ impl IndexScheduler {
         let index_stats = self.index_mapper.stats_of(&rtxn, index_uid)?;
 
         Ok(IndexStats { is_indexing, inner_stats: index_stats })
+    }
+
+    pub fn ip_policy(&self) -> &http_client::policy::IpPolicy {
+        &self.scheduler.ip_policy
     }
 
     pub fn features(&self) -> RoFeatures {
@@ -1137,7 +1145,7 @@ impl IndexScheduler {
 
                     // add missing embedder
                     let embedder = Arc::new(
-                        Embedder::new(embedder_options.clone(), self.scheduler.embedding_cache_cap)
+                        Embedder::new(embedder_options.clone(), self.scheduler.embedding_cache_cap, self.ip_policy().clone())
                             .map_err(meilisearch_types::milli::vector::Error::from)
                             .map_err(|err| {
                                 Error::from_milli(err.into(), Some(index_uid.clone()))

@@ -159,7 +159,9 @@ async fn run_http(
     let personalization_service = Data::new(
         opt.experimental_personalization_api_key
             .clone()
-            .map(PersonalizationService::cohere)
+            .map(|api_key| {
+                PersonalizationService::cohere(api_key, index_scheduler.ip_policy().clone())
+            })
             .unwrap_or_else(PersonalizationService::disabled),
     );
     let search_queue = SearchQueue::new(

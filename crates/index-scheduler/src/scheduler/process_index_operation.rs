@@ -188,6 +188,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            self.ip_policy(),
                             &embedder_stats,
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?,
@@ -301,6 +302,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            self.ip_policy(),
                             &embedder_stats,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
@@ -451,6 +453,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            self.ip_policy(),
                             &embedder_stats,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
@@ -485,7 +488,12 @@ impl IndexScheduler {
 
                 progress.update_progress(SettingsProgress::ApplyTheSettings);
                 let congestion = builder
-                    .execute(&|| must_stop_processing.get(), progress, embedder_stats)
+                    .execute(
+                        &|| must_stop_processing.get(),
+                        progress,
+                        self.ip_policy(),
+                        embedder_stats,
+                    )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
                 Ok((tasks, congestion))

@@ -182,7 +182,11 @@ pub struct Embedder {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions, cache_cap: usize) -> Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: EmbedderOptions,
+        cache_cap: usize,
+        ip_policy: http_client::policy::IpPolicy,
+    ) -> Result<Self, NewEmbedderError> {
         let mut inferred_api_key = Default::default();
         let api_key = options.api_key.as_ref().unwrap_or_else(|| {
             inferred_api_key = infer_api_key();
@@ -211,6 +215,7 @@ impl Embedder {
             },
             cache_cap,
             super::rest::ConfigurationSource::OpenAi,
+            ip_policy,
         )?;
 
         // looking at the code it is very unclear that this can actually fail.

@@ -129,15 +129,13 @@ impl IndexScheduler {
     ) -> crate::Result<u64> {
         // TECHDEBT: this spawns a `ureq` agent additionally to `reqwest`. We probably want to harmonize all of this.
         let config = http_client::ureq::config::Config::builder()
-            .prepare(|config| config.timeout_global(Some(Duration::from_secs(5))))
+            .prepare(|config| {
+                config.timeout_global(Some(Duration::from_secs(5))).http_status_as_error(false)
+            })
             .build();
 
-        /// FIXME: breaks use of internal IPs
-        let agent = http_client::ureq::Agent::new_with_config(
-            config,
-            http_client::policy::Policy::deny_all_local_ips(),
-        )
-        ;
+        let agent =
+            http_client::ureq::Agent::new_with_config(config, self.scheduler.ip_policy.clone());
 
         let mut indexer_alloc = Bump::new();
 
@@ -299,6 +297,7 @@ impl IndexScheduler {
             embedders,
             &|| must_stop_processing.get(),
             progress,
+            self.ip_policy(),
             &EmbedderStats::default(),
         )
         .map_err(err)?;
@@ -319,6 +318,7 @@ impl IndexScheduler {
     async fn assume_role_with_web_identity(
         role_arn: &str,
         web_identity_token_file: &std::path::Path,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> anyhow::Result<StsCredentials> {
         use std::env::VarError;
 
@@ -344,7 +344,9 @@ impl IndexScheduler {
             ("DurationSeconds", &duration.to_string()),
         ];
 
-        let client = http_client::reqwest::Client::builder().build().unwrap();
+        let client = http_client::reqwest::Client::builder()
+            .build_with_policies(ip_policy, Default::default())
+            .unwrap();
         let response = client
             .post("https://sts.amazonaws.com/")
             .prepare(|inner| {
@@ -382,6 +384,7 @@ impl IndexScheduler {
         s3_secret_key: Option<String>,
         s3_role_arn: Option<String>,
         s3_web_identity_token_file: Option<std::path::PathBuf>,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> anyhow::Result<(String, String, Option<String>)> {
         let static_credentials = s3_access_key.zip(s3_secret_key);
         let web_identity = s3_role_arn.zip(s3_web_identity_token_file);
@@ -389,7 +392,7 @@ impl IndexScheduler {
             (Some((access_key, secret_key)), None) => Ok((access_key, secret_key, None)),
             (None, Some((role_arn, token_file))) => {
                 let StsCredentials { access_key_id, secret_access_key, session_token } =
-                    Self::assume_role_with_web_identity(&role_arn, &token_file).await?;
+                    Self::assume_role_with_web_identity(&role_arn, &token_file, ip_policy).await?;
                 Ok((access_key_id, secret_access_key, Some(session_token)))
             }
             (_, _) => anyhow::bail!("Clap must pass valid auth parameters"),
@@ -431,12 +434,15 @@ impl IndexScheduler {
         };
 
         let (reader, writer) = std::io::pipe()?;
+        let ip_policy = self.scheduler.ip_policy.clone();
+
         let uploader_task = tokio::spawn(async move {
             let (s3_access_key, s3_secret_key, s3_token) = Self::extract_credentials_from_options(
                 s3_access_key,
                 s3_secret_key,
                 s3_role_arn,
                 s3_web_identity_token_file,
+                ip_policy.clone(),
             )
             .await?;
 
@@ -455,6 +461,7 @@ impl IndexScheduler {
                 retry_backoff,
                 db_name,
                 reader,
+                ip_policy,
             )
             .await
         });
@@ -658,6 +665,7 @@ async fn multipart_stream_to_s3(
     retry_backoff: backoff::exponential::ExponentialBackoff<backoff::SystemClock>,
     db_name: String,
     reader: std::io::PipeReader,
+    ip_policy: http_client::policy::IpPolicy,
 ) -> Result<(), Error> {
     use std::collections::VecDeque;
     use std::io;
@@ -691,7 +699,7 @@ async fn multipart_stream_to_s3(
     let action = bucket.create_multipart_upload(Some(&credential), &object);
     let url = action.sign(s3_signature_duration);
 
-    let client = Client::builder().build().unwrap();
+    let client = Client::builder().build_with_policies(ip_policy, Default::default()).unwrap();
     let resp = client.post(url).send().await.map_err(Error::S3HttpError)?;
     let status = resp.status();
 

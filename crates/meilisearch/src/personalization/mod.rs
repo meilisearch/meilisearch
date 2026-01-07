@@ -62,11 +62,11 @@ pub struct CohereService {
 }
 
 impl CohereService {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, ip_policy: http_client::policy::IpPolicy) -> Self {
         info!("Personalization service initialized with Cohere API");
         let client = Client::builder()
             .prepare(|inner| inner.timeout(Duration::from_secs(30)))
-            .build()
+            .build_with_policies(ip_policy, Default::default())
             .expect("Failed to create HTTP client");
         Self { client, api_key }
     }
@@ -329,12 +329,12 @@ pub enum PersonalizationService {
 }
 
 impl PersonalizationService {
-    pub fn cohere(api_key: String) -> Self {
+    pub fn cohere(api_key: String, ip_policy: http_client::policy::IpPolicy) -> Self {
         // If the API key is empty, consider the personalization service as disabled
         if api_key.trim().is_empty() {
             Self::disabled()
         } else {
-            Self::Cohere(CohereService::new(api_key))
+            Self::Cohere(CohereService::new(api_key, ip_policy))
         }
     }
 
