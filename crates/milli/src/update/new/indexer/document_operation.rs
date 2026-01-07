@@ -367,34 +367,31 @@ impl<'pl> DocumentOperations<'pl> {
             use DocumentOperation::*;
             use MissingDocumentPolicy::*;
 
-            match (document_operations.last(), &operation) {
+            let existence_after_last_op = match document_operations.last() {
+                Some(Replacement { .. } | Update { .. }) => DocumentExistence::Exists,
+                Some(Deletion) => DocumentExistence::Missing,
+                None => document_existence,
+            };
+
+            match (existence_after_last_op, operation) {
+                // when the document is missing for sure after the last operation,
+                // and the next operation requires skipping creation,
+                // we skip this operation
                 (
-                    None,
-                    Replacement { on_missing_document, .. } | Update { on_missing_document, .. },
-                ) => {
-                    if let (DocumentExistence::Missing, Skip) =
-                        (document_existence, on_missing_document)
-                    {
-                        continue;
-                    }
-                }
-                (_, Deletion) => document_operations.clear(),
-                (Some(Replacement { .. } | Update { .. }), Replacement { .. }) => {
-                    document_operations.clear()
-                }
-                (
-                    Some(Deletion),
+                    DocumentExistence::Missing,
                     Replacement { on_missing_document: Skip, .. }
                     | Update { on_missing_document: Skip, .. },
                 ) => continue,
-                (Some(Deletion), Replacement { on_missing_document: Create, .. }) => {
-                    document_operations.clear()
+                // deletions and replacements delete all previous operations
+                (_, op @ (Deletion | Replacement { .. })) => {
+                    document_operations.clear();
+                    document_operations.push(op);
                 }
-                (Some(Replacement { .. } | Update { .. }), Update { .. }) => (),
-                (Some(Deletion), Update { on_missing_document: Create, .. }) => (),
+                // updates executes after the previous operations
+                (_, op @ Update { .. }) => {
+                    document_operations.push(op);
+                }
             }
-
-            document_operations.push(operation);
         }
 
         if document_operations.is_empty() {
