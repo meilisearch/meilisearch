@@ -30,7 +30,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     #[inline(always)]
     pub fn get<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        RequestBuilder::from_client_inner(&self, self.inner.get(url))
+        RequestBuilder::from_client_inner(self, self.inner.get(url))
     }
 
     /// Convenience method to make a `POST` request to a URL.
@@ -40,7 +40,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     #[inline(always)]
     pub fn post<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        RequestBuilder::from_client_inner(&self, self.inner.post(url))
+        RequestBuilder::from_client_inner(self, self.inner.post(url))
     }
 
     /// Convenience method to make a `PUT` request to a URL.
@@ -50,7 +50,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     #[inline(always)]
     pub fn put<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        RequestBuilder::from_client_inner(&self, self.inner.put(url))
+        RequestBuilder::from_client_inner(self, self.inner.put(url))
     }
 
     /// Convenience method to make a `PATCH` request to a URL.
@@ -60,7 +60,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     #[inline(always)]
     pub fn patch<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        RequestBuilder::from_client_inner(&self, self.inner.patch(url))
+        RequestBuilder::from_client_inner(self, self.inner.patch(url))
     }
 
     /// Convenience method to make a `DELETE` request to a URL.
@@ -70,7 +70,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     #[inline(always)]
     pub fn delete<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        RequestBuilder::from_client_inner(&self, self.inner.delete(url))
+        RequestBuilder::from_client_inner(self, self.inner.delete(url))
     }
 
     /// Convenience method to make a `HEAD` request to a URL.
@@ -80,7 +80,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     #[inline(always)]
     pub fn head<U: IntoUrl>(&self, url: U) -> RequestBuilder {
-        RequestBuilder::from_client_inner(&self, self.inner.head(url))
+        RequestBuilder::from_client_inner(self, self.inner.head(url))
     }
 
     /// Start building a `Request` with the `Method` and `Url`.
@@ -93,7 +93,7 @@ impl Client {
     /// This method fails whenever the supplied `Url` cannot be parsed.
     #[inline(always)]
     pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> RequestBuilder {
-        RequestBuilder::from_client_inner(&self, self.inner.request(method, url))
+        RequestBuilder::from_client_inner(self, self.inner.request(method, url))
     }
 
     /// Executes a `Request`.
@@ -109,6 +109,7 @@ impl Client {
     /// This method fails if there was an error while sending request,
     /// redirect loop was detected or redirect limit was exhausted.
     #[inline(always)]
+    #[allow(clippy::manual_async_fn)] // we reproduce reqwest's API
     pub fn execute(&self, request: Request) -> impl Future<Output = Result<Response>> {
         async {
             self.ip_policy.check_ip_in_hostname(request.url())?;
@@ -135,7 +136,7 @@ impl ClientBuilder {
     ///
     /// - ip_policy: the policy regarding local IPs
     /// - redirect_policy: **overrides** any redirect policy previous passed to `ClientBuilder::redirect`.
-    ///                    This is unfortunate, but necessary, to allow the ip policy to work on redirections.
+    ///   This is unfortunate, but necessary, to allow the ip policy to work on redirections.
     pub fn build_with_policies(
         self,
         ip_policy: IpPolicy,

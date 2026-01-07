@@ -160,12 +160,11 @@ async fn try_proxy_search(
             request
         };
         let request = request.header(PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE);
-        let request = if include_metadata {
+        if include_metadata {
             request.header(INCLUDE_METADATA_HEADER, "true")
         } else {
             request
-        };
-        request
+        }
     });
 
     let response = request.send().await;

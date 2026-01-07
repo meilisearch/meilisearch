@@ -23,10 +23,10 @@ impl Resolver for ExternalRequestResolver {
     ) -> Result<ureq::unversioned::resolver::ResolvedSocketAddrs, ureq::Error> {
         let resolved = self.inner.resolve(uri, config, timeout)?;
         for socket_addr in &resolved {
-            if let Err(_) = self.ip_policy.check_socket_addr(*socket_addr) {
+            if self.ip_policy.check_socket_addr(*socket_addr).is_err() {
                 return Err(ureq::Error::BadUri("Rejected URI".into()));
             }
         }
-        return Ok(resolved);
+        Ok(resolved)
     }
 }

@@ -103,6 +103,7 @@ fn is_global_4(ipv4_addr: std::net::Ipv4Addr) -> bool {
 }
 
 /// See <https://doc.rust-lang.org/src/core/net/ip_addr.rs.html#1604>
+#[allow(clippy::manual_range_contains)] // we reuse std's implementation which has this particular lint ringing
 fn is_global_6(ipv6_addr: std::net::Ipv6Addr) -> bool {
     !(ipv6_addr.is_unspecified()
             || ipv6_addr.is_loopback()
