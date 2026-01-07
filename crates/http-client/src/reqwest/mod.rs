@@ -10,12 +10,12 @@ mod resolver;
 pub use error::{Error, Result};
 pub use request::RequestBuilder;
 
-use crate::policy::Policy;
+use crate::policy::IpPolicy;
 
 #[derive(Clone)]
 pub struct Client {
     inner: ::reqwest::Client,
-    ip_policy: Policy,
+    ip_policy: IpPolicy,
 }
 
 impl Client {
@@ -131,19 +131,14 @@ impl ClientBuilder {
 }
 
 impl ClientBuilder {
-    /// Returns a `Client` that uses this `ClientBuilder` configuration.
+    /// Returns a `Client` that uses this `ClientBuilder` configuration and the specified policies.
     ///
-    /// # Errors
-    ///
-    /// This method fails if a TLS backend cannot be initialized, or the resolver
-    /// cannot load the system configuration.
-    pub fn build(self) -> Result<Client> {
-        self.build_with_policy(Policy::deny_all_local_ips(), redirect::Policy::default())
-    }
-
-    pub fn build_with_policy(
+    /// - ip_policy: the policy regarding local IPs
+    /// - redirect_policy: **overrides** any redirect policy previous passed to `ClientBuilder::redirect`.
+    ///                    This is unfortunate, but necessary, to allow the ip policy to work on redirections.
+    pub fn build_with_policies(
         self,
-        ip_policy: Policy,
+        ip_policy: IpPolicy,
         redirect_policy: redirect::Policy,
     ) -> Result<Client> {
         let redirect_policy = {
@@ -163,6 +158,12 @@ impl ClientBuilder {
         Ok(Client { inner: builder.build()?, ip_policy })
     }
 
+    /// Returns a `Client` that ues this `ClientBuilder` configuration and **no IP policy**.
+    ///
+    /// # Danger
+    ///
+    /// As this client uses no IP policy, it might be vulnerable to SSRF. It is provided for testing and dependencies
+    /// that require a `::reqwest::Client`.
     pub fn danger_build_no_ip_policy(self) -> Result<DangerousClient, error::ReqwestError> {
         self.0.build()
     }

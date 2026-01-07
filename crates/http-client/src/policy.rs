@@ -1,22 +1,21 @@
-use std::collections::HashSet;
 use std::fmt::Display;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use reqwest::Url;
 
 #[derive(Debug, Clone)]
-pub struct Policy {
+pub struct IpPolicy {
     deny_local_ips: bool,
-    allow_list: HashSet<IpAddr>,
+    allow_list: Vec<cidr::IpCidr>,
 }
 
-impl Policy {
+impl IpPolicy {
     pub fn deny_all_local_ips() -> Self {
         Self::deny_local_ips(Default::default())
     }
 
     /// Deny local IPs, **except IPs in the `exceptions` list**
-    pub fn deny_local_ips(exceptions: HashSet<IpAddr>) -> Self {
+    pub fn deny_local_ips(exceptions: Vec<cidr::IpCidr>) -> Self {
         Self { deny_local_ips: true, allow_list: exceptions }
     }
 
@@ -62,7 +61,12 @@ impl Policy {
         }
 
         // 4. check if the IP is allow-listed
-        if self.allow_list.contains(&addr) { return Ok(()) } else { Err(Error::DeniedLocalIp) }
+        for cidr in &self.allow_list {
+            if cidr.contains(&addr) {
+                return Ok(());
+            }
+        }
+        Err(Error::DeniedLocalIp)
     }
 }
 

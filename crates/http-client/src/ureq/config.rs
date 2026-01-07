@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 pub use ureq::config::{AutoHeaderValue, IpFamily, RedirectAuthHeaders, Timeouts};
 
-use crate::policy::Policy;
+use crate::policy::IpPolicy;
 
 type InternalConfig = ::ureq::config::ConfigBuilder<::ureq::typestate::AgentScope>;
 
@@ -16,7 +16,7 @@ impl Config {
         ConfigBuilder(::ureq::config::Config::builder())
     }
 
-    pub fn new_agent(&self, ip_policy: Policy) -> super::Agent {
+    pub fn new_agent(&self, ip_policy: IpPolicy) -> super::Agent {
         super::Agent::new_with_config(self.clone(), ip_policy)
     }
 }
