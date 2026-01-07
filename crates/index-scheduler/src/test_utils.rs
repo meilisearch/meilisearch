@@ -5,6 +5,7 @@ use std::time::Duration;
 use big_s::S;
 use crossbeam_channel::RecvTimeoutError;
 use file_store::File;
+use http_client::policy::IpPolicy;
 use meilisearch_auth::open_auth_store_env;
 use meilisearch_types::document_formats::DocumentFormatError;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
@@ -115,6 +116,8 @@ impl IndexScheduler {
             export_default_payload_size_bytes: byte_unit::Byte::parse_str("20MiB", false).unwrap(),
             auto_upgrade: true, // Don't cost much and will ensure the happy path works
             embedding_cache_cap: 10,
+            // NO DANGER: test code
+            ip_policy: IpPolicy::danger_always_allow(),
             experimental_no_snapshot_compaction: false,
         };
         let version = configuration(&mut options).unwrap_or({

@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use http_client::policy::IpPolicy;
 use meili_snap::snapshot;
 
 use crate::index::tests::TempIndex;
@@ -105,7 +106,7 @@ fn degraded_search_and_score_details() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [4, 1, 0, 3]
-    Scores: 1.0000 0.9167 0.8333 0.6667 
+    Scores: 1.0000 0.9167 0.8333 0.6667
     Score Details:
     [
         [
@@ -173,7 +174,7 @@ fn degraded_search_and_score_details() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [0, 1, 4, 2]
-    Scores: 0.6667 0.6667 0.6667 0.0000 
+    Scores: 0.6667 0.6667 0.6667 0.0000
     Score Details:
     [
         [
@@ -215,7 +216,7 @@ fn degraded_search_and_score_details() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [4, 0, 1, 2]
-    Scores: 1.0000 0.6667 0.6667 0.0000 
+    Scores: 1.0000 0.6667 0.6667 0.0000
     Score Details:
     [
         [
@@ -262,7 +263,7 @@ fn degraded_search_and_score_details() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [4, 1, 0, 2]
-    Scores: 1.0000 0.9167 0.6667 0.0000 
+    Scores: 1.0000 0.9167 0.6667 0.0000
     Score Details:
     [
         [
@@ -315,7 +316,7 @@ fn degraded_search_and_score_details() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [4, 1, 0, 2]
-    Scores: 1.0000 0.9167 0.8333 0.0000 
+    Scores: 1.0000 0.9167 0.8333 0.0000
     Score Details:
     [
         [
@@ -372,7 +373,7 @@ fn degraded_search_and_score_details() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [4, 1, 0, 3]
-    Scores: 1.0000 0.9167 0.8333 0.3333 
+    Scores: 1.0000 0.9167 0.8333 0.3333
     Score Details:
     [
         [
@@ -436,7 +437,7 @@ fn degraded_search_and_score_details() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [4, 1, 0, 3]
-    Scores: 1.0000 0.9167 0.8333 0.6667 
+    Scores: 1.0000 0.9167 0.8333 0.6667
     Score Details:
     [
         [
@@ -570,6 +571,8 @@ fn degraded_search_and_score_details_vector() {
                 distribution: None,
             }),
             0,
+            // NO DANGER: test code
+            IpPolicy::danger_always_allow()
         )
         .unwrap(),
     );
@@ -583,7 +586,7 @@ fn degraded_search_and_score_details_vector() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [2, 0, 3, 1]
-    Scores: 1.0000 0.5000 0.5000 0.0000 
+    Scores: 1.0000 0.5000 0.5000 0.0000
     Score Details:
     [
         [
@@ -631,7 +634,7 @@ fn degraded_search_and_score_details_vector() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [0, 1, 2, 3]
-    Scores: 0.5000 0.0000 0.0000 0.0000 
+    Scores: 0.5000 0.0000 0.0000 0.0000
     Score Details:
     [
         [
@@ -660,7 +663,7 @@ fn degraded_search_and_score_details_vector() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [0, 1, 2, 3]
-    Scores: 0.5000 0.0000 0.0000 0.0000 
+    Scores: 0.5000 0.0000 0.0000 0.0000
     Score Details:
     [
         [
@@ -695,7 +698,7 @@ fn degraded_search_and_score_details_vector() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [2, 0, 1, 3]
-    Scores: 1.0000 0.5000 0.0000 0.0000 
+    Scores: 1.0000 0.5000 0.0000 0.0000
     Score Details:
     [
         [
@@ -736,7 +739,7 @@ fn degraded_search_and_score_details_vector() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [2, 0, 3, 1]
-    Scores: 1.0000 0.5000 0.5000 0.0000 
+    Scores: 1.0000 0.5000 0.5000 0.0000
     Score Details:
     [
         [
@@ -783,7 +786,7 @@ fn degraded_search_and_score_details_vector() {
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
     IDs: [2, 0, 3, 1]
-    Scores: 1.0000 0.5000 0.5000 0.0000 
+    Scores: 1.0000 0.5000 0.5000 0.0000
     Score Details:
     [
         [

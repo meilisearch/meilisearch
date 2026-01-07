@@ -3,6 +3,7 @@ use std::cmp::Reverse;
 use big_s::S;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
+use http_client::policy::IpPolicy;
 use itertools::Itertools;
 use maplit::hashset;
 use milli::progress::Progress;
@@ -237,7 +238,15 @@ fn criteria_mixup() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(criteria.clone());
-        builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+        builder
+            .execute(
+                &|| false,
+                &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
+                Default::default(),
+            )
+            .unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
@@ -278,7 +287,15 @@ fn criteria_ascdesc() {
         S("name"),
         S("age"),
     });
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
 
     wtxn.commit().unwrap();
     let mut wtxn = index.write_txn().unwrap();
@@ -347,6 +364,8 @@ fn criteria_ascdesc() {
         embedders,
         &|| false,
         &Progress::default(),
+        // NO DANGER: test
+        &IpPolicy::danger_always_allow(),
         &Default::default(),
     )
     .unwrap();
@@ -362,7 +381,15 @@ fn criteria_ascdesc() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(vec![criterion.clone()]);
-        builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+        builder
+            .execute(
+                &|| false,
+                &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
+                Default::default(),
+            )
+            .unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
