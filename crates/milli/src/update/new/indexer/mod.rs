@@ -77,6 +77,7 @@ pub fn index<'pl, 'indexer, 'index, DC, MSP>(
     embedders: RuntimeEmbedders,
     must_stop_processing: &'indexer MSP,
     progress: &'indexer Progress,
+    embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: &'indexer EmbedderStats,
 ) -> Result<ChannelCongestion>
 where
@@ -231,6 +232,7 @@ where
         new_fields_ids_map,
         new_primary_key,
         embedders,
+        embedder_ip_policy,
         field_distribution,
         document_ids,
     )?;
@@ -247,6 +249,7 @@ pub fn reindex<'indexer, 'index, MSP, SD>(
     settings_delta: &'indexer SD,
     must_stop_processing: &'indexer MSP,
     progress: &'indexer Progress,
+    embedder_ip_policy: &'indexer http_client::policy::IpPolicy,
     embedder_stats: Arc<EmbedderStats>,
 ) -> Result<ChannelCongestion>
 where
@@ -397,6 +400,7 @@ where
         new_fields_ids_map,
         None,
         settings_delta.new_embedders().clone(),
+        embedder_ip_policy,
         field_distribution,
         document_ids,
     )?;

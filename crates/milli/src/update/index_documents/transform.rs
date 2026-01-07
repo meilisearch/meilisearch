@@ -55,6 +55,7 @@ pub struct Transform<'a, 'i> {
     fields_ids_map: FieldIdMapWithMetadata,
 
     indexer_settings: &'a IndexerConfig,
+    embedder_ip_policy: &'a http_client::policy::IpPolicy,
     pub index_documents_method: IndexDocumentsMethod,
     available_documents_ids: AvailableIds,
 
@@ -108,6 +109,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         index: &'i Index,
         indexer_settings: &'a IndexerConfig,
         index_documents_method: IndexDocumentsMethod,
+        embedder_ip_policy: &'a http_client::policy::IpPolicy,
         _autogenerate_docids: bool,
     ) -> Result<Self> {
         use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
@@ -157,6 +159,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             new_documents_ids: RoaringBitmap::new(),
             new_external_documents_ids_builder: FxHashMap::default(),
             documents_count: 0,
+            embedder_ip_policy,
         })
     }
 
@@ -623,7 +626,8 @@ impl<'a, 'i> Transform<'a, 'i> {
             fst_new_external_documents_ids_builder.insert(key, value)
         })?;
 
-        let old_inner_settings = InnerIndexSettings::from_index(self.index, wtxn, None)?;
+        let old_inner_settings =
+            InnerIndexSettings::from_index(self.index, wtxn, self.embedder_ip_policy, None)?;
         let fields_ids_map = self.fields_ids_map;
         let primary_key_id = self.index.primary_key(wtxn)?.and_then(|name| fields_ids_map.id(name));
         let mut new_inner_settings = old_inner_settings.clone();

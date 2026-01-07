@@ -73,6 +73,9 @@ pub struct Scheduler {
     /// 0 disables the cache.
     pub(crate) embedding_cache_cap: usize,
 
+    /// IP policy for requests performed by the index scheduler.
+    pub(crate) ip_policy: http_client::policy::IpPolicy,
+
     /// Snapshot compaction status.
     pub(crate) experimental_no_snapshot_compaction: bool,
 
@@ -95,6 +98,7 @@ impl Scheduler {
             embedding_cache_cap: self.embedding_cache_cap,
             experimental_no_snapshot_compaction: self.experimental_no_snapshot_compaction,
             s3_snapshot_options: self.s3_snapshot_options.clone(),
+            ip_policy: self.ip_policy.clone(),
         }
     }
 
@@ -124,6 +128,7 @@ impl Scheduler {
             instance_features: _,
             auto_upgrade: _,
             embedding_cache_cap,
+            ip_policy,
             experimental_no_snapshot_compaction,
         } = options;
 
@@ -139,6 +144,7 @@ impl Scheduler {
             auth_env,
             version_file_path: version_file_path.clone(),
             embedding_cache_cap: *embedding_cache_cap,
+            ip_policy: ip_policy.clone(),
             experimental_no_snapshot_compaction: *experimental_no_snapshot_compaction,
             s3_snapshot_options: indexer_config.s3_snapshot_options.clone(),
         }

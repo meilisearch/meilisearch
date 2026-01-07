@@ -217,7 +217,7 @@ where
             .prepare(|inner| {
                 inner.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
             })
-            .build()
+            .build_with_policies(index_scheduler.ip_policy().clone(), Default::default())
             .unwrap();
 
         let method = from_old_http_method(req.method());
@@ -327,6 +327,7 @@ pub async fn send_request<T, F, U>(
     body: Body<T, F>,
     remote_name: &str,
     remote: &Remote,
+    ip_policy: http_client::policy::IpPolicy,
 ) -> Result<U, ProxyError>
 where
     T: serde::Serialize,
@@ -346,7 +347,7 @@ where
         .prepare(|inner| {
             inner.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
         })
-        .build()
+        .build_with_policies(ip_policy, Default::default())
         .unwrap();
 
     let url = format!("{}{}", remote.url, path_and_query);

@@ -84,11 +84,16 @@ impl EmbedderOptions {
 }
 
 impl Embedder {
-    pub fn new(options: EmbedderOptions, cache_cap: usize) -> Result<Self, NewEmbedderError> {
+    pub fn new(
+        options: EmbedderOptions,
+        cache_cap: usize,
+        ip_policy: http_client::policy::IpPolicy,
+    ) -> Result<Self, NewEmbedderError> {
         let rest_embedder = match RestEmbedder::new(
             options.into_rest_embedder_config()?,
             cache_cap,
             super::rest::ConfigurationSource::Ollama,
+            ip_policy,
         ) {
             Ok(embedder) => embedder,
             Err(NewEmbedderError {

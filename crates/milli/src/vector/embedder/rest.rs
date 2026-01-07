@@ -182,6 +182,7 @@ impl Embedder {
         options: EmbedderOptions,
         cache_cap: usize,
         configuration_source: ConfigurationSource,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> Result<Self, NewEmbedderError> {
         let bearer = options.api_key.as_deref().map(|api_key| format!("Bearer {api_key}"));
 
@@ -201,10 +202,7 @@ impl Embedder {
             })
             .build();
 
-        let client = http_client::ureq::Agent::new_with_config(
-            config,
-            http_client::policy::Policy::deny_all_local_ips(),
-        );
+        let client = http_client::ureq::Agent::new_with_config(config, ip_policy);
 
         let request = RequestData::new(
             options.request,
@@ -522,10 +520,7 @@ where
 }
 
 fn check_response(
-    response: Result<
-        UreqResponse,
-        http_client::ureq::Error,
-    >,
+    response: Result<UreqResponse, http_client::ureq::Error>,
     configuration_source: ConfigurationSource,
 ) -> Result<UreqResponse, Retry> {
     match response {
@@ -569,9 +564,10 @@ fn response_to_embedding(
     expected_count: usize,
     expected_dimensions: Option<usize>,
 ) -> Result<Vec<Embedding>, Retry> {
-    /// TODO: fix 10MB limit in responses...
     let response: Value = response
         .body_mut()
+        // when using `with_config`, `read_json` has no limit on response size
+        .with_config()
         .read_json()
         .map_err(EmbedError::rest_response_deserialization)
         .map_err(Retry::retry_later)?;

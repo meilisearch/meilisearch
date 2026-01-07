@@ -56,13 +56,14 @@ impl IndexScheduler {
         let mut output = BTreeMap::new();
 
         let config = http_client::ureq::config::Config::builder()
-            .prepare(|config| config.timeout_global(Some(Duration::from_secs(5))))
+            .prepare(|config| {
+                config.timeout_global(Some(Duration::from_secs(5))).http_status_as_error(false)
+            })
             .build();
 
-        /// FIXME: breaks use of internal IPs
         let agent = http_client::ureq::Agent::new_with_config(
             config,
-            http_client::policy::Policy::deny_all_local_ips(),
+            self.scheduler.ip_policy.clone(),
         );
 
         let must_stop_processing = self.scheduler.must_stop_processing.clone();
