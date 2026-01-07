@@ -1,5 +1,6 @@
 use std::fmt::Display;
 
+use http_client::reqwest::StatusCode;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::milli::index::RollbackOutcome;
@@ -7,7 +8,6 @@ use meilisearch_types::milli::DocumentId;
 use meilisearch_types::tasks::network::ReceiveTaskError;
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
-use http_client::reqwest::StatusCode;
 use thiserror::Error;
 use uuid::Uuid;
 

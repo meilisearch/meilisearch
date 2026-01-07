@@ -572,7 +572,7 @@ fn degraded_search_and_score_details_vector() {
             }),
             0,
             // NO DANGER: test code
-            IpPolicy::danger_always_allow()
+            IpPolicy::danger_always_allow(),
         )
         .unwrap(),
     );

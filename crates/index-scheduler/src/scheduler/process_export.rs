@@ -61,10 +61,8 @@ impl IndexScheduler {
             })
             .build();
 
-        let agent = http_client::ureq::Agent::new_with_config(
-            config,
-            self.scheduler.ip_policy.clone(),
-        );
+        let agent =
+            http_client::ureq::Agent::new_with_config(config, self.scheduler.ip_policy.clone());
 
         let must_stop_processing = self.scheduler.must_stop_processing.clone();
         for (i, (_pattern, uid, export_settings)) in indexes.iter().enumerate() {

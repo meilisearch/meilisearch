@@ -101,7 +101,14 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     (conf.configure)(&mut builder);
 
-    builder.execute(&|| false, &Progress::default(), &IpPolicy::danger_always_allow(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
     wtxn.commit().unwrap();
 
     let config = IndexerConfig::default();
