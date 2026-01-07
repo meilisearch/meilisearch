@@ -362,11 +362,11 @@ impl<'pl> DocumentOperations<'pl> {
     where
         I: IntoIterator<Item = DocumentOperation<'pl>>,
     {
+        use DocumentOperation::*;
+        use MissingDocumentPolicy::*;
+
         let mut document_operations = Vec::new();
         for operation in operations {
-            use DocumentOperation::*;
-            use MissingDocumentPolicy::*;
-
             let existence_after_last_op = match document_operations.last() {
                 Some(Replacement { .. } | Update { .. }) => DocumentExistence::Exists,
                 Some(Deletion) => DocumentExistence::Missing,
@@ -388,16 +388,13 @@ impl<'pl> DocumentOperations<'pl> {
                     document_operations.push(op);
                 }
                 // updates executes after the previous operations
-                (_, op @ Update { .. }) => {
-                    document_operations.push(op);
-                }
+                (_, op @ Update { .. }) => document_operations.push(op),
             }
         }
 
-        if document_operations.is_empty() {
-            None
-        } else {
-            Some(DocumentOperations(document_operations))
+        match (document_existence, document_operations.last()) {
+            (DocumentExistence::Missing, Some(Deletion) | None) => None,
+            (_, _) => Some(DocumentOperations(document_operations)),
         }
     }
 
