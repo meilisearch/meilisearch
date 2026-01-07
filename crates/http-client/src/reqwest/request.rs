@@ -1,7 +1,7 @@
 use ::reqwest::{Request, RequestBuilder as InnerRequestBuilder};
 use reqwest::Response;
 
-use crate::policy::Policy;
+use crate::policy::IpPolicy;
 
 /// A builder to construct the properties of a `Request`.
 ///
@@ -10,7 +10,7 @@ use crate::policy::Policy;
 #[derive(Debug)]
 pub struct RequestBuilder {
     pub(crate) inner: InnerRequestBuilder,
-    pub(crate) ip_policy: Policy,
+    pub(crate) ip_policy: IpPolicy,
 }
 
 impl RequestBuilder {

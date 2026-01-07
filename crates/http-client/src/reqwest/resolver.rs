@@ -5,24 +5,20 @@ use tower_service::Service;
 #[derive(Debug)]
 pub struct ExternalRequestResolver {
     resolver: HyperGaiResolver,
-    ip_policy: Policy,
+    ip_policy: IpPolicy,
 }
 
 impl ExternalRequestResolver {
-    pub fn new(ip_policy: Policy) -> Self {
+    pub fn new(ip_policy: IpPolicy) -> Self {
         Self { resolver: HyperGaiResolver::new(), ip_policy }
     }
 }
 
-impl Default for ExternalRequestResolver {
-    fn default() -> Self {
-        Self::new(Policy::deny_all_local_ips())
-    }
-}
+
 
 use std::error::Error as StdError;
 
-use crate::policy::Policy;
+use crate::policy::IpPolicy;
 type BoxError = Box<dyn StdError + Send + Sync>;
 
 impl Resolve for ExternalRequestResolver {

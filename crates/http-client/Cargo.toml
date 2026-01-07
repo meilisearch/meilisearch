@@ -16,6 +16,7 @@ reqwest = { version = "0.12.24", features = [
 ], default-features = false }
 hyper-util = { version = "0.1.19", features = ["client", "client-legacy", "tokio"] }
 tower-service = "0.3.3"
+cidr = "0.3.2"
 
 [dev-dependencies]
 tokio = { version = "1.48.0", features = ["full"] }
