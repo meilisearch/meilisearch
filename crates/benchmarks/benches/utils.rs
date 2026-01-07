@@ -8,6 +8,7 @@ use std::str::FromStr as _;
 use anyhow::Context;
 use bumpalo::Bump;
 use criterion::BenchmarkId;
+use http_client::policy::IpPolicy;
 use memmap2::Mmap;
 use milli::documents::sort::recursive_sort;
 use milli::heed::EnvOpenOptions;
@@ -100,7 +101,7 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     (conf.configure)(&mut builder);
 
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder.execute(&|| false, &Progress::default(), &IpPolicy::danger_always_allow(), Default::default()).unwrap();
     wtxn.commit().unwrap();
 
     let config = IndexerConfig::default();
@@ -139,6 +140,7 @@ pub fn base_setup(conf: &Conf) -> Index {
         RuntimeEmbedders::default(),
         &|| false,
         &Progress::default(),
+        &IpPolicy::danger_always_allow(),
         &Default::default(),
     )
     .unwrap();

@@ -6,6 +6,7 @@ use std::path::Path;
 
 use bumpalo::Bump;
 use criterion::{criterion_group, criterion_main, Criterion};
+use http_client::policy::IpPolicy;
 use milli::documents::PrimaryKey;
 use milli::heed::{EnvOpenOptions, RwTxn};
 use milli::progress::Progress;
@@ -69,7 +70,14 @@ fn setup_settings<'t>(
     let sortable_fields = sortable_fields.iter().map(|s| s.to_string()).collect();
     builder.set_sortable_fields(sortable_fields);
 
-    builder.execute(&no_cancel, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &no_cancel,
+            &Progress::default(),
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
 }
 
 fn setup_index_with_settings(
@@ -174,6 +182,7 @@ fn indexing_songs_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -242,6 +251,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -288,6 +298,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -358,6 +369,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -436,6 +448,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -482,6 +495,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -524,6 +538,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -593,6 +608,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -661,6 +677,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -729,6 +746,7 @@ fn indexing_wiki(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -796,6 +814,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -842,6 +861,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -911,6 +931,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -989,6 +1010,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1036,6 +1058,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1079,6 +1102,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1147,6 +1171,7 @@ fn indexing_movies_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1214,6 +1239,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1260,6 +1286,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1329,6 +1356,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1378,6 +1406,7 @@ fn delete_documents_from_ids(index: Index, document_ids_to_delete: Vec<RoaringBi
             RuntimeEmbedders::default(),
             &no_cancel,
             &Progress::default(),
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -1444,6 +1473,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1490,6 +1520,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1532,6 +1563,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1623,6 +1655,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1715,6 +1748,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1799,6 +1833,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1867,6 +1902,7 @@ fn indexing_geo(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1934,6 +1970,7 @@ fn reindexing_geo(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -1980,6 +2017,7 @@ fn reindexing_geo(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();
@@ -2049,6 +2087,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                     RuntimeEmbedders::default(),
                     &no_cancel,
                     &Progress::default(),
+                    &IpPolicy::danger_always_allow(),
                     &Default::default(),
                 )
                 .unwrap();

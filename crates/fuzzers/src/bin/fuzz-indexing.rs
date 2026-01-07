@@ -8,6 +8,7 @@ use bumpalo::Bump;
 use clap::Parser;
 use either::Either;
 use fuzzers::Operation;
+use http_client::policy::IpPolicy;
 use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
@@ -148,6 +149,7 @@ fn main() {
                                 embedders,
                                 &|| false,
                                 &Progress::default(),
+                                &IpPolicy::deny_all_local_ips(),
                                 &Default::default(),
                             )
                             .unwrap();

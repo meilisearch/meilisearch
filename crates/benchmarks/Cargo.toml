@@ -14,6 +14,7 @@ license.workspace = true
 anyhow = "1.0.100"
 bumpalo = "3.19.0"
 csv = "1.4.0"
+http-client = { path = "../http-client" }
 memmap2 = "0.9.9"
 milli = { path = "../milli" }
 mimalloc = { version = "0.1.48", default-features = false }
@@ -31,7 +32,10 @@ anyhow = "1.0.100"
 bytes = "1.11.0"
 convert_case = "0.9.0"
 flate2 = "1.1.5"
-reqwest = { version = "0.12.24", features = ["blocking", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12.24", features = [
+    "blocking",
+    "rustls-tls",
+], default-features = false }
 
 [features]
 default = ["milli/all-tokenizations"]
