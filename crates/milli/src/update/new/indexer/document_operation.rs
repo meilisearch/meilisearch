@@ -226,7 +226,8 @@ fn fetch_first_document<'b, 'pl: 'b>(
 
 /// The correctly ordered operations that were extracted from the payload.
 ///
-/// We don't need the payload index as we merge them in order by using the
+/// We don't need the payload index as we merge them in order by using
+/// the rayon `try_reduce` method.
 #[derive(Default)]
 struct IndexedPayloadOperations<'pl> {
     /// Represents the operations that will be applied to the documents of this payload.
