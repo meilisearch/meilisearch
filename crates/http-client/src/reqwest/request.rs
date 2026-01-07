@@ -67,11 +67,12 @@ impl RequestBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::manual_async_fn)] // we reproduce reqwest's API
     pub fn send(self) -> impl Future<Output = crate::reqwest::Result<Response>> {
         async {
             let (client, request) = self.build_split();
             let request = request?;
-            Ok(client.execute(request).await?)
+            client.execute(request).await
         }
     }
 
