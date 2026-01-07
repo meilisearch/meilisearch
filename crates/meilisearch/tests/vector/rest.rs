@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::AtomicUsize;
 use std::time::Duration;
 
+use http_client::policy::IpPolicy;
 use http_client::reqwest::{redirect, IntoUrl};
 use meili_snap::{json_string, snapshot};
 use tokio::sync::mpsc;
@@ -377,9 +378,9 @@ pub async fn post<T: IntoUrl>(
     text: &str,
 ) -> http_client::reqwest::Result<http_client::reqwest::Response> {
     http_client::reqwest::Client::builder()
-        .build_with_policy(
+        .build_with_policies(
             // NO DANGER: tests
-            http_client::policy::Policy::danger_always_allow(),
+            IpPolicy::danger_always_allow(),
             redirect::Policy::default(),
         )?
         .post(url)

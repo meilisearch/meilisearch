@@ -589,7 +589,6 @@ dependencies = [
  "criterion",
  "csv",
  "flate2",
- "http-client",
  "memmap2",
  "milli",
  "mimalloc",
@@ -1164,9 +1163,6 @@ name = "cidr"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "579504560394e388085d0c080ea587dfa5c15f7e251b4d5247d1e1a61d1d6928"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "cipher"
@@ -2311,7 +2307,6 @@ dependencies = [
  "clap",
  "either",
  "fastrand",
- "http-client",
  "milli",
  "serde",
  "serde_json",
@@ -4059,7 +4054,6 @@ dependencies = [
  "byte-unit",
  "bytes",
  "cargo_toml",
- "cidr",
  "clap",
  "crossbeam-channel",
  "deserr",

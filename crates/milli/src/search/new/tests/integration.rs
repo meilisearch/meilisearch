@@ -3,6 +3,7 @@ use std::io::Write;
 use big_s::S;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
+use http_client::policy::IpPolicy;
 use maplit::{btreemap, hashset};
 
 use crate::progress::Progress;
@@ -44,7 +45,15 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("america") => vec![S("the united states")],
     });
     builder.set_searchable_fields(vec![S("title"), S("description")]);
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
     wtxn.commit().unwrap();
 
     // index documents
@@ -96,6 +105,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         embedders,
         &|| false,
         &Progress::default(),
+        // NO DANGER: test
+        &IpPolicy::danger_always_allow(),
         &Default::default(),
     )
     .unwrap();
