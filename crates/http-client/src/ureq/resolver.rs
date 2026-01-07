@@ -1,15 +1,15 @@
 use ::ureq::unversioned::resolver::{DefaultResolver, Resolver};
 
-use crate::policy::Policy;
+use crate::policy::IpPolicy;
 
 #[derive(Debug)]
 pub struct ExternalRequestResolver {
     inner: DefaultResolver,
-    ip_policy: Policy,
+    ip_policy: IpPolicy,
 }
 
 impl ExternalRequestResolver {
-    pub fn new(ip_policy: Policy) -> Self {
+    pub fn new(ip_policy: IpPolicy) -> Self {
         Self { inner: DefaultResolver::default(), ip_policy }
     }
 }

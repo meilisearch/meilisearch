@@ -3,10 +3,10 @@ use std::ops::Deref;
 pub use ureq::{
     AsSendBody, Body, BodyBuilder, BodyWithConfig, Error, Proxy, ProxyBuilder, ProxyProtocol,
     RequestBuilder, RequestExt, ResponseExt, SendBody, Timeout, http, middleware, tls, typestate,
-    unversioned,
+    unversioned
 };
 
-use crate::policy::Policy;
+use crate::policy::IpPolicy;
 
 pub mod config;
 mod resolver;
@@ -17,7 +17,7 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new_with_config(config: config::Config, ip_policy: Policy) -> Self {
+    pub fn new_with_config(config: config::Config, ip_policy: IpPolicy) -> Self {
         Self {
             inner: ::ureq::Agent::with_parts(
                 config.0,
