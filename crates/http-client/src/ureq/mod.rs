@@ -3,7 +3,7 @@ use std::ops::Deref;
 pub use ureq::{
     AsSendBody, Body, BodyBuilder, BodyWithConfig, Error, Proxy, ProxyBuilder, ProxyProtocol,
     RequestBuilder, RequestExt, ResponseExt, SendBody, Timeout, http, middleware, tls, typestate,
-    unversioned
+    unversioned,
 };
 
 use crate::policy::IpPolicy;

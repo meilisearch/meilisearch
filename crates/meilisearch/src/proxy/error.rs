@@ -1,5 +1,5 @@
-use meilisearch_types::error::{ErrorCode as _, ResponseError};
 use http_client::reqwest::StatusCode;
+use meilisearch_types::error::{ErrorCode as _, ResponseError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyError {

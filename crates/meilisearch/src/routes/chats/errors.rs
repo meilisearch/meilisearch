@@ -98,7 +98,9 @@ pub struct StreamError {
 }
 
 impl StreamErrorEvent {
-    pub async fn from_openai_error<E>(error: OpenAIError) -> Result<Self, http_client::reqwest::Error>
+    pub async fn from_openai_error<E>(
+        error: OpenAIError,
+    ) -> Result<Self, http_client::reqwest::Error>
     where
         E: serde::de::DeserializeOwned,
         Self: From<E>,

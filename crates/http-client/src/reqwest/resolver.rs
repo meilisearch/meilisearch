@@ -14,8 +14,6 @@ impl ExternalRequestResolver {
     }
 }
 
-
-
 use std::error::Error as StdError;
 
 use crate::policy::IpPolicy;

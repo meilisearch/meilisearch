@@ -1145,11 +1145,13 @@ impl IndexScheduler {
 
                     // add missing embedder
                     let embedder = Arc::new(
-                        Embedder::new(embedder_options.clone(), self.scheduler.embedding_cache_cap, self.ip_policy().clone())
-                            .map_err(meilisearch_types::milli::vector::Error::from)
-                            .map_err(|err| {
-                                Error::from_milli(err.into(), Some(index_uid.clone()))
-                            })?,
+                        Embedder::new(
+                            embedder_options.clone(),
+                            self.scheduler.embedding_cache_cap,
+                            self.ip_policy().clone(),
+                        )
+                        .map_err(meilisearch_types::milli::vector::Error::from)
+                        .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?,
                     );
                     {
                         let mut embedders = self.embedders.write().unwrap();
