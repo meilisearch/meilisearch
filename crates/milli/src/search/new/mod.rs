@@ -60,7 +60,7 @@ use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
-use crate::vector::Embedder;
+use crate::vector::{Embedder, ExplorationStrategy};
 use crate::{
     AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, TimeBudget,
     UserError, Weight,
@@ -428,6 +428,7 @@ fn get_ranking_rules_for_vector<'ctx>(
                         embedder_name,
                         embedder,
                         quantized,
+                        ExplorationStrategy::Fast,
                     )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
