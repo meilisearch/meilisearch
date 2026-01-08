@@ -398,7 +398,7 @@ async fn non_streamed_chat(
     };
 
     let config = Config::new(&chat_settings);
-    let client = Client::with_config(config);
+    let client = Client::with_config(index_scheduler.ip_policy().clone(), config);
     let auth_token = extract_token_from_request(&req)?.unwrap();
     let system_role = chat_settings.source.system_role(&chat_completion.model);
     // TODO do function support later
@@ -535,7 +535,7 @@ async fn streamed_chat(
     let tx = SseEventSender::new(tx);
     let workspace_uid = workspace_uid.to_string();
     let _join_handle = Handle::current().spawn(async move {
-        let client = Client::with_config(config.clone());
+        let client = Client::with_config(index_scheduler.ip_policy().clone(), config.clone());
         let mut global_tool_calls = HashMap::<u32, Call>::new();
 
         // Limit the number of internal calls to satisfy the search requests of the LLM

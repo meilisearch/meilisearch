@@ -19,7 +19,10 @@ members = [
     "crates/tracing-trace",
     "crates/xtask",
     "crates/build-info",
-    "crates/openapi-generator", "crates/http-client",
+    "crates/openapi-generator",
+    "crates/http-client",
+    "external-crates/async-openai",
+    "external-crates/async-openai-macros",
 ]
 
 [workspace.package]
