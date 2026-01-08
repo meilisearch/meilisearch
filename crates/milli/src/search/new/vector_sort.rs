@@ -7,7 +7,7 @@ use roaring::RoaringBitmap;
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use super::VectorStoreStats;
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::{DistributionShift, Embedder, VectorStore};
+use crate::vector::{DistributionShift, Embedder, ExplorationStrategy, VectorStore};
 use crate::{DocumentId, Result, SearchContext, SearchLogger, TimeBudget};
 
 pub struct VectorSort<Q: RankingRuleQueryTrait> {
@@ -19,6 +19,7 @@ pub struct VectorSort<Q: RankingRuleQueryTrait> {
     distribution_shift: Option<DistributionShift>,
     embedder_index: u8,
     quantized: bool,
+    exploration_strategy: ExplorationStrategy,
 }
 
 impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
@@ -30,6 +31,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         embedder_name: &str,
         embedder: &Embedder,
         quantized: bool,
+        exploration_strategy: ExplorationStrategy,
     ) -> Result<Self> {
         let embedder_index = ctx
             .index
@@ -46,6 +48,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             distribution_shift: embedder.distribution(),
             embedder_index,
             quantized,
+            exploration_strategy,
         })
     }
 
@@ -67,6 +70,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             self.limit,
             Some(vector_candidates),
             time_budget,
+            self.exploration_strategy,
         )?;
         self.cached_sorted_docids = results.into_iter();
         *ctx.vector_store_stats.get_or_insert_default() += VectorStoreStats {
