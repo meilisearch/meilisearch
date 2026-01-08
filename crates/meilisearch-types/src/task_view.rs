@@ -21,8 +21,8 @@ pub struct TaskView {
     /// The unique sequential identifier of the task.
     #[schema(value_type = u32, example = 4312)]
     pub uid: TaskId,
-    /// The unique identifier of the index where this task is operated.
-    #[schema(value_type = Option<u32>, example = json!("movies"))]
+    /// The unique identifier of the batch where this task is grouped.
+    #[schema(value_type = Option<u32>, example = json!(12))]
     pub batch_uid: Option<BatchId>,
     #[serde(default)]
     pub index_uid: Option<String>,

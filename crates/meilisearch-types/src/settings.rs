@@ -302,7 +302,7 @@ pub struct Settings<T> {
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsLocalizedAttributes>)]
-    #[schema(value_type = Option<Vec<LocalizedAttributesRuleView>>, example = json!(50))]
+    #[schema(value_type = Option<Vec<LocalizedAttributesRuleView>>, example = json!(null))]
     pub localized_attributes: Setting<Vec<LocalizedAttributesRuleView>>,
 
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]

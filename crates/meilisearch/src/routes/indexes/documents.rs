@@ -696,7 +696,7 @@ pub struct UpdateDocumentsQuery {
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
     pub custom_metadata: Option<String>,
 
-    #[param(example = "true")]
+    #[param(example = true)]
     #[deserr(default, try_from(&String) = from_string_skip_creation -> DeserrQueryParamError<InvalidSkipCreation>, error = DeserrQueryParamError<InvalidSkipCreation>)]
     /// Only update documents if they already exist.
     pub skip_creation: Option<bool>,

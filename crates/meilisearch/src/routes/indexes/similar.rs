@@ -79,11 +79,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                   "release_date": 1418256000
                 }
               ],
+              "id": "143",
               "offset": 0,
               "limit": 2,
               "estimatedTotalHits": 976,
-              "processingTimeMs": 35,
-              "query": "american "
+              "processingTimeMs": 35
             }
         )),
         (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
@@ -161,11 +161,11 @@ pub async fn similar_get(
                   "release_date": 1418256000
                 }
               ],
+              "id": "143",
               "offset": 0,
               "limit": 2,
               "estimatedTotalHits": 976,
-              "processingTimeMs": 35,
-              "query": "american "
+              "processingTimeMs": 35
             }
         )),
         (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(

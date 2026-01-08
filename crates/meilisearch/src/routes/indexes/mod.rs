@@ -51,7 +51,7 @@ mod similar_analytics;
         (path = "/", api = settings::SettingsApi),
         (path = "/", api = compact::CompactApi),
     ),
-    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats, compact::compact),
+    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats),
     tags(
         (
             name = "Indexes",
