@@ -66,6 +66,18 @@ impl Drop for Permit {
     }
 }
 
+/// Added Documentation
+/// A queue that manages and schedules search operations.
+///
+/// The SearchQueue prevents too many searches from running simultaneously,
+/// which could overwhelm the system. It queues incoming search requests
+/// and processes them in order based on available capacity.
+///
+///
+/// ```
+/// let queue = SearchQueue::new(4, 10);
+/// ```
+
 impl SearchQueue {
     pub fn new(capacity: usize, paralellism: NonZeroUsize) -> Self {
         // Search requests are going to wait until we're available anyway,
