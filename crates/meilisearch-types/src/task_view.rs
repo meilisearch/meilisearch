@@ -81,9 +81,8 @@ impl TaskView {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Default, Debug, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
 pub struct DetailsView {
     /// Number of documents received for documentAdditionOrUpdate task.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -156,6 +155,27 @@ pub struct DetailsView {
     pub moved_documents: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
+}
+
+// Manual ToSchema implementation to avoid complex allOf/oneOf schema from flattened settings
+// This generates a simple object schema that accepts any properties
+impl utoipa::PartialSchema for DetailsView {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{AdditionalProperties, ObjectBuilder};
+
+        // Simple object that allows any properties (since details vary by task type)
+        let schema = ObjectBuilder::new()
+            .additional_properties(Some(AdditionalProperties::FreeForm(true)))
+            .build();
+
+        utoipa::openapi::RefOr::T(utoipa::openapi::Schema::Object(schema))
+    }
+}
+
+impl utoipa::ToSchema for DetailsView {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("DetailsView")
+    }
 }
 
 impl DetailsView {

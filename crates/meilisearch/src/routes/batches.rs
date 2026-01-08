@@ -46,7 +46,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         (status = OK, description = "Return the batch", body = BatchView, content_type = "application/json", example = json!(
             {
                 "uid": 1,
-                "details": {},
+                "details": {
+                    "receivedDocuments": 1,
+                    "indexedDocuments": 1
+                },
                 "progress": null,
                 "stats": {
                     "totalNbTasks": 1,
