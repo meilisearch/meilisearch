@@ -111,6 +111,13 @@ Meilisearch is available in two editions:
 
 Want access to Enterprise features? → Contact us at [sales@meilisearch.com](maito:sales@meilisearch.com).
 
+### 📦 External crates
+
+Meilisearch vendors the following MIT-licensed external crates with code modifications to use the HTTP client located in `crates/http-clients`:
+
+- `external-crates/async-openai` and `external-crates/async-openai-macros` from <https://github.com/64bit/async-openai>
+- `external-crates/reqwest-eventsource` from <https://github.com/jpopesculian/reqwest-eventsource>
+
 ## 📊 Telemetry
 
 Meilisearch collects **anonymized** user data to help us improve our product. You can [deactivate this](https://www.meilisearch.com/docs/learn/what_is_meilisearch/telemetry?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=telemetry#how-to-disable-data-collection) whenever you want.
