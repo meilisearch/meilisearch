@@ -1,6 +1,6 @@
-use std::fs;
-use std::io;
-use std::path::Path;
+use std::fs::DirEntry;
+use std::path::{self, Path};
+use std::{fs, io};
 
 use tar::Archive;
 
@@ -37,11 +37,14 @@ impl<R: io::Read> ArchiveExt for Archive<R> {
             match entry.header().entry_type() {
                 tar::EntryType::Directory => directories.push(entry),
                 _ => {
-                    if !entry.header().path()?.starts_with(dst) {
-                        return Err(io::Error::new(
-                            io::ErrorKind::Other,
-                            "links and symlinks must link within the dump directory",
-                        ));
+                    if let Some(link_name) = entry.header().link_name()? {
+                        let absolute_link_name = path::absolute(dst.join(&link_name))?;
+                        if !absolute_link_name.starts_with(&dst) {
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                "links and symlinks must link within the dump directory",
+                            ));
+                        }
                     }
                     entry.unpack_in(dst)?;
                 }
@@ -60,6 +63,57 @@ impl<R: io::Read> ArchiveExt for Archive<R> {
             dir.unpack_in(dst)?;
         }
 
+        // Finally check the unpacked files and directories
+        // to check if symlinks are pointing inside the dst folder.
+        check_symlinks(&dst)?;
+
         Ok(())
     }
+}
+
+/// Makes sure no symlink points outside the dst folder.
+fn check_symlinks(dir: &Path) -> io::Result<()> {
+    /// Walk a directory only visiting files.
+    /// <https://doc.rust-lang.org/stable/std/fs/fn.read_dir.html>
+    fn visit_dirs(
+        dir: &Path,
+        max_depth: u32,
+        cb: &dyn Fn(&DirEntry) -> io::Result<()>,
+    ) -> io::Result<()> {
+        if !dir.is_dir() {
+            return Ok(());
+        }
+
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                match max_depth.checked_sub(1) {
+                    Some(new_max_depth) => visit_dirs(&path, new_max_depth, cb)?,
+                    None => {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "maximum depth exceeded",
+                        ))
+                    }
+                }
+            } else {
+                cb(&entry)?;
+            }
+        }
+        Ok(())
+    }
+
+    let max_depth = 10;
+    visit_dirs(dir, max_depth, &|entry| {
+        if entry.file_type()?.is_symlink() {
+            if !entry.path().canonicalize()?.starts_with(dir) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "links and symlinks must link within the dump directory",
+                ));
+            }
+        }
+        Ok(())
+    })
 }
