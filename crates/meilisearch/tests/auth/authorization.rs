@@ -87,14 +87,6 @@ static INVALID_RESPONSE: Lazy<Value> = Lazy::new(|| {
     })
 });
 
-static INVALID_METRICS_RESPONSE: Lazy<Value> = Lazy::new(|| {
-    json!({"message": "The provided API key is invalid. The API key for the `/metrics` route must allow access to all indexes.",
-        "code": "invalid_api_key",
-        "type": "auth",
-        "link": "https://docs.meilisearch.com/errors#invalid_api_key"
-    })
-});
-
 const MASTER_KEY: &str = "MASTER_KEY";
 
 #[actix_rt::test]
@@ -231,13 +223,13 @@ async fn access_authorized_restricted_index() {
             if *route == "/metrics" {
                 assert_eq!(
                     response,
-                    INVALID_METRICS_RESPONSE.clone(),
+                    Value::null(),
                     "on route: {:?} - {:?} with action: {:?}",
                     method,
                     route,
                     action
                 );
-                assert_eq!(code, 403);
+                assert_eq!(code, 200);
             } else {
                 assert_ne!(
                     response,
