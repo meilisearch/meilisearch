@@ -1,23 +1,6 @@
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 
-use actix_web::web::Data;
-use actix_web::{web, HttpRequest, HttpResponse};
-use deserr::actix_web::{AwebJson, AwebQueryParameter};
-use deserr::{DeserializeError, Deserr, ValuePointerRef};
-use index_scheduler::IndexScheduler;
-use meilisearch_types::deserr::query_params::Param;
-use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};
-use meilisearch_types::error::deserr_codes::*;
-use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::milli::{self, FieldDistribution, Index};
-use meilisearch_types::tasks::KindWithContent;
-use serde::Serialize;
-use time::OffsetDateTime;
-use tracing::debug;
-use utoipa::{IntoParams, OpenApi, ToSchema};
-
 use super::{
     get_task_id, Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
 };
@@ -28,6 +11,27 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::is_dry_run;
 use crate::Opt;
+use actix_web::web::Data;
+use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::{AwebJson, AwebQueryParameter};
+use deserr::{DeserializeError, Deserr, ValuePointerRef};
+use globset::{Glob, GlobMatcher};
+use index_scheduler::IndexScheduler;
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::index_uid::IndexUid;
+use meilisearch_types::milli::tokenizer::Language;
+use meilisearch_types::milli::{
+    self, FieldDistribution, FilterableAttributesRule, Index, MetadataBuilder, OrderBy,
+};
+use meilisearch_types::tasks::KindWithContent;
+use regex::Regex;
+use serde::Serialize;
+use time::OffsetDateTime;
+use tracing::debug;
+use utoipa::{IntoParams, OpenApi, ToSchema};
 
 pub mod compact;
 pub mod documents;
@@ -77,6 +81,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                     .route(web::delete().to(SeqHandler(delete_index))),
             )
             .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
+            .service(web::resource("/fields").route(web::post().to(SeqHandler(post_index_fields))))
             .service(web::scope("/documents").configure(documents::configure))
             .service(web::scope("/search").configure(search::configure))
             .service(web::scope("/facet-search").configure(facet_search::configure))
@@ -649,4 +654,217 @@ pub async fn get_index_stats(
 
     debug!(returns = ?stats, "Get index stats");
     Ok(HttpResponse::Ok().json(stats))
+}
+
+#[derive(Debug, Serialize, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Field<'a> {
+    pub name: &'a str,
+    pub displayed: FieldDisplayConfig,
+    pub searchable: FieldSearchConfig,
+    pub distinct: FieldDistinctConfig,
+    pub filterable: FieldFilterableConfig<'a>,
+    pub localized: FieldLocalizedConfig<'a>,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldDisplayConfig {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldSearchConfig {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldDistinctConfig {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldFacetSearchConfig<'a> {
+    pub sort_by: &'a str,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldFilterConfig {
+    pub equality: bool,
+    pub comparison: bool,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldFilterableConfig<'a> {
+    pub enabled: bool,
+    pub facet_search: FieldFacetSearchConfig<'a>,
+    pub filter: FieldFilterConfig,
+}
+
+#[derive(Debug, Serialize, Clone, Copy, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldLocalizedConfig<'a> {
+    #[schema(value_type = Vec<String>)]
+    pub locales: &'a [Language],
+}
+
+#[derive(Deserr, Debug, Clone, ToSchema)]
+#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+pub struct ListFields {
+    #[deserr(default, error = DeserrJsonError<InvalidIndexOffset>)]
+    pub offset: usize,
+    #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidIndexLimit>)]
+    pub limit: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilter>)]
+    pub filter: Option<ListFieldsFilter>,
+}
+
+impl ListFields {
+    fn apply_filter(&self, field: &Field) -> bool {
+        if let Some(filter) = &self.filter {
+            if let Some(value) = &filter.starts_with {
+                if !field.name.starts_with(value) {
+                    return false;
+                }
+            }
+
+            if let Some(value) = &filter.contains {
+                if !field.name.contains(value) {
+                    return false;
+                }
+            }
+
+            if let Some(regex) = &filter.regex {
+                if !regex.is_match(field.name) {
+                    return false;
+                }
+            }
+
+            if let Some(glob) = &filter.glob {
+                if !glob.is_match(field.name) {
+                    return false;
+                }
+            }
+
+            if let Some(displayed) = &filter.displayed {
+                if *displayed != field.displayed.enabled {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        true
+    }
+}
+
+#[derive(Deserr, Debug, Clone, ToSchema)]
+#[deserr(error = DeserrJsonError<InvalidIndexFieldsFilter>, rename_all = camelCase, deny_unknown_fields)]
+pub struct ListFieldsFilter {
+    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterStartsWith>)]
+    pub starts_with: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterContains>)]
+    pub contains: Option<String>,
+    #[deserr(default, try_from(&String) = from_string_regex -> DeserrJsonError<InvalidIndexFieldsFilterRegex>, error = DeserrJsonError<InvalidIndexFieldsFilterRegex>)]
+    #[schema(value_type = String)]
+    pub regex: Option<Regex>,
+    #[deserr(default, try_from(&String) = from_string_glob -> DeserrJsonError<InvalidIndexFieldsFilterGlob>, error = DeserrJsonError<InvalidIndexFieldsFilterGlob>)]
+    #[schema(value_type = String)]
+    pub glob: Option<GlobMatcher>,
+    #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterDisplayed>)]
+    pub displayed: Option<bool>,
+}
+
+fn from_string_regex(
+    value: &str,
+) -> Result<Option<Regex>, DeserrJsonError<InvalidIndexFieldsFilterRegex>> {
+    Regex::new(value).map(Some).map_err(|err| {
+        DeserrJsonError::new(
+            format!("invalid regex pattern: {}", err),
+            Code::InvalidIndexFieldsFilterRegex,
+        )
+    })
+}
+
+fn from_string_glob(
+    value: &str,
+) -> Result<Option<GlobMatcher>, DeserrJsonError<InvalidIndexFieldsFilterGlob>> {
+    Glob::new(value).map(|glob| Some(glob.compile_matcher())).map_err(|err| {
+        DeserrJsonError::new(
+            format!("invalid glob pattern: {}", err),
+            Code::InvalidIndexFieldsFilterGlob,
+        )
+    })
+}
+
+#[utoipa::path(
+    post,
+    path = "/{indexUid}/fields",
+    tag = "Fields",
+    security(("Bearer" = ["fields.post", "fields.*", "*"])),
+    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    request_body = ListFields,
+)]
+pub async fn post_index_fields(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::FIELDS_POST }>, Data<IndexScheduler>>,
+    index_uid: web::Path<String>,
+    body: AwebJson<ListFields, DeserrJsonError>,
+) -> Result<HttpResponse, ResponseError> {
+    let index = index_scheduler.index(index_uid.as_str())?;
+    let rtxn = index.read_txn()?;
+    let builder = MetadataBuilder::from_index(&index, &rtxn)?;
+    let fields = builder
+        .fields_metadata()
+        .iter()
+        .filter_map(|(name, metadata)| {
+            let is_filterable = builder.filterable_attributes().iter().any(|rule| match rule {
+                FilterableAttributesRule::Pattern(p) => {
+                    p.match_str(name) == milli::PatternMatch::Match
+                }
+                FilterableAttributesRule::Field(f) => f == name,
+            });
+
+            let locales = builder
+                .localized_attributes_rules()
+                .and_then(|rules| metadata.locales(rules))
+                .unwrap_or_default();
+
+            let field = Field {
+                name,
+                displayed: FieldDisplayConfig { enabled: metadata.displayed },
+                searchable: FieldSearchConfig { enabled: metadata.searchable.is_some() },
+                distinct: FieldDistinctConfig { enabled: metadata.distinct },
+                filterable: FieldFilterableConfig {
+                    enabled: is_filterable,
+                    facet_search: FieldFacetSearchConfig {
+                        sort_by: match metadata.sort_by {
+                            OrderBy::Lexicographic => "alpha",
+                            OrderBy::Count => "count",
+                        },
+                    },
+                    filter: FieldFilterConfig {
+                        equality: is_filterable,
+                        comparison: is_filterable,
+                    },
+                },
+                localized: FieldLocalizedConfig { locales },
+            };
+
+            if !body.0.apply_filter(&field) {
+                return None;
+            }
+
+            Some(field)
+        })
+        .skip(body.0.offset)
+        .take(body.0.limit)
+        .collect::<Vec<_>>();
+
+    Ok(HttpResponse::Ok().json(fields))
 }

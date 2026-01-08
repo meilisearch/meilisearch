@@ -9,9 +9,10 @@ use crate::attribute_patterns::{match_field_legacy, PatternMatch};
 use crate::constants::{
     RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
 };
+use crate::order_by_map::OrderByMap;
 use crate::{
     is_faceted_by, FieldId, FilterableAttributesFeatures, FilterableAttributesRule, Index,
-    LocalizedAttributesRule, Result, Weight,
+    LocalizedAttributesRule, OrderBy, Result, Weight,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -30,10 +31,14 @@ pub struct Metadata {
     pub geo: bool,
     /// The field is a geo json field (`_geojson`).
     pub geo_json: bool,
+    /// The field is defined as a field that can be displayed.
+    pub displayed: bool,
     /// The id of the localized attributes rule if the field is localized.
     pub localized_attributes_rule_id: Option<NonZeroU16>,
     /// The id of the filterable attributes rule if the field is filterable.
     pub filterable_attributes_rule_id: Option<NonZeroU16>,
+    /// How that field will be sorted by.
+    pub sort_by: OrderBy,
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +222,9 @@ pub struct MetadataBuilder {
     localized_attributes: Option<Vec<LocalizedAttributesRule>>,
     distinct_attribute: Option<String>,
     asc_desc_attributes: HashSet<String>,
+    displayed_attributes: Option<HashSet<String>>,
+    fields_metadata: BTreeMap<String, Metadata>,
+    order_by_map: OrderByMap,
 }
 
 impl MetadataBuilder {
@@ -232,7 +240,11 @@ impl MetadataBuilder {
         let distinct_attribute = index.distinct_field(rtxn)?.map(String::from);
         let asc_desc_attributes = index.asc_desc_fields(rtxn)?;
 
-        Ok(Self::new(
+        let displayed_attributes = index
+            .displayed_fields(rtxn)?
+            .map(|fields| fields.into_iter().map(String::from).collect());
+
+        let mut this = Self {
             searchable_attributes,
             exact_searchable_attributes,
             filterable_attributes,
@@ -240,7 +252,16 @@ impl MetadataBuilder {
             localized_attributes,
             distinct_attribute,
             asc_desc_attributes,
-        ))
+            displayed_attributes,
+            fields_metadata: BTreeMap::default(),
+            order_by_map: index.sort_facet_values_by(rtxn)?,
+        };
+
+        for field_name in index.fields_ids_map(rtxn)?.names() {
+            this.fields_metadata.insert(field_name.to_owned(), this.metadata_for_field(field_name));
+        }
+
+        Ok(this)
     }
 
     /// Build a new `MetadataBuilder` from the given parameters.
@@ -269,6 +290,9 @@ impl MetadataBuilder {
             localized_attributes,
             distinct_attribute,
             asc_desc_attributes,
+            displayed_attributes: None,
+            fields_metadata: BTreeMap::default(),
+            order_by_map: OrderByMap::default(),
         }
     }
 
@@ -285,6 +309,8 @@ impl MetadataBuilder {
                 geo_json: false,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id: None,
+                displayed: self.is_field_displayed(field),
+                sort_by: OrderBy::default(),
             };
         }
 
@@ -313,6 +339,8 @@ impl MetadataBuilder {
                 geo_json: false,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id,
+                displayed: self.is_field_displayed(field),
+                sort_by: self.order_by_map.get(field),
             };
         }
         if match_field_legacy(RESERVED_GEOJSON_FIELD_NAME, field) == PatternMatch::Match {
@@ -327,6 +355,8 @@ impl MetadataBuilder {
                 geo_json: true,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id,
+                displayed: self.is_field_displayed(field),
+                sort_by: self.order_by_map.get(field),
             };
         }
 
@@ -364,7 +394,13 @@ impl MetadataBuilder {
             geo_json: false,
             localized_attributes_rule_id,
             filterable_attributes_rule_id,
+            displayed: self.is_field_displayed(field),
+            sort_by: self.order_by_map.get(field),
         }
+    }
+
+    fn is_field_displayed(&self, field: &str) -> bool {
+        self.displayed_attributes.as_ref().map(|attrs| attrs.contains(field)).unwrap_or(true)
     }
 
     pub fn searchable_attributes(&self) -> Option<&[String]> {
@@ -381,5 +417,9 @@ impl MetadataBuilder {
 
     pub fn localized_attributes_rules(&self) -> Option<&[LocalizedAttributesRule]> {
         self.localized_attributes.as_deref()
+    }
+
+    pub fn fields_metadata(&self) -> &BTreeMap<String, Metadata> {
+        &self.fields_metadata
     }
 }

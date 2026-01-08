@@ -1,0 +1,784 @@
+---
+source: crates/meilisearch/tests/index/fields.rs
+expression: "(code.as_u16(), resp)"
+---
+[
+  200,
+  [
+    {
+      "name": "calories_per_serving",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "cooking_time_minutes",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "created_at",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "cuisine",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "cuisine.is_authentic",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "cuisine.region",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "cuisine.type",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "description",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "difficulty",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "id",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "image_url",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "ingredients",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "ingredients.name",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "instructions",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "instructions.description",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "instructions.step",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "is_dairy_free",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "is_gluten_free",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "is_vegan",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "is_vegetarian",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "nutrition",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "nutrition.calories",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "nutrition.carbs",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "nutrition.fat",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "nutrition.protein",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "preparation_time_minutes",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "servings",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "tags",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "title",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "total_time_minutes",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": true,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": true,
+          "comparison": true
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "updated_at",
+      "displayed": {
+        "enabled": false
+      },
+      "searchable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    }
+  ]
+]

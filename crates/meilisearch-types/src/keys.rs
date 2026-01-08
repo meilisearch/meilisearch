@@ -383,6 +383,9 @@ pub enum Action {
     #[serde(rename = "indexes.compact")]
     #[deserr(rename = "indexes.compact")]
     IndexesCompact,
+    #[serde(rename = "fields.post")]
+    #[deserr(rename = "fields.post")]
+    FieldsPost,
 }
 
 impl Action {
@@ -440,6 +443,7 @@ impl Action {
             WEBHOOKS_DELETE => Some(Self::WebhooksDelete),
             WEBHOOKS_CREATE => Some(Self::WebhooksCreate),
             WEBHOOKS_ALL => Some(Self::WebhooksAll),
+            FIELDS_POST => Some(Self::FieldsPost),
             _otherwise => None,
         }
     }
@@ -494,6 +498,7 @@ impl Action {
             WebhooksUpdate => false,
             WebhooksDelete => false,
             WebhooksCreate => false,
+            FieldsPost => true,
         }
     }
 
@@ -528,6 +533,7 @@ pub mod actions {
     pub const SETTINGS_UPDATE: u8 = SettingsUpdate.repr();
     pub const STATS_ALL: u8 = StatsAll.repr();
     pub const STATS_GET: u8 = StatsGet.repr();
+    pub const FIELDS_POST: u8 = FieldsPost.repr();
     pub const METRICS_ALL: u8 = MetricsAll.repr();
     pub const METRICS_GET: u8 = MetricsGet.repr();
     pub const DUMPS_ALL: u8 = DumpsAll.repr();

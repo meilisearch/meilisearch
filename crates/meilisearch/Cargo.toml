@@ -65,6 +65,7 @@ prometheus = { version = "0.14.0", features = ["process"] }
 rand = "0.8.5"
 rayon = "1.11.0"
 regex = "1.12.2"
+globset = "0.4.18"
 reqwest = { version = "0.12.24", features = [
     "rustls-tls",
     "json",

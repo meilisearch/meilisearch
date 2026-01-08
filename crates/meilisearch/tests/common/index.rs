@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use std::panic::{catch_unwind, resume_unwind, UnwindSafe};
 
 use actix_web::http::StatusCode;
+use serde::Serialize;
 use urlencoding::encode as urlencode;
 
 use super::encoder::Encoder;
@@ -461,6 +462,15 @@ impl<State> Index<'_, State> {
         self.service.get(url).await
     }
 
+    pub async fn fields(&self, params: &ListFieldsPayload<'_>) -> (Value, StatusCode) {
+        self.service
+            .post(
+                format!("/indexes/{}/fields", urlencode(self.uid.as_str())),
+                serde_json::to_value(params).unwrap().into(),
+            )
+            .await
+    }
+
     pub async fn get_batch(&self, batch_id: u32) -> (Value, StatusCode) {
         let url = format!("/batches/{}", batch_id);
         self.service.get(url).await
@@ -633,4 +643,34 @@ pub struct GetAllDocumentsOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort: Option<Vec<&'static str>>,
     pub retrieve_vectors: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListFieldsPayload<'a> {
+    pub offset: usize,
+    pub limit: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<ListFieldsFilterPayload<'a>>,
+}
+
+impl Default for ListFieldsPayload<'_> {
+    fn default() -> Self {
+        Self { offset: 0, limit: 20, filter: None }
+    }
+}
+
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ListFieldsFilterPayload<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub starts_with: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contains: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub regex: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub glob: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub displayed: Option<bool>,
 }

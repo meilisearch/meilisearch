@@ -1,0 +1,109 @@
+---
+source: crates/meilisearch/tests/index/fields.rs
+expression: "(code.as_u16(), response)"
+---
+[
+  200,
+  [
+    {
+      "name": "color",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "genre",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "id",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    },
+    {
+      "name": "title",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "facetSearch": {
+          "sortBy": "alpha"
+        },
+        "filter": {
+          "equality": false,
+          "comparison": false
+        }
+      },
+      "localized": {
+        "locales": []
+      }
+    }
+  ]
+]

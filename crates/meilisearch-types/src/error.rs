@@ -442,6 +442,12 @@ InvalidChatCompletionSearchQueryParamPrompt    , InvalidRequest       , BAD_REQU
 InvalidChatCompletionSearchFilterParamPrompt   , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchIndexUidParamPrompt , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilter                       , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterStartsWith             , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterContains               , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterRegex                  , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterGlob                   , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterDisplayed              , InvalidRequest       , BAD_REQUEST ;
 RequiresEnterpriseEdition                      , InvalidRequest       , UNAVAILABLE_FOR_LEGAL_REASONS ;
 // Webhooks
 InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
