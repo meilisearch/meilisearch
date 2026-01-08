@@ -116,15 +116,9 @@ pub struct CreateImageRequest {
 #[serde(untagged)]
 pub enum Image {
     /// The URL of the generated image, if `response_format` is `url` (default).
-    Url {
-        url: String,
-        revised_prompt: Option<String>,
-    },
+    Url { url: String, revised_prompt: Option<String> },
     /// The base64-encoded JSON of the generated image, if `response_format` is `b64_json`.
-    B64Json {
-        b64_json: std::sync::Arc<String>,
-        revised_prompt: Option<String>,
-    },
+    B64Json { b64_json: std::sync::Arc<String>, revised_prompt: Option<String> },
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

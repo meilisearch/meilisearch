@@ -38,11 +38,7 @@ impl Parse for BoundArgs {
                 }
             }
         }
-        Ok(BoundArgs {
-            bounds,
-            where_clause,
-            stream,
-        })
+        Ok(BoundArgs { bounds, where_clause, stream })
     }
 }
 
@@ -75,10 +71,8 @@ pub fn byot(args: TokenStream, item: TokenStream) -> TokenStream {
 
                         // Create type parameter with optional bounds
                         let mut type_param = TypeParam::from(generic_ident.clone());
-                        if let Some((_, bound)) = bounds_args
-                            .bounds
-                            .iter()
-                            .find(|(name, _)| name == &generic_name)
+                        if let Some((_, bound)) =
+                            bounds_args.bounds.iter().find(|(name, _)| name == &generic_name)
                         {
                             type_param.bounds.extend(vec![bound.clone()]);
                         }

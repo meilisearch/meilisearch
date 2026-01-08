@@ -30,36 +30,24 @@ impl From<FunctionObject> for AssistantTools {
 
 impl From<CreateAssistantToolFileSearchResources> for CreateAssistantToolResources {
     fn from(value: CreateAssistantToolFileSearchResources) -> Self {
-        Self {
-            code_interpreter: None,
-            file_search: Some(value),
-        }
+        Self { code_interpreter: None, file_search: Some(value) }
     }
 }
 
 impl From<AssistantToolCodeInterpreterResources> for CreateAssistantToolResources {
     fn from(value: AssistantToolCodeInterpreterResources) -> Self {
-        Self {
-            code_interpreter: Some(value),
-            file_search: None,
-        }
+        Self { code_interpreter: Some(value), file_search: None }
     }
 }
 
 impl From<AssistantToolCodeInterpreterResources> for AssistantToolResources {
     fn from(value: AssistantToolCodeInterpreterResources) -> Self {
-        Self {
-            code_interpreter: Some(value),
-            file_search: None,
-        }
+        Self { code_interpreter: Some(value), file_search: None }
     }
 }
 
 impl From<AssistantToolFileSearchResources> for AssistantToolResources {
     fn from(value: AssistantToolFileSearchResources) -> Self {
-        Self {
-            code_interpreter: None,
-            file_search: Some(value),
-        }
+        Self { code_interpreter: None, file_search: Some(value) }
     }
 }

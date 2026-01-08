@@ -37,12 +37,7 @@ impl ExponentialBackoff {
         max_duration: Option<Duration>,
         max_retries: Option<usize>,
     ) -> Self {
-        Self {
-            start,
-            factor,
-            max_duration,
-            max_retries,
-        }
+        Self { start, factor, max_duration, max_retries }
     }
 }
 
@@ -116,9 +111,5 @@ impl RetryPolicy for Never {
 }
 
 /// The default [`RetryPolicy`] when initializing an [`EventSource`]
-pub const DEFAULT_RETRY: ExponentialBackoff = ExponentialBackoff::new(
-    Duration::from_millis(300),
-    2.,
-    Some(Duration::from_secs(5)),
-    None,
-);
+pub const DEFAULT_RETRY: ExponentialBackoff =
+    ExponentialBackoff::new(Duration::from_millis(300), 2., Some(Duration::from_secs(5)), None);
