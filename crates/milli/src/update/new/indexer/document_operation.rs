@@ -1,15 +1,20 @@
 use std::sync::atomic::Ordering;
+use std::{mem, ops, ptr, vec};
 
-use bumpalo::collections::CollectIn;
+use bstr::ByteSlice;
+use bumpalo::collections::vec::Vec as BumpVec;
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
-use hashbrown::hash_map::Entry;
 use heed::RoTxn;
+use indexmap::map::Entry;
+use indexmap::IndexMap;
 use memmap2::Mmap;
-use rayon::slice::ParallelSlice;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::slice::{ParallelSlice, ParallelSliceMut as _};
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 use serde_json::Deserializer;
+use thread_local::ThreadLocal;
 
 use super::super::document_change::DocumentChange;
 use super::document_changes::DocumentChanges;
@@ -24,12 +29,13 @@ use crate::update::new::{DocumentIdentifiers, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod, MissingDocumentPolicy};
 use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
 
+/// The set of operations to be applied to multiple documents in an index.
 #[derive(Default)]
-pub struct DocumentOperation<'pl> {
+pub struct IndexOperations<'pl> {
     operations: Vec<Payload<'pl>>,
 }
 
-impl<'pl> DocumentOperation<'pl> {
+impl<'pl> IndexOperations<'pl> {
     pub fn new() -> Self {
         Self { operations: Default::default() }
     }
@@ -83,376 +89,508 @@ impl<'pl> DocumentOperation<'pl> {
         shards: Option<&Shards>,
     ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
     where
-        MSP: Fn() -> bool,
+        MSP: Fn() -> bool + Sync,
     {
         progress.update_progress(IndexingStep::PreparingPayloads);
         let Self { operations } = self;
 
-        let documents_ids = index.documents_ids(rtxn)?;
-        let mut operations_stats = Vec::new();
-        let mut available_docids = AvailableIds::new(&documents_ids);
-        let mut docids_version_offsets = hashbrown::HashMap::new();
-        let mut primary_key = None;
-
-        let payload_count = operations.len();
-        let (step, progress_step) = AtomicPayloadStep::new(payload_count as u32);
-        progress.update_progress(progress_step);
-
-        for (payload_index, operation) in operations.into_iter().enumerate() {
-            if must_stop_processing() {
-                return Err(InternalError::AbortedIndexation.into());
-            }
-            step.store(payload_index as u32, Ordering::Relaxed);
-
-            let mut bytes = 0;
-            let result = match operation {
-                Payload::Replace { payload, on_missing_document } => {
-                    extract_addition_payload_changes(
-                        indexer,
-                        index,
-                        rtxn,
-                        primary_key_from_op,
-                        &mut primary_key,
-                        new_fields_ids_map,
-                        &mut available_docids,
-                        &mut bytes,
-                        &docids_version_offsets,
-                        IndexDocumentsMethod::ReplaceDocuments,
-                        shards,
-                        payload,
-                        on_missing_document,
-                    )
-                }
-                Payload::Update { payload, on_missing_document } => {
-                    extract_addition_payload_changes(
-                        indexer,
-                        index,
-                        rtxn,
-                        primary_key_from_op,
-                        &mut primary_key,
-                        new_fields_ids_map,
-                        &mut available_docids,
-                        &mut bytes,
-                        &docids_version_offsets,
-                        IndexDocumentsMethod::UpdateDocuments,
-                        shards,
-                        payload,
-                        on_missing_document,
-                    )
-                }
-                Payload::Deletion(to_delete) => extract_deletion_payload_changes(
-                    index,
-                    rtxn,
-                    &mut available_docids,
-                    &docids_version_offsets,
-                    shards,
-                    to_delete,
-                ),
-            };
-
-            let mut document_count = 0;
-            let error = match result {
-                Ok(new_docids_version_offsets) => {
-                    document_count = new_docids_version_offsets.len() as u64;
-                    // If we don't have any error then we can merge the content of this payload
-                    // into to main payload. Else we just drop this payload extraction.
-                    merge_version_offsets(&mut docids_version_offsets, new_docids_version_offsets);
-                    None
-                }
-                Err(Error::UserError(user_error)) => Some(user_error),
-                Err(e) => return Err(e),
-            };
-            operations_stats.push(PayloadStats { document_count, bytes, error });
-        }
-        step.store(payload_count as u32, Ordering::Relaxed);
-
-        // TODO We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
-        let mut docids_version_offsets: bumpalo::collections::vec::Vec<_> =
-            docids_version_offsets.drain().collect_in(indexer);
-
-        // Reorder the offsets to make sure we iterate on the file sequentially
-        // And finally sort them. This clearly speeds up reading the update files.
-        docids_version_offsets
-            .sort_unstable_by_key(|(_, po)| first_update_pointer(&po.operations).unwrap_or(0));
-
-        let docids_version_offsets = docids_version_offsets.into_bump_slice();
-        Ok((DocumentOperationChanges { docids_version_offsets }, operations_stats, primary_key))
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn extract_addition_payload_changes<'r, 'pl: 'r>(
-    indexer: &'pl Bump,
-    index: &Index,
-    rtxn: &'r RoTxn<'r>,
-    primary_key_from_op: Option<&'r str>,
-    primary_key: &mut Option<PrimaryKey<'r>>,
-    new_fields_ids_map: &mut FieldsIdsMap,
-    available_docids: &mut AvailableIds,
-    bytes: &mut u64,
-    main_docids_version_offsets: &hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>,
-    method: IndexDocumentsMethod,
-    shards: Option<&Shards>,
-    payload: &'pl [u8],
-    on_missing_document: MissingDocumentPolicy,
-) -> Result<hashbrown::HashMap<&'pl str, PayloadOperations<'pl>>> {
-    use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
-
-    let mut new_docids_version_offsets = hashbrown::HashMap::<&str, PayloadOperations<'pl>>::new();
-
-    let mut previous_offset = 0;
-    let mut iter = Deserializer::from_slice(payload).into_iter::<&RawValue>();
-    while let Some(doc) = iter.next().transpose().map_err(InternalError::SerdeJson)? {
-        *bytes = previous_offset as u64;
-
-        // Only guess the primary key if it is the first document
-        let retrieved_primary_key = if previous_offset == 0 {
-            let doc = RawMap::from_raw_value_and_hasher(doc, FxBuildHasher, indexer)
-                .map(Some)
-                .map_err(UserError::SerdeJson)?;
-
-            let result = retrieve_or_guess_primary_key(
-                rtxn,
-                index,
-                new_fields_ids_map,
-                primary_key_from_op,
-                doc,
-            );
-
-            let (pk, _has_been_changed) = match result {
-                Ok(Ok(pk)) => pk,
-                Ok(Err(user_error)) => return Err(Error::UserError(user_error)),
-                Err(error) => return Err(error),
-            };
-
-            primary_key.get_or_insert(pk)
-        } else {
-            // primary key was retrieved in the first iteration or in a previous payload
-            primary_key.as_ref().unwrap()
-        };
-
-        let current_offset = iter.byte_offset();
-        let content = &payload[previous_offset..current_offset];
-        previous_offset = current_offset;
-
-        let external_id =
-            retrieved_primary_key.extract_fields_and_docid(doc, new_fields_ids_map, indexer)?;
-
-        let external_id = external_id.to_de();
-
-        if shards.is_some_and(|shards| !shards.must_process(external_id)) {
-            continue;
-        }
-
-        let document_offset = DocumentOffset { content };
-
-        match main_docids_version_offsets.get(external_id) {
-            None => {
-                match index.external_documents_ids().get(rtxn, external_id) {
-                    Ok(Some(docid)) => match new_docids_version_offsets.entry(external_id) {
-                        Entry::Occupied(mut entry) => match method {
-                            ReplaceDocuments => entry
-                                .get_mut()
-                                .push_replacement(document_offset, on_missing_document),
-                            UpdateDocuments => {
-                                entry.get_mut().push_update(document_offset, on_missing_document)
-                            }
-                        },
-                        Entry::Vacant(entry) => {
-                            match method {
-                                ReplaceDocuments => {
-                                    entry.insert(PayloadOperations::new_replacement(
-                                        docid,
-                                        false, // is new
-                                        document_offset,
-                                    ));
-                                }
-                                UpdateDocuments => {
-                                    entry.insert(PayloadOperations::new_update(
-                                        docid,
-                                        false, // is new
-                                        document_offset,
-                                    ));
-                                }
-                            }
-                        }
-                    },
-                    Ok(None) => match new_docids_version_offsets.entry(external_id) {
-                        Entry::Occupied(mut entry) => match method {
-                            ReplaceDocuments => entry
-                                .get_mut()
-                                .push_replacement(document_offset, on_missing_document),
-                            UpdateDocuments => {
-                                entry.get_mut().push_update(document_offset, on_missing_document)
-                            }
-                        },
-                        Entry::Vacant(entry) => {
-                            let docid = match available_docids.next() {
-                                Some(docid) => docid,
-                                None => return Err(UserError::DocumentLimitReached.into()),
-                            };
-
-                            if matches!(on_missing_document, MissingDocumentPolicy::Skip) {
-                                continue;
-                            }
-
-                            match method {
-                                ReplaceDocuments => {
-                                    entry.insert(PayloadOperations::new_replacement(
-                                        docid,
-                                        true, // is new
-                                        document_offset,
-                                    ));
-                                }
-                                UpdateDocuments => {
-                                    entry.insert(PayloadOperations::new_update(
-                                        docid,
-                                        true, // is new
-                                        document_offset,
-                                    ));
-                                }
-                            }
-                        }
-                    },
-                    Err(e) => return Err(e.into()),
-                }
-            }
-            Some(payload_operations) => match new_docids_version_offsets.entry(external_id) {
-                Entry::Occupied(mut entry) => match method {
-                    ReplaceDocuments => {
-                        entry.get_mut().push_replacement(document_offset, on_missing_document)
-                    }
-                    UpdateDocuments => {
-                        entry.get_mut().push_update(document_offset, on_missing_document)
-                    }
-                },
-                Entry::Vacant(entry) => {
-                    if payload_operations.is_new
-                        && matches!(on_missing_document, MissingDocumentPolicy::Skip)
-                    {
-                        continue;
-                    }
-
-                    match method {
-                        ReplaceDocuments => {
-                            entry.insert(PayloadOperations::new_replacement(
-                                payload_operations.docid,
-                                payload_operations.is_new,
-                                document_offset,
-                            ));
-                        }
-                        UpdateDocuments => {
-                            entry.insert(PayloadOperations::new_update(
-                                payload_operations.docid,
-                                payload_operations.is_new,
-                                document_offset,
-                            ));
-                        }
-                    }
-                }
-            },
-        }
-    }
-
-    if payload.is_empty() {
-        let result = retrieve_or_guess_primary_key(
+        // We first fetch the primary key from the index...
+        let primary_key = retrieve_or_guess_primary_key(
             rtxn,
             index,
             new_fields_ids_map,
             primary_key_from_op,
             None,
-        );
-        match result {
-            Ok(Ok((pk, _))) => {
-                primary_key.get_or_insert(pk);
-            }
-            Ok(Err(UserError::NoPrimaryKeyCandidateFound)) => (),
-            Ok(Err(user_error)) => return Err(Error::UserError(user_error)),
-            Err(error) => return Err(error),
-        };
-    }
+        )?
+        .map(|(pk, _)| pk);
 
-    Ok(new_docids_version_offsets)
+        // ...and if not present we try to guess it from
+        // the operations and ignore the useless ones.
+        let (primary_key, pre_payload_stats, remaining_operations) = match primary_key {
+            Ok(pk) => (pk, Vec::new(), operations),
+            Err(_user_error) => {
+                let (primary_key, pre_payload_stats, operations) =
+                    fetch_primary_and_ignore_payloads(
+                        indexer,
+                        index,
+                        rtxn,
+                        primary_key_from_op,
+                        new_fields_ids_map,
+                        operations,
+                    )?;
+
+                match primary_key {
+                    Some(pk) => (pk, pre_payload_stats, operations),
+                    None => {
+                        return Ok((
+                            DocumentOperationChanges { docids_version_offsets: &[] },
+                            pre_payload_stats,
+                            None,
+                        ));
+                    }
+                }
+            }
+        };
+
+        let payload_count: u32 = remaining_operations.len().try_into().unwrap();
+        let (step, progress_step) = AtomicPayloadStep::new(payload_count);
+        progress.update_progress(progress_step);
+
+        let IndexedPayloadOperations { document_operations, fields_ids_map, payload_stats } =
+            remaining_operations
+                .into_par_iter()
+                .enumerate()
+                .map(|(payload_index, payload)| {
+                    if must_stop_processing() {
+                        return Err(InternalError::AbortedIndexation.into());
+                    }
+                    step.store(payload_index as u32, Ordering::Relaxed);
+                    IndexedPayloadOperations::from_payload(payload, &primary_key, shards)
+                })
+                .try_reduce(IndexedPayloadOperations::default, |lhs, rhs| lhs | rhs)?;
+
+        step.store(payload_count, Ordering::Relaxed);
+
+        // We must drain the HashMap into a Vec because rayon::hash_map::IntoIter: !Clone
+        progress.update_progress(IndexingStep::AssigningDocumentsIds);
+        let external_documents_ids = index.external_documents_ids();
+
+        // We read the database in parallel to retrieve the internal IDs of the existing
+        // documents and mark the ones that need a new ID. To avoid creating a lot of
+        // read transactions we prefer store the read transactions in a thread-local variable.
+        let thread_local_rtxns = ThreadLocal::new();
+        let extracted_docids = document_operations
+            .par_keys()
+            .enumerate()
+            .map(|(_, external_id)| {
+                let local_rtxn = thread_local_rtxns.get_or_try(|| index.read_txn())?;
+                external_documents_ids.get(local_rtxn, external_id)
+            })
+            .collect_vec_list();
+
+        let documents_ids = index.documents_ids(rtxn)?;
+        let mut available_ids = AvailableIds::new(&documents_ids);
+        let number_of_operations = document_operations.len();
+        let mut docids_version_offsets = BumpVec::with_capacity_in(number_of_operations, indexer);
+
+        let docids = extracted_docids.into_iter().flatten();
+        for ((external_id, ops), docid_result) in document_operations.into_iter().zip(docids) {
+            let (docid, is_missing) = match docid_result? {
+                Some(docid) => (docid, false),
+                None => (available_ids.next().ok_or(UserError::DocumentLimitReached)?, true),
+            };
+
+            if let Some(ops) = ops.into_payload_operations(is_missing, docid) {
+                let external_id = &*indexer.alloc_str(&external_id);
+                docids_version_offsets.push((external_id, ops));
+            }
+        }
+
+        // We insert all the fields ids discovered in the payload that were extracted
+        // from the parallel threads into the main fields ids map. There couldn't be more
+        // than 2^16 fields so no need to optimize this part.
+        for field_name in fields_ids_map.names() {
+            new_fields_ids_map.insert(field_name).ok_or(UserError::AttributeLimitReached)?;
+        }
+
+        // Reorder the offsets to make sure we iterate on the file sequentially
+        // And finally sort them. This clearly speeds up reading the update files.
+        progress.update_progress(IndexingStep::ReorderingPayloadOffsets);
+        docids_version_offsets
+            .par_sort_unstable_by_key(|(_, po)| first_update_pointer(&po.operations).unwrap_or(0));
+
+        Ok((
+            DocumentOperationChanges {
+                docids_version_offsets: docids_version_offsets.into_bump_slice(),
+            },
+            // Once we got the payload stats for the valid operations
+            // we must prepend the stats from skipped ones.
+            pre_payload_stats.into_iter().chain(payload_stats).collect(),
+            Some(primary_key),
+        ))
+    }
 }
 
-fn extract_deletion_payload_changes<'s, 'pl: 's>(
+/// Fetches the primary key from the operations and removes the ignored ones.
+/// Collecting the stats and the useful payloads for future use.
+fn fetch_primary_and_ignore_payloads<'pl>(
+    bump: &'pl Bump,
     index: &Index,
-    rtxn: &RoTxn,
-    available_docids: &mut AvailableIds,
-    main_docids_version_offsets: &hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
-    shards: Option<&Shards>,
-    to_delete: &'pl [&'pl str],
-) -> Result<hashbrown::HashMap<&'s str, PayloadOperations<'pl>>> {
-    let mut new_docids_version_offsets = hashbrown::HashMap::<&str, PayloadOperations<'pl>>::new();
+    rtxn: &'pl RoTxn<'pl>,
+    primary_key_from_op: Option<&'pl str>,
+    new_fields_ids_map: &mut FieldsIdsMap,
+    operations: Vec<Payload<'pl>>,
+) -> Result<(Option<PrimaryKey<'pl>>, Vec<PayloadStats>, Vec<Payload<'pl>>)> {
+    let mut payload_stats = Vec::new();
+    let mut remaining_operations = Vec::new();
+    let mut primary_key = None;
 
-    for external_id in to_delete {
-        if shards.is_some_and(|shards| !shards.must_process(external_id)) {
+    for operation in operations {
+        if primary_key.is_some() {
+            remaining_operations.push(operation);
             continue;
         }
 
-        match main_docids_version_offsets.get(external_id) {
-            None => {
-                match index.external_documents_ids().get(rtxn, external_id) {
-                    Ok(Some(docid)) => {
-                        match new_docids_version_offsets.entry(external_id) {
-                            Entry::Occupied(mut entry) => entry.get_mut().push_deletion(),
-                            Entry::Vacant(entry) => {
-                                entry.insert(PayloadOperations::new_deletion(
-                                    docid, false, // is new
-                                ));
-                            }
-                        }
+        let stats = match operation {
+            Payload::Replace { payload: p, .. } | Payload::Update { payload: p, .. } => {
+                // Fetches the first document from payload bytes.
+                let first_document = Deserializer::from_slice(p)
+                    .into_iter::<&RawValue>()
+                    .next()
+                    .map(|v| {
+                        v.and_then(|v| RawMap::from_raw_value_and_hasher(v, FxBuildHasher, bump))
+                    })
+                    .transpose()
+                    .map_err(InternalError::SerdeJson)?;
+
+                let primary_key_result = retrieve_or_guess_primary_key(
+                    rtxn,
+                    index,
+                    new_fields_ids_map,
+                    primary_key_from_op,
+                    first_document,
+                )?;
+
+                match primary_key_result {
+                    Ok((pk, _)) => {
+                        primary_key = Some(pk);
+                        // From now on, we will collect the remaining
+                        // operations in a vector to manage them later on.
+                        remaining_operations.push(operation);
+                        continue;
                     }
-                    Ok(None) => {
-                        let docid = match available_docids.next() {
-                            Some(docid) => docid,
-                            None => return Err(UserError::DocumentLimitReached.into()),
-                        };
-                        match new_docids_version_offsets.entry(external_id) {
-                            Entry::Occupied(mut entry) => entry.get_mut().push_deletion(),
-                            Entry::Vacant(entry) => {
-                                entry.insert(PayloadOperations::new_deletion(
-                                    docid, true, // is new
-                                ));
-                            }
-                        }
-                    }
-                    Err(e) => return Err(e.into()),
+                    Err(error) => PayloadStats {
+                        bytes: p.len() as u64,
+                        document_count: 0,
+                        // We do not consider errors when payloads are empty.
+                        error: if p.trim().is_empty() { None } else { Some(error) },
+                    },
                 }
             }
-            Some(payload_operations) => match new_docids_version_offsets.entry(external_id) {
-                Entry::Occupied(mut entry) => entry.get_mut().push_deletion(),
-                Entry::Vacant(entry) => {
-                    entry.insert(PayloadOperations::new_deletion(
-                        payload_operations.docid,
-                        payload_operations.is_new,
-                    ));
-                }
-            },
-        }
+            Payload::Deletion(_) => {
+                // We reach this when we don't have a primary key so it's impossible to delete documents.
+                PayloadStats { bytes: 0, document_count: 0, error: None }
+            }
+        };
+
+        payload_stats.push(stats);
     }
 
-    Ok(new_docids_version_offsets)
+    Ok((primary_key, payload_stats, remaining_operations))
 }
 
-fn merge_version_offsets<'s, 'pl>(
-    main: &mut hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
-    new: hashbrown::HashMap<&'s str, PayloadOperations<'pl>>,
-) {
-    // We cannot swap like nothing because documents
-    // operations must be in the right order.
-    if main.is_empty() {
-        return *main = new;
+/// The correctly ordered operations that were extracted from the payload.
+///
+/// We don't need the payload index as we merge them in order by using
+/// the rayon `try_reduce` method.
+#[derive(Default)]
+struct IndexedPayloadOperations<'pl> {
+    /// Represents the operations that will be applied to the documents of this payload.
+    ///
+    /// The key corresponds to the external document id.
+    document_operations: IndexMap<String, DocumentOperations<'pl>>,
+
+    /// The local fields ids map for this payload or a union of payloads.
+    fields_ids_map: FieldsIdsMap,
+
+    /// Some interesting stats and possible errors.
+    ///
+    /// The order is the same as the payload files.
+    payload_stats: Vec<PayloadStats>,
+}
+
+impl<'pl> IndexedPayloadOperations<'pl> {
+    fn from_payload(
+        payload_operation: Payload<'pl>,
+        primary_key: &PrimaryKey<'_>,
+        shards: Option<&Shards>,
+    ) -> Result<Self> {
+        use IndexDocumentsMethod::*;
+
+        let (document_operations, payload_stats, fields_ids_map) = match payload_operation {
+            Payload::Replace { payload, on_missing_document } => extract_payload_changes(
+                payload,
+                on_missing_document,
+                primary_key,
+                ReplaceDocuments,
+                shards,
+            )?,
+            Payload::Update { payload, on_missing_document } => extract_payload_changes(
+                payload,
+                on_missing_document,
+                primary_key,
+                UpdateDocuments,
+                shards,
+            )?,
+            Payload::Deletion(docids) => {
+                let (document_operations, stats) = extract_payload_deletions(docids, shards);
+                (document_operations, stats, FieldsIdsMap::default())
+            }
+        };
+
+        Ok(IndexedPayloadOperations {
+            document_operations,
+            fields_ids_map,
+            payload_stats: vec![payload_stats],
+        })
+    }
+}
+
+impl ops::BitOr for IndexedPayloadOperations<'_> {
+    type Output = Result<Self>;
+
+    /// The merge operation consists of merging the document operations, in order: rhs into lhs.
+    fn bitor(self, rhs: Self) -> Self::Output {
+        let IndexedPayloadOperations {
+            mut document_operations,
+            mut fields_ids_map,
+            mut payload_stats,
+        } = self;
+        let IndexedPayloadOperations {
+            document_operations: rhs_document_operations,
+            fields_ids_map: rhs_fields_ids_map,
+            payload_stats: mut rhs_payload_stats,
+        } = rhs;
+
+        for (external_document_id, rhs_docops) in rhs_document_operations {
+            match document_operations.entry(external_document_id) {
+                Entry::Occupied(mut entry) => {
+                    // Unfortunately we don't have the OccupiedEntry::replace_entry_with method
+                    // on the IndexMap entry. This operation would be much more elegant otherwise.
+                    let lhs_docops = mem::replace(entry.get_mut(), DocumentOperations::empty());
+                    match DocumentOperations::from_iter(
+                        lhs_docops.into_iter().chain(rhs_docops),
+                        DocumentExistence::Unknown,
+                    ) {
+                        Some(operations) => entry.insert(operations),
+                        None => entry.shift_remove(),
+                    };
+                }
+                Entry::Vacant(vacant_entry) => {
+                    vacant_entry.insert(rhs_docops);
+                }
+            }
+        }
+
+        for field_name in rhs_fields_ids_map.names() {
+            fields_ids_map.insert(field_name).ok_or(UserError::AttributeLimitReached)?;
+        }
+
+        payload_stats.append(&mut rhs_payload_stats);
+
+        Ok(IndexedPayloadOperations { document_operations, fields_ids_map, payload_stats })
+    }
+}
+
+/// A set of operations applied to a single document in a particular order.
+struct DocumentOperations<'pl>(Vec<DocumentOperation<'pl>>);
+
+impl<'pl> DocumentOperations<'pl> {
+    /// Creates an empty set of operations.
+    ///
+    /// This is useful mostly when merging documents operations retrieved
+    /// from payload and shouldn't be considered a valid state otherwise.
+    fn empty() -> Self {
+        DocumentOperations(Vec::new())
     }
 
-    for (key, new_payload) in new {
-        match main.entry(key) {
-            Entry::Occupied(mut entry) => entry.get_mut().append_operations(new_payload.operations),
-            Entry::Vacant(entry) => {
-                entry.insert(new_payload);
+    fn one_deletion() -> Self {
+        DocumentOperations(vec![DocumentOperation::Deletion])
+    }
+
+    fn from_raw_value(
+        method: IndexDocumentsMethod,
+        document: &'pl RawValue,
+        on_missing_document: MissingDocumentPolicy,
+    ) -> Self {
+        use DocumentOperation::*;
+        use IndexDocumentsMethod::*;
+
+        let operation = match method {
+            ReplaceDocuments => Replacement { document, on_missing_document },
+            UpdateDocuments => Update { document, on_missing_document },
+        };
+
+        DocumentOperations(vec![operation])
+    }
+
+    fn from_iter<I>(operations: I, document_existence: DocumentExistence) -> Option<Self>
+    where
+        I: IntoIterator<Item = DocumentOperation<'pl>>,
+    {
+        use DocumentOperation::*;
+        use MissingDocumentPolicy::*;
+
+        let mut document_operations = Vec::new();
+        for operation in operations {
+            let existence_after_last_op = match document_operations.last() {
+                Some(Replacement { .. } | Update { .. }) => DocumentExistence::Exists,
+                Some(Deletion) => DocumentExistence::Missing,
+                None => document_existence,
+            };
+
+            match (existence_after_last_op, operation) {
+                // when the document is missing for sure after the last operation,
+                // and the next operation requires skipping creation,
+                // we skip this operation
+                (
+                    DocumentExistence::Missing,
+                    Replacement { on_missing_document: Skip, .. }
+                    | Update { on_missing_document: Skip, .. },
+                ) => continue,
+                // deletions and replacements delete all previous operations
+                (_, op @ (Deletion | Replacement { .. })) => {
+                    document_operations.clear();
+                    document_operations.push(op);
+                }
+                // updates executes after the previous operations
+                (_, op @ Update { .. }) => document_operations.push(op),
+            }
+        }
+
+        match (document_existence, document_operations.last()) {
+            (DocumentExistence::Missing, Some(Deletion) | None) => None,
+            (_, _) => Some(DocumentOperations(document_operations)),
+        }
+    }
+
+    fn into_payload_operations(
+        self,
+        was_missing: bool,
+        docid: DocumentId,
+    ) -> Option<PayloadOperations<'pl>> {
+        use DocumentExistence::*;
+        use DocumentOperation::*;
+
+        let document_existence = if was_missing { Missing } else { Exists };
+        Self::from_iter(self.0, document_existence).map(|DocumentOperations(operations)| {
+            PayloadOperations {
+                docid,
+                is_new: was_missing, // same thing
+                operations: operations
+                    .into_iter()
+                    .map(|op| match op {
+                        Replacement { document, .. } => {
+                            InnerDocOp::Replace(DocumentOffset { content: document })
+                        }
+                        Update { document, .. } => {
+                            InnerDocOp::Update(DocumentOffset { content: document })
+                        }
+                        Deletion => InnerDocOp::Deletion,
+                    })
+                    .collect(),
+            }
+        })
+    }
+
+    fn push_raw_value(
+        &mut self,
+        method: IndexDocumentsMethod,
+        raw_value: &'pl RawValue,
+        on_missing_document: MissingDocumentPolicy,
+    ) {
+        use DocumentOperation::*;
+        use IndexDocumentsMethod::*;
+
+        let operation = match method {
+            ReplaceDocuments => Replacement { document: raw_value, on_missing_document },
+            UpdateDocuments => Update { document: raw_value, on_missing_document },
+        };
+
+        self.0.push(operation);
+    }
+}
+
+impl<'pl> IntoIterator for DocumentOperations<'pl> {
+    type Item = DocumentOperation<'pl>;
+    type IntoIter = vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum DocumentExistence {
+    Unknown,
+    Exists,
+    Missing,
+}
+
+/// Represents an operation to be performed on a document.
+enum DocumentOperation<'pl> {
+    Replacement { document: &'pl RawValue, on_missing_document: MissingDocumentPolicy },
+    Update { document: &'pl RawValue, on_missing_document: MissingDocumentPolicy },
+    Deletion,
+}
+
+fn extract_payload_changes<'pl>(
+    payload: &'pl [u8],
+    on_missing_document: MissingDocumentPolicy,
+    primary_key: &PrimaryKey<'_>,
+    method: IndexDocumentsMethod,
+    shards: Option<&Shards>,
+) -> Result<(IndexMap<String, DocumentOperations<'pl>>, PayloadStats, FieldsIdsMap)> {
+    let mut new_docids_version_offsets = IndexMap::<_, DocumentOperations>::new();
+    let mut fids_map = FieldsIdsMap::new();
+    let bump = bumpalo::Bump::new();
+
+    let mut iter = Deserializer::from_slice(payload).into_iter::<&RawValue>();
+    while let Some(doc) = iter.next().transpose().map_err(InternalError::SerdeJson)? {
+        let external_document_id =
+            match primary_key.extract_fields_and_docid(doc, &mut fids_map, &bump) {
+                Ok(external_document_id) => external_document_id.to_de(),
+                Err(Error::UserError(user_error)) => {
+                    let payload_stats = PayloadStats {
+                        bytes: payload.len() as u64,
+                        document_count: 0,
+                        error: Some(user_error),
+                    };
+                    // In case of a user error, we immediately return
+                    // it and ignore the documents from this payload.
+                    return Ok((IndexMap::new(), payload_stats, FieldsIdsMap::new()));
+                }
+                Err(error) => return Err(error),
+            };
+
+        if shards.is_some_and(|shards| !shards.must_process(external_document_id)) {
+            continue;
+        }
+
+        match new_docids_version_offsets.entry(external_document_id.to_owned()) {
+            Entry::Occupied(mut occupied_entry) => {
+                occupied_entry.get_mut().push_raw_value(method, doc, on_missing_document);
+            }
+            Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(DocumentOperations::from_raw_value(
+                    method,
+                    doc,
+                    on_missing_document,
+                ));
             }
         }
     }
+
+    let payload_stats = PayloadStats {
+        bytes: payload.len() as u64,
+        document_count: new_docids_version_offsets.len() as u64,
+        error: None,
+    };
+
+    Ok((new_docids_version_offsets, payload_stats, fids_map))
+}
+
+fn extract_payload_deletions<'pl>(
+    external_document_ids: &[&str],
+    shards: Option<&Shards>,
+) -> (IndexMap<String, DocumentOperations<'pl>>, PayloadStats) {
+    let docops: IndexMap<_, _> = external_document_ids
+        .iter()
+        .filter(|id| shards.is_none_or(|shards| shards.must_process(id)))
+        .map(|id| (id.to_string(), DocumentOperations::one_deletion()))
+        .collect();
+    let payload_stats = PayloadStats { bytes: 0, document_count: docops.len() as u64, error: None };
+    (docops, payload_stats)
 }
 
 impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
@@ -508,68 +646,6 @@ pub struct PayloadOperations<'pl> {
 }
 
 impl<'pl> PayloadOperations<'pl> {
-    fn new_replacement(docid: DocumentId, is_new: bool, offset: DocumentOffset<'pl>) -> Self {
-        Self { docid, is_new, operations: vec![InnerDocOp::Replace(offset)] }
-    }
-
-    fn new_update(docid: DocumentId, is_new: bool, offset: DocumentOffset<'pl>) -> Self {
-        Self { docid, is_new, operations: vec![InnerDocOp::Update(offset)] }
-    }
-
-    fn new_deletion(docid: DocumentId, is_new: bool) -> Self {
-        Self { docid, is_new, operations: vec![InnerDocOp::Deletion] }
-    }
-}
-
-impl<'pl> PayloadOperations<'pl> {
-    fn push_replacement(
-        &mut self,
-        offset: DocumentOffset<'pl>,
-        on_missing_document: MissingDocumentPolicy,
-    ) {
-        // If the last operation was a deletion, we can safely ignore the replacement if the policy
-        // is set on skip.
-        if matches!(
-            (self.operations.last(), on_missing_document),
-            (Some(InnerDocOp::Deletion), MissingDocumentPolicy::Skip)
-        ) {
-            return;
-        }
-
-        self.operations.clear();
-        self.operations.push(InnerDocOp::Replace(offset))
-    }
-
-    fn push_update(
-        &mut self,
-        offset: DocumentOffset<'pl>,
-        on_missing_document: MissingDocumentPolicy,
-    ) {
-        // If the last operation was a deletion, we can safely ignore the update if the policy is
-        // set on skip.
-        if matches!(
-            (self.operations.last(), on_missing_document),
-            (Some(InnerDocOp::Deletion), MissingDocumentPolicy::Skip)
-        ) {
-            return;
-        }
-
-        self.operations.push(InnerDocOp::Update(offset))
-    }
-
-    fn push_deletion(&mut self) {
-        self.operations.clear();
-        self.operations.push(InnerDocOp::Deletion);
-    }
-
-    fn append_operations(&mut self, mut operations: Vec<InnerDocOp<'pl>>) {
-        debug_assert!(!operations.is_empty());
-        if matches!(operations.first(), Some(InnerDocOp::Deletion | InnerDocOp::Replace(_))) {
-            self.operations.clear();
-        }
-        self.operations.append(&mut operations);
-    }
-
     /// Returns only the most recent version of a document based on the updates from the payloads.
     ///
     /// This function is only meant to be used when doing a replacement and not an update.
@@ -583,10 +659,8 @@ impl<'pl> PayloadOperations<'pl> {
     {
         match self.operations.last() {
             Some(InnerDocOp::Replace(DocumentOffset { content })) => {
-                let document = serde_json::from_slice(content).unwrap();
-                let document =
-                    RawMap::from_raw_value_and_hasher(document, FxBuildHasher, doc_alloc)
-                        .map_err(UserError::SerdeJson)?;
+                let document = RawMap::from_raw_value_and_hasher(content, FxBuildHasher, doc_alloc)
+                    .map_err(UserError::SerdeJson)?;
 
                 if self.is_new {
                     Ok(Some(DocumentChange::Insertion(Insertion::create(
@@ -630,9 +704,8 @@ impl<'pl> PayloadOperations<'pl> {
                         InnerDocOp::Deletion => unreachable!("Deletion in document operations"),
                     };
 
-                    let document = serde_json::from_slice(content).unwrap();
                     let document =
-                        RawMap::from_raw_value_and_hasher(document, FxBuildHasher, doc_alloc)
+                        RawMap::from_raw_value_and_hasher(content, FxBuildHasher, doc_alloc)
                             .map_err(UserError::SerdeJson)?;
 
                     Ok(document)
@@ -680,7 +753,7 @@ pub enum InnerDocOp<'pl> {
 #[derive(Clone)]
 pub struct DocumentOffset<'pl> {
     /// The mmapped payload files.
-    pub content: &'pl [u8],
+    pub content: &'pl RawValue,
 }
 
 /// Returns the first pointer of the first change in a document.
@@ -688,9 +761,13 @@ pub struct DocumentOffset<'pl> {
 /// This is used to sort the documents in update file content order
 /// and read the update file in order to largely speed up the indexation.
 pub fn first_update_pointer(docops: &[InnerDocOp]) -> Option<usize> {
+    // A &RawValue is an unsized transparent type that simply wraps an str. The ref (&)
+    // corresponds to the pointer to the str and therefore a direct access into memory.
+    //
+    // <https://docs.rs/serde_json/1.0.148/src/serde_json/raw.rs.html#115-119>
     docops.iter().find_map(|ido: &_| match ido {
-        InnerDocOp::Replace(replace) => Some(replace.content.as_ptr() as usize),
-        InnerDocOp::Update(update) => Some(update.content.as_ptr() as usize),
+        InnerDocOp::Replace(replace) => Some(ptr::from_ref(replace.content) as *const () as usize),
+        InnerDocOp::Update(update) => Some(ptr::from_ref(update.content) as *const () as usize),
         InnerDocOp::Deletion => None,
     })
 }

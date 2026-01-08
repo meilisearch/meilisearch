@@ -38,7 +38,7 @@ heed = { version = "0.22.1-nested-rtxns-6", default-features = false, features =
     "serde-json",
     "serde-bincode",
 ] }
-indexmap = { version = "2.12.0", features = ["serde"] }
+indexmap = { version = "2.12.0", features = ["serde", "rayon"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memchr = "2.7.6"

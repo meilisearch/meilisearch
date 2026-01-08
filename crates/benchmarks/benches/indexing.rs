@@ -144,7 +144,7 @@ fn indexing_songs_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -212,7 +212,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -258,7 +258,7 @@ fn reindexing_songs_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -328,7 +328,7 @@ fn deleting_songs_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -406,7 +406,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_1_2, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -452,7 +452,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_3_4, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -494,7 +494,7 @@ fn indexing_songs_in_three_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS_4_4, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -562,7 +562,7 @@ fn indexing_songs_without_faceted_numbers(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
 
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
@@ -631,7 +631,7 @@ fn indexing_songs_without_faceted_fields(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_SONGS, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -699,7 +699,7 @@ fn indexing_wiki(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -766,7 +766,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -812,7 +812,7 @@ fn reindexing_wiki(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -881,7 +881,7 @@ fn deleting_wiki_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -958,7 +958,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_1_2, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
@@ -1005,7 +1005,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_3_4, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
@@ -1048,7 +1048,7 @@ fn indexing_wiki_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents =
                     utils::documents_from(datasets_paths::SMOL_WIKI_ARTICLES_4_4, "csv");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
@@ -1117,7 +1117,7 @@ fn indexing_movies_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1184,7 +1184,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1230,7 +1230,7 @@ fn reindexing_movies_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1299,7 +1299,7 @@ fn deleting_movies_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1414,7 +1414,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_1_2, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1460,7 +1460,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_3_4, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1502,7 +1502,7 @@ fn indexing_movies_in_three_batches(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::MOVIES_4_4, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1593,7 +1593,7 @@ fn indexing_nested_movies_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1685,7 +1685,7 @@ fn deleting_nested_movies_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1769,7 +1769,7 @@ fn indexing_nested_movies_without_faceted_fields(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::NESTED_MOVIES, "json");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1837,7 +1837,7 @@ fn indexing_geo(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1904,7 +1904,7 @@ fn reindexing_geo(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -1950,7 +1950,7 @@ fn reindexing_geo(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
@@ -2019,7 +2019,7 @@ fn deleting_geo_in_batches_default(c: &mut Criterion) {
                 let db_fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let documents = utils::documents_from(datasets_paths::SMOL_ALL_COUNTRIES, "jsonl");
                 indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 

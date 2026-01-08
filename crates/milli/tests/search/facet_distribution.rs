@@ -36,7 +36,7 @@ fn test_facet_distribution_with_no_facet_values() {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = RuntimeEmbedders::default();
-    let mut indexer = indexer::DocumentOperation::new();
+    let mut indexer = indexer::IndexOperations::new();
 
     let doc1: Object = from_value(
         json!({ "id": 123, "title": "What a week, hu...", "genres": [], "tags": ["blue"] }),

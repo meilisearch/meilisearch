@@ -77,7 +77,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = RuntimeEmbedders::default();
-    let mut indexer = indexer::DocumentOperation::new();
+    let mut indexer = indexer::IndexOperations::new();
 
     let mut file = tempfile::tempfile().unwrap();
     file.write_all(CONTENT.as_bytes()).unwrap();
