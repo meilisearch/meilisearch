@@ -3,7 +3,6 @@ name: Check OpenAPI file
 on:
   workflow_dispatch:
   pull_request:
-  merge_group:
 
 permissions:
   contents: read
