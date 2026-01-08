@@ -323,6 +323,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-js-plugins
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
       - name: Setup node
         uses: actions/setup-node@v5
         with:
