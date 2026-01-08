@@ -109,7 +109,7 @@ utoipa = { version = "5.4.0", features = [
     "openapi_extensions",
 ] }
 utoipa-scalar = { version = "0.3.0", optional = true, features = ["actix-web"] }
-async-openai = { git = "https://github.com/meilisearch/async-openai", branch = "better-error-handling" }
+async-openai = { path = "../../external-crates/async-openai" }
 secrecy = "0.10.3"
 actix-web-lab = { version = "0.24.3", default-features = false }
 urlencoding = "2.1.3"
