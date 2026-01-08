@@ -19,7 +19,7 @@ impl<R: io::Read> ArchiveExt for Archive<R> {
         let dst = dst.as_ref();
 
         if dst.symlink_metadata().is_err() {
-            fs::create_dir_all(&dst).map_err(|e| {
+            fs::create_dir_all(dst).map_err(|e| {
                 io::Error::new(e.kind(), format!("failed to create `{}`", dst.display()))
             })?;
         }
@@ -43,9 +43,8 @@ impl<R: io::Read> ArchiveExt for Archive<R> {
                 _ => {
                     if let Some(link_name) = entry.header().link_name()? {
                         let absolute_link_name = path::absolute(dst.join(&link_name))?;
-                        if !absolute_link_name.starts_with(&dst) {
-                            return Err(io::Error::new(
-                                io::ErrorKind::Other,
+                        if !absolute_link_name.starts_with(dst) {
+                            return Err(io::Error::other(
                                 "links and symlinks must link within the dump directory",
                             ));
                         }
@@ -69,7 +68,7 @@ impl<R: io::Read> ArchiveExt for Archive<R> {
 
         // Finally check the unpacked files and directories
         // to check if symlinks are pointing inside the dst folder.
-        check_symlinks(&dst)?;
+        check_symlinks(dst)?;
 
         Ok(())
     }
@@ -110,14 +109,13 @@ fn check_symlinks(dir: &Path) -> io::Result<()> {
 
     let max_depth = 10;
     visit_dirs(dir, max_depth, &|entry| {
-        if entry.file_type()?.is_symlink() {
-            if !entry.path().canonicalize()?.starts_with(dir) {
+        if entry.file_type()?.is_symlink()
+            && !entry.path().canonicalize()?.starts_with(dir) {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     "links and symlinks must link within the dump directory",
                 ));
             }
-        }
         Ok(())
     })
 }
