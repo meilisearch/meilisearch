@@ -39,6 +39,9 @@ jobs:
       - name: Check all routes have summaries
         run: cargo run --release -p openapi-generator -- --check-summaries
 
+      - name: Check for duplicate or malformed paths
+        run: cargo run --release -p openapi-generator -- --check-paths
+
       # Validates that the OpenAPI file is syntactically correct and conforms to the OpenAPI specification
       - name: Validate OpenAPI schema
         run: swagger-cli validate /tmp/openapi.json
