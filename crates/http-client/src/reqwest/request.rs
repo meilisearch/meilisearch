@@ -113,4 +113,20 @@ impl RequestBuilder {
     {
         Self { inner: f(self.inner), ip_policy: self.ip_policy }
     }
+
+    /// Attempts to return a `RequestBuilder` modified with the modifications done to the internal builder, or return an error
+    /// if the internal modifications fail.
+    ///
+    /// This spares this crate from redeclaring all methods from the internal builder as wrapper methods,
+    /// while providing protection against accidental misuses of the internal builder.
+    ///
+    /// # Warning
+    ///
+    /// Do not directly send the `InnerRequestBuilder` inside of the closure
+    pub fn try_prepare<F, E>(self, f: F) -> Result<RequestBuilder, E>
+    where
+        F: FnOnce(InnerRequestBuilder) -> Result<InnerRequestBuilder, E>,
+    {
+        Ok(Self { inner: f(self.inner)?, ip_policy: self.ip_policy })
+    }
 }
