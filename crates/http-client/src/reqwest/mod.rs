@@ -1,6 +1,7 @@
 pub use ::reqwest::{
     Body, Client as DangerousClient, IntoUrl, Method, NoProxy, Proxy, Request, Response,
-    ResponseBuilderExt, StatusCode, Upgraded, Url, Version, header, redirect, retry, tls,
+    ResponseBuilderExt, StatusCode, Upgraded, Url, Version, header, multipart, redirect, retry,
+    tls,
 };
 
 pub mod error;
@@ -12,7 +13,7 @@ pub use request::RequestBuilder;
 
 use crate::policy::IpPolicy;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Client {
     inner: ::reqwest::Client,
     ip_policy: IpPolicy,
