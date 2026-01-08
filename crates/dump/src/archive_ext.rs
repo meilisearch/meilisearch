@@ -5,10 +5,14 @@ use std::{fs, io};
 use tar::Archive;
 
 pub trait ArchiveExt {
+    /// Unpacks the archive into the specified directory in a safer way,
+    /// specifically around symlinks.
     fn safe_unpack(&mut self, dst: impl AsRef<Path>) -> io::Result<()>;
 }
 
 impl<R: io::Read> ArchiveExt for Archive<R> {
+    /// Most of the dcode comes from the `tar` crate.
+    /// <https://github.com/alexcrichton/tar-rs/blob/20a650970793e56238b58ac2f51773d343b02117/src/archive.rs#L217-L257>
     fn safe_unpack(&mut self, dst: impl AsRef<Path>) -> io::Result<()> {
         // Note that I should create a subfunction with non-generic types
         // but the `Archive::entries` method doesn't work on non-sized types...
