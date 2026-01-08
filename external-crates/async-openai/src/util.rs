@@ -10,9 +10,8 @@ use crate::types::InputSource;
 pub(crate) async fn file_stream_body(source: InputSource) -> Result<Body, OpenAIError> {
     let body = match source {
         InputSource::Path { path } => {
-            let file = File::open(path)
-                .await
-                .map_err(|e| OpenAIError::FileReadError(e.to_string()))?;
+            let file =
+                File::open(path).await.map_err(|e| OpenAIError::FileReadError(e.to_string()))?;
             let stream = FramedRead::new(file, BytesCodec::new());
             Body::wrap_stream(stream)
         }
@@ -43,10 +42,7 @@ pub(crate) async fn create_file_part(
                 .unwrap()
                 .to_string();
 
-            (
-                file_stream_body(InputSource::Path { path }).await?,
-                file_name,
-            )
+            (file_stream_body(InputSource::Path { path }).await?, file_name)
         }
         InputSource::Bytes { filename, bytes } => (Body::from(bytes), filename),
         InputSource::VecU8 { filename, vec } => (Body::from(vec), filename),
