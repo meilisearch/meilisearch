@@ -60,6 +60,10 @@ struct Cli {
     /// Check that all routes have a summary (useful for CI)
     #[arg(long)]
     check_summaries: bool,
+
+    /// Check for duplicate routes and path issues (useful for CI)
+    #[arg(long)]
+    check_paths: bool,
 }
 
 fn main() -> Result<()> {
@@ -83,6 +87,11 @@ fn main() -> Result<()> {
     // Check that all routes have summaries if requested
     if cli.check_summaries {
         check_all_routes_have_summaries(&openapi_value)?;
+    }
+
+    // Check for path issues (duplicates, malformed paths) if requested
+    if cli.check_paths {
+        check_path_issues(&openapi_value)?;
     }
 
     // Determine output path
@@ -559,6 +568,73 @@ fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
     }
 }
 
+/// Checks for path issues in the OpenAPI specification.
+///
+/// This function validates that:
+/// 1. All paths start with `/`
+/// 2. No paths contain double slashes `//`
+/// 3. No duplicate paths exist (after normalizing slashes)
+///
+/// Returns an error if any issues are found.
+fn check_path_issues(openapi: &Value) -> Result<()> {
+    let paths = openapi
+        .get("paths")
+        .and_then(|p| p.as_object())
+        .context("OpenAPI spec missing 'paths' object")?;
+
+    let mut issues: Vec<String> = Vec::new();
+    let mut normalized_paths: HashMap<String, String> = HashMap::new();
+
+    for path in paths.keys() {
+        // Check 1: Path must start with /
+        if !path.starts_with('/') {
+            issues.push(format!("Path does not start with '/': {}", path));
+        }
+
+        // Check 2: Path must not contain //
+        if path.contains("//") {
+            issues.push(format!("Path contains double slashes '//': {}", path));
+        }
+
+        // Check 3: Check for duplicates after normalization
+        // Normalize by: removing leading/trailing slashes, collapsing multiple slashes
+        let normalized = normalize_path(path);
+        if let Some(existing) = normalized_paths.get(&normalized) {
+            if existing != path {
+                issues.push(format!(
+                    "Duplicate routes detected (same path after normalization):\n    - {}\n    - {}",
+                    existing, path
+                ));
+            }
+        } else {
+            normalized_paths.insert(normalized, path.clone());
+        }
+    }
+
+    if issues.is_empty() {
+        println!("All paths are valid (no duplicates or malformed paths).");
+        Ok(())
+    } else {
+        eprintln!("Path issues found in OpenAPI specification:\n");
+        for issue in &issues {
+            eprintln!("  - {}", issue);
+        }
+        eprintln!();
+        anyhow::bail!("{} path issue(s) found", issues.len());
+    }
+}
+
+/// Normalizes a path for duplicate detection.
+///
+/// - Removes leading and trailing slashes
+/// - Collapses multiple consecutive slashes into one
+fn normalize_path(path: &str) -> String {
+    path.split('/')
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -748,5 +824,77 @@ complex_block: |-
         // Test5: externalDocs description "null" should be removed
         assert!(!tags[4]["externalDocs"].as_object().unwrap().contains_key("description"));
         assert_eq!(tags[4]["externalDocs"]["url"], "https://example.com");
+    }
+
+    #[test]
+    fn test_normalize_path() {
+        assert_eq!(normalize_path("/indexes"), "indexes");
+        assert_eq!(normalize_path("/indexes/"), "indexes");
+        assert_eq!(normalize_path("indexes"), "indexes");
+        assert_eq!(normalize_path("/indexes/{indexUid}"), "indexes/{indexUid}");
+        assert_eq!(normalize_path("indexes//{indexUid}"), "indexes/{indexUid}");
+        assert_eq!(normalize_path("/indexes//{indexUid}/compact"), "indexes/{indexUid}/compact");
+        assert_eq!(normalize_path("//indexes///compact//"), "indexes/compact");
+    }
+
+    #[test]
+    fn test_check_path_issues_valid() {
+        let openapi = json!({
+            "paths": {
+                "/indexes": {},
+                "/indexes/{indexUid}": {},
+                "/indexes/{indexUid}/documents": {},
+                "/indexes/{indexUid}/compact": {}
+            }
+        });
+
+        let result = check_path_issues(&openapi);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_check_path_issues_missing_leading_slash() {
+        let openapi = json!({
+            "paths": {
+                "/indexes": {},
+                "indexes/{indexUid}": {}
+            }
+        });
+
+        let result = check_path_issues(&openapi);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("path issue"));
+    }
+
+    #[test]
+    fn test_check_path_issues_double_slash() {
+        let openapi = json!({
+            "paths": {
+                "/indexes": {},
+                "/indexes//{indexUid}/compact": {}
+            }
+        });
+
+        let result = check_path_issues(&openapi);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("path issue"));
+    }
+
+    #[test]
+    fn test_check_path_issues_duplicate_routes() {
+        let openapi = json!({
+            "paths": {
+                "/indexes/{indexUid}/compact": {},
+                "indexes//{indexUid}/compact": {}
+            }
+        });
+
+        let result = check_path_issues(&openapi);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        // Should report at least the duplicate issue (and possibly the missing slash and double slash)
+        assert!(err.contains("path issue"));
     }
 }
