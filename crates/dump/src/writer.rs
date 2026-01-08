@@ -272,6 +272,7 @@ pub(crate) mod test {
         create_test_api_keys, create_test_batches, create_test_documents, create_test_dump,
         create_test_instance_uid, create_test_settings, create_test_tasks,
     };
+    use crate::ArchiveExt;
 
     fn create_directory_hierarchy(dir: &Path) -> String {
         let mut ret = String::new();
@@ -339,8 +340,8 @@ pub(crate) mod test {
         let dump = tempfile::tempdir().unwrap();
 
         let gz = GzDecoder::new(&mut file);
-        let mut tar = tar::Archive::new(gz);
-        tar.unpack(dump.path()).unwrap();
+        let mut archive = tar::Archive::new(gz);
+        archive.safe_unpack(dump.path()).unwrap();
 
         let dump_path = dump.path();
 
