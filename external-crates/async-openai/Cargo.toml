@@ -1,0 +1,47 @@
+[package]
+name = "async-openai"
+version = "0.28.1"
+authors = ["Himanshu Neema"]
+categories = ["api-bindings", "web-programming", "asynchronous"]
+keywords = ["openai", "async", "openapi", "ai"]
+description = "Rust library for OpenAI"
+edition = "2021"
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/64bit/async-openai"
+repository = "https://github.com/64bit/async-openai"
+
+[features]
+default = []
+realtime = ["dep:tokio-tungstenite"]
+# Bring your own types
+byot = []
+
+[dependencies]
+async-openai-macros = { path = "../async-openai-macros", version = "0.1.0" }
+backoff = { version = "0.4.0", features = ["tokio"] }
+base64 = "0.22.1"
+futures = "0.3.31"
+rand = "0.8.5"
+http-client = { path = "../../crates/http-client" }
+reqwest-eventsource = { version = "0.6.0", path = "../reqwest-eventsource" }
+serde = { version = "1.0.217", features = ["derive", "rc"] }
+serde_json = "1.0.135"
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", features = ["fs", "macros"] }
+tokio-stream = "0.1.17"
+tokio-util = { version = "0.7.13", features = ["codec", "io-util"] }
+tracing = "0.1.41"
+derive_builder = "0.20.2"
+secrecy = { version = "0.10.3", features = ["serde"] }
+bytes = "1.9.0"
+eventsource-stream = "0.2.3"
+tokio-tungstenite = { version = "0.26.1", optional = true, default-features = false }
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+serde_json = "1.0"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
