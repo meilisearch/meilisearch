@@ -1218,12 +1218,13 @@ impl ExplorationStrategy {
     pub fn exploration_factor(&self, limit: usize) -> usize {
         let factor = match self {
             ExplorationStrategy::Fast => 10,
-            ExplorationStrategy::Greedy => 100,
+            ExplorationStrategy::Greedy => 1000,
         };
 
         // if limit is less than 10, we use the default value of 10.
         let limit = limit.max(10);
 
+        tracing::debug!("Strategy: {:?}, Exploration factor: {}", self, limit * factor);
         limit * factor
     }
 }
