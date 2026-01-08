@@ -569,6 +569,7 @@ impl VectorStore {
         item: ItemId,
         limit: usize,
         filter: Option<&RoaringBitmap>,
+        es: ExplorationStrategy,
     ) -> crate::Result<Vec<(ItemId, f32)>> {
         if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
@@ -579,10 +580,10 @@ impl VectorStore {
                     .map_err(Into::into)
             }
         } else if self.quantized {
-            self._hannoy_nns_by_item(rtxn, self._hannoy_quantized_db(), item, limit, filter)
+            self._hannoy_nns_by_item(rtxn, self._hannoy_quantized_db(), item, limit, filter, es)
                 .map_err(Into::into)
         } else {
-            self._hannoy_nns_by_item(rtxn, self._hannoy_angular_db(), item, limit, filter)
+            self._hannoy_nns_by_item(rtxn, self._hannoy_angular_db(), item, limit, filter, es)
                 .map_err(Into::into)
         }
     }
@@ -593,6 +594,7 @@ impl VectorStore {
         limit: usize,
         filter: Option<&RoaringBitmap>,
         time_budget: &TimeBudget,
+        es: ExplorationStrategy,
     ) -> crate::Result<Vec<(ItemId, f32)>> {
         if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
@@ -610,6 +612,7 @@ impl VectorStore {
                 limit,
                 filter,
                 time_budget,
+                es,
             )
             .map_err(Into::into)
         } else {
@@ -620,6 +623,7 @@ impl VectorStore {
                 limit,
                 filter,
                 time_budget,
+                es,
             )
             .map_err(Into::into)
         }
@@ -962,13 +966,14 @@ impl VectorStore {
         item: ItemId,
         limit: usize,
         filter: Option<&RoaringBitmap>,
+        es: ExplorationStrategy,
     ) -> Result<Vec<(ItemId, f32)>, hannoy::Error> {
         let mut results = Vec::new();
 
         for reader in self._hannoy_readers(rtxn, db) {
             let reader = reader?;
             let mut searcher = reader.nns(limit);
-            searcher.ef_search((limit * 10).max(100)); // TODO find better ef
+            searcher.ef_search(es.exploration_factor(limit));
             if let Some(filter) = filter {
                 searcher.candidates(filter);
             }
@@ -1017,13 +1022,14 @@ impl VectorStore {
         limit: usize,
         filter: Option<&RoaringBitmap>,
         time_budget: &TimeBudget,
+        es: ExplorationStrategy,
     ) -> Result<Vec<(ItemId, f32)>, hannoy::Error> {
         let mut results = Vec::new();
 
         for reader in self._hannoy_readers(rtxn, db) {
             let reader = reader?;
             let mut searcher = reader.nns(limit);
-            searcher.ef_search((limit * 10).max(100)); // TODO find better ef
+            searcher.ef_search(es.exploration_factor(limit));
             if let Some(filter) = filter {
                 searcher.candidates(filter);
             }
@@ -1198,4 +1204,26 @@ fn vector_store_range_for_embedder(embedder_id: u8) -> impl Iterator<Item = u16>
 fn vector_store_for_embedder(embedder_id: u8, store_id: u8) -> u16 {
     let embedder_id = (embedder_id as u16) << 8;
     embedder_id | (store_id as u16)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExplorationStrategy {
+    /// Fetch 10 times the limit.
+    Fast,
+    /// Fetch 100 times the limit.
+    Greedy,
+}
+
+impl ExplorationStrategy {
+    pub fn exploration_factor(&self, limit: usize) -> usize {
+        let factor = match self {
+            ExplorationStrategy::Fast => 10,
+            ExplorationStrategy::Greedy => 100,
+        };
+
+        // if limit is less than 10, we use the default value of 10.
+        let limit = limit.max(10);
+
+        limit * factor
+    }
 }

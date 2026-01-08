@@ -3,7 +3,7 @@ use std::sync::Arc;
 use roaring::RoaringBitmap;
 
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::{Embedder, VectorStore};
+use crate::vector::{Embedder, ExplorationStrategy, VectorStore};
 use crate::{filtered_universe, DocumentId, Filter, Index, Result, SearchResult};
 
 pub struct Similar<'a> {
@@ -18,6 +18,7 @@ pub struct Similar<'a> {
     embedder: Arc<Embedder>,
     ranking_score_threshold: Option<f64>,
     quantized: bool,
+    exploration_strategy: ExplorationStrategy,
 }
 
 impl<'a> Similar<'a> {
@@ -43,6 +44,7 @@ impl<'a> Similar<'a> {
             embedder,
             ranking_score_threshold: None,
             quantized,
+            exploration_strategy: ExplorationStrategy::Fast,
         }
     }
 
@@ -81,6 +83,7 @@ impl<'a> Similar<'a> {
             self.id,
             self.limit + self.offset + 1,
             Some(&universe),
+            self.exploration_strategy,
         )?;
 
         let mut documents_ids = Vec::with_capacity(self.limit);
