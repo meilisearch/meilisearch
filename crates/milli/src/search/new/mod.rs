@@ -428,7 +428,7 @@ fn get_ranking_rules_for_vector<'ctx>(
                         embedder_name,
                         embedder,
                         quantized,
-                        ExplorationStrategy::Fast,
+                        ExplorationStrategy::Greedy,
                     )?;
                     ranking_rules.push(Box::new(vector_sort));
                     vector = true;
