@@ -139,12 +139,11 @@ impl<'pl> IndexOperations<'pl> {
         let IndexedPayloadOperations { document_operations, fields_ids_map, payload_stats } =
             remaining_operations
                 .into_par_iter()
-                .enumerate()
-                .map(|(payload_index, payload)| {
+                .map(|payload| {
                     if must_stop_processing() {
                         return Err(InternalError::AbortedIndexation.into());
                     }
-                    step.store(payload_index as u32, Ordering::Relaxed);
+                    step.fetch_add(1, Ordering::Relaxed);
                     IndexedPayloadOperations::from_payload(payload, &primary_key, shards)
                 })
                 .try_reduce(IndexedPayloadOperations::default, |lhs, rhs| lhs | rhs)?;
