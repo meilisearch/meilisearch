@@ -3,10 +3,10 @@ use std::string::FromUtf8Error;
 
 use eventsource_stream::EventStreamError;
 use http_client::reqwest::header::HeaderValue;
-use http_client::reqwest::{Error as ReqwestError, Response, StatusCode};
-use nom::error::Error as NomError;
 #[cfg(doc)]
 use http_client::reqwest::RequestBuilder;
+use http_client::reqwest::{Error as ReqwestError, Response, StatusCode};
+use nom::error::Error as NomError;
 
 /// Error raised when a [`RequestBuilder`] cannot be cloned. See [`RequestBuilder::try_clone`] for
 /// more information

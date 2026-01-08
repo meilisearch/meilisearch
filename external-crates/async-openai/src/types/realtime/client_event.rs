@@ -166,36 +166,12 @@ macro_rules! event_from {
 }
 
 event_from!(SessionUpdateEvent, ClientEvent, SessionUpdate);
-event_from!(
-    InputAudioBufferAppendEvent,
-    ClientEvent,
-    InputAudioBufferAppend
-);
-event_from!(
-    InputAudioBufferCommitEvent,
-    ClientEvent,
-    InputAudioBufferCommit
-);
-event_from!(
-    InputAudioBufferClearEvent,
-    ClientEvent,
-    InputAudioBufferClear
-);
-event_from!(
-    ConversationItemCreateEvent,
-    ClientEvent,
-    ConversationItemCreate
-);
-event_from!(
-    ConversationItemTruncateEvent,
-    ClientEvent,
-    ConversationItemTruncate
-);
-event_from!(
-    ConversationItemDeleteEvent,
-    ClientEvent,
-    ConversationItemDelete
-);
+event_from!(InputAudioBufferAppendEvent, ClientEvent, InputAudioBufferAppend);
+event_from!(InputAudioBufferCommitEvent, ClientEvent, InputAudioBufferCommit);
+event_from!(InputAudioBufferClearEvent, ClientEvent, InputAudioBufferClear);
+event_from!(ConversationItemCreateEvent, ClientEvent, ConversationItemCreate);
+event_from!(ConversationItemTruncateEvent, ClientEvent, ConversationItemTruncate);
+event_from!(ConversationItemDeleteEvent, ClientEvent, ConversationItemDelete);
 event_from!(ResponseCreateEvent, ClientEvent, ResponseCreate);
 event_from!(ResponseCancelEvent, ClientEvent, ResponseCancel);
 
@@ -211,10 +187,6 @@ message_from_event!(ResponseCancelEvent, ClientEvent);
 
 impl From<Item> for ConversationItemCreateEvent {
     fn from(value: Item) -> Self {
-        Self {
-            event_id: None,
-            previous_item_id: None,
-            item: value,
-        }
+        Self { event_id: None, previous_item_id: None, item: value }
     }
 }

@@ -39,9 +39,7 @@ impl Default for OpenAIConfig {
     fn default() -> Self {
         Self {
             api_base: OPENAI_API_BASE.to_string(),
-            api_key: std::env::var("OPENAI_API_KEY")
-                .unwrap_or_else(|_| "".to_string())
-                .into(),
+            api_key: std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "".to_string()).into(),
             org_id: Default::default(),
             project_id: Default::default(),
         }
@@ -87,25 +85,16 @@ impl Config for OpenAIConfig {
     fn headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
         if !self.org_id.is_empty() {
-            headers.insert(
-                OPENAI_ORGANIZATION_HEADER,
-                self.org_id.as_str().parse().unwrap(),
-            );
+            headers.insert(OPENAI_ORGANIZATION_HEADER, self.org_id.as_str().parse().unwrap());
         }
 
         if !self.project_id.is_empty() {
-            headers.insert(
-                OPENAI_PROJECT_HEADER,
-                self.project_id.as_str().parse().unwrap(),
-            );
+            headers.insert(OPENAI_PROJECT_HEADER, self.project_id.as_str().parse().unwrap());
         }
 
         headers.insert(
             AUTHORIZATION,
-            format!("Bearer {}", self.api_key.expose_secret())
-                .as_str()
-                .parse()
-                .unwrap(),
+            format!("Bearer {}", self.api_key.expose_secret()).as_str().parse().unwrap(),
         );
 
         // hack for Assistants APIs
@@ -146,9 +135,7 @@ impl Default for AzureConfig {
     fn default() -> Self {
         Self {
             api_base: Default::default(),
-            api_key: std::env::var("OPENAI_API_KEY")
-                .unwrap_or_else(|_| "".to_string())
-                .into(),
+            api_key: std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "".to_string()).into(),
             deployment_id: Default::default(),
             api_version: Default::default(),
         }
@@ -193,10 +180,7 @@ impl Config for AzureConfig {
     }
 
     fn url(&self, path: &str) -> String {
-        format!(
-            "{}/openai/deployments/{}{}",
-            self.api_base, self.deployment_id, path
-        )
+        format!("{}/openai/deployments/{}{}", self.api_base, self.deployment_id, path)
     }
 
     fn api_base(&self) -> &str {

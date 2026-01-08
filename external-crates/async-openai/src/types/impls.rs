@@ -263,7 +263,6 @@ impl Display for FilePurpose {
     }
 }
 
-
 macro_rules! impl_from_for_integer_array {
     ($from_typ:ty, $to_typ:ty) => {
         impl<const N: usize> From<[$from_typ; N]> for $to_typ {

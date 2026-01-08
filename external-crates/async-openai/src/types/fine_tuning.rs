@@ -128,12 +128,8 @@ pub struct CreateFineTuningJobRequest {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum FineTuneMethod {
-    Supervised {
-        supervised: FineTuneSupervisedMethod,
-    },
-    DPO {
-        dpo: FineTuneDPOMethod,
-    },
+    Supervised { supervised: FineTuneSupervisedMethod },
+    DPO { dpo: FineTuneDPOMethod },
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

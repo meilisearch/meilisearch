@@ -110,12 +110,7 @@ pub enum AssistantStreamEvent {
     Done(String),
     /// Unknown event type.
     #[serde(rename = "unknown")]
-    Unknown {
-        event: String,
-        data: String,
-        id: String,
-        retry: Option<Duration>,
-    },
+    Unknown { event: String, data: String, id: String, retry: Option<Duration> },
 }
 
 pub type AssistantEventStream =
@@ -216,18 +211,8 @@ impl TryFrom<eventsource_stream::Event> for AssistantStreamEvent {
                 .map(AssistantStreamEvent::ErrorEvent),
             "done" => Ok(AssistantStreamEvent::Done(value.data)),
             _ => {
-                let eventsource_stream::Event {
-                    id,
-                    event,
-                    data,
-                    retry,
-                } = value;
-                Ok(AssistantStreamEvent::Unknown {
-                    event,
-                    data,
-                    id,
-                    retry,
-                })
+                let eventsource_stream::Event { id, event, data, retry } = value;
+                Ok(AssistantStreamEvent::Unknown { event, data, id, retry })
             }
         }
     }
