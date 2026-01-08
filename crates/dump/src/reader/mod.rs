@@ -9,7 +9,7 @@ use self::compat::v4_to_v5::CompatV4ToV5;
 use self::compat::v5_to_v6::{CompatIndexV5ToV6, CompatV5ToV6};
 use self::v5::V5Reader;
 use self::v6::{V6IndexReader, V6Reader};
-use crate::{Result, Version};
+use crate::{ArchiveExt, Result, Version};
 
 mod compat;
 
@@ -35,7 +35,7 @@ impl DumpReader {
         let mut dump = BufReader::new(dump);
         let gz = GzDecoder::new(&mut dump);
         let mut archive = tar::Archive::new(gz);
-        archive.unpack(path.path())?;
+        archive.safe_unpack(path.path())?;
 
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]

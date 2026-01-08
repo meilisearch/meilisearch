@@ -18,10 +18,12 @@ use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+mod archive_ext;
 mod error;
 mod reader;
 mod writer;
 
+use archive_ext::ArchiveExt;
 pub use error::Error;
 pub use reader::{DumpReader, UpdateFile};
 pub use writer::DumpWriter;
