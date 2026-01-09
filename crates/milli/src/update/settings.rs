@@ -1995,7 +1995,7 @@ impl InnerIndexSettingsDiff {
 }
 
 #[derive(Clone)]
-pub(crate) struct InnerIndexSettings {
+pub struct InnerIndexSettings {
     pub stop_words: Option<fst::Set<Vec<u8>>>,
     pub allowed_separators: Option<BTreeSet<String>>,
     pub dictionary: Option<BTreeSet<String>>,
