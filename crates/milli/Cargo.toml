@@ -112,7 +112,7 @@ utoipa = { version = "5.4.0", features = [
     "time",
     "openapi_extensions",
 ] }
-lru = "0.16.2"
+lru = "0.16.3"
 twox-hash = { version = "2.1.2", default-features = false, features = [
     "std",
     "xxhash3_64",
