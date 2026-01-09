@@ -1610,6 +1610,7 @@ mod tests {
     #[test]
     fn test_meilisearch_1714() {
         let index = TempIndex::new();
+        let progress = Progress::default();
 
         index
             .add_documents(documents!([
@@ -1628,7 +1629,7 @@ mod tests {
         let count = index.word_docids.get(&rtxn, "bāo").unwrap().unwrap().len();
         assert_eq!(count, 2);
 
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = crate::Search::new(&rtxn, &index, &progress);
         search.query("化妆包");
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
