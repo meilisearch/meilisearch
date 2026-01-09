@@ -61,9 +61,17 @@ pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 
+/// Configuration for personalized search results.
+///
+/// When enabled, search results are tailored based on user context,
+/// providing different rankings and results for different user profiles.
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema, Debug)]
 #[deserr(error = DeserrJsonError<InvalidSearchPersonalize>, rename_all = camelCase, deny_unknown_fields)]
 pub struct Personalize {
+    /// A string describing the user context for personalization. This is
+    /// passed to the embedder to generate user-specific vectors that
+    /// influence search ranking. Example: user preferences, browsing
+    /// history, or demographic information.
     #[deserr(error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
     pub user_context: String,
 }
@@ -71,67 +79,106 @@ pub struct Personalize {
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
+    /// Query string
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
+    /// Search using a custom query vector
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    /// Perform AI-powered search queries with multimodal content
     #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
+    /// Hybrid search configuration combining keyword and semantic search.
+    /// Set `semanticRatio` to balance between keyword matching (0.0) and
+    /// semantic similarity (1.0). Requires an embedder to be configured.
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
+    #[schema(value_type = Option<HybridQuery>)]
     pub hybrid: Option<HybridQuery>,
+    /// Number of documents to skip
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     #[schema(default = DEFAULT_SEARCH_OFFSET)]
     pub offset: usize,
+    /// Maximum number of documents returned
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
     #[schema(default = DEFAULT_SEARCH_LIMIT)]
     pub limit: usize,
+    /// Request a specific page of results
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
+    /// Maximum number of documents returned for a page
     #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
+    /// Attributes to display in the returned documents
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    /// Return document and query vector data
     #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
     pub retrieve_vectors: bool,
+    /// Attributes whose values have to be cropped
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
+    /// Maximum length of cropped value in words
     #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     #[schema(default = DEFAULT_CROP_LENGTH)]
     pub crop_length: usize,
+    /// Highlight matching terms contained in an attribute
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
+    /// Return matching terms location
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
+    /// Display the global ranking score of a document
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
+    /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
+    /// Filter queries by an attribute's value
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
+    /// Sort search results by an attribute's value
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
+    /// Restrict search to documents with unique values of specified
+    /// attribute
     #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
+    /// Display the count of matches per facet
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
+    /// String inserted at the start of a highlighted term
     #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     #[schema(default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     pub highlight_pre_tag: String,
+    /// String inserted at the end of a highlighted term
     #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     #[schema(default = DEFAULT_HIGHLIGHT_POST_TAG)]
     pub highlight_post_tag: String,
+    /// String marking crop boundaries
     #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     #[schema(default = DEFAULT_CROP_MARKER)]
     pub crop_marker: String,
+    /// Strategy used to match query terms within documents
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
+    /// Restrict search to the specified attributes
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
+    /// Minimum ranking score threshold (0.0 to 1.0) that documents must
+    /// achieve to be included in results. Documents with scores below this
+    /// threshold are excluded. Useful for filtering out low-relevance
+    /// results.
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>)]
+    #[schema(value_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
+    /// Explicitly specify languages used in a query
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
+    /// Enables personalized search results based on user context. When
+    /// provided, the search uses AI to tailor results to the user's
+    /// profile, preferences, or behavior described in `userContext`.
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
+    #[schema(value_type = Option<Personalize>)]
     pub personalize: Option<Personalize>,
 }
 
@@ -359,14 +406,17 @@ impl fmt::Debug for SearchQuery {
     }
 }
 
+/// Hybrid search configuration for combining keyword and semantic search
 #[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError<InvalidSearchHybridQuery>, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct HybridQuery {
+    /// Balance between keyword search (0.0) and semantic search (1.0)
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
     #[schema(default, value_type = f32)]
     #[serde(default)]
     pub semantic_ratio: SemanticRatio,
+    /// Name of the embedder to use for semantic search
     #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
     pub embedder: String,
 }
@@ -504,67 +554,102 @@ impl SearchQuery {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchQueryWithIndex {
+    /// Index unique identifier
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     pub index_uid: IndexUid,
+    /// Query string
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
+    /// Search using a custom query vector
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
+    /// Perform AI-powered search queries with multimodal content
     #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
+    /// Hybrid search configuration combining keyword and semantic search.
+    /// Set `semanticRatio` to balance between keyword matching (0.0) and
+    /// semantic similarity (1.0). Requires an embedder to be configured.
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
+    #[schema(value_type = Option<HybridQuery>)]
     pub hybrid: Option<HybridQuery>,
+    /// Number of documents to skip
     #[deserr(default, error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: Option<usize>,
+    /// Maximum number of documents returned
     #[deserr(default, error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: Option<usize>,
+    /// Request a specific page of results
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
+    /// Maximum number of documents returned for a page
     #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
+    /// Attributes to display in the returned documents
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    /// Return document and query vector data
     #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
     pub retrieve_vectors: bool,
+    /// Attributes whose values have to be cropped
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
+    /// Maximum length of cropped value in words
     #[deserr(default, error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     pub crop_length: usize,
+    /// Highlight matching terms contained in an attribute
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
+    /// Display the global ranking score of a document
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
     pub show_ranking_score: bool,
+    /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+    /// Return matching terms location
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
+    /// Filter queries by an attribute's value
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
+    /// Sort search results by an attribute's value
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
+    /// Restrict search to documents with unique values of specified
+    /// attribute
     #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
+    /// Display the count of matches per facet
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
+    /// String inserted at the start of a highlighted term
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     pub highlight_pre_tag: String,
+    /// String inserted at the end of a highlighted term
     #[deserr(default, error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     pub highlight_post_tag: String,
+    /// String marking crop boundaries
     #[deserr(default, error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     pub crop_marker: String,
+    /// Strategy used to match query terms within documents
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
+    /// Restrict search to the specified attributes
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
+    /// Exclude results below the specified ranking score
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
+    #[schema(value_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
+    /// Languages to use for query tokenization
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
+    /// Personalize search results
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
     #[serde(skip)]
     pub personalize: Option<Personalize>,
-
+    /// Federation options for multi-index search
     #[deserr(default)]
+    #[schema(value_type = Option<FederationOptions>)]
     pub federation_options: Option<FederationOptions>,
 }
 
@@ -733,28 +818,39 @@ impl SearchQueryWithIndex {
     }
 }
 
+/// Request body for similar document search
 #[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SimilarQuery {
+    /// Document ID to find similar documents for
     #[deserr(error = DeserrJsonError<InvalidSimilarId>)]
     #[schema(value_type = String)]
     pub id: serde_json::Value,
+    /// Number of documents to skip
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSimilarOffset>)]
     pub offset: usize,
+    /// Maximum number of documents returned
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSimilarLimit>)]
     pub limit: usize,
+    /// Filter queries by an attribute's value
     #[deserr(default, error = DeserrJsonError<InvalidSimilarFilter>)]
     pub filter: Option<Value>,
+    /// Name of the embedder to use for semantic similarity
     #[deserr(error = DeserrJsonError<InvalidSimilarEmbedder>)]
     pub embedder: String,
+    /// Attributes to display in the returned documents
     #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
+    /// Return document vector data
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRetrieveVectors>)]
     pub retrieve_vectors: bool,
+    /// Display the global ranking score of a document
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScore>, default)]
     pub show_ranking_score: bool,
+    /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+    /// Excludes results with low ranking scores
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
     #[schema(value_type = f64)]
     pub ranking_score_threshold: Option<RankingScoreThresholdSimilar>,
@@ -791,6 +887,7 @@ impl TryFrom<Value> for ExternalDocumentId {
     }
 }
 
+/// Strategy used to match query terms within documents
 #[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserr, ToSchema, Serialize)]
 #[deserr(rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
@@ -827,11 +924,13 @@ impl From<index::MatchingStrategy> for MatchingStrategy {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Deserr)]
 #[deserr(rename_all = camelCase)]
 pub enum FacetValuesSort {
-    /// Facet values are sorted in alphabetical order, ascending from A to Z.
+    /// Facet values are sorted in alphabetical order, ascending from A to
+    /// Z.
     #[default]
     Alpha,
     /// Facet values are sorted by decreasing count.
-    /// The count is the number of records containing this facet value in the results of the query.
+    /// The count is the number of records containing this facet value in
+    /// the results of the query.
     Count,
 }
 
@@ -844,55 +943,79 @@ impl From<FacetValuesSort> for OrderBy {
     }
 }
 
+/// A single search result hit
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchHit {
+    /// The document data
     #[serde(flatten)]
     #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
+    /// The formatted document with highlighted and cropped attributes
     #[serde(default, rename = "_formatted", skip_serializing_if = "Document::is_empty")]
     #[schema(additional_properties, value_type = HashMap<String, Value>)]
     pub formatted: Document,
+    /// Location of matching terms in the document
     #[serde(default, rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<BTreeMap<String, Vec<MatchBounds>>>)]
     pub matches_position: Option<MatchesPosition>,
+    /// Global ranking score of the document
     #[serde(default, rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
     pub ranking_score: Option<f64>,
+    /// Detailed breakdown of the ranking score
     #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
+/// Metadata about a search query
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchMetadata {
+    /// Unique identifier for the query
     pub query_uid: Uuid,
+    /// Identifier of the queried index
     pub index_uid: String,
+    /// Primary key of the queried index
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<String>,
+    /// Remote server that processed the query
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remote: Option<String>,
 }
 
+/// Search response containing matching documents and metadata
 #[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchResult {
+    /// Results of the query
     pub hits: Vec<SearchHit>,
+    /// Query originating the response
     pub query: String,
+    /// Vector representation of the query
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_vector: Option<Vec<f32>>,
+    /// Processing time of the query in milliseconds
     pub processing_time_ms: u128,
+    /// Pagination information for the search results
     #[serde(flatten)]
     pub hits_info: HitsInfo,
+    /// Distribution of the given facets
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<BTreeMap<String, Value>>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
+    /// The numeric min and max values per facet
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
+    /// A UUID v7 identifying the search request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_uid: Option<Uuid>,
+    /// Metadata about the search query
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<SearchMetadata>,
 
+    /// Exhaustive number of semantic search matches (only present in
+    /// AI-powered searches)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
 
@@ -955,39 +1078,69 @@ impl fmt::Debug for SearchResult {
     }
 }
 
+/// Response containing similar documents
 #[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SimilarResult {
+    /// Results of the query
     pub hits: Vec<SearchHit>,
+    /// Document ID that was used as reference
     pub id: String,
+    /// Processing time of the query in milliseconds
     pub processing_time_ms: u128,
+    /// Pagination information
     #[serde(flatten)]
     pub hits_info: HitsInfo,
 }
 
+/// Search result with index identifier for multi-search responses
 #[derive(Serialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchResultWithIndex {
+    /// Identifier of the queried index
     pub index_uid: String,
+    /// Search results for this index
     #[serde(flatten)]
     pub result: SearchResult,
 }
 
+/// Pagination information for search results
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
+    /// Finite pagination with exact counts
     #[serde(rename_all = "camelCase")]
     #[schema(rename_all = "camelCase")]
-    Pagination { hits_per_page: usize, page: usize, total_pages: usize, total_hits: usize },
+    Pagination {
+        /// Number of results on each page
+        hits_per_page: usize,
+        /// Current search results page
+        page: usize,
+        /// Exhaustive total number of search result pages
+        total_pages: usize,
+        /// Exhaustive total number of matches
+        total_hits: usize,
+    },
+    /// Offset-based pagination with estimated counts
     #[serde(rename_all = "camelCase")]
     #[schema(rename_all = "camelCase")]
-    OffsetLimit { limit: usize, offset: usize, estimated_total_hits: usize },
+    OffsetLimit {
+        /// Number of documents to take
+        limit: usize,
+        /// Number of documents skipped
+        offset: usize,
+        /// Estimated total number of matches
+        estimated_total_hits: usize,
+    },
 }
 
+/// The numeric min and max values for a facet
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct FacetStats {
+    /// Minimum value of the numeric facet
     pub min: f64,
+    /// Maximum value of the numeric facet
     pub max: f64,
 }
 
@@ -1333,10 +1486,13 @@ pub fn perform_search(
     Ok((result, time_budget))
 }
 
+/// Computed facet data from a search
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct ComputedFacets {
+    /// Count of documents for each facet value
     #[schema(value_type = BTreeMap<String, BTreeMap<String, u64>>)]
     pub distribution: BTreeMap<String, IndexMap<String, u64>>,
+    /// Numeric statistics for each facet
     pub stats: BTreeMap<String, FacetStats>,
 }
 
@@ -1436,11 +1592,14 @@ struct AttributesFormat {
 pub enum RetrieveVectors {
     /// Remove the `_vectors` field
     ///
-    /// this is the behavior when the vectorStore feature is enabled, and `retrieveVectors` is `false`
+    /// this is the behavior when the vectorStore feature is enabled, and
+    /// `retrieveVectors` is `false`
     Hide,
-    /// Retrieve vectors from the DB and merge them into the `_vectors` field
+    /// Retrieve vectors from the DB and merge them into the `_vectors`
+    /// field
     ///
-    /// this is the behavior when the vectorStore feature is enabled, and `retrieveVectors` is `true`
+    /// this is the behavior when the vectorStore feature is enabled, and
+    /// `retrieveVectors` is `true`
     Retrieve,
 }
 

@@ -4,10 +4,17 @@ use utoipa::ToSchema;
 
 use crate::is_faceted_by;
 
+/// A collection of patterns used to match attribute names. Patterns can
+/// include wildcards (`*`) for flexible matching. For example, `title`
+/// matches exactly, `overview_*` matches any attribute starting with
+/// `overview_`, and `*_date` matches any attribute ending with `_date`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[repr(transparent)]
 #[serde(transparent)]
 pub struct AttributePatterns {
+    /// An array of attribute name patterns. Each pattern can be an exact
+    /// attribute name, or include wildcards (`*`) at the start, end, or
+    /// both. Examples: `["title", "description_*", "*_date", "*content*"]`.
     #[schema(example = json!(["title", "overview_*", "release_date"]))]
     pub patterns: Vec<String>,
 }
@@ -28,7 +35,8 @@ impl From<Vec<String>> for AttributePatterns {
 }
 
 impl AttributePatterns {
-    /// Match a string against the attribute patterns using the match_pattern function.
+    /// Match a string against the attribute patterns using the
+    /// match_pattern function.
     pub fn match_str(&self, str: &str) -> PatternMatch {
         let mut pattern_match = PatternMatch::NoMatch;
         for pattern in &self.patterns {
@@ -84,8 +92,10 @@ pub fn match_pattern(pattern: &str, str: &str) -> PatternMatch {
 
 /// Match a field against a pattern using the legacy behavior.
 ///
-/// A field matches a pattern if it is a parent of the pattern or if it is the pattern itself.
-/// This behavior is used to match the sortable attributes, the searchable attributes and the filterable attributes rules `Field`.
+/// A field matches a pattern if it is a parent of the pattern or if it is
+/// the pattern itself. This behavior is used to match the sortable
+/// attributes, the searchable attributes and the filterable attributes
+/// rules `Field`.
 ///
 /// # Arguments
 ///

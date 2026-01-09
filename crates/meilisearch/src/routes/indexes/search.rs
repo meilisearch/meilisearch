@@ -60,81 +60,158 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct SearchQueryGet {
+    /// The search query string. Meilisearch will return documents that match
+    /// this query. Supports prefix search (words matching the beginning of
+    /// the query) and typo tolerance. Leave empty to match all documents.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
     q: Option<String>,
+    /// A vector of floating-point numbers for semantic/vector search. The
+    /// dimensions must match the embedder configuration. When provided,
+    /// documents are ranked by vector similarity. Can be combined with `q`
+    /// for hybrid search.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchVector>)]
     #[param(value_type = Vec<f32>, explode = false)]
     vector: Option<CS<f32>>,
+    /// Number of search results to skip. Use together with `limit` for
+    /// pagination. For example, to get results 21-40, set `offset=20` and
+    /// `limit=20`. Defaults to `0`. Cannot be used with `page`/`hitsPerPage`.
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSearchOffset>)]
     #[param(value_type = usize, default = DEFAULT_SEARCH_OFFSET)]
     offset: Param<usize>,
+    /// Maximum number of search results to return. Use together with `offset`
+    /// for pagination. Defaults to `20`. Cannot be used with
+    /// `page`/`hitsPerPage`.
     #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSearchLimit>)]
     #[param(value_type = usize, default = DEFAULT_SEARCH_LIMIT)]
     limit: Param<usize>,
+    /// Request a specific page of results (1-indexed). Use together with
+    /// `hitsPerPage` for page-based pagination. Cannot be used with
+    /// `offset`/`limit`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPage>)]
     #[param(value_type = Option<usize>)]
     page: Option<Param<usize>>,
+    /// Number of results per page when using page-based pagination. Use
+    /// together with `page`. Cannot be used with `offset`/`limit`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchHitsPerPage>)]
     #[param(value_type = Option<usize>)]
     hits_per_page: Option<Param<usize>>,
+    /// Comma-separated list of attributes to include in the returned
+    /// documents. Use `*` to return all attributes. By default, returns
+    /// attributes from the `displayedAttributes` setting.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
     #[param(value_type = Vec<String>, explode = false)]
     attributes_to_retrieve: Option<CS<String>>,
+    /// When `true`, includes vector embeddings in the response for documents
+    /// that have them. Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchRetrieveVectors>)]
     #[param(value_type = bool, default)]
     retrieve_vectors: Param<bool>,
+    /// Comma-separated list of attributes whose values should be cropped to
+    /// fit within `cropLength`. Useful for displaying long text attributes
+    /// in search results. Format: `attribute` or `attribute:length`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToCrop>)]
     #[param(value_type = Vec<String>, explode = false)]
     attributes_to_crop: Option<CS<String>>,
+    /// Maximum number of words to keep when cropping attribute values. The
+    /// cropped text will be centered around the matching terms. Defaults to
+    /// `10`.
     #[deserr(default = Param(DEFAULT_CROP_LENGTH()), error = DeserrQueryParamError<InvalidSearchCropLength>)]
     #[param(value_type = usize, default = DEFAULT_CROP_LENGTH)]
     crop_length: Param<usize>,
+    /// Comma-separated list of attributes whose matching terms should be
+    /// highlighted with `highlightPreTag` and `highlightPostTag`. Use `*` to
+    /// highlight all searchable attributes.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
     #[param(value_type = Vec<String>, explode = false)]
     attributes_to_highlight: Option<CS<String>>,
+    /// Filter expression to narrow down search results. Uses SQL-like syntax.
+    /// Example: `genres = action AND rating > 4`. Only attributes in
+    /// `filterableAttributes` can be used.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFilter>)]
     filter: Option<String>,
+    /// Comma-separated list of attributes to sort by. Format: `attribute:asc`
+    /// or `attribute:desc`. Only attributes in `sortableAttributes` can be
+    /// used. Custom ranking rules can also affect sort order.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
     sort: Option<String>,
+    /// Attribute used to ensure only one document with each unique value is
+    /// returned. Useful for deduplication. Only attributes in
+    /// `filterableAttributes` can be used.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchDistinct>)]
     distinct: Option<String>,
+    /// When `true`, returns the position (start and length) of each matched
+    /// term in the original document attributes. Useful for custom
+    /// highlighting implementations.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
     #[param(value_type = bool)]
     show_matches_position: Param<bool>,
+    /// When `true`, includes a `_rankingScore` field (0.0 to 1.0) in each
+    /// document indicating how well it matches the query. Higher scores mean
+    /// better matches.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScore>)]
     #[param(value_type = bool)]
     show_ranking_score: Param<bool>,
+    /// When `true`, includes a `_rankingScoreDetails` object showing the
+    /// contribution of each ranking rule to the final score. Useful for
+    /// debugging relevancy.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScoreDetails>)]
     #[param(value_type = bool)]
     show_ranking_score_details: Param<bool>,
+    /// Comma-separated list of attributes for which to return facet
+    /// distribution (value counts). Only attributes in `filterableAttributes`
+    /// can be used. Returns the count of documents matching each facet value.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
     #[param(value_type = Vec<String>, explode = false)]
     facets: Option<CS<String>>,
+    /// HTML tag or string to insert before highlighted matching terms.
+    /// Defaults to `<em>`.
     #[deserr(default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
     #[param(default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     highlight_pre_tag: String,
+    /// HTML tag or string to insert after highlighted matching terms.
+    /// Defaults to `</em>`.
     #[deserr(default = DEFAULT_HIGHLIGHT_POST_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPostTag>)]
     #[param(default = DEFAULT_HIGHLIGHT_POST_TAG)]
     highlight_post_tag: String,
+    /// String used to indicate truncated content when cropping. Defaults to
+    /// `…` (ellipsis).
     #[deserr(default = DEFAULT_CROP_MARKER(), error = DeserrQueryParamError<InvalidSearchCropMarker>)]
     #[param(default = DEFAULT_CROP_MARKER)]
     crop_marker: String,
+    /// Strategy for matching query terms. `last` (default): all terms must
+    /// match, removing terms from the end if needed. `all`: all terms must
+    /// match exactly. `frequency`: prioritizes matching frequent terms.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
     matching_strategy: MatchingStrategy,
+    /// Comma-separated list of attributes to search in. By default, searches
+    /// all `searchableAttributes`. Use this to restrict search to specific
+    /// fields for better performance or relevance.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     #[param(value_type = Vec<String>, explode = false)]
     pub attributes_to_search_on: Option<CS<String>>,
+    /// Name of the embedder to use for hybrid/semantic search. Must match an
+    /// embedder configured in the index settings.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchEmbedder>)]
     pub hybrid_embedder: Option<String>,
+    /// Balance between keyword search (0.0) and semantic/vector search (1.0)
+    /// in hybrid search. A value of 0.5 gives equal weight to both. Defaults
+    /// to `0.5`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
     #[param(value_type = f32)]
     pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
+    /// Minimum ranking score (0.0 to 1.0) a document must have to be
+    /// included in results. Documents with lower scores are excluded. Useful
+    /// for filtering out poor matches.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchRankingScoreThreshold>)]
     #[param(value_type = f32)]
     pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
+    /// Comma-separated list of language locales to use for tokenization and
+    /// processing. Useful for multilingual content. Example: `en,fr,de`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
     #[param(value_type = Vec<Locale>, explode = false)]
     pub locales: Option<CS<Locale>>,
+    /// User-specific context for personalized search results. The format
+    /// depends on your personalization configuration.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
     pub personalize_user_context: Option<String>,
 }

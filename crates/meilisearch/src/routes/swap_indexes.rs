@@ -28,13 +28,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(swap_indexes))));
 }
 
+/// Request body for swapping two indexes
 #[derive(Deserr, Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    /// Array of the two indexUids to be swapped
+    /// Array of the two index UIDs to be swapped
     #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<IndexUid>,
-    /// If set to true, instead of swapping the left and right indexes it'll change the name of the first index to the second
+    /// If true, rename the first index to the second instead of swapping
     #[deserr(default, error = DeserrJsonError<InvalidSwapRename>)]
     rename: bool,
 }
@@ -64,9 +65,12 @@ impl Aggregate for IndexSwappedAnalytics {
 
 /// Swap indexes
 ///
-/// Swap the documents, settings, and task history of two or more indexes. You can only swap indexes in pairs. However, a single request can swap as many index pairs as you wish.
-/// Swapping indexes is an atomic transaction: either all indexes are successfully swapped, or none are.
-/// Swapping indexA and indexB will also replace every mention of indexA by indexB and vice-versa in the task history. enqueued tasks are left unmodified.
+/// Swap the documents, settings, and task history of two or more indexes.
+/// You can only swap indexes in pairs. However, a single request can swap as
+/// many index pairs as you wish. Swapping indexes is an atomic transaction:
+/// either all indexes are successfully swapped, or none are. Swapping indexA
+/// and indexB will also replace every mention of indexA by indexB and
+/// vice-versa in the task history. enqueued tasks are left unmodified.
 #[utoipa::path(
     post,
     path = "",
