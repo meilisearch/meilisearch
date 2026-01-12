@@ -25,8 +25,6 @@ pub fn from_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Res
     let gz = GzDecoder::new(f);
     let mut ar = Archive::new(gz);
     create_dir_all(&dest)?;
-    // The destination path must be absolute for safe unpacking
-    let dest = std::path::absolute(dest.as_ref())?;
     ar.safe_unpack(&dest)?;
     Ok(())
 }
