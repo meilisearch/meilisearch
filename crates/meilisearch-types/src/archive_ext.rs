@@ -109,7 +109,7 @@ fn check_symlinks(dir: &Path) -> io::Result<()> {
         Ok(())
     }
 
-    let max_depth = 10;
+    let max_depth = 100;
     visit_dirs(dir, max_depth, &|entry| {
         if entry.file_type()?.is_symlink() && !entry.path().canonicalize()?.starts_with(dir) {
             return Err(io::Error::new(
