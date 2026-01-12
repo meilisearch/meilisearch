@@ -17,7 +17,9 @@ impl<R: io::Read> ArchiveExt for Archive<R> {
     fn safe_unpack(&mut self, dst: impl AsRef<Path>) -> io::Result<()> {
         let dst = dst.as_ref();
 
-        // Unpack the archive into the destination directory.
+        // This is the only place where we use `unpack`
+        // directly and we do the verification just after.
+        #[allow(clippy::disallowed_methods)]
         self.unpack(dst)?;
 
         // Finally check the unpacked files and directories
