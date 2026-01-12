@@ -11,7 +11,8 @@ pub trait ArchiveExt {
 }
 
 impl<R: io::Read> ArchiveExt for Archive<R> {
-    /// Most of the dcode comes from the `tar` crate.
+    /// Most of the dcode comes from the `tar` crate. The destination path must be absolute.
+    ///
     /// <https://github.com/alexcrichton/tar-rs/blob/20a650970793e56238b58ac2f51773d343b02117/src/archive.rs#L217-L257>
     fn safe_unpack(&mut self, dst: impl AsRef<Path>) -> io::Result<()> {
         // Note that I should create a subfunction with non-generic types
@@ -42,6 +43,7 @@ impl<R: io::Read> ArchiveExt for Archive<R> {
                 tar::EntryType::Directory => directories.push(entry),
                 _ => {
                     if let Some(link_name) = entry.header().link_name()? {
+                        // The destination path must be absolute.
                         let absolute_link_name = path::absolute(dst.join(&link_name))?;
                         if !absolute_link_name.starts_with(dst) {
                             return Err(io::Error::other(
