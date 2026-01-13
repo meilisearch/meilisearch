@@ -2,12 +2,18 @@ use heed::RwTxn;
 
 use super::UpgradeIndex;
 use crate::progress::Progress;
-use crate::{make_enum_progress, Index, Result};
+use crate::{make_enum_progress, Index, MustStopProcessing, Result};
 
 pub(super) struct FixFieldDistribution {}
 
 impl UpgradeIndex for FixFieldDistribution {
-    fn upgrade(&self, wtxn: &mut RwTxn, index: &Index, progress: Progress) -> Result<bool> {
+    fn upgrade(
+        &self,
+        wtxn: &mut RwTxn,
+        index: &Index,
+        _must_stop_processing: &MustStopProcessing,
+        progress: Progress,
+    ) -> Result<bool> {
         make_enum_progress! {
             enum FieldDistribution {
                 RebuildingFieldDistribution,
@@ -30,7 +36,13 @@ impl UpgradeIndex for FixFieldDistribution {
 pub(super) struct RecomputeStats {}
 
 impl UpgradeIndex for RecomputeStats {
-    fn upgrade(&self, _wtxn: &mut RwTxn, _index: &Index, _progress: Progress) -> Result<bool> {
+    fn upgrade(
+        &self,
+        _wtxn: &mut RwTxn,
+        _index: &Index,
+        _must_stop_processing: &MustStopProcessing,
+        _progress: Progress,
+    ) -> Result<bool> {
         // recompute the indexes stats
         Ok(true)
     }

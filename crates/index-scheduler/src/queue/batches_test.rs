@@ -1,9 +1,9 @@
 use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
-use crate::test_utils::Breakpoint::*;
 use crate::test_utils::{
     index_creation_task, replace_document_import_task, replace_document_import_task_with_opts,
     sample_documents, FailureLocation,
 };
+use crate::test_utils::{read_json, Breakpoint::*};
 use crate::{IndexScheduler, Query};
 use meili_snap::snapshot;
 use meilisearch_auth::AuthFilter;
@@ -527,4 +527,105 @@ fn batch_skip_creation_with_deletion() {
     handle.advance_one_successful_batch();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+    let index = index_scheduler.index("docs").unwrap();
+    let rtxn = index.read_txn().unwrap();
+    snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
+}
+
+#[test]
+fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
+    let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+    let _task = index_scheduler
+        .register(
+            KindWithContent::IndexCreation { index_uid: "docs".to_string(), primary_key: None },
+            None,
+            false,
+        )
+        .unwrap();
+
+    handle.advance_one_successful_batch();
+
+    // First register a deletion task
+    index_scheduler
+        .register(
+            KindWithContent::DocumentDeletion {
+                index_uid: "docs".to_string(),
+                documents_ids: vec!["1".to_string()],
+            },
+            None,
+            false,
+        )
+        .unwrap();
+
+    // conflicting pk
+    let content = r#"{ "id": "Hello!", "noid": "World!" }"#.to_string();
+
+    let (_uuid, mut file0) = index_scheduler.queue.create_update_file_with_uuid(1).unwrap();
+    let documents_count0 = read_json(content.as_bytes(), &mut file0).unwrap();
+    file0.persist().unwrap();
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        None,
+        1,
+        documents_count0,
+        MissingDocumentPolicy::Create,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    // no primary
+    let content = r#"{ "toto": "Hello!", "titi": "World!" }"#.to_string();
+
+    let (_uuid, mut file1) = index_scheduler.queue.create_update_file_with_uuid(2).unwrap();
+    let documents_count1 = read_json(content.as_bytes(), &mut file1).unwrap();
+    file1.persist().unwrap();
+
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        None,
+        2,
+        documents_count1,
+        MissingDocumentPolicy::Create,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    // actually guessing the pk
+    let content = r#"{ "id": "1234", "content": "Hello World!" }"#.to_string();
+
+    let (_uuid, mut file2) = index_scheduler.queue.create_update_file_with_uuid(3).unwrap();
+    let documents_count2 = read_json(content.as_bytes(), &mut file2).unwrap();
+    file2.persist().unwrap();
+
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        None,
+        3,
+        documents_count2,
+        MissingDocumentPolicy::Create,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    // We now know the pk, GG!
+    let content = r#"{ "id": "12345", "noid": "World!" }"#.to_string();
+
+    let (_uuid, mut file3) = index_scheduler.queue.create_update_file_with_uuid(4).unwrap();
+    let documents_count0 = read_json(content.as_bytes(), &mut file3).unwrap();
+    file3.persist().unwrap();
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        None,
+        4,
+        documents_count0,
+        MissingDocumentPolicy::Create,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    handle.advance_one_successful_batch();
+
+    snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+    let index = index_scheduler.index("docs").unwrap();
+    let rtxn = index.read_txn().unwrap();
+    snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
 }

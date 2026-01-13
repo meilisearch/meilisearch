@@ -50,63 +50,88 @@ struct InnerProgress {
 }
 
 impl Progress {
-    /// Update the progress and return `true` if the step was started, `false` if it was already started.
-    pub fn update_progress<P: Step>(&self, sub_progress: P) -> bool {
-        let mut inner = self.steps.write().unwrap();
+    /// Update the progress and return `Updated` if the step was started, `NotUpdated` if it was already started.
+    /// Return `Failed` if the RWLock failed to lock.
+    pub fn update_progress<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        let mut inner = match self.steps.write() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to start progress step `{}`: {error}", sub_progress.name());
+                return UpdateStepStatus::NotUpdated;
+            }
+        };
         let InnerProgress { steps, durations } = &mut *inner;
 
-        let now = Instant::now();
         let step_type = TypeId::of::<P>();
         if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
             if steps[idx].1.name() == sub_progress.name() {
                 // The step is already started, so we don't need to start it again.
-                return false;
+                return UpdateStepStatus::NotUpdated;
             }
 
+            let now = Instant::now();
             push_steps_durations(steps, durations, now, idx);
             steps.truncate(idx);
+            steps.push((step_type, Box::new(sub_progress), now));
+        } else {
+            steps.push((step_type, Box::new(sub_progress), Instant::now()));
         }
 
-        steps.push((step_type, Box::new(sub_progress), now));
-        true
+        UpdateStepStatus::Updated
     }
 
     /// End a step that has been started without having to start a new step.
-    fn end_progress_step<P: Step>(&self, sub_progress: P) {
-        let mut inner = self.steps.write().unwrap();
+    /// Update the progress and return `Updated` if the step was ended, `NotUpdated` if it was already ended.
+    /// Return `Failed` if the RWLock failed to lock.
+    fn end_progress_step<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        let mut inner = match self.steps.write() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to end progress step `{}`: {error}", sub_progress.name());
+                return UpdateStepStatus::NotUpdated;
+            }
+        };
+
         let InnerProgress { steps, durations } = &mut *inner;
 
-        let now = Instant::now();
         let step_type = TypeId::of::<P>();
-
-        debug_assert!(
-            steps.iter().any(|(id, s, _)| *id == step_type && s.name() == sub_progress.name()),
-            "Step `{}` must have been started",
-            sub_progress.name()
-        );
-
-        if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
-            push_steps_durations(steps, durations, now, idx);
-            steps.truncate(idx);
+        match steps
+            .iter()
+            .position(|(id, s, _)| *id == step_type && s.name() == sub_progress.name())
+        {
+            Some(idx) => {
+                let now = Instant::now();
+                push_steps_durations(steps, durations, now, idx);
+                steps.truncate(idx);
+                UpdateStepStatus::Updated
+            }
+            None => UpdateStepStatus::NotUpdated,
         }
     }
 
     /// Update the progress and return a scoped progress step that will end the progress step when dropped.
     pub fn update_progress_scoped<P: Step + Copy>(&self, step: P) -> ScopedProgressStep<'_, P> {
-        let started = self.update_progress(step);
-
-        debug_assert!(
-            started,
-            "Step `{}` can't be scoped because it was already started",
-            step.name()
-        );
-
-        ScopedProgressStep { progress: self, step: started.then_some(step) }
+        match self.update_progress(step) {
+            UpdateStepStatus::Updated => ScopedProgressStep { progress: self, step: Some(step) },
+            UpdateStepStatus::NotUpdated => {
+                tracing::warn!(
+                    "Step `{}` can't be scoped because it was already started",
+                    step.name()
+                );
+                ScopedProgressStep { progress: self, step: None }
+            }
+        }
     }
 
     // TODO: This code should be in meilisearch_types but cannot because milli can't depend on meilisearch_types
-    pub fn as_progress_view(&self) -> ProgressView {
-        let inner = self.steps.read().unwrap();
+    pub fn as_progress_view(&self) -> Option<ProgressView> {
+        let inner = match self.steps.read() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to read progress: {error}");
+                return None;
+            }
+        };
         let InnerProgress { steps, .. } = &*inner;
 
         let mut percentage = 0.0;
@@ -124,11 +149,17 @@ impl Progress {
             });
         }
 
-        ProgressView { steps: step_view, percentage: percentage * 100.0 }
+        Some(ProgressView { steps: step_view, percentage: percentage * 100.0 })
     }
 
     pub fn accumulated_durations(&self) -> IndexMap<String, String> {
-        let inner = self.steps.read().unwrap();
+        let inner = match self.steps.read() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to read progress: {error}");
+                return IndexMap::new();
+            }
+        };
         let InnerProgress { steps, durations, .. } = &*inner;
         let mut durations = durations.clone();
 
@@ -400,7 +431,17 @@ pub struct ScopedProgressStep<'a, P: Step + Copy> {
 impl<'a, P: Step + Copy> Drop for ScopedProgressStep<'a, P> {
     fn drop(&mut self) {
         if let Some(step) = self.step {
-            self.progress.end_progress_step(step);
+            if self.progress.end_progress_step(step) == UpdateStepStatus::NotUpdated {
+                tracing::warn!("Step `{}` has already been ended", step.name());
+            }
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateStepStatus {
+    /// The step was updated.
+    Updated,
+    /// The step did not change.
+    NotUpdated,
 }

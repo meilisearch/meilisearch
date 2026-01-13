@@ -3,12 +3,18 @@ use heed::RwTxn;
 
 use super::UpgradeIndex;
 use crate::progress::Progress;
-use crate::{make_enum_progress, Index, Result};
+use crate::{make_enum_progress, Index, MustStopProcessing, Result};
 
 pub(super) struct UpgradeArroyVersion();
 
 impl UpgradeIndex for UpgradeArroyVersion {
-    fn upgrade(&self, wtxn: &mut RwTxn, index: &Index, progress: Progress) -> Result<bool> {
+    fn upgrade(
+        &self,
+        wtxn: &mut RwTxn,
+        index: &Index,
+        _must_stop_processing: &MustStopProcessing,
+        progress: Progress,
+    ) -> Result<bool> {
         make_enum_progress! {
             enum VectorStore {
                 UpdateInternalVersions,

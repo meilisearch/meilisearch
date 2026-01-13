@@ -4,9 +4,7 @@ use roaring::RoaringBitmap;
 
 use super::logger::SearchLogger;
 use super::{QueryGraph, SearchContext};
-use crate::progress::Progress;
 use crate::score_details::ScoreDetails;
-use crate::search::steps::ComputingBucketSortStep;
 use crate::{Result, TimeBudget};
 
 /// An internal trait implemented by only [`PlaceholderQuery`] and [`QueryGraph`]
@@ -41,7 +39,6 @@ pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
         universe: &RoaringBitmap,
         query: &Query,
         time_budget: &TimeBudget,
-        progress: &Progress,
     ) -> Result<()>;
 
     /// Return the next bucket of this ranking rule.
@@ -59,7 +56,6 @@ pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
         logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
         time_budget: &TimeBudget,
-        progress: &Progress,
     ) -> Result<Option<RankingRuleOutput<Query>>>;
 
     /// Return the next bucket of this ranking rule, if doing so can be done without blocking
@@ -73,7 +69,6 @@ pub trait RankingRule<'ctx, Query: RankingRuleQueryTrait> {
         _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Query>,
         _universe: &RoaringBitmap,
-        _progress: &Progress,
     ) -> Result<Poll<RankingRuleOutput<Query>>> {
         Ok(Poll::Pending)
     }
@@ -128,24 +123,6 @@ impl std::fmt::Display for RankingRuleId {
             RankingRuleId::VectorSort => write!(f, "vector_sort"),
             RankingRuleId::Asc(field_name) => write!(f, "asc:{}", field_name),
             RankingRuleId::Desc(field_name) => write!(f, "desc:{}", field_name),
-        }
-    }
-}
-
-impl From<RankingRuleId> for ComputingBucketSortStep {
-    fn from(ranking_rule_id: RankingRuleId) -> Self {
-        match ranking_rule_id {
-            RankingRuleId::Words => Self::Words,
-            RankingRuleId::Typo => Self::Typo,
-            RankingRuleId::Proximity => Self::Proximity,
-            RankingRuleId::AttributePosition => Self::AttributePosition,
-            RankingRuleId::WordPosition => Self::WordPosition,
-            RankingRuleId::Exactness => Self::Exactness,
-            RankingRuleId::Sort => Self::Sort,
-            RankingRuleId::GeoSort => Self::GeoSort,
-            RankingRuleId::VectorSort => Self::VectorSort,
-            RankingRuleId::Asc(_) => Self::Asc,
-            RankingRuleId::Desc(_) => Self::Desc,
         }
     }
 }

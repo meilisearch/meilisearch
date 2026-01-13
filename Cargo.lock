@@ -580,7 +580,7 @@ source = "git+https://github.com/meilisearch/bbqueue#e8af4a4bccc8eb36b2b0442c4a9
 
 [[package]]
 name = "benchmarks"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "anyhow",
  "bumpalo",
@@ -790,7 +790,7 @@ dependencies = [
 
 [[package]]
 name = "build-info"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "anyhow",
  "time",
@@ -1786,7 +1786,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "anyhow",
  "big_s",
@@ -2018,7 +2018,7 @@ checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
 
 [[package]]
 name = "file-store"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "tempfile",
  "thiserror 2.0.17",
@@ -2040,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "insta",
  "levenshtein_automata",
@@ -2068,7 +2068,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzers"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "arbitrary",
  "bumpalo",
@@ -2698,9 +2698,9 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.1.2-nested-rtxns"
+version = "0.1.3-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "533c952127a7e73448f26af313ac7b98012516561e48e953781cd6b30e573436"
+checksum = "8ccefa5359b5cd1ca44f6c47ffc75c981744caf9e500ac317578409d99f01c6b"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -3185,7 +3185,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "anyhow",
  "backoff",
@@ -3238,6 +3238,7 @@ checksum = "6717a8d2a5a929a1a2eb43a12812498ed141a0bcfb7e8f7844fbdbe4303bba9f"
 dependencies = [
  "equivalent",
  "hashbrown 0.16.0",
+ "rayon",
  "serde",
  "serde_core",
 ]
@@ -3449,7 +3450,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "criterion",
  "serde_json",
@@ -3849,9 +3850,9 @@ checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
 
 [[package]]
 name = "lru"
-version = "0.16.2"
+version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96051b46fc183dc9cd4a223960ef37b9af631b55191852a8274bfef064cda20f"
+checksum = "a1dc47f592c06f33f8e3aea9591776ec7c9f9e4124778ff8a3c3b87159f7e593"
 dependencies = [
  "hashbrown 0.16.0",
 ]
@@ -3939,7 +3940,7 @@ checksum = "ae960838283323069879657ca3de837e9f7bbb4c7bf6ea7f1b290d5e9476d2e0"
 
 [[package]]
 name = "meili-snap"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "insta",
  "md5 0.8.0",
@@ -3950,7 +3951,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -4048,7 +4049,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "base64 0.22.1",
  "enum-iterator",
@@ -4067,7 +4068,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -4105,7 +4106,7 @@ dependencies = [
 
 [[package]]
 name = "meilitool"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -4139,7 +4140,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "arroy",
  "bbqueue",
@@ -4718,7 +4719,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "big_s",
  "serde_json",
@@ -7758,7 +7759,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.31.0"
+version = "1.32.0"
 dependencies = [
  "anyhow",
  "build-info",

@@ -23,13 +23,13 @@ mod test_embedders;
 mod test_failure;
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
-use meilisearch_types::milli;
 use meilisearch_types::milli::update::S3SnapshotOptions;
+use meilisearch_types::milli::{self, MustStopProcessing};
 use meilisearch_types::tasks::Status;
 use process_batch::ProcessBatchInfo;
 use rayon::current_num_threads;
@@ -39,23 +39,6 @@ use synchronoise::SignalEvent;
 
 use crate::processing::{AtomicTaskStep, BatchProgress};
 use crate::{Error, IndexScheduler, IndexSchedulerOptions, Result, TickOutcome};
-
-#[derive(Default, Clone, Debug)]
-pub struct MustStopProcessing(Arc<AtomicBool>);
-
-impl MustStopProcessing {
-    pub fn get(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
-    }
-
-    pub fn must_stop(&self) {
-        self.0.store(true, Ordering::Relaxed);
-    }
-
-    pub fn reset(&self) {
-        self.0.store(false, Ordering::Relaxed);
-    }
-}
 
 pub struct Scheduler {
     /// A boolean that can be set to true to stop the currently processing tasks.

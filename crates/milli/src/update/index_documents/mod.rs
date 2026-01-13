@@ -1998,7 +1998,7 @@ mod tests {
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
         indexer.replace_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
         indexer.replace_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
@@ -2051,7 +2051,7 @@ mod tests {
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
         indexer.update_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
         indexer.update_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
@@ -2139,7 +2139,7 @@ mod tests {
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
         indexer.update_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
         indexer.update_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
@@ -2334,7 +2334,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
         indexer.delete_documents(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2389,7 +2389,7 @@ mod tests {
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let documents = documents!([
@@ -2453,7 +2453,7 @@ mod tests {
         ]);
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2506,7 +2506,7 @@ mod tests {
         ]);
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
@@ -2557,7 +2557,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.delete_documents(&["1", "2"]);
 
         let documents = documents!([
@@ -2614,7 +2614,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2674,7 +2674,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
@@ -2725,7 +2725,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         indexer.delete_documents(&["1"]);
 
@@ -2937,7 +2937,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         // OP
 
@@ -2999,7 +2999,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         indexer.delete_documents(&["1"]);
 
@@ -3059,7 +3059,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },

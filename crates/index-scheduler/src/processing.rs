@@ -22,7 +22,7 @@ impl ProcessingTasks {
     }
 
     pub fn get_progress_view(&self) -> Option<ProgressView> {
-        Some(self.progress.as_ref()?.as_progress_view())
+        self.progress.as_ref()?.as_progress_view()
     }
 
     /// Stores the currently processing tasks, and the date time at which it started.
@@ -160,6 +160,7 @@ make_enum_progress! {
     pub enum DocumentOperationProgress {
         RetrievingConfig,
         ComputingDocumentChanges,
+        ReadingPayloadStats,
         Indexing,
     }
 }

@@ -110,7 +110,7 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let documents = documents_from(conf.dataset, conf.dataset_format);
-    let mut indexer = indexer::DocumentOperation::new();
+    let mut indexer = indexer::IndexOperations::new();
     indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();

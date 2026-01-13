@@ -38,7 +38,7 @@ heed = { version = "0.22.1-nested-rtxns-6", default-features = false, features =
     "serde-json",
     "serde-bincode",
 ] }
-indexmap = { version = "2.12.0", features = ["serde"] }
+indexmap = { version = "2.12.0", features = ["serde", "rayon"] }
 json-depth-checker = { path = "../json-depth-checker" }
 levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
 memchr = "2.7.6"
@@ -91,7 +91,7 @@ rhai = { version = "1.23.6", features = [
     "sync",
 ] }
 arroy = "0.6.4-nested-rtxns"
-hannoy = { version = "0.1.2-nested-rtxns", features = ["arroy"] }
+hannoy = { version = "0.1.3-nested-rtxns", features = ["arroy"] }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
@@ -112,7 +112,7 @@ utoipa = { version = "5.4.0", features = [
     "time",
     "openapi_extensions",
 ] }
-lru = "0.16.2"
+lru = "0.16.3"
 twox-hash = { version = "2.1.2", default-features = false, features = [
     "std",
     "xxhash3_64",
