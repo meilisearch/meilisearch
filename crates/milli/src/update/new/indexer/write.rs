@@ -204,7 +204,7 @@ pub fn write_from_bbqueue(
                         if let Err(error) = database.put(wtxn, key, value) {
                             return Err(handle_store_mdb_error(
                                 database_name,
-                                &key,
+                                key,
                                 Some(value.len()),
                                 error,
                             ));
@@ -223,7 +223,7 @@ pub fn write_from_bbqueue(
                         Err(error) => {
                             return Err(handle_store_mdb_error(
                                 database_name,
-                                &key,
+                                key,
                                 None,
                                 error,
                             ));
