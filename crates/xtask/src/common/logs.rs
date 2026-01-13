@@ -1,6 +1,9 @@
-use anyhow::Context;
 use std::io::LineWriter;
-use tracing_subscriber::{fmt::format::FmtSpan, layer::SubscriberExt, Layer};
+
+use anyhow::Context;
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::Layer;
 
 pub fn setup_logs(log_filter: &str) -> anyhow::Result<()> {
     let filter: tracing_subscriber::filter::Targets =

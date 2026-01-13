@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{bench::BenchWorkload, test::TestWorkload};
+use crate::bench::BenchWorkload;
+use crate::test::TestWorkload;
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(tag = "type")]

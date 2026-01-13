@@ -221,12 +221,7 @@ pub fn write_from_bbqueue(
                         }
                         Ok(_) => (),
                         Err(error) => {
-                            return Err(handle_store_mdb_error(
-                                database_name,
-                                key,
-                                None,
-                                error,
-                            ));
+                            return Err(handle_store_mdb_error(database_name, key, None, error));
                         }
                     },
                 }

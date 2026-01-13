@@ -2,16 +2,17 @@ mod dashboard;
 mod env_info;
 mod workload;
 
-use crate::common::args::CommonArgs;
-use crate::common::logs::setup_logs;
-use crate::common::workload::Workload;
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{bail, Context};
 use clap::Parser;
-
-use crate::common::client::Client;
 pub use workload::BenchWorkload;
+
+use crate::common::args::CommonArgs;
+use crate::common::client::Client;
+use crate::common::logs::setup_logs;
+use crate::common::workload::Workload;
 
 pub fn default_report_folder() -> String {
     "./bench/reports/".into()
