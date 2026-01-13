@@ -556,19 +556,29 @@ pub fn delete_old_fid_based_databases_from_fids<MSP>(
 where
     MSP: Fn() -> bool + Sync,
 {
-    progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
-    delete_old_word_fid_docids(wtxn, index.word_fid_docids, must_stop_processing, fids_to_delete)?;
-
     progress.update_progress(SettingsIndexerStep::DeletingOldFidWordCountDocids);
-    delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, fids_to_delete)?;
+    let deleted_entries =
+        delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, fids_to_delete)?;
 
-    progress.update_progress(SettingsIndexerStep::DeletingOldWordPrefixFidDocids);
-    delete_old_word_fid_docids(
-        wtxn,
-        index.word_prefix_fid_docids,
-        must_stop_processing,
-        fids_to_delete,
-    )?;
+    if deleted_entries != 0 {
+        progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
+        delete_old_word_fid_docids(
+            wtxn,
+            index.word_fid_docids,
+            must_stop_processing,
+            fids_to_delete,
+        )?;
+    }
+
+    if deleted_entries != 0 {
+        progress.update_progress(SettingsIndexerStep::DeletingOldWordPrefixFidDocids);
+        delete_old_word_fid_docids(
+            wtxn,
+            index.word_prefix_fid_docids,
+            must_stop_processing,
+            fids_to_delete,
+        )?;
+    }
 
     Ok(())
 }
@@ -599,16 +609,20 @@ where
     Ok(())
 }
 
+/// Deletes the fields IDs from the field id word count docids database.
+///
+/// Returns the number of actually deleted entries from the database.
 fn delete_old_fid_word_count_docids<MSP>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
     must_stop_processing: &MSP,
     fids_to_delete: &BTreeSet<u16>,
-) -> Result<(), Error>
+) -> Result<usize, Error>
 where
     MSP: Fn() -> bool + Sync,
 {
     let db = index.field_id_word_count_docids.remap_data_type::<DecodeIgnore>();
+    let mut deleted_entries = 0;
     for &fid_to_delete in fids_to_delete {
         if must_stop_processing() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
@@ -619,10 +633,11 @@ where
             debug_assert_eq!(fid, fid_to_delete);
             // safety: We don't keep any references to the data.
             unsafe { iter.del_current()? };
+            deleted_entries += 1;
         }
     }
 
-    Ok(())
+    Ok(deleted_entries)
 }
 
 fn indexer_memory_settings(
