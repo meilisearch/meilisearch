@@ -165,22 +165,29 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     // also make sure not to specify the first and last keys to make sure
     // that if the fields to clean have keys that are higher or lower than
     // the first or last keys in the word dictionary we still find them.
-    let mut bounds = Vec::new();
+
+    // Here We make sure to start with an unbounded
+    // left bound for the first range
+    let mut bounds = vec![None];
     let mut stream = fst.stream();
     let mut count = 0;
     while let Some(key) = stream.next() {
-        // We store the first...
-        if count == 0 {
-            bounds.push(None);
-        // ...last...
-        } else if count == fst.len() - 1 {
-            bounds.push(None);
-        // ...and every bounds to divide the work between threads
-        } else if count % keys_by_thread == 0 {
+        let is_first = count == 0;
+        let is_last = count == fst.len() - 1;
+
+        // In this loop we make sure to account for every bounds
+        // to divide the work between threads but not send the bounds
+        // for the beginning or the end of the word dictionary
+        if count % keys_by_thread == 0 && !(is_first || is_last) {
             bounds.push(Some(key.to_vec()));
         }
+
         count += 1;
     }
+
+    // We now push the last bound that
+    // defines the end of the last range
+    bounds.push(None);
 
     // We create a thread pool and generate enough read transactions for each one of them.
     let pool = rayon::ThreadPoolBuilder::new().num_threads(keys_by_thread).build()?;
