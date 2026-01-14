@@ -38,6 +38,7 @@ use super::weighted_scores;
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE};
+use crate::search::DEFAULT_SEARCH_LIMIT;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
@@ -62,7 +63,18 @@ pub async fn perform_federated_search(
 
     let deadline = before_search + std::time::Duration::from_secs(timeout);
 
-    let required_hit_count = federation.limit + federation.offset;
+    let required_hit_count = match (federation.page, federation.hits_per_page) {
+        // no pagination, use limit and offset
+        (None, None) => federation.limit + federation.offset,
+        // pagination, default page (1)
+        (None, Some(hits_per_page)) => hits_per_page,
+        // pagination, no hits
+        (Some(0), _) => 0,
+        // pagination, default hits per page
+        (Some(page), None) => DEFAULT_SEARCH_LIMIT() * page,
+        // pagination
+        (Some(page), Some(hits_per_page)) => hits_per_page * page,
+    };
     let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
 
     let network = index_scheduler.network();
@@ -107,6 +119,7 @@ pub async fn perform_federated_search(
         is_proxy,
         network: &network,
         has_remote: partitioned_queries.has_remote,
+        is_exhaustive: federation.is_exhaustive(),
         required_hit_count,
     };
     let mut search_by_index = SearchByIndex::new(
@@ -159,13 +172,26 @@ pub async fn perform_federated_search(
     });
 
     // 3.2. merge federation metadata
-    let (estimated_total_hits, degraded, used_negative_operator, facets, max_remote_duration) =
+    // FIXME: hit_number not bigger than max_total_hits
+    let (hit_number, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
+
+    let (skip, take) = match (federation.page, federation.hits_per_page) {
+        // no pagination
+        (None, None) => (federation.offset, federation.limit),
+        // pagination: default page (1)
+        (None, Some(hits_per_page)) => (0, hits_per_page),
+        // special page 0: no hits
+        (Some(0), _) => (0, 0),
+        // pagination: default hits per page
+        (Some(page), None) => ((page - 1) * DEFAULT_SEARCH_LIMIT(), DEFAULT_SEARCH_LIMIT()),
+        (Some(page), Some(hits_per_page)) => ((page - 1) * hits_per_page, hits_per_page),
+    };
 
     // 3.3. merge hits
     let merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
-        .skip(federation.offset)
-        .take(federation.limit)
+        .skip(skip)
+        .take(take)
         .inspect(|hit| {
             if let Some(semantic_hit_count) = &mut semantic_hit_count {
                 if hit.to_score().0.any(|score| matches!(&score, WeightedScoreValue::VectorSort(_)))
@@ -207,15 +233,30 @@ pub async fn perform_federated_search(
         + (after_merge - after_waiting_remote_results);
     let max_duration = Duration::max(local_duration, max_remote_duration);
 
+    let hits_info = match (federation.page, federation.hits_per_page) {
+        // no pagination
+        (None, None) => HitsInfo::OffsetLimit {
+            limit: federation.limit,
+            offset: federation.offset,
+            estimated_total_hits: hit_number,
+        },
+        // pagination: default page number (1)
+        (page, hits_per_page) => {
+            let page = page.unwrap_or(1);
+            let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+            // If hit_per_page is 0, then pages can't be computed and so we respond 0.
+            let total_pages = (hit_number + hits_per_page.saturating_sub(1))
+                .checked_div(hits_per_page)
+                .unwrap_or(0);
+            HitsInfo::Pagination { hits_per_page, page, total_pages, total_hits: hit_number }
+        }
+    };
+
     Ok((
         FederatedSearchResult {
             hits: merged_hits,
             processing_time_ms: max_duration.as_millis(),
-            hits_info: HitsInfo::OffsetLimit {
-                limit: federation.limit,
-                offset: federation.offset,
-                estimated_total_hits,
-            },
+            hits_info,
             query_vectors,
             semantic_hit_count,
             degraded,
@@ -707,8 +748,22 @@ impl RemoteSearch {
                 tokio::spawn({
                     let mut proxy_federation = federation.clone();
                     // fixup limit and offset to not apply them twice
-                    proxy_federation.limit = federation.limit + federation.offset;
-                    proxy_federation.offset = 0;
+                    match (federation.page, federation.hits_per_page) {
+                        (None, None) => {
+                            proxy_federation.limit = federation.limit + federation.offset;
+                            proxy_federation.offset = 0;
+                        }
+                        (Some(0), _) => {
+                            // leave `proxy_federation.page` at Some(0)
+                        }
+                        (page, hits_per_page) => {
+                            let page = page.unwrap_or(1);
+                            let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+                            proxy_federation.page = Some(1);
+                            proxy_federation.hits_per_page = Some(page * hits_per_page);
+                        }
+                    }
+
                     // never merge distant facets
                     proxy_federation.merge_facets = None;
                     let params = params.clone();
@@ -805,6 +860,7 @@ impl RemoteSearch {
 struct SearchByIndexParams<'a> {
     index_scheduler: &'a IndexScheduler,
     required_hit_count: usize,
+    is_exhaustive: bool,
     features: RoFeatures,
     is_proxy: bool,
     has_remote: bool,
@@ -976,6 +1032,7 @@ impl SearchByIndex {
                 search.scoring_strategy(milli::score_details::ScoringStrategy::Detailed);
                 search.offset(0);
                 search.limit(params.required_hit_count);
+                search.exhaustive_number_hits(params.is_exhaustive);
 
                 let (result, _semantic_hit_count) =
                     super::super::search_from_kind(index_uid.to_string(), search_kind, search)?;

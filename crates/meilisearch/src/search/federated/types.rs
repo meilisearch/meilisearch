@@ -93,6 +93,10 @@ pub struct Federation {
     /// Number of results to skip
     #[deserr(default = super::super::DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    pub page: Option<usize>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    pub hits_per_page: Option<usize>,
     /// Facets to retrieve per index
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
     pub facets_by_index: BTreeMap<IndexUid, Option<Vec<String>>>,
@@ -100,6 +104,12 @@ pub struct Federation {
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
     #[schema(value_type = Option<MergeFacets>)]
     pub merge_facets: Option<MergeFacets>,
+}
+
+impl Federation {
+    pub fn is_exhaustive(&self) -> bool {
+        self.page.is_some() || self.hits_per_page.is_some()
+    }
 }
 
 /// Options for merging facets from multiple indexes in federated search.
