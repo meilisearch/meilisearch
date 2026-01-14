@@ -99,9 +99,17 @@ pub async fn perform_federated_search(
     // 1. partition queries by host and index
     let mut partitioned_queries = PartitionedQueries::new();
 
+    let mut federation = federation;
     for (query_index, federated_query) in queries.into_iter().enumerate() {
-        partitioned_queries.partition(federated_query, query_index, &network, features)?
+        partitioned_queries.partition(
+            &mut federation,
+            federated_query,
+            query_index,
+            &network,
+            features,
+        )?
     }
+    let federation = federation;
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
@@ -633,7 +641,8 @@ impl PartitionedQueries {
 
     fn partition(
         &mut self,
-        federated_query: SearchQueryWithIndex,
+        federation: &mut Federation,
+        mut federated_query: SearchQueryWithIndex,
         query_index: usize,
         network: &Network,
         features: RoFeatures,
@@ -660,63 +669,95 @@ impl PartitionedQueries {
             return Err(MeilisearchHttpError::PersonalizationInFederatedQuery(query_index).into());
         }
 
-        let (index_uid, query, federation_options) = federated_query.into_index_query_federation();
+        if federated_query.has_remote_and_use_network() {
+            return Err(MeilisearchHttpError::RemoteAndUseNetwork(query_index).into());
+        }
 
-        let federation_options = federation_options.unwrap_or_default();
+        if federated_query.use_network.is_some() {
+            features.check_network("passing `.useNetwork` in a federated search query")?;
+        }
 
-        // local or remote node?
-        'local_query: {
-            let queries_by_index = match federation_options.remote {
-                None => self.local_queries_by_index.entry(index_uid.into_inner()).or_default(),
-                Some(remote_name) => {
-                    self.has_remote = true;
-                    features.check_network("Performing a remote federated search")?;
+        let (index_uid, query, federation_options);
+        let queries = if federated_query
+            .use_network
+            // avoid accidental recursion
+            .take()
+            .unwrap_or_default()
+        {
+            (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
-                    match &network.local {
-                        Some(local) if local == &remote_name => {
-                            self.local_queries_by_index.entry(index_uid.into_inner()).or_default()
-                        }
-                        _ => {
-                            // node from the network
-                            let Some(remote) = network.remotes.get(&remote_name) else {
-                                return Err(ResponseError::from_msg(format!("Invalid `queries[{query_index}].federation_options.remote`: remote `{remote_name}` is not registered"),
+            either::Left(super::network_partition(
+                federation,
+                &query,
+                federation_options,
+                &index_uid,
+                network.clone(),
+            ))
+        } else {
+            either::Right(std::iter::once(federated_query))
+        };
+
+        for federated_query in queries {
+            let (index_uid, query, federation_options) =
+                federated_query.into_index_query_federation();
+
+            let federation_options = federation_options.unwrap_or_default();
+
+            // local or remote node?
+            'local_query: {
+                let queries_by_index = match federation_options.remote {
+                    None => self.local_queries_by_index.entry(index_uid.into_inner()).or_default(),
+                    Some(remote_name) => {
+                        self.has_remote = true;
+                        features.check_network("Performing a remote federated search")?;
+
+                        match &network.local {
+                            Some(local) if local == &remote_name => self
+                                .local_queries_by_index
+                                .entry(index_uid.into_inner())
+                                .or_default(),
+                            _ => {
+                                // node from the network
+                                let Some(remote) = network.remotes.get(&remote_name) else {
+                                    return Err(ResponseError::from_msg(format!("Invalid `queries[{query_index}].federation_options.remote`: remote `{remote_name}` is not registered"),
                            meilisearch_types::error::Code::InvalidMultiSearchRemote));
-                            };
-                            let query = SearchQueryWithIndex::from_index_query_federation(
-                                index_uid,
-                                query,
-                                Some(FederationOptions {
-                                    weight: federation_options.weight,
-                                    // do not pass the `remote` to not require the remote instance to have itself has a local node
-                                    remote: None,
-                                    // pass an explicit query index
-                                    query_position: Some(query_index),
-                                }),
-                            );
+                                };
+                                let query = SearchQueryWithIndex::from_index_query_federation(
+                                    index_uid,
+                                    query,
+                                    Some(FederationOptions {
+                                        weight: federation_options.weight,
+                                        // do not pass the `remote` to not require the remote instance to have itself has a local node
+                                        remote: None,
+                                        // pass an explicit query index
+                                        query_position: Some(query_index),
+                                    }),
+                                );
 
-                            self.remote_queries_by_host
-                                .entry(remote_name)
-                                .or_insert_with(|| (remote.clone(), Default::default()))
-                                .1
-                                .push(query);
-                            break 'local_query;
+                                self.remote_queries_by_host
+                                    .entry(remote_name)
+                                    .or_insert_with(|| (remote.clone(), Default::default()))
+                                    .1
+                                    .push(query);
+                                break 'local_query;
+                            }
                         }
                     }
-                }
-            };
+                };
 
-            queries_by_index.push(QueryByIndex {
-                query,
-                weight: federation_options.weight,
-                // override query index here with the one in federation.
-                // this will fix-up error messages to refer to the global query index of the original request.
-                query_index: if let Some(query_index) = federation_options.query_position {
-                    features.check_network("Using `federationOptions.queryPosition`")?;
-                    query_index
-                } else {
-                    query_index
-                },
-            })
+                queries_by_index.push(QueryByIndex {
+                    query,
+                    weight: federation_options.weight,
+                    // override query index here with the one in federation.
+                    // this will fix-up error messages to refer to the global query index of the original request.
+                    query_index: if let Some(query_index) = federation_options.query_position {
+                        features.check_network("Using `federationOptions.queryPosition`")?;
+                        query_index
+                    } else {
+                        query_index
+                    },
+                })
+            }
         }
         Ok(())
     }

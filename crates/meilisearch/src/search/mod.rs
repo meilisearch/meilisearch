@@ -715,6 +715,11 @@ impl SearchQueryWithIndex {
         self.personalize.is_some()
     }
 
+    pub fn has_remote_and_use_network(&self) -> bool {
+        self.federation_options.as_ref().and_then(|opt| opt.remote.as_ref()).is_some()
+            && self.use_network.is_some()
+    }
+
     pub fn from_index_query_federation(
         index_uid: IndexUid,
         query: SearchQuery,
