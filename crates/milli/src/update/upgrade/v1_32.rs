@@ -195,7 +195,7 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     bounds.push(None);
 
     // We create a thread pool and generate enough read transactions for each one of them.
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(keys_by_thread).build()?;
+    let pool = rayon::ThreadPoolBuilder::new().num_threads(threads_count).build()?;
     let rtxns = iter::repeat_with(|| index.env.nested_read_txn(wtxn))
         .take(bounds.len().saturating_sub(1))
         .collect::<heed::Result<Vec<_>>>()?;
