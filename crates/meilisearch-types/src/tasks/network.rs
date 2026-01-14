@@ -96,11 +96,20 @@ impl From<TaskNetwork> for DbTaskNetwork {
     }
 }
 
+/// Information about the origin of a task in a distributed Meilisearch
+/// deployment. This tracks where a task was originally created before being
+/// replicated to other nodes.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Origin {
+    /// The name of the remote Meilisearch instance where this task originated.
+    /// This corresponds to a remote defined in the network configuration.
     pub remote_name: String,
+    /// The unique task identifier on the originating remote. This allows
+    /// tracking the same task across different nodes in the network.
     pub task_uid: u32,
+    /// The version of the network topology when this task was created. Used to
+    /// ensure consistent task routing during network topology changes.
     #[serde(default)]
     pub network_version: Uuid,
 }
@@ -124,17 +133,27 @@ pub struct ImportMetadata {
     pub index_count: u64,
     /// Key unique to this (network_change, index, host, key).
     ///
-    /// In practice, an internal document id of one of the documents to import.
+    /// In practice, an internal document id of one of the documents to
+    /// import.
     pub task_key: Option<DocumentId>,
     /// Total number of documents to import for this index from this host.
     pub total_index_documents: u64,
 }
 
+/// Represents a task that was replicated to a remote Meilisearch instance.
+/// Contains either the remote task UID on success, or an error if
+/// replication failed.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RemoteTask {
+    /// The unique task identifier assigned by the remote Meilisearch instance.
+    /// Present when the task was successfully replicated to the remote.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<u32>)]
     task_uid: Option<TaskId>,
+    /// Error details if the task failed to replicate to this remote. Contains
+    /// the error message, code, and type from the remote instance.
+    #[schema(value_type = Option<ResponseError>)]
     error: Option<ResponseError>,
 }
 
@@ -149,12 +168,14 @@ impl From<Result<TaskId, ResponseError>> for RemoteTask {
 
 /// Contains the full state of a network topology change.
 ///
-/// A network topology change task is unique in that it can be processed in multiple different batches, as its resolution
-/// depends on various document additions tasks being processed.
+/// A network topology change task is unique in that it can be processed in
+/// multiple different batches, as its resolution depends on various document
+/// additions tasks being processed.
 ///
 /// A network topology task has 4 states:
 ///
-/// 1. Processing any task that was meant for an earlier version of the network. This is necessary to know that we have the right version of
+/// 1. Processing any task that was meant for an earlier version of the
+///    network. This is necessary to know that we have the right version of
 ///    documents.
 /// 2. Sending all documents that must be moved to other remotes.
 /// 3. Processing any task coming from the remotes.
@@ -422,9 +443,10 @@ impl InRemote {
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 enum ImportState {
-    /// Initially Meilisearch doesn't know how many documents it should expect from a remote.
-    /// Any task from each remote contains the information of how many indexes will be imported,
-    /// and the number of documents to import for the index of the task.
+    /// Initially Meilisearch doesn't know how many documents it should expect
+    /// from a remote. Any task from each remote contains the information of
+    /// how many indexes will be imported, and the number of documents to
+    /// import for the index of the task.
     #[default]
     WaitingForInitialTask,
     Ongoing {

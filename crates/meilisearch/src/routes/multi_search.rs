@@ -43,14 +43,17 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
 }
 
+/// Response containing results from multiple search queries
 #[derive(Serialize, ToSchema)]
 pub struct SearchResults {
+    /// Array of search results for each query
     results: Vec<SearchResultWithIndex>,
 }
 
 /// Perform a multi-search
 ///
-/// Bundle multiple search queries in a single API request. Use this endpoint to search through multiple indexes at once.
+/// Bundle multiple search queries in a single API request. Use this endpoint
+/// to search through multiple indexes at once.
 #[utoipa::path(
     post,
     request_body = FederatedSearch,
@@ -369,7 +372,8 @@ pub async fn multi_search_with_post(
 /// Local `Result` extension trait to avoid `map_err` boilerplate.
 trait WithIndex {
     type T;
-    /// convert the error type inside of the `Result` to a `ResponseError`, and return a couple of it + the usize.
+    /// convert the error type inside of the `Result` to a `ResponseError`, and
+    /// return a couple of it + the usize.
     fn with_index(self, index: usize) -> Result<Self::T, (ResponseError, usize)>;
 }
 
