@@ -629,10 +629,7 @@ fn check_path_issues(openapi: &Value) -> Result<()> {
 /// - Removes leading and trailing slashes
 /// - Collapses multiple consecutive slashes into one
 fn normalize_path(path: &str) -> String {
-    path.split('/')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("/")
+    path.split('/').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("/")
 }
 
 #[cfg(test)]
