@@ -87,15 +87,16 @@ impl UpgradeIndex for RebuildHannoyGraph {
                 config.config.quantized(),
             );
 
+            let dimensions = match vector_store.dimensions(wtxn)? {
+                Some(dimensions) => dimensions,
+                None => continue,
+            };
+
             let seed = rand::random();
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            vector_store.rebuild_graph(
-                wtxn,
-                progress.clone(),
-                &mut rng,
-                vector_store.dimensions(wtxn)?.unwrap(),
-                &|| must_stop_processing.get(),
-            )?;
+            vector_store.rebuild_graph(wtxn, progress.clone(), &mut rng, dimensions, &|| {
+                must_stop_processing.get()
+            })?;
         }
 
         Ok(false)
