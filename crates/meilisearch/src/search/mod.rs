@@ -43,8 +43,8 @@ use crate::error::MeilisearchHttpError;
 
 mod federated;
 pub use federated::{
-    perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    network_partition, perform_federated_search, FederatedSearch, FederatedSearchResult,
+    Federation, FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
 mod ranking_rules;
@@ -1012,6 +1012,10 @@ pub struct SearchResult {
     /// Metadata about the search query
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<SearchMetadata>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_errors: Option<BTreeMap<String, ResponseError>>,
+
     /// Exhaustive number of semantic search matches (only present in
     /// AI-powered searches)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1039,6 +1043,7 @@ impl fmt::Debug for SearchResult {
             semantic_hit_count,
             degraded,
             used_negative_operator,
+            remote_errors,
         } = self;
 
         let mut debug = f.debug_struct("SearchResult");
@@ -1070,6 +1075,9 @@ impl fmt::Debug for SearchResult {
         }
         if let Some(metadata) = metadata {
             debug.field("metadata", &metadata);
+        }
+        if let Some(remote_errors) = remote_errors {
+            debug.field("remote_errors", &remote_errors);
         }
 
         debug.finish()
@@ -1470,6 +1478,7 @@ pub fn perform_search(
         semantic_hit_count,
         request_uid: Some(request_uid),
         metadata,
+        remote_errors: None,
     };
     Ok((result, deadline))
 }
