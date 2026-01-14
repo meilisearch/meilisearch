@@ -39,7 +39,7 @@ impl FileStore {
     /// Creates a new temporary update file.
     /// A call to `persist` is needed to persist the file in the database.
     pub fn new_update(&self) -> Result<(Uuid, File)> {
-        let file = NamedTempFile::new_in(&self.path)?;
+        let file = NamedTempFile::new()?;
         let uuid = Uuid::new_v4();
         let path = self.path.join(uuid.to_string());
         let update_file = File { file: Some(file), path };
@@ -50,7 +50,7 @@ impl FileStore {
     /// Creates a new temporary update file with the given Uuid.
     /// A call to `persist` is needed to persist the file in the database.
     pub fn new_update_with_uuid(&self, uuid: u128) -> Result<(Uuid, File)> {
-        let file = NamedTempFile::new_in(&self.path)?;
+        let file = NamedTempFile::new()?;
         let uuid = Uuid::from_u128(uuid);
         let path = self.path.join(uuid.to_string());
         let update_file = File { file: Some(file), path };
