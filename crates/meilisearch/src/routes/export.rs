@@ -49,6 +49,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     post,
     path = "",
     tag = "Export",
+    request_body = Export,
     security(("Bearer" = ["export", "*"])),
     responses(
         (status = 202, description = "Export successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
