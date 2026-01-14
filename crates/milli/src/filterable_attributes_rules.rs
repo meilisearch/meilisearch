@@ -182,7 +182,7 @@ pub struct FilterFeatures {
     /// to `true`.
     #[serde(default = "default_true")]
     #[deserr(default = true)]
-    pub equality: bool
+    pub equality: bool,
     /// When `true`, enables comparison operators: `<`, `>`, `<=`, `>=`, and
     /// `TO` (range). These allow filtering based on numeric or string
     /// comparisons. Defaults to `false`.
