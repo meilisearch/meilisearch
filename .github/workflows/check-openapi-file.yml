@@ -3,6 +3,9 @@ name: Check OpenAPI file
 on:
   workflow_dispatch:
   pull_request:
+  schedule:
+    # Run daily at 5 AM UTC
+    - cron: '0 5 * * *'
 
 permissions:
   contents: read
