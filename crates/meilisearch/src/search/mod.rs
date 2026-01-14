@@ -132,6 +132,37 @@ pub struct SearchQuery {
     /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
+    /// Experimental: Whether this query should be performed on the whole network or locally.
+    ///
+    /// When performing the query on the whole network, this is "as-if" a remote federated search were performed,
+    /// such that all shards are covered, and such that documents are deduplicated across the remotes.
+    ///
+    /// # Response
+    ///
+    /// The response will have the same shape as a federated search response.
+    ///
+    /// # Edition
+    ///
+    /// This feature is available in the Enterprise Edition.
+    ///
+    /// # Experimental
+    ///
+    /// - Setting this parameter to a value different from the default requires the `network` experimental feature.
+    ///
+    /// # Values
+    ///
+    /// - `Some(true)`: Use the whole network for this query.
+    /// - `Some(false)`: Make this query local.
+    /// - `None` (default): Same as `Some(false)`.
+    ///
+    /// # Assumptions when using the network
+    ///
+    /// Network queries assume that the following is true:
+    ///
+    /// - the target index exists with compatible settings on all remotes of the network.
+    /// - any document with the same document id between two remotes have the same content and can be deduplicated.
+    #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
+    pub use_network: Option<bool>,
     /// Filter queries by an attribute's value
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
@@ -227,6 +258,8 @@ impl From<SearchParameters> for SearchQuery {
             crop_marker: DEFAULT_CROP_MARKER(),
             locales: None,
             personalize: None,
+            // TODO: support `use_network` in chat route (not trivial)
+            use_network: None,
         }
     }
 }
@@ -309,6 +342,7 @@ impl fmt::Debug for SearchQuery {
             ranking_score_threshold,
             locales,
             personalize,
+            use_network,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -399,6 +433,10 @@ impl fmt::Debug for SearchQuery {
 
         if let Some(personalize) = personalize {
             debug.field("personalize", &personalize);
+        }
+
+        if let Some(use_network) = use_network {
+            debug.field("use_network", use_network);
         }
 
         debug.finish()
@@ -604,6 +642,8 @@ pub struct SearchQueryWithIndex {
     /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>, default)]
+    pub use_network: Option<bool>,
     /// Return matching terms location
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
@@ -709,6 +749,7 @@ impl SearchQueryWithIndex {
             ranking_score_threshold,
             locales,
             personalize,
+            use_network,
         } = query;
 
         SearchQueryWithIndex {
@@ -742,6 +783,7 @@ impl SearchQueryWithIndex {
             locales,
             personalize,
             federation_options,
+            use_network,
         }
     }
 
@@ -777,6 +819,7 @@ impl SearchQueryWithIndex {
             ranking_score_threshold,
             locales,
             personalize,
+            use_network,
         } = self;
         (
             index_uid,
@@ -809,6 +852,7 @@ impl SearchQueryWithIndex {
                 ranking_score_threshold,
                 locales,
                 personalize,
+                use_network,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -1387,8 +1431,6 @@ pub fn perform_search(
         page,
         hits_per_page,
         attributes_to_retrieve,
-        // use the enum passed as parameter
-        retrieve_vectors: _,
         attributes_to_crop,
         crop_length,
         attributes_to_highlight,
@@ -1401,6 +1443,10 @@ pub fn perform_search(
         highlight_post_tag,
         crop_marker,
         locales,
+        // already used in callers
+        use_network: _,
+        // use the enum passed as parameter
+        retrieve_vectors: _,
         // already used in prepare_search
         vector: _,
         media: _,

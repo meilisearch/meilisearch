@@ -26,7 +26,7 @@ use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, Sear
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_search, HybridQuery, MatchingStrategy, Personalize,
-    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult,
+    RankingScoreThreshold, RetrieveVectors, SearchHit, SearchKind, SearchParams, SearchQuery, SearchResult,
     SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
@@ -214,6 +214,8 @@ pub struct SearchQueryGet {
     /// depends on your personalization configuration.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
     pub personalize_user_context: Option<String>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchUseNetwork>)]
+    pub use_network: Option<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]
@@ -318,6 +320,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             ranking_score_threshold: other.ranking_score_threshold.map(|o| o.0),
             locales: other.locales.map(|o| o.into_iter().collect()),
             personalize,
+            use_network: other.use_network,
         })
     }
 }
