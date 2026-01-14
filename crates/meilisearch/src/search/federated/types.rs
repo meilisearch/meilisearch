@@ -106,6 +106,20 @@ pub struct Federation {
     pub merge_facets: Option<MergeFacets>,
 }
 
+
+impl Default for Federation {
+    fn default() -> Self {
+        Self {
+            limit: super::super::DEFAULT_SEARCH_LIMIT(),
+            offset: super::super::DEFAULT_SEARCH_OFFSET(),
+            page: Default::default(),
+            hits_per_page: Default::default(),
+            facets_by_index: Default::default(),
+            merge_facets: Default::default(),
+        }
+    }
+}
+
 impl Federation {
     pub fn is_exhaustive(&self) -> bool {
         self.page.is_some() || self.hits_per_page.is_some()
