@@ -76,10 +76,10 @@ impl FilterableAttributesPatterns {
 pub struct FilterableAttributesFeatures {
     #[serde(default)]
     #[deserr(default)]
-    facet_search: bool,
+    pub facet_search: bool,
     #[serde(default)]
     #[deserr(default)]
-    filter: FilterFeatures,
+    pub filter: FilterFeatures,
 }
 
 impl FilterableAttributesFeatures {
@@ -156,10 +156,10 @@ impl<E: DeserializeError> Deserr<E> for FilterableAttributesRule {
 pub struct FilterFeatures {
     #[serde(default = "default_true")]
     #[deserr(default = true)]
-    equality: bool,
+    pub equality: bool,
     #[serde(default)]
     #[deserr(default)]
-    comparison: bool,
+    pub comparison: bool,
 }
 
 fn default_true() -> bool {

@@ -67,7 +67,7 @@ pub use self::error::{
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
 pub use self::fields_ids_map::{
-    FieldIdMapWithMetadata, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
+    FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
 };
 pub use self::filterable_attributes_rules::{
     FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,

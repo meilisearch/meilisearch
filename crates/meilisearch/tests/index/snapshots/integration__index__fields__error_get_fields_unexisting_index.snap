@@ -1,0 +1,13 @@
+---
+source: crates/meilisearch/tests/index/fields.rs
+expression: "(code.as_u16(), response)"
+---
+[
+  404,
+  {
+    "message": "Index `DOES_NOT_EXISTS` not found.",
+    "code": "index_not_found",
+    "type": "invalid_request",
+    "link": "https://docs.meilisearch.com/errors#index_not_found"
+  }
+]

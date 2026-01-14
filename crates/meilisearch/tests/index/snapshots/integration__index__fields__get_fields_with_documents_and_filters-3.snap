@@ -1,0 +1,37 @@
+---
+source: crates/meilisearch/tests/index/fields.rs
+expression: "(code.as_u16(), response)"
+---
+[
+  200,
+  [
+    {
+      "name": "title",
+      "displayed": {
+        "enabled": true
+      },
+      "searchable": {
+        "enabled": true
+      },
+      "sortable": {
+        "enabled": false
+      },
+      "distinct": {
+        "enabled": false
+      },
+      "rankingRule": {
+        "enabled": false
+      },
+      "filterable": {
+        "enabled": false,
+        "sortBy": "alpha",
+        "facetSearch": false,
+        "equality": false,
+        "comparison": false
+      },
+      "localized": {
+        "locales": []
+      }
+    }
+  ]
+]
