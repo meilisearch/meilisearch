@@ -8,7 +8,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
-use crate::search::{Personalize, SearchResult};
+use crate::search::{Personalize, SearchHit};
 
 const COHERE_API_URL: &str = "https://api.cohere.ai/v1/rerank";
 const MAX_RETRIES: u32 = 10;
@@ -73,15 +73,15 @@ impl CohereService {
 
     pub async fn rerank_search_results(
         &self,
-        search_result: SearchResult,
+        hits: Vec<SearchHit>,
         personalize: &Personalize,
         query: Option<&str>,
         deadline: Deadline,
-    ) -> Result<SearchResult, ResponseError> {
+    ) -> Result<Vec<SearchHit>, ResponseError> {
         if deadline.exceeded() {
             warn!("Could not rerank due to deadline");
             // If the deadline is exceeded, return the original search result instead of an error
-            return Ok(search_result);
+            return Ok(hits);
         }
 
         // Extract user context from personalization
@@ -94,8 +94,7 @@ impl CohereService {
         };
 
         // Extract documents for reranking
-        let documents: Vec<String> = search_result
-            .hits
+        let documents: Vec<String> = hits
             .iter()
             .map(|hit| {
                 // Convert the document to a string representation for reranking
@@ -104,7 +103,7 @@ impl CohereService {
             .collect();
 
         if documents.is_empty() {
-            return Ok(search_result);
+            return Ok(hits);
         }
 
         // Call Cohere's rerank API with retry logic
@@ -113,22 +112,22 @@ impl CohereService {
                 Ok(indices) => indices,
                 Err(PersonalizationError::DeadlineExceeded) => {
                     // If the deadline is exceeded, return the original search result instead of an error
-                    return Ok(search_result);
+                    return Ok(hits);
                 }
                 Err(e) => return Err(e.into()),
             };
 
-        debug!("Cohere rerank successful, reordering {} results", search_result.hits.len());
+        debug!("Cohere rerank successful, reordering {} results", hits.len());
 
         // Reorder the hits based on Cohere's reranking
         let mut reranked_hits = Vec::new();
         for index in reranked_indices.iter() {
-            if let Some(hit) = search_result.hits.get(*index) {
+            if let Some(hit) = hits.get(*index) {
                 reranked_hits.push(hit.clone());
             }
         }
 
-        Ok(SearchResult { hits: reranked_hits, ..search_result })
+        Ok(reranked_hits)
     }
 
     async fn call_rerank_with_retry(
@@ -343,18 +342,16 @@ impl PersonalizationService {
 
     pub async fn rerank_search_results(
         &self,
-        search_result: SearchResult,
+        hits: Vec<SearchHit>,
         personalize: &Personalize,
         query: Option<&str>,
         deadline: Deadline,
         progress: &Progress,
-    ) -> Result<SearchResult, ResponseError> {
+    ) -> Result<Vec<SearchHit>, ResponseError> {
         match self {
             Self::Cohere(cohere_service) => {
                 let _step = progress.update_progress_scoped(SearchStep::Personalization);
-                cohere_service
-                    .rerank_search_results(search_result, personalize, query, deadline)
-                    .await
+                cohere_service.rerank_search_results(hits, personalize, query, deadline).await
             }
             Self::Disabled => Err(PersonalizationError::FeatureNotEnabled(
                 index_scheduler::error::FeatureNotEnabledError {
