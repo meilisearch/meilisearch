@@ -25,6 +25,11 @@ impl UpgradeIndex for CleanupFidBasedDatabases {
             }
         };
 
+        if matches!(std::env::var_os("MEILI_EXPERIMENTAL_DISABLE_FID_BASED_DATABASES_CLEANUP"), Some(x) if x != "false" && x != "0")
+        {
+            return Ok(false);
+        }
+
         // Force-delete the fid-based databases for the fids that are not searchable.
         // This is a sanity cleanup step to ensure that the database is not corrupted.
         progress.update_progress(CleanupFidBasedDatabases::RetrievingFidsToDelete);
