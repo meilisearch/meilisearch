@@ -35,7 +35,7 @@ use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
 use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};
 use crate::{
-    default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
+    default_criteria, CboRoaringBitmapCodec, Criterion, Deadline, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
     FieldidsWeightsMap, FilterableAttributesRule, GeoPoint, LocalizedAttributesRule, ObkvCodec,
     Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
@@ -1803,6 +1803,13 @@ impl Index {
 
     pub fn search_cutoff(&self, rtxn: &RoTxn<'_>) -> Result<Option<u64>> {
         Ok(self.main.remap_types::<Str, BEU64>().get(rtxn, main_key::SEARCH_CUTOFF)?)
+    }
+
+    pub fn search_deadline(&self, rtxn: &RoTxn<'_>) -> Result<Deadline> {
+        Ok(match self.search_cutoff(&rtxn)? {
+            Some(cutoff) => Deadline::from_budget(std::time::Duration::from_millis(cutoff)),
+            None => Deadline::default(),
+        })
     }
 
     pub(crate) fn delete_search_cutoff(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {

@@ -9,7 +9,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{self, TotalProcessingTimeStep};
+use meilisearch_types::milli::{self, Deadline, TotalProcessingTimeStep};
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;

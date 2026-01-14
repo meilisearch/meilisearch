@@ -14,7 +14,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::update::Setting;
 use crate::vector::settings::EmbeddingSettings;
 use crate::vector::{Embedder, EmbedderOptions};
-use crate::{Criterion, Filter, FilterableAttributesRule, TimeBudget};
+use crate::{Criterion, Filter, FilterableAttributesRule, Deadline};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -64,7 +64,7 @@ fn basic_degraded_search() {
     let mut search = index.search(&rtxn);
     search.query("hello puppy kefir");
     search.limit(3);
-    search.time_budget(TimeBudget::new(Duration::from_millis(0)));
+    search.deadline(Deadline::from_budget(Duration::from_millis(0)));
 
     let result = search.execute().unwrap();
     assert!(result.degraded);
@@ -78,7 +78,7 @@ fn degraded_search_cannot_skip_filter() {
     let mut search = index.search(&rtxn);
     search.query("hello puppy kefir");
     search.limit(100);
-    search.time_budget(TimeBudget::new(Duration::from_millis(0)));
+    search.deadline(Deadline::from_budget(Duration::from_millis(0)));
     let filter_condition = Filter::from_str("id > 2").unwrap().unwrap();
     search.filter(filter_condition);
 
@@ -100,7 +100,7 @@ fn degraded_search_and_score_details() {
     search.query("hello puppy kefir");
     search.limit(4);
     search.scoring_strategy(ScoringStrategy::Detailed);
-    search.time_budget(TimeBudget::max());
+    search.deadline(Deadline::never());
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -168,7 +168,7 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do ONE loop iteration. Not much can be deduced, almost everyone matched the words first bucket.
-    search.time_budget(TimeBudget::max().with_stop_after(1));
+    search.deadline(Deadline::never().with_stop_after(1));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -210,7 +210,7 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do TWO loop iterations. The first document should be entirely sorted
-    search.time_budget(TimeBudget::max().with_stop_after(2));
+    search.deadline(Deadline::never().with_stop_after(2));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -257,7 +257,7 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do THREE loop iterations. The second document should be entirely sorted as well
-    search.time_budget(TimeBudget::max().with_stop_after(3));
+    search.deadline(Deadline::never().with_stop_after(3));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -310,7 +310,7 @@ fn degraded_search_and_score_details() {
 
     // Do FOUR loop iterations. The third document should be entirely sorted as well
     // The words bucket have still not progressed thus the last document doesn't have any info yet.
-    search.time_budget(TimeBudget::max().with_stop_after(4));
+    search.deadline(Deadline::never().with_stop_after(4));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -367,7 +367,7 @@ fn degraded_search_and_score_details() {
     "###);
 
     // After FIVE loop iterations. The words ranking rule gave us a new bucket.
-    search.time_budget(TimeBudget::max().with_stop_after(5));
+    search.deadline(Deadline::never().with_stop_after(5));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -431,7 +431,7 @@ fn degraded_search_and_score_details() {
 
     // After SIX loop iterations.
     // we finished
-    search.time_budget(TimeBudget::max().with_stop_after(6));
+    search.deadline(Deadline::never().with_stop_after(6));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -577,7 +577,7 @@ fn degraded_search_and_score_details_vector() {
 
     search.limit(4);
     search.scoring_strategy(ScoringStrategy::Detailed);
-    search.time_budget(TimeBudget::max());
+    search.deadline(Deadline::never());
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -625,7 +625,7 @@ fn degraded_search_and_score_details_vector() {
     "###);
 
     // Do ONE loop iteration. Not much can be deduced, almost everyone matched the words first bucket.
-    search.time_budget(TimeBudget::max().with_stop_after(1));
+    search.deadline(Deadline::never().with_stop_after(1));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -654,7 +654,7 @@ fn degraded_search_and_score_details_vector() {
     ]
     "###);
 
-    search.time_budget(TimeBudget::max().with_stop_after(2));
+    search.deadline(Deadline::never().with_stop_after(2));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -689,7 +689,7 @@ fn degraded_search_and_score_details_vector() {
     ]
     "###);
 
-    search.time_budget(TimeBudget::max().with_stop_after(3));
+    search.deadline(Deadline::never().with_stop_after(3));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -730,7 +730,7 @@ fn degraded_search_and_score_details_vector() {
     ]
     "###);
 
-    search.time_budget(TimeBudget::max().with_stop_after(4));
+    search.deadline(Deadline::never().with_stop_after(4));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -777,7 +777,7 @@ fn degraded_search_and_score_details_vector() {
     ]
     "###);
 
-    search.time_budget(TimeBudget::max().with_stop_after(5));
+    search.deadline(Deadline::never().with_stop_after(5));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"

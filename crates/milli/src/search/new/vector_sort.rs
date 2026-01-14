@@ -10,7 +10,7 @@ use super::VectorStoreStats;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::new::ranking_rules::RankingRuleId;
 use crate::vector::{DistributionShift, Embedder, VectorStore};
-use crate::{DocumentId, Result, SearchContext, SearchLogger, TimeBudget};
+use crate::{DocumentId, Result, SearchContext, SearchLogger, Deadline};
 
 pub struct VectorSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
@@ -59,7 +59,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         &mut self,
         ctx: &mut SearchContext<'_>,
         vector_candidates: &RoaringBitmap,
-        time_budget: &TimeBudget,
+        deadline: &Deadline,
     ) -> Result<usize> {
         let target = &self.target;
         let backend = ctx.index.get_vector_store(ctx.txn)?.unwrap_or_default();
@@ -72,7 +72,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             target,
             self.limit,
             Some(vector_candidates),
-            time_budget,
+            deadline,
         )?;
         let total_results = results.len();
         self.cached_sorted_docids = results.into_iter().chunk_by(by_distance);
@@ -116,13 +116,13 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
         query: &Q,
-        time_budget: &TimeBudget,
+        deadline: &Deadline,
     ) -> Result<()> {
         assert!(self.query.is_none());
 
         self.query = Some(query.clone());
         let vector_candidates = &self.vector_candidates & universe;
-        self.fill_buffer(ctx, &vector_candidates, time_budget)?;
+        self.fill_buffer(ctx, &vector_candidates, deadline)?;
         Ok(())
     }
 
@@ -133,7 +133,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
-        time_budget: &TimeBudget,
+        deadline: &Deadline,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
         let query = self.query.as_ref().unwrap().clone();
         let vector_candidates = &self.vector_candidates & universe;
@@ -156,7 +156,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
 
         // if we got out of this loop it means we've exhausted our cache.
         // we need to refill it and run the function again.
-        let total_results = self.fill_buffer(ctx, &vector_candidates, time_budget)?;
+        let total_results = self.fill_buffer(ctx, &vector_candidates, deadline)?;
 
         // we tried filling the buffer, but it remained empty 😢
         // it means we don't actually have any document remaining in the universe with a vector.
@@ -169,7 +169,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             }));
         }
 
-        self.next_bucket(ctx, _logger, universe, time_budget)
+        self.next_bucket(ctx, _logger, universe, deadline)
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]

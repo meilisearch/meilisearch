@@ -32,7 +32,7 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{
-    all_obkv_to_json, obkv_to_json, OrderBy, PatternMatch, TimeBudget, TotalProcessingTimeStep,
+    all_obkv_to_json, obkv_to_json, OrderBy, PatternMatch, TotalProcessingTimeStep,
 };
 use meilisearch_types::{Document, Index};
 use serde::Deserialize;
@@ -295,20 +295,16 @@ async fn process_search_request(
     let features = index_scheduler.features();
     let index_cloned = index.clone();
     let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
-        let time_budget = match index_cloned
-            .search_cutoff(&rtxn)
-            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.clone())))?
-        {
-            Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-            None => TimeBudget::default(),
-        };
+        let deadline = index_cloned
+            .search_deadline(&rtxn)
+            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.clone())))?;
 
         let (search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
             &index_cloned,
             &rtxn,
             &query,
             &search_kind,
-            time_budget,
+            deadline,
             features,
             &progress,
         )?;

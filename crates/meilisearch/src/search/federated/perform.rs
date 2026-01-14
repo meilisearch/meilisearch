@@ -15,7 +15,7 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, DocumentId, FederatingResultsStep, OrderBy, SearchStep, TimeBudget,
+    self, Deadline, DocumentId, FederatingResultsStep, OrderBy, SearchStep,
     DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
@@ -865,7 +865,7 @@ impl SearchByIndex {
         let separators = index.allowed_separators(&rtxn)?;
         let separators: Option<Vec<_>> =
             separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-        let cutoff = index.search_cutoff(&rtxn)?;
+
         let mut degraded = false;
         let mut used_negative_operator = false;
         let mut candidates = RoaringBitmap::new();
@@ -885,11 +885,9 @@ impl SearchByIndex {
         }
         let mut results_by_query = Vec::with_capacity(queries.len());
 
-        // all queries for an index share the same budget
-        let time_budget = match cutoff {
-            Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-            None => TimeBudget::default(),
-        };
+        // all queries for an index share the same deadline
+        let deadline = index.search_deadline(&rtxn)?;
+
         for QueryByIndex { query, weight, query_index } in queries {
             // use an immediately invoked lambda to capture the result without returning from the function
 
@@ -964,8 +962,8 @@ impl SearchByIndex {
                     &rtxn,
                     &query,
                     &search_kind,
-                    // clones of `TimeBudget` share the budget rather than restart it
-                    time_budget.clone(),
+                    // clones of `Deadline` share the deadline rather than restart it
+                    deadline.clone(),
                     params.features,
                     progress,
                 )?;

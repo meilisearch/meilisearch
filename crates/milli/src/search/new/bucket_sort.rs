@@ -7,7 +7,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::{
     apply_distinct_rule, distinct_fid, distinct_single_docid, DistinctOutput,
 };
-use crate::{Result, TimeBudget};
+use crate::{Result, Deadline};
 
 pub struct BucketSortOutput {
     pub docids: Vec<u32>,
@@ -30,7 +30,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     length: usize,
     scoring_strategy: ScoringStrategy,
     logger: &mut dyn SearchLogger<Q>,
-    time_budget: TimeBudget,
+    deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     exhaustive_number_hits: bool,
     max_total_hits: Option<usize>,
@@ -97,7 +97,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query, universe);
 
-    ranking_rules[0].start_iteration(ctx, logger, universe, query, &time_budget)?;
+    ranking_rules[0].start_iteration(ctx, logger, universe, query, &deadline)?;
 
     let mut ranking_rule_scores: Vec<ScoreDetails> = vec![];
 
@@ -180,7 +180,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             continue;
         }
 
-        let next_bucket = if time_budget.exceeded() {
+        let next_bucket = if deadline.exceeded() {
             match ranking_rules[cur_ranking_rule_index].non_blocking_next_bucket(
                 ctx,
                 logger,
@@ -230,7 +230,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 ctx,
                 logger,
                 &ranking_rule_universes[cur_ranking_rule_index],
-                &time_budget,
+                &deadline,
             )?
             else {
                 back!();
@@ -288,7 +288,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
             logger,
             &next_bucket.candidates,
             &next_bucket.query,
-            &time_budget,
+            &deadline,
         )?;
     }
 

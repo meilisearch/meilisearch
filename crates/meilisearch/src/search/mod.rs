@@ -3,7 +3,7 @@ use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use deserr::Deserr;
 use either::Either;
@@ -22,8 +22,7 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
-    TimeBudget,
+    Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -1177,7 +1176,7 @@ pub fn prepare_search<'t>(
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
     search_kind: &SearchKind,
-    time_budget: TimeBudget,
+    deadline: Deadline,
     features: RoFeatures,
     progress: &'t Progress,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
@@ -1185,7 +1184,7 @@ pub fn prepare_search<'t>(
         features.check_multimodal("passing `media` in a search query")?;
     }
     let mut search = index.search(rtxn, progress);
-    search.time_budget(time_budget);
+    search.deadline(deadline);
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
     }
@@ -1331,7 +1330,7 @@ pub fn perform_search(
     params: SearchParams,
     index: &Index,
     progress: &Progress,
-) -> Result<(SearchResult, TimeBudget), ResponseError> {
+) -> Result<(SearchResult, Deadline), ResponseError> {
     let SearchParams {
         index_uid,
         query,
@@ -1344,20 +1343,10 @@ pub fn perform_search(
     let before_search = Instant::now();
     let index_uid_for_metadata = index_uid.clone();
     let rtxn = index.read_txn()?;
-    let time_budget = match index.search_cutoff(&rtxn)? {
-        Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-        None => TimeBudget::default(),
-    };
+    let deadline = index.search_deadline(&rtxn)?;
 
-    let (search, is_finite_pagination, max_total_hits, offset) = prepare_search(
-        index,
-        &rtxn,
-        &query,
-        &search_kind,
-        time_budget.clone(),
-        features,
-        progress,
-    )?;
+    let (search, is_finite_pagination, max_total_hits, offset) =
+        prepare_search(index, &rtxn, &query, &search_kind, deadline.clone(), features, progress)?;
 
     let (
         milli::SearchResult {
@@ -1483,7 +1472,7 @@ pub fn perform_search(
         request_uid: Some(request_uid),
         metadata,
     };
-    Ok((result, time_budget))
+    Ok((result, deadline))
 }
 
 /// Computed facet data from a search
@@ -1883,10 +1872,7 @@ pub fn perform_facet_search(
     let before_search = Instant::now();
     let progress = Progress::default();
     let rtxn = index.read_txn()?;
-    let time_budget = match index.search_cutoff(&rtxn)? {
-        Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-        None => TimeBudget::default(),
-    };
+    let deadline = index.search_deadline(&rtxn)?;
 
     if !index.facet_search(&rtxn)? {
         return Err(ResponseError::from_msg(
@@ -1910,15 +1896,8 @@ pub fn perform_facet_search(
             .collect()
     });
 
-    let (search, _, _, _) = prepare_search(
-        index,
-        &rtxn,
-        &search_query,
-        &search_kind,
-        time_budget,
-        features,
-        &progress,
-    )?;
+    let (search, _, _, _) =
+        prepare_search(index, &rtxn, &search_query, &search_kind, deadline, features, &progress)?;
     let mut facet_search = SearchForFacetValues::new(
         facet_name,
         search,
