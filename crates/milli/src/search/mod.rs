@@ -444,6 +444,7 @@ mod test {
     #[test]
     fn test_kanji_language_detection() {
         use crate::index::tests::TempIndex;
+        let progress = Progress::default();
 
         let index = TempIndex::new();
 
@@ -456,7 +457,7 @@ mod test {
             .unwrap();
 
         let txn = index.write_txn().unwrap();
-        let mut search = Search::new(&txn, &index);
+        let mut search = Search::new(&txn, &index, &progress);
 
         search.query("東京");
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
@@ -468,6 +469,7 @@ mod test {
     #[test]
     fn test_hangul_language_detection() {
         use crate::index::tests::TempIndex;
+        let progress = Progress::default();
 
         let index = TempIndex::new();
 
@@ -480,7 +482,7 @@ mod test {
             .unwrap();
 
         let txn = index.write_txn().unwrap();
-        let mut search = Search::new(&txn, &index);
+        let mut search = Search::new(&txn, &index, &progress);
 
         search.query("김밥");
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
