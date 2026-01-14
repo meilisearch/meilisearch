@@ -751,12 +751,17 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
     fn write_key_value(&self, database: Database, key: &[u8], value: &[u8]) -> crate::Result<()> {
         let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
-            InternalError::StorePut {
+            crate::convert_mdb_error_ignore_map_full(
+                MdbError::BadValSize,
+                database.database_name(),
+                key,
+                Some(value.len()),
+            ).unwrap_or_else(|| InternalError::StorePut {
                 database_name: database.database_name(),
                 key: key.into(),
                 value_length: value.len(),
                 error: MdbError::BadValSize.into(),
-            }
+            })
         })?;
         self.write_key_value_with(database, key_length, value.len(), |key_buffer, value_buffer| {
             key_buffer.copy_from_slice(key);
@@ -822,11 +827,16 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
     fn delete_entry(&self, database: Database, key: &[u8]) -> crate::Result<()> {
         let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
-            InternalError::StoreDeletion {
+            crate::convert_mdb_error_ignore_map_full(
+                MdbError::BadValSize,
+                database.database_name(),
+                key,
+                None,
+            ).unwrap_or_else(|| InternalError::StoreDeletion {
                 database_name: database.database_name(),
                 key: key.into(),
                 error: MdbError::BadValSize.into(),
-            }
+            })
         })?;
         self.delete_entry_with(database, key_length, |buffer| {
             buffer.copy_from_slice(key);
@@ -973,12 +983,17 @@ impl<D: DatabaseType> WordDocidsSender<'_, '_, D> {
     pub fn write(&self, key: &[u8], bitmap: &RoaringBitmap) -> crate::Result<()> {
         let value_length = CboRoaringBitmapCodec::serialized_size(bitmap);
         let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
-            InternalError::StorePut {
+            crate::convert_mdb_error_ignore_map_full(
+                MdbError::BadValSize,
+                D::DATABASE.database_name(),
+                key,
+                Some(value_length),
+            ).unwrap_or_else(|| InternalError::StorePut {
                 database_name: D::DATABASE.database_name(),
                 key: key.into(),
                 value_length,
                 error: MdbError::BadValSize.into(),
-            }
+            })
         })?;
         self.sender.write_key_value_with(
             D::DATABASE,
@@ -1015,12 +1030,17 @@ impl FacetDocidsSender<'_, '_> {
             FacetKind::Null | FacetKind::Empty | FacetKind::Exists => value_length,
         };
         let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
-            InternalError::StorePut {
+            crate::convert_mdb_error_ignore_map_full(
+                MdbError::BadValSize,
+                database.database_name(),
+                key,
+                Some(value_length),
+            ).unwrap_or_else(|| InternalError::StorePut {
                 database_name: database.database_name(),
                 key: key.into(),
                 value_length,
                 error: MdbError::BadValSize.into(),
-            }
+            })
         })?;
 
         self.sender.write_key_value_with(
@@ -1158,12 +1178,17 @@ impl GeoSender<'_, '_> {
         let value_length = bitmap.serialized_size();
         let key = GEO_FACETED_DOCUMENTS_IDS_KEY.as_bytes();
         let key_length = key.len().try_into().ok().and_then(NonZeroU16::new).ok_or_else(|| {
-            InternalError::StorePut {
+            crate::convert_mdb_error_ignore_map_full(
+                MdbError::BadValSize,
+                database.database_name(),
+                key,
+                Some(value_length),
+            ).unwrap_or_else(|| InternalError::StorePut {
                 database_name: database.database_name(),
                 key: key.into(),
                 value_length,
                 error: MdbError::BadValSize.into(),
-            }
+            })
         })?;
 
         self.0.write_key_value_with(
