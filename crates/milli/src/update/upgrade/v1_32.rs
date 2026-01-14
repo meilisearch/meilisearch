@@ -150,7 +150,9 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     let fst = index.words_fst(wtxn)?;
     // TODO get this number from the CLI parameters
     let threads_count = rayon::current_num_threads() * 4;
-    let keys_by_thread = (fst.len() + 1) / threads_count;
+    // We don't have to worry about a good balance of entries
+    // between threads as we had unbounded first and last bounds.
+    let keys_by_thread = fst.len() / threads_count;
 
     // We iterate over the FST keys that represents the word dictionary and
     // roughly represents what can be found in the database we are cleaning.
