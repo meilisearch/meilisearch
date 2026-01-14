@@ -77,25 +77,27 @@ pub fn delete_old_fid_based_databases_from_fids(
     progress: &Progress,
 ) -> Result<()> {
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
-    delete_old_word_fid_docids(
+    let deleted = delete_old_word_fid_docids(
         wtxn,
         index,
         index.word_fid_docids.remap_data_type(),
         must_stop_processing,
         fids_to_delete,
     )?;
+    tracing::debug!("We just deleted {deleted} old word-fid-docids");
 
     progress.update_progress(SettingsIndexerStep::DeletingOldFidWordCountDocids);
     delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, fids_to_delete)?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldWordPrefixFidDocids);
-    delete_old_word_fid_docids(
+    let deleted = delete_old_word_fid_docids(
         wtxn,
         index,
         index.word_prefix_fid_docids.remap_data_type(),
         must_stop_processing,
         fids_to_delete,
     )?;
+    tracing::debug!("We just deleted {deleted} old word-prefix-fid-docids");
 
     Ok(())
 }
@@ -106,19 +108,24 @@ fn delete_old_word_fid_docids<'txn>(
     database: Database<StrBEU16Codec, Unit>,
     must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
-) -> crate::Result<()> {
+) -> crate::Result<usize> {
     let results = fetch_keys_to_delete_in_parallel(wtxn, index, database, fids_to_delete)?;
 
     let database = database.remap_key_type::<Bytes>();
+    let mut count = 0;
     for result in results.into_iter().flatten() {
         let keys = result?;
         if must_stop_processing.get() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
-        keys.into_iter().try_for_each(|key| database.delete(wtxn, &key).map(drop))?;
+        keys.into_iter().try_for_each(|key| {
+            database.delete(wtxn, &key)?;
+            count += 1;
+            Ok(()) as Result<()>
+        })?;
     }
 
-    Ok(())
+    Ok(count)
 }
 
 fn delete_old_fid_word_count_docids(
