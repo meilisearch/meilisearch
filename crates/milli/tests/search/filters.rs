@@ -1,7 +1,6 @@
 use either::{Either, Left, Right};
 use milli::progress::Progress;
 use milli::{Criterion, Filter, Search, SearchResult, TermsMatchingStrategy};
-
 use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};

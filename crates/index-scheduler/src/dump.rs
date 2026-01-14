@@ -3,7 +3,6 @@
 use std::collections::HashMap;
 use std::io;
 
-use crate::{utils, Error, IndexScheduler, Result};
 use dump::{KindDump, TaskDump, UpdateFile};
 use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::heed::RwTxn;
@@ -13,6 +12,8 @@ use meilisearch_types::milli::update::MissingDocumentPolicy;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
+
+use crate::{utils, Error, IndexScheduler, Result};
 
 pub struct Dump<'a> {
     index_scheduler: &'a IndexScheduler,

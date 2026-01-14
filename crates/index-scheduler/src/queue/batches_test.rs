@@ -1,16 +1,17 @@
-use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
-use crate::test_utils::{
-    index_creation_task, replace_document_import_task, replace_document_import_task_with_opts,
-    sample_documents, FailureLocation,
-};
-use crate::test_utils::{read_json, Breakpoint::*};
-use crate::{IndexScheduler, Query};
 use meili_snap::snapshot;
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli::update::MissingDocumentPolicy;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent, Status};
 use time::{Duration, OffsetDateTime};
+
+use crate::insta_snapshot::{snapshot_bitmap, snapshot_index_scheduler};
+use crate::test_utils::Breakpoint::*;
+use crate::test_utils::{
+    index_creation_task, read_json, replace_document_import_task,
+    replace_document_import_task_with_opts, sample_documents, FailureLocation,
+};
+use crate::{IndexScheduler, Query};
 
 #[test]
 fn query_batches_from_and_limit() {

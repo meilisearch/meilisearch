@@ -10,6 +10,7 @@ use time::OffsetDateTime;
 use super::super::channel::*;
 use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
+use crate::error::handle_store_mdb_error;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
@@ -45,12 +46,12 @@ pub fn write_to_db(
                 let database_name = database.database_name();
                 let database = database.database(index);
                 if let Err(error) = database.put(wtxn, &key, &value) {
-                    return Err(Error::InternalError(InternalError::StorePut {
+                    return Err(handle_store_mdb_error(
                         database_name,
-                        key: bstr::BString::from(&key[..]),
-                        value_length: value.len(),
+                        &key,
+                        Some(value.len()),
                         error,
-                    }));
+                    ));
                 }
             }
             ReceiverAction::LargeVectors(large_vectors) => {
@@ -201,12 +202,12 @@ pub fn write_from_bbqueue(
                 match operation.key_value(frame) {
                     (key, Some(value)) => {
                         if let Err(error) = database.put(wtxn, key, value) {
-                            return Err(Error::InternalError(InternalError::StorePut {
+                            return Err(handle_store_mdb_error(
                                 database_name,
-                                key: key.into(),
-                                value_length: value.len(),
+                                key,
+                                Some(value.len()),
                                 error,
-                            }));
+                            ));
                         }
                     }
                     (key, None) => match database.delete(wtxn, key) {
@@ -220,11 +221,7 @@ pub fn write_from_bbqueue(
                         }
                         Ok(_) => (),
                         Err(error) => {
-                            return Err(Error::InternalError(InternalError::StoreDeletion {
-                                database_name,
-                                key: key.into(),
-                                error,
-                            }));
+                            return Err(handle_store_mdb_error(database_name, key, None, error));
                         }
                     },
                 }
