@@ -1,6 +1,6 @@
+use crate::search::{Federation, FederationOptions, SearchQuery, SearchQueryWithIndex};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::network::Network;
-use crate::search::{Federation, FederationOptions, SearchQuery, SearchQueryWithIndex};
 
 pub fn network_partition<'a>(
     federation: &mut Federation,
@@ -34,8 +34,7 @@ pub fn network_partition<'a>(
             if facets.is_empty() {
                 break 'facets;
             }
-            let facets_by_index =
-                federation.facets_by_index.entry(index_uid.clone()).or_insert(Default::default());
+            let facets_by_index = federation.facets_by_index.entry(index_uid.clone()).or_default();
             *facets_by_index = Some(facets);
         }
     }

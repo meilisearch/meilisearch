@@ -7,7 +7,7 @@ use crate::score_details::{self, ScoreDetails};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::ExactTerm;
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{CboRoaringBitmapCodec, Result, SearchContext, SearchLogger, Deadline};
+use crate::{CboRoaringBitmapCodec, Deadline, Result, SearchContext, SearchLogger};
 
 /// A ranking rule that produces 3 disjoint buckets:
 ///

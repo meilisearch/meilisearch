@@ -276,7 +276,7 @@ pub async fn multi_search_with_post(
                         request_uid,
                         include_metadata,
                         &progress,
-                        &*personalization_service,
+                        &personalization_service,
                         StatusCode::BAD_REQUEST,
                     )
                     .await

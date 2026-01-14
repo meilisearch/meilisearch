@@ -10,7 +10,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{self, Deadline, TotalProcessingTimeStep};
+use meilisearch_types::milli::{self, TotalProcessingTimeStep};
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
@@ -27,7 +27,7 @@ use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, Sear
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, network_partition, perform_federated_search, perform_search, Federation,
-    HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors, SearchHit, SearchKind,
+    HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
     SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
     DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
     DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
@@ -446,7 +446,7 @@ pub async fn search_with_url_query(
         request_uid,
         include_metadata,
         &progress,
-        &*personalization_service,
+        &personalization_service,
         StatusCode::NOT_FOUND,
     )
     .await;
@@ -465,6 +465,7 @@ pub async fn search_with_url_query(
     Ok(HttpResponse::Ok().json(search_result))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn search(
     mut query: SearchQuery,
     index_scheduler: Data<IndexScheduler>,
@@ -497,7 +498,7 @@ pub(crate) async fn search(
         let queries =
             network_partition(&mut federation, &query, None, &index_uid, network).collect();
         let search_result = perform_federated_search(
-            &*index_scheduler,
+            &index_scheduler,
             queries,
             federation,
             features,
@@ -523,7 +524,7 @@ pub(crate) async fn search(
             _ => ResponseError::from(err),
         })?;
 
-        let search_kind = search_kind(&query, &*index_scheduler, index_uid.to_string(), &index)?;
+        let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
         let progress_clone = progress.clone();
@@ -548,21 +549,14 @@ pub(crate) async fn search(
     };
 
     // Apply personalization if requested
-
-    let hits: &mut Vec<SearchHit> = &mut search_result.hits;
-    let progress: &Progress = &progress;
-    let personalize = personalize.as_ref();
-    let personalize_query = personalize_query.as_deref();
-
     if let Some(personalize) = personalize {
-        let hits_to_rerank = std::mem::take(hits);
-        *hits = service
+        search_result.hits = service
             .rerank_search_results(
-                hits_to_rerank,
-                personalize,
+                std::mem::take(&mut search_result.hits),
+                &personalize,
                 personalize_query.as_deref(),
                 deadline,
-                &progress,
+                progress,
             )
             .await?;
     }
@@ -662,7 +656,7 @@ pub async fn search_with_post(
         request_uid,
         include_metadata,
         &progress,
-        &*personalization_service,
+        &personalization_service,
         StatusCode::NOT_FOUND,
     )
     .await;

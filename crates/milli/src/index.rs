@@ -1806,7 +1806,7 @@ impl Index {
     }
 
     pub fn search_deadline(&self, rtxn: &RoTxn<'_>) -> Result<Deadline> {
-        Ok(match self.search_cutoff(&rtxn)? {
+        Ok(match self.search_cutoff(rtxn)? {
             Some(cutoff) => Deadline::from_budget(std::time::Duration::from_millis(cutoff)),
             None => Deadline::default(),
         })

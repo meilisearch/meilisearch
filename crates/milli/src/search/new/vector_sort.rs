@@ -10,7 +10,7 @@ use super::VectorStoreStats;
 use crate::score_details::{self, ScoreDetails};
 use crate::search::new::ranking_rules::RankingRuleId;
 use crate::vector::{DistributionShift, Embedder, VectorStore};
-use crate::{DocumentId, Result, SearchContext, SearchLogger, Deadline};
+use crate::{Deadline, DocumentId, Result, SearchContext, SearchLogger};
 
 pub struct VectorSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
@@ -67,13 +67,8 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         let before = Instant::now();
         let reader =
             VectorStore::new(backend, ctx.index.vector_store, self.embedder_index, self.quantized);
-        let results = reader.nns_by_vector(
-            ctx.txn,
-            target,
-            self.limit,
-            Some(vector_candidates),
-            deadline,
-        )?;
+        let results =
+            reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates), deadline)?;
         let total_results = results.len();
         self.cached_sorted_docids = results.into_iter().chunk_by(by_distance);
         *ctx.vector_store_stats.get_or_insert_default() +=

@@ -8,7 +8,7 @@ use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{FieldId, Index, Result, Deadline};
+use crate::{Deadline, FieldId, Index, Result};
 
 pub trait RankingRuleOutputIter<'ctx, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;

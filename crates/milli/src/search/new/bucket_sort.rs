@@ -7,7 +7,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::{
     apply_distinct_rule, distinct_fid, distinct_single_docid, DistinctOutput,
 };
-use crate::{Result, Deadline};
+use crate::{Deadline, Result};
 
 pub struct BucketSortOutput {
     pub docids: Vec<u32>,

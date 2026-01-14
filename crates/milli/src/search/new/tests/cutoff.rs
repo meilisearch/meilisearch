@@ -14,7 +14,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::update::Setting;
 use crate::vector::settings::EmbeddingSettings;
 use crate::vector::{Embedder, EmbedderOptions};
-use crate::{Criterion, Filter, FilterableAttributesRule, Deadline};
+use crate::{Criterion, Deadline, Filter, FilterableAttributesRule};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();

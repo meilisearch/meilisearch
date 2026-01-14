@@ -8,7 +8,7 @@ use crate::documents::geo_sort::{fill_cache, next_bucket};
 use crate::documents::{GeoSortParameter, GeoSortStrategy};
 use crate::score_details::{self, ScoreDetails};
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{GeoPoint, Result, SearchContext, SearchLogger, Deadline};
+use crate::{Deadline, GeoPoint, Result, SearchContext, SearchLogger};
 
 pub struct GeoSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,

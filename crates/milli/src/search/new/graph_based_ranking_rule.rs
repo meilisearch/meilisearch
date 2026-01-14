@@ -54,7 +54,7 @@ use crate::score_details::Rank;
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::PathVisitor;
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{Result, TermsMatchingStrategy, Deadline};
+use crate::{Deadline, Result, TermsMatchingStrategy};
 
 pub type Words = GraphBasedRankingRule<WordsGraph>;
 impl GraphBasedRankingRule<WordsGraph> {

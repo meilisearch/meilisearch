@@ -62,7 +62,7 @@ use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, Deadline,
+    AscDesc, Deadline, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy,
     UserError, Weight,
 };
 

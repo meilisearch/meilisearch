@@ -5,7 +5,7 @@ use roaring::RoaringBitmap;
 use super::logger::SearchLogger;
 use super::{QueryGraph, SearchContext};
 use crate::score_details::ScoreDetails;
-use crate::{Result, Deadline};
+use crate::{Deadline, Result};
 
 /// An internal trait implemented by only [`PlaceholderQuery`] and [`QueryGraph`]
 pub trait RankingRuleQueryTrait: Sized + Clone + 'static {}

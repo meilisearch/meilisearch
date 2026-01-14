@@ -16,8 +16,8 @@ use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::{Embedder, Embedding};
 use crate::{
-    execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, Error, Index,
-    Result, SearchContext, Deadline, UserError,
+    execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
+    Index, Result, SearchContext, UserError,
 };
 
 // Building these factories is not free.

@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{SearchStep, Deadline};
+use meilisearch_types::milli::{Deadline, SearchStep};
 use rand::Rng;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
