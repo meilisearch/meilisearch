@@ -49,7 +49,7 @@ pub async fn perform_federated_search(
     request_uid: Uuid,
     include_metadata: bool,
     progress: &Progress,
-) -> Result<FederatedSearchResult, ResponseError> {
+) -> Result<(FederatedSearchResult, Deadline), ResponseError> {
     if is_proxy {
         features.check_network("Performing a remote federated search")?;
     }
@@ -115,9 +115,11 @@ pub async fn perform_federated_search(
         params.has_remote,
     );
 
+    let mut deadline = Deadline::never();
     for (index_uid, queries) in partitioned_queries.local_queries_by_index {
         // note: this is the only place we open `index_uid`
-        search_by_index.execute(index_uid, queries, &params, progress)?;
+        let index_deadline = search_by_index.execute(index_uid, queries, &params, progress)?;
+        deadline = Deadline::earliest(deadline, index_deadline);
     }
 
     // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
@@ -205,25 +207,28 @@ pub async fn perform_federated_search(
         + (after_merge - after_waiting_remote_results);
     let max_duration = Duration::max(local_duration, max_remote_duration);
 
-    Ok(FederatedSearchResult {
-        hits: merged_hits,
-        processing_time_ms: max_duration.as_millis(),
-        hits_info: HitsInfo::OffsetLimit {
-            limit: federation.limit,
-            offset: federation.offset,
-            estimated_total_hits,
+    Ok((
+        FederatedSearchResult {
+            hits: merged_hits,
+            processing_time_ms: max_duration.as_millis(),
+            hits_info: HitsInfo::OffsetLimit {
+                limit: federation.limit,
+                offset: federation.offset,
+                estimated_total_hits,
+            },
+            query_vectors,
+            semantic_hit_count,
+            degraded,
+            used_negative_operator,
+            facet_distribution,
+            facet_stats,
+            facets_by_index,
+            remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
+            request_uid: Some(request_uid),
+            metadata: query_metadata,
         },
-        query_vectors,
-        semantic_hit_count,
-        degraded,
-        used_negative_operator,
-        facet_distribution,
-        facet_stats,
-        facets_by_index,
-        remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
-        request_uid: Some(request_uid),
-        metadata: query_metadata,
-    })
+        deadline,
+    ))
 }
 
 struct QueryByIndex {
@@ -841,7 +846,7 @@ impl SearchByIndex {
         queries: Vec<QueryByIndex>,
         params: &SearchByIndexParams<'_>,
         progress: &Progress,
-    ) -> Result<(), ResponseError> {
+    ) -> Result<Deadline, ResponseError> {
         let first_query_index = queries.first().map(|query| query.query_index);
         let index = match params.index_scheduler.index(&index_uid) {
             Ok(index) => index,
@@ -1118,7 +1123,7 @@ impl SearchByIndex {
             used_negative_operator,
             facets,
         });
-        Ok(())
+        Ok(deadline)
     }
 
     fn check_unused_facets(
