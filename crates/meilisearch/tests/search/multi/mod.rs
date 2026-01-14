@@ -3562,8 +3562,8 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
-      "semanticHitCount": 4,
-      "requestUid": "[uuid]"
+      "requestUid": "[uuid]",
+      "semanticHitCount": 4
     }
     "###);
 
@@ -3620,8 +3620,8 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
-      "semanticHitCount": 4,
-      "requestUid": "[uuid]"
+      "requestUid": "[uuid]",
+      "semanticHitCount": 4
     }
     "###);
 
@@ -3683,8 +3683,8 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
-      "semanticHitCount": 3,
-      "requestUid": "[uuid]"
+      "requestUid": "[uuid]",
+      "semanticHitCount": 3
     }
     "###);
 }
@@ -3940,10 +3940,6 @@ async fn federation_vector_two_indexes() {
           }
         }
       ],
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 8,
       "queryVectors": {
         "0": [
           1.0,
@@ -3955,8 +3951,12 @@ async fn federation_vector_two_indexes() {
           0.6
         ]
       },
-      "semanticHitCount": 6,
-      "requestUid": "[uuid]"
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 8,
+      "requestUid": "[uuid]",
+      "semanticHitCount": 6
     }
     "###);
 
@@ -3968,7 +3968,7 @@ async fn federation_vector_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4180,10 +4180,6 @@ async fn federation_vector_two_indexes() {
           "_rankingScore": "[score]"
         }
       ],
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 8,
       "queryVectors": {
         "0": [
           1.0,
@@ -4195,10 +4191,14 @@ async fn federation_vector_two_indexes() {
           0.6
         ]
       },
-      "semanticHitCount": 8,
-      "requestUid": "[uuid]"
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 8,
+      "requestUid": "[uuid]",
+      "semanticHitCount": 8
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]

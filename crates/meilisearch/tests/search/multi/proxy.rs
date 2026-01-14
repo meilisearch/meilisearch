@@ -604,10 +604,6 @@ async fn remote_sharding_retrieve_vectors() {
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
-      "processingTimeMs": "[time]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 0,
       "queryVectors": {
         "0": [
           1.0,
@@ -625,9 +621,13 @@ async fn remote_sharding_retrieve_vectors() {
           0.2
         ]
       },
-      "semanticHitCount": 0,
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
       "requestUid": "[uuid]",
-      "remoteErrors": {}
+      "remoteErrors": {},
+      "semanticHitCount": 0
     }
     "###);
 
@@ -677,13 +677,9 @@ async fn remote_sharding_retrieve_vectors() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
-      "processingTimeMs": "[time]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 0,
       "queryVectors": {
         "0": [
           1.0,
@@ -701,11 +697,15 @@ async fn remote_sharding_retrieve_vectors() {
           0.2
         ]
       },
-      "semanticHitCount": 0,
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
       "requestUid": "[uuid]",
-      "remoteErrors": {}
+      "remoteErrors": {},
+      "semanticHitCount": 0
     }
-    "#);
+    "###);
 
     // multi vector search: two queries on the same remote
 
@@ -753,13 +753,9 @@ async fn remote_sharding_retrieve_vectors() {
 
     let (response, _status_code) = ms0.multi_search(request.clone()).await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
-      "processingTimeMs": "[time]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 0,
       "queryVectors": {
         "0": [
           1.0,
@@ -777,11 +773,15 @@ async fn remote_sharding_retrieve_vectors() {
           0.2
         ]
       },
-      "semanticHitCount": 0,
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
       "requestUid": "[uuid]",
-      "remoteErrors": {}
+      "remoteErrors": {},
+      "semanticHitCount": 0
     }
-    "#);
+    "###);
 
     // multi search: two vector, one keyword
 
@@ -832,10 +832,6 @@ async fn remote_sharding_retrieve_vectors() {
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
-      "processingTimeMs": "[time]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 0,
       "queryVectors": {
         "0": [
           1.0,
@@ -848,9 +844,13 @@ async fn remote_sharding_retrieve_vectors() {
           0.2
         ]
       },
-      "semanticHitCount": 0,
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
       "requestUid": "[uuid]",
-      "remoteErrors": {}
+      "remoteErrors": {},
+      "semanticHitCount": 0
     }
     "###);
 
@@ -903,10 +903,6 @@ async fn remote_sharding_retrieve_vectors() {
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
-      "processingTimeMs": "[time]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 0,
       "queryVectors": {
         "0": [
           1.0,
@@ -924,6 +920,10 @@ async fn remote_sharding_retrieve_vectors() {
           0.2
         ]
       },
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 0,
       "requestUid": "[uuid]",
       "remoteErrors": {}
     }
