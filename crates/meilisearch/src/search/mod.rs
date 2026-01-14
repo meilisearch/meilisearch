@@ -1012,7 +1012,6 @@ pub struct SearchResult {
     /// Metadata about the search query
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<SearchMetadata>,
-
     /// Exhaustive number of semantic search matches (only present in
     /// AI-powered searches)
     #[serde(skip_serializing_if = "Option::is_none")]
