@@ -148,6 +148,7 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     fids_to_delete: &BTreeSet<u16>,
 ) -> Result<LinkedList<Vec<Result<Vec<Box<[u8]>>>>>> {
     let fst = index.words_fst(wtxn)?;
+
     // TODO get this number from the CLI parameters
     let threads_count = rayon::current_num_threads() * 4;
     let keys_by_thread = (fst.len() / threads_count) + (fst.len() % threads_count);
@@ -168,9 +169,13 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     let mut stream = fst.stream();
     let mut count = 0;
     while let Some(key) = stream.next() {
-        // We store the first, last and every bounds to divide the work between threads
-        if count == 0 || count == fst.len() - 1 {
+        // We store the first...
+        if count == 0 {
             bounds.push(None);
+        // ...last...
+        } else if count == fst.len() - 1 {
+            bounds.push(None);
+        // ...and every bounds to divide the work between threads
         } else if count % keys_by_thread == 0 {
             bounds.push(Some(key.to_vec()));
         }
@@ -180,7 +185,7 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     // We create a thread pool and generate enough read transactions for each one of them.
     let pool = rayon::ThreadPoolBuilder::new().num_threads(keys_by_thread).build()?;
     let rtxns = iter::repeat_with(|| index.env.nested_read_txn(wtxn))
-        .take(threads_count)
+        .take(bounds.len().saturating_sub(1))
         .collect::<heed::Result<Vec<_>>>()?;
 
     let results = pool.install(|| {
