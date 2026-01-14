@@ -148,6 +148,7 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     fids_to_delete: &BTreeSet<u16>,
 ) -> Result<LinkedList<Vec<Result<Vec<Box<[u8]>>>>>> {
     let fst = index.words_fst(wtxn)?;
+
     // TODO get this number from the CLI parameters
     let threads_count = rayon::current_num_threads() * 4;
     let keys_by_thread = (fst.len() / threads_count) + (fst.len() % threads_count);
@@ -186,7 +187,7 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     let results = pool.install(|| {
         rtxns
             .into_par_iter()
-            .zip_eq(bounds.windows(2).collect::<Vec<_>>())
+            .zip(bounds.windows(2).collect::<Vec<_>>())
             .map(|(rtxn, win)| {
                 let bound = match [win[0].as_deref(), win[1].as_deref()] {
                     [None, None] => (Bound::Unbounded, Bound::Unbounded),
