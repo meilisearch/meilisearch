@@ -55,6 +55,10 @@ pub struct TaskView {
     /// Contains type-specific information about the task, such as the number
     /// of documents processed, settings that were applied, or filters that
     /// were used. The structure varies depending on the task type.
+
+    // Note: We use Object here because DetailsView has a complex schema with flattened
+    // Settings that utoipa doesn't handle correctly (allOf with additionalProperties: false).
+    #[schema(value_type = Option<Object>)]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<DetailsView>)]
     pub details: Option<DetailsView>,
