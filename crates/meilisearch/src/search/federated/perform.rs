@@ -19,6 +19,7 @@ use meilisearch_types::milli::{
     DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
+use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -75,6 +76,7 @@ pub async fn perform_federated_search(
         // pagination
         (Some(page), Some(hits_per_page)) => hits_per_page * page,
     };
+
     let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
 
     let network = index_scheduler.network();
@@ -180,7 +182,6 @@ pub async fn perform_federated_search(
     });
 
     // 3.2. merge federation metadata
-    // FIXME: hit_number not bigger than max_total_hits
     let (hit_number, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
 
@@ -968,6 +969,14 @@ impl SearchByIndex {
         let separators: Option<Vec<_>> =
             separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
 
+        let max_total_hits = index
+            .pagination_max_total_hits(&rtxn)
+            .map_err(milli::Error::from)?
+            .map(|x| x as usize)
+            .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
+
+        let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
+
         let mut degraded = false;
         let mut used_negative_operator = false;
         let mut candidates = RoaringBitmap::new();
@@ -1071,8 +1080,9 @@ impl SearchByIndex {
                 )?;
 
                 search.scoring_strategy(milli::score_details::ScoringStrategy::Detailed);
+
                 search.offset(0);
-                search.limit(params.required_hit_count);
+                search.limit(required_hit_count);
                 search.exhaustive_number_hits(params.is_exhaustive);
 
                 let (result, _semantic_hit_count) =
@@ -1146,7 +1156,7 @@ impl SearchByIndex {
             merge_index_local_results(results_by_query)
                 // skip documents we've already seen & mark that we saw the current document
                 .filter(|SearchResultByQueryIterItem { docid, .. }| documents_seen.insert(*docid))
-                .take(params.required_hit_count)
+                .take(required_hit_count)
                 // 2.3 make hits
                 .map(
                     |SearchResultByQueryIterItem {
