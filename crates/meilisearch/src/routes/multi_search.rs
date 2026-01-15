@@ -19,12 +19,10 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::search::search_kind;
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, perform_federated_search, perform_search, FederatedSearch,
-    FederatedSearchResult, RetrieveVectors, SearchParams, SearchQueryWithIndex,
-    SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
+    SearchQueryWithIndex, SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
 
@@ -239,7 +237,9 @@ pub async fn multi_search_with_post(
                 "Federated-search"
             );
 
-            HttpResponse::Ok().json(search_result?)
+            let (search_result, _) = search_result?;
+
+            HttpResponse::Ok().json(search_result)
         }
         None => {
             // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
@@ -247,7 +247,7 @@ pub async fn multi_search_with_post(
             // changes.
             let search_results: Result<_, (ResponseError, usize)> = async {
                 let mut search_results = Vec::with_capacity(queries.len());
-                for (query_index, (index_uid, mut query, federation_options)) in queries
+                for (query_index, (index_uid, query, federation_options)) in queries
                     .into_iter()
                     .map(SearchQueryWithIndex::into_index_query_federation)
                     .enumerate()
@@ -269,68 +269,18 @@ pub async fn multi_search_with_post(
                         ));
                     }
 
-                    let index = index_scheduler
-                        .index(&index_uid)
-                        .map_err(|err| {
-                            let mut err = ResponseError::from(err);
-                            // Patch the HTTP status code to 400 as it defaults to 404 for `index_not_found`, but
-                            // here the resource not found is not part of the URL.
-                            err.code = StatusCode::BAD_REQUEST;
-                            err
-                        })
-                        .with_index(query_index)?;
-
-                    // Extract personalization and query string before moving query
-                    let personalize = query.personalize.take();
-
-                    // Save the query string for personalization if requested
-                    let personalize_query =
-                        personalize.is_some().then(|| query.q.clone()).flatten();
-
-                    let index_uid_str = index_uid.to_string();
-
-                    let search_kind = search_kind(
-                        &query,
-                        index_scheduler.get_ref(),
-                        index_uid_str.clone(),
-                        &index,
+                    let search_result = crate::routes::indexes::search::search(
+                        query,
+                        index_scheduler.clone(),
+                        index_uid.clone(),
+                        request_uid,
+                        include_metadata,
+                        &progress,
+                        &*personalization_service,
+                        StatusCode::BAD_REQUEST,
                     )
-                    .with_index(query_index)?;
-                    let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
-
-                    let progress_clone = progress.clone();
-                    let (mut search_result, time_budget) = tokio::task::spawn_blocking(move || {
-                        perform_search(
-                            SearchParams {
-                                index_uid: index_uid_str.clone(),
-                                query,
-                                search_kind,
-                                retrieve_vectors: retrieve_vector,
-                                features,
-                                request_uid,
-                                include_metadata,
-                            },
-                            &index,
-                            &progress_clone,
-                        )
-                    })
                     .await
-                    .with_index(query_index)?
                     .with_index(query_index)?;
-
-                    // Apply personalization if requested
-                    if let Some(personalize) = personalize.as_ref() {
-                        search_result = personalization_service
-                            .rerank_search_results(
-                                search_result,
-                                personalize,
-                                personalize_query.as_deref(),
-                                time_budget,
-                                &progress,
-                            )
-                            .await
-                            .with_index(query_index)?;
-                    }
 
                     search_results.push(SearchResultWithIndex {
                         index_uid: index_uid.into_inner(),
