@@ -134,9 +134,8 @@ pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
 
 #[derive(Clone)]
-pub struct TimeBudget {
-    started_at: std::time::Instant,
-    budget: std::time::Duration,
+pub struct Deadline {
+    deadline: Option<std::time::Instant>,
 
     /// When testing the time budget, ensuring we did more than iteration of the bucket sort can be useful.
     /// But to avoid being flaky, the only option is to add the ability to stop after a specific number of calls instead of a `Duration`.
@@ -144,35 +143,43 @@ pub struct TimeBudget {
     stop_after: Option<(std::sync::Arc<std::sync::atomic::AtomicUsize>, usize)>,
 }
 
-impl fmt::Debug for TimeBudget {
+impl fmt::Debug for Deadline {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TimeBudget")
-            .field("started_at", &self.started_at)
-            .field("budget", &self.budget)
-            .field("left", &(self.budget - self.started_at.elapsed()))
-            .finish()
+        f.debug_struct("TimeBudget").field("deadline", &self.deadline).finish()
     }
 }
 
-impl Default for TimeBudget {
+impl Default for Deadline {
     fn default() -> Self {
-        Self::new(std::time::Duration::from_millis(1500))
+        Self::from_budget(std::time::Duration::from_millis(1500))
     }
 }
 
-impl TimeBudget {
-    pub fn new(budget: std::time::Duration) -> Self {
+impl Deadline {
+    pub fn from_budget(budget: std::time::Duration) -> Self {
+        let deadline = std::time::Instant::now().checked_add(budget);
         Self {
-            started_at: std::time::Instant::now(),
-            budget,
+            deadline,
 
             #[cfg(test)]
             stop_after: None,
         }
     }
 
-    pub fn max() -> Self {
-        Self::new(std::time::Duration::from_secs(u64::MAX))
+    pub fn never() -> Self {
+        Self {
+            deadline: None,
+            #[cfg(test)]
+            stop_after: None,
+        }
+    }
+
+    pub fn earliest(left: Self, right: Self) -> Self {
+        Self {
+            deadline: left.deadline.min(right.deadline),
+            #[cfg(test)]
+            stop_after: left.stop_after,
+        }
     }
 
     #[cfg(test)]
@@ -195,8 +202,10 @@ impl TimeBudget {
                 return false;
             }
         }
-
-        self.started_at.elapsed() > self.budget
+        let Some(deadline) = self.deadline else {
+            return false;
+        };
+        deadline < std::time::Instant::now()
     }
 }
 

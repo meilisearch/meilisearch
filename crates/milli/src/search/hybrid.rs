@@ -219,7 +219,7 @@ impl Search<'_> {
             rtxn: self.rtxn,
             index: self.index,
             semantic: self.semantic.clone(),
-            time_budget: self.time_budget.clone(),
+            deadline: self.deadline.clone(),
             ranking_score_threshold: self.ranking_score_threshold,
             locales: self.locales.clone(),
             progress: self.progress,

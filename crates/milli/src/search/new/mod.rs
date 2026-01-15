@@ -62,7 +62,7 @@ use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, TimeBudget,
+    AscDesc, Deadline, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy,
     UserError, Weight,
 };
 
@@ -662,7 +662,7 @@ pub fn execute_vector_search(
     embedder_name: &str,
     embedder: &Embedder,
     quantized: bool,
-    time_budget: TimeBudget,
+    deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     progress: &Progress,
 ) -> Result<PartialSearchResult> {
@@ -696,7 +696,7 @@ pub fn execute_vector_search(
         length,
         scoring_strategy,
         placeholder_search_logger,
-        time_budget,
+        deadline,
         ranking_score_threshold,
         exhaustive_number_hits,
         max_total_hits,
@@ -730,7 +730,7 @@ pub fn execute_search(
     words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
-    time_budget: TimeBudget,
+    deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     locales: Option<&Vec<Language>>,
     progress: &Progress,
@@ -864,7 +864,7 @@ pub fn execute_search(
             length,
             scoring_strategy,
             query_graph_logger,
-            time_budget,
+            deadline,
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
@@ -883,7 +883,7 @@ pub fn execute_search(
             length,
             scoring_strategy,
             placeholder_search_logger,
-            time_budget,
+            deadline,
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,

@@ -511,7 +511,7 @@ mod tests {
     use super::*;
     use crate::index::tests::TempIndex;
     use crate::progress::Progress;
-    use crate::{execute_search, filtered_universe, SearchContext, TimeBudget};
+    use crate::{execute_search, filtered_universe, Deadline, SearchContext};
 
     impl<'a> MatcherBuilder<'a> {
         fn new_test(rtxn: &'a heed::RoTxn<'a>, index: &'a TempIndex, query: &str) -> Self {
@@ -534,7 +534,7 @@ mod tests {
                 Some(10),
                 &mut crate::DefaultSearchLogger,
                 &mut crate::DefaultSearchLogger,
-                TimeBudget::max(),
+                Deadline::never(),
                 None,
                 None,
                 &progress,
