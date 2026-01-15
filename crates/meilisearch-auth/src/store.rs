@@ -193,7 +193,7 @@ impl HeedAuthStore {
                 Ok((uid, _)) => {
                     let (uid, _) = try_split_array_at(uid)?;
                     let uid = Uuid::from_bytes(*uid);
-                    if generate_key_as_hexa(uid, master_key).as_bytes() == encoded_key {
+                    if verify_key_matches(uid, master_key, encoded_key) {
                         Some(uid)
                     } else {
                         None
@@ -355,6 +355,25 @@ pub fn generate_key_as_hexa(uid: Uuid, master_key: &[u8]) -> String {
     format!("{:x}", result.into_bytes())
 }
 
+/// Verifies if an encoded API key matches the expected HMAC for the given uid.
+/// Uses constant-time comparison to prevent timing attacks (CVE mitigation).
+pub fn verify_key_matches(uid: Uuid, master_key: &[u8], encoded_key: &[u8]) -> bool {
+    // Decode hex-encoded key to raw bytes
+    let Ok(key_bytes) = hex::decode(encoded_key) else {
+        return false;
+    };
+
+    // Compute expected HMAC
+    let mut uid_buffer = [0; Hyphenated::LENGTH];
+    let uid_str = uid.hyphenated().encode_lower(&mut uid_buffer);
+
+    let mut mac = Hmac::<Sha256>::new_from_slice(master_key).unwrap();
+    mac.update(uid_str.as_bytes());
+
+    // verify_slice uses constant-time comparison internally
+    mac.verify_slice(&key_bytes).is_ok()
+}
+
 /// Divides one slice into two at an index, returns `None` if mid is out of bounds.
 pub fn try_split_at<T>(slice: &[T], mid: usize) -> Option<(&[T], &[T])> {
     if mid <= slice.len() {
@@ -373,4 +392,63 @@ where
     let (head, tail) = try_split_at(slice, N)?;
     let head = head.try_into().ok()?;
     Some((head, tail))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verify_key_matches_valid() {
+        let uid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let master_key = b"my-secret-master-key";
+
+        // Generate a valid key
+        let valid_key = generate_key_as_hexa(uid, master_key);
+
+        // Should match
+        assert!(verify_key_matches(uid, master_key, valid_key.as_bytes()));
+    }
+
+    #[test]
+    fn test_verify_key_matches_invalid_key() {
+        let uid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let master_key = b"my-secret-master-key";
+
+        // Wrong key (valid hex but wrong value)
+        let wrong_key = "0000000000000000000000000000000000000000000000000000000000000000";
+        assert!(!verify_key_matches(uid, master_key, wrong_key.as_bytes()));
+
+        // Invalid hex
+        assert!(!verify_key_matches(uid, master_key, b"not-valid-hex"));
+
+        // Wrong length
+        assert!(!verify_key_matches(uid, master_key, b"deadbeef"));
+    }
+
+    #[test]
+    fn test_verify_key_matches_wrong_uid() {
+        let uid1 = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let uid2 = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440001").unwrap();
+        let master_key = b"my-secret-master-key";
+
+        // Generate key for uid1
+        let key = generate_key_as_hexa(uid1, master_key);
+
+        // Should not match uid2
+        assert!(!verify_key_matches(uid2, master_key, key.as_bytes()));
+    }
+
+    #[test]
+    fn test_verify_key_matches_wrong_master_key() {
+        let uid = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let master_key1 = b"master-key-1";
+        let master_key2 = b"master-key-2";
+
+        // Generate key with master_key1
+        let key = generate_key_as_hexa(uid, master_key1);
+
+        // Should not match with master_key2
+        assert!(!verify_key_matches(uid, master_key2, key.as_bytes()));
+    }
 }
