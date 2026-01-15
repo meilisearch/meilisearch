@@ -196,7 +196,6 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
                     let (_word, fid) =
                         StrBEU16Codec::bytes_decode(key_bytes).map_err(heed::Error::Decoding)?;
 
-                    // TODO optimize allocations
                     if fids_to_delete.contains(&fid) {
                         keys_to_delete.push(key_bytes.to_vec().into_boxed_slice());
                     }
