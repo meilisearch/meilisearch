@@ -6,7 +6,7 @@ use obkv::KvReaderU16;
 
 use super::helpers::{
     create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters,
-    MergeDeladdCboRoaringBitmaps,
+    MergeDeladdDeCboRoaringBitmaps,
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -28,7 +28,7 @@ pub fn extract_word_position_docids<R: io::Read + io::Seek>(
 
     let mut word_position_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        MergeDeladdCboRoaringBitmaps,
+        MergeDeladdDeCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,
@@ -100,7 +100,7 @@ fn words_position_into_sorter(
     key_buffer: &mut Vec<u8>,
     del_word_positions: &BTreeSet<(u16, Vec<u8>)>,
     add_word_positions: &BTreeSet<(u16, Vec<u8>)>,
-    word_position_docids_sorter: &mut grenad::Sorter<MergeDeladdCboRoaringBitmaps>,
+    word_position_docids_sorter: &mut grenad::Sorter<MergeDeladdDeCboRoaringBitmaps>,
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};

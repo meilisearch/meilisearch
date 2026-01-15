@@ -4,7 +4,7 @@ use std::fmt::Write;
 use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
 use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
-use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{DeCboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Details, Kind, Status, Task};
 use meilisearch_types::versioning::{self, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use roaring::RoaringBitmap;
@@ -188,7 +188,7 @@ pub fn snapshot_all_batches(rtxn: &RoTxn, db: Database<BEU32, SerdeJson<Batch>>)
 
 pub fn snapshot_batches_to_tasks_mappings(
     rtxn: &RoTxn,
-    db: Database<BEU32, CboRoaringBitmapCodec>,
+    db: Database<BEU32, DeCboRoaringBitmapCodec>,
 ) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
@@ -199,7 +199,7 @@ pub fn snapshot_batches_to_tasks_mappings(
     snap
 }
 
-pub fn snapshot_date_db(rtxn: &RoTxn, db: Database<BEI128, CboRoaringBitmapCodec>) -> String {
+pub fn snapshot_date_db(rtxn: &RoTxn, db: Database<BEI128, DeCboRoaringBitmapCodec>) -> String {
     let mut snap = String::new();
     let iter = db.iter(rtxn).unwrap();
     for next in iter {
