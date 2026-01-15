@@ -12,6 +12,7 @@ use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
 use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
+use meilisearch::mcp::McpSessionStore;
 use meilisearch::{create_app, Opt, ServicesData, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
 use tracing::level_filters::LevelFilter;
@@ -157,20 +158,18 @@ impl Service {
             .map(PersonalizationService::cohere)
             .unwrap_or_else(PersonalizationService::disabled);
 
-        actix_web::test::init_service(create_app(
-            ServicesData {
-                index_scheduler: self.index_scheduler.clone().into(),
-                auth: self.auth.clone().into(),
-                search_queue: Data::new(search_queue),
-                personalization_service: Data::new(personalization_service),
-                logs_route_handle: Data::new(route_layer_handle),
-                logs_stderr_handle: Data::new(stderr_layer_handle),
-                analytics: Data::new(Analytics::no_analytics()),
-            },
-            self.options.clone(),
-            true,
-        ))
-        .await
+        let services_data = ServicesData {
+            index_scheduler: self.index_scheduler.clone().into(),
+            auth: self.auth.clone().into(),
+            search_queue: Data::new(search_queue),
+            personalization_service: Data::new(personalization_service),
+            logs_route_handle: Data::new(route_layer_handle),
+            logs_stderr_handle: Data::new(stderr_layer_handle),
+            analytics: Data::new(Analytics::no_analytics()),
+            mcp_session_store: Data::new(McpSessionStore::new()),
+        };
+
+        actix_web::test::init_service(create_app(services_data, self.options.clone(), true)).await
     }
 
     pub async fn request(&self, mut req: test::TestRequest) -> (Value, StatusCode) {
