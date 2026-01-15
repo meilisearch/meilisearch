@@ -68,6 +68,7 @@ impl MultiSearchAggregator {
             ranking_score_threshold: _,
             locales: _,
             personalize: _,
+            use_network: _,
         } in &federated_search.queries
         {
             if let Some(federation_options) = federation_options {
