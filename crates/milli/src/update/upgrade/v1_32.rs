@@ -161,9 +161,8 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
 ) -> Result<LinkedList<Vec<Result<Vec<Box<[u8]>>>>>> {
     let fst = index.words_fst(wtxn)?;
 
-    // TODO get this number from the CLI parameters
     let threads_count = rayon::current_num_threads() * 4;
-    let keys_by_thread = (fst.len() / threads_count) + (fst.len() % threads_count);
+    let keys_by_thread = fst.len().div_ceil(threads_count);
 
     // We iterate over the FST keys that represents the word dictionary and
     // roughly represents what can be found in the database we are cleaning.
