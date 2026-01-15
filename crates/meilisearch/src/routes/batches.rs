@@ -65,7 +65,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 },
                 "duration": "PT0.364788S",
                 "startedAt": "2024-12-10T15:48:49.672141Z",
-                "finishedAt": "2024-12-10T15:48:50.036929Z"
+                "finishedAt": "2024-12-10T15:48:50.036929Z",
+                "batchStrategy": "batched all enqueued tasks"
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(

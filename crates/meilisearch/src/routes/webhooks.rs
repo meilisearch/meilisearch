@@ -122,6 +122,9 @@ pub(super) struct WebhookResults {
     results: Vec<WebhookWithMetadataRedactedAuthorization>,
 }
 
+/// List webhooks
+///
+/// Get the list of all registered webhooks.
 #[utoipa::path(
     get,
     path = "",
@@ -307,6 +310,9 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
     Ok(())
 }
 
+/// Get a webhook
+///
+/// Get a single webhook by its UUID.
 #[utoipa::path(
     get,
     path = "/{uuid}",
@@ -342,6 +348,9 @@ async fn get_webhook(
     Ok(HttpResponse::Ok().json(webhook))
 }
 
+/// Create a webhook
+///
+/// Create a new webhook to receive task notifications.
 #[utoipa::path(
     post,
     path = "",
@@ -400,6 +409,9 @@ async fn post_webhook(
     Ok(HttpResponse::Created().json(response))
 }
 
+/// Update a webhook
+///
+/// Update an existing webhook's URL or headers.
 #[utoipa::path(
     patch,
     path = "/{uuid}",
@@ -452,6 +464,9 @@ async fn patch_webhook(
     Ok(HttpResponse::Ok().json(response))
 }
 
+/// Delete a webhook
+///
+/// Delete an existing webhook by its UUID.
 #[utoipa::path(
     delete,
     path = "/{uuid}",

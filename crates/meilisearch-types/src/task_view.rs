@@ -31,7 +31,7 @@ pub struct TaskView {
     /// The unique identifier of the batch that processed this task. Multiple
     /// tasks may share the same batch UID if they were processed together
     /// for efficiency. This is `null` for tasks that haven't been processed.
-    #[schema(value_type = Option<u32>, example = json!("movies"))]
+    #[schema(value_type = Option<u32>, example = json!(12))]
     pub batch_uid: Option<BatchId>,
     /// The unique identifier of the index this task operates on. This is
     /// `null` for global tasks like `dumpCreation` or `taskDeletion` that
@@ -55,6 +55,10 @@ pub struct TaskView {
     /// Contains type-specific information about the task, such as the number
     /// of documents processed, settings that were applied, or filters that
     /// were used. The structure varies depending on the task type.
+
+    // Note: We use Object here because DetailsView has a complex schema with flattened
+    // Settings that utoipa doesn't handle correctly (allOf with additionalProperties: false).
+    #[schema(value_type = Option<Object>)]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<DetailsView>)]
     pub details: Option<DetailsView>,

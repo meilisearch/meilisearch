@@ -356,7 +356,7 @@ pub struct Settings<T> {
     /// improving search quality for non-English text.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsLocalizedAttributes>)]
-    #[schema(value_type = Option<Vec<LocalizedAttributesRuleView>>, example = json!(50))]
+    #[schema(value_type = Option<Vec<LocalizedAttributesRuleView>>, example = json!([{"locales": ["jpn"], "attributePatterns": ["*_ja"]}]))]
     pub localized_attributes: Setting<Vec<LocalizedAttributesRuleView>>,
 
     /// When `true`, enables facet search which allows users to search within

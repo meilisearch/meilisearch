@@ -766,7 +766,7 @@ pub struct UpdateDocumentsQuery {
     /// new ones. Documents that don't already exist in the index will be
     /// ignored. This is useful for partial updates where you only want to
     /// modify existing records without adding new ones.
-    #[param(example = "true")]
+    #[param(example = true)]
     #[deserr(default, try_from(&String) = from_string_skip_creation -> DeserrQueryParamError<InvalidSkipCreation>, error = DeserrQueryParamError<InvalidSkipCreation>)]
     pub skip_creation: Option<bool>,
 }
