@@ -7,6 +7,7 @@ use heed::types::{Bytes, DecodeIgnore, Unit};
 use heed::{BytesDecode, Database, RwTxn};
 use rand::SeedableRng as _;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use super::UpgradeIndex;
 use crate::heed_codec::StrBEU16Codec;
@@ -76,6 +77,9 @@ pub fn delete_old_fid_based_databases_from_fids(
     fids_to_delete: &BTreeSet<u16>,
     progress: &Progress,
 ) -> Result<()> {
+    let bounds = compute_bounds(wtxn, index)?;
+    let pool = ThreadPoolBuilder::new().num_threads(bounds.len().saturating_sub(1)).build()?;
+
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
     let deleted = delete_old_word_fid_docids(
         wtxn,
@@ -83,6 +87,8 @@ pub fn delete_old_fid_based_databases_from_fids(
         index.word_fid_docids.remap_data_type(),
         must_stop_processing,
         fids_to_delete,
+        &bounds[..],
+        &pool,
     )?;
     tracing::debug!("We just deleted {deleted} old word-fid-docids");
 
@@ -96,6 +102,8 @@ pub fn delete_old_fid_based_databases_from_fids(
         index.word_prefix_fid_docids.remap_data_type(),
         must_stop_processing,
         fids_to_delete,
+        &bounds[..],
+        &pool,
     )?;
     tracing::debug!("We just deleted {deleted} old word-prefix-fid-docids");
 
@@ -108,8 +116,11 @@ fn delete_old_word_fid_docids<'txn>(
     database: Database<StrBEU16Codec, Unit>,
     must_stop_processing: &MustStopProcessing,
     fids_to_delete: &BTreeSet<u16>,
+    bounds: &[Option<Box<[u8]>>],
+    pool: &ThreadPool,
 ) -> crate::Result<usize> {
-    let results = fetch_keys_to_delete_in_parallel(wtxn, index, database, fids_to_delete)?;
+    let results =
+        fetch_keys_to_delete_in_parallel(wtxn, index, database, fids_to_delete, bounds, pool)?;
 
     let database = database.remap_key_type::<Bytes>();
     let mut count = 0;
@@ -158,50 +169,10 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     index: &Index,
     database: Database<StrBEU16Codec, Unit>,
     fids_to_delete: &BTreeSet<u16>,
+    bounds: &[Option<Box<[u8]>>],
+    pool: &ThreadPool,
 ) -> Result<LinkedList<Vec<Result<Vec<Box<[u8]>>>>>> {
-    let fst = index.words_fst(wtxn)?;
-
-    let threads_count = rayon::current_num_threads() * 4;
-    let keys_by_thread = fst.len().div_ceil(threads_count);
-
-    // We iterate over the FST keys that represents the word dictionary and
-    // roughly represents what can be found in the database we are cleaning.
-    //
-    // The database we are cleaning contains different words from the word
-    // dictionary as it contains words from fields that are not indexed too
-    // but it is mixed with indexed ones.
-    //
-    // We then divide equally the entries of the database to clean by
-    // selecting ranges of keys that will be processed by each thread. We
-    // also make sure not to specify the first and last keys to make sure
-    // that if the fields to clean have keys that are higher or lower than
-    // the first or last keys in the word dictionary we still find them.
-
-    // Here We make sure to start with an unbounded
-    // left bound for the first range
-    let mut bounds = vec![None];
-    let mut stream = fst.stream();
-    let mut count = 0;
-    while let Some(key) = stream.next() {
-        let is_first = count == 0;
-        let is_last = count == fst.len() - 1;
-
-        // In this loop we make sure to account for every bounds
-        // to divide the work between threads but not send the bounds
-        // for the beginning or the end of the word dictionary
-        if count % keys_by_thread == 0 && !(is_first || is_last) {
-            bounds.push(Some(key.to_vec()));
-        }
-
-        count += 1;
-    }
-
-    // We now push the last bound that
-    // defines the end of the last range
-    bounds.push(None);
-
-    // We create a thread pool and generate enough read transactions for each one of them.
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(threads_count).build()?;
+    // We generate enough read transactions for each thread.
     let rtxns = iter::repeat_with(|| index.env.nested_read_txn(wtxn))
         .take(bounds.len().saturating_sub(1))
         .collect::<heed::Result<Vec<_>>>()?;
@@ -237,6 +208,56 @@ fn fetch_keys_to_delete_in_parallel<'txn>(
     });
 
     Ok(results)
+}
+
+/// Use the FST to balance the work between threads
+/// by generating appropriate word bounds.
+fn compute_bounds<'txn>(
+    wtxn: &mut RwTxn<'txn>,
+    index: &Index,
+) -> crate::Result<Vec<Option<Box<[u8]>>>> {
+    let fst = index.words_fst(wtxn)?;
+
+    let threads_count = rayon::current_num_threads() * 4;
+    let keys_by_thread = fst.len().div_ceil(threads_count);
+
+    // We iterate over the FST keys that represents the word dictionary and
+    // roughly represents what can be found in the database we are cleaning.
+    //
+    // The database we are cleaning contains different words from the word
+    // dictionary as it contains words from fields that are not indexed too
+    // but it is mixed with indexed ones.
+    //
+    // We then divide equally the entries of the database to clean by
+    // selecting ranges of keys that will be processed by each thread. We
+    // also make sure not to specify the first and last keys to make sure
+    // that if the fields to clean have keys that are higher or lower than
+    // the first or last keys in the word dictionary we still find them.
+
+    // Here We make sure to start with an unbounded
+    // left bound for the first range
+    let mut bounds = vec![None];
+    let mut stream = fst.stream();
+    let mut count = 0;
+    while let Some(key) = stream.next() {
+        let is_first = count == 0;
+        let is_last = count == fst.len() - 1;
+
+        // In this loop we make sure to account for every bounds
+        // to divide the work between threads but not send the bounds
+        // for the beginning or the end of the word dictionary
+        if count % keys_by_thread == 0 && !(is_first || is_last) {
+            bounds.push(Some(key.to_vec().into_boxed_slice()));
+        }
+
+        count += 1;
+    }
+
+    // We now push the last bound that
+    // defines the end of the last range
+    bounds.push(None);
+
+    Ok(bounds)
 }
 
 /// Rebuilds the hannoy graph and do not touch to the embeddings.
