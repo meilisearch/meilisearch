@@ -1,4 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, LinkedList};
+use std::iter;
+use std::ops::Bound;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Once, RwLock};
 use std::thread::{self, Builder};
@@ -8,8 +10,10 @@ use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{IndexOperations, PayloadStats};
 use hashbrown::HashMap;
-use heed::types::DecodeIgnore;
+use fst::Streamer as _;
+use heed::types::{Bytes, DecodeIgnore, Unit};
 use heed::{BytesDecode, Database, RoTxn, RwTxn};
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 pub use partial_dump::PartialDump;
 pub use post_processing::recompute_word_fst_from_word_docids_database;
 pub use settings_changes::settings_change_extract;
@@ -556,47 +560,65 @@ pub fn delete_old_fid_based_databases_from_fids<MSP>(
 where
     MSP: Fn() -> bool + Sync,
 {
+    let bounds = compute_bounds(wtxn, index)?;
+
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
-    delete_old_word_fid_docids(wtxn, index.word_fid_docids, must_stop_processing, fids_to_delete)?;
+    let deleted = delete_old_word_fid_docids(
+        wtxn,
+        index,
+        index.word_fid_docids.remap_data_type(),
+        must_stop_processing,
+        fids_to_delete,
+        &bounds[..],
+    )?;
+    tracing::debug!("We just deleted {deleted} old word-fid-docids");
 
     progress.update_progress(SettingsIndexerStep::DeletingOldFidWordCountDocids);
     delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, fids_to_delete)?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldWordPrefixFidDocids);
-    delete_old_word_fid_docids(
+    let deleted = delete_old_word_fid_docids(
         wtxn,
-        index.word_prefix_fid_docids,
+        index,
+        index.word_prefix_fid_docids.remap_data_type(),
         must_stop_processing,
         fids_to_delete,
+        &bounds[..],
     )?;
+    tracing::debug!("We just deleted {deleted} old word-prefix-fid-docids");
 
     Ok(())
 }
 
-fn delete_old_word_fid_docids<'txn, MSP, DC>(
-    wtxn: &mut RwTxn<'txn>,
-    database: Database<StrBEU16Codec, DC>,
+fn delete_old_word_fid_docids<MSP>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    database: Database<StrBEU16Codec, Unit>,
     must_stop_processing: &MSP,
     fids_to_delete: &BTreeSet<u16>,
-) -> Result<(), Error>
+    bounds: &[Option<Box<[u8]>>],
+) -> crate::Result<usize>
 where
     MSP: Fn() -> bool + Sync,
-    DC: BytesDecode<'txn>,
 {
-    let mut iter = database.iter_mut(wtxn)?.remap_data_type::<DecodeIgnore>();
-    while let Some(((_word, fid), ())) = iter.next().transpose()? {
-        // TODO should I call it that often?
+    let results =
+        fetch_keys_to_delete_in_parallel(wtxn, index, database, fids_to_delete, bounds)?;
+
+    let database = database.remap_key_type::<Bytes>();
+    let mut count = 0;
+    for result in results.into_iter().flatten() {
+        let keys = result?;
         if must_stop_processing() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
-
-        if fids_to_delete.contains(&fid) {
-            // safety: We don't keep any references to the data.
-            unsafe { iter.del_current()? };
-        }
+        keys.into_iter().try_for_each(|key| {
+            database.delete(wtxn, &key)?;
+            count += 1;
+            Ok(()) as Result<()>
+        })?;
     }
 
-    Ok(())
+    Ok(count)
 }
 
 fn delete_old_fid_word_count_docids<MSP>(
@@ -623,6 +645,74 @@ where
     }
 
     Ok(())
+}
+
+/// Fetches keys to delete in parallel using the provided bounds.
+fn fetch_keys_to_delete_in_parallel(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    database: Database<StrBEU16Codec, Unit>,
+    fids_to_delete: &BTreeSet<u16>,
+    bounds: &[Option<Box<[u8]>>],
+) -> Result<LinkedList<Vec<Result<Vec<Box<[u8]>>>>>> {
+    let rtxns = iter::repeat_with(|| index.env.nested_read_txn(wtxn))
+        .take(bounds.len().saturating_sub(1))
+        .collect::<heed::Result<Vec<_>>>()?;
+
+    let results = rtxns
+        .into_par_iter()
+        .zip_eq(bounds.windows(2).collect::<Vec<_>>())
+        .map(|(rtxn, win)| {
+            let bound = match [win[0].as_deref(), win[1].as_deref()] {
+                [None, None] => (Bound::Unbounded, Bound::Unbounded),
+                [None, Some(end)] => (Bound::Unbounded, Bound::Excluded(end)),
+                [Some(start), None] => (Bound::Included(start), Bound::Unbounded),
+                [Some(start), Some(end)] => (Bound::Included(start), Bound::Excluded(end)),
+            };
+
+            let mut keys_to_delete = Vec::new();
+            let iter = database.remap_types::<Bytes, DecodeIgnore>().range(&rtxn, &bound);
+            for result in iter? {
+                let (key_bytes, ()) = result?;
+                let (_word, fid) =
+                    StrBEU16Codec::bytes_decode(key_bytes).map_err(heed::Error::Decoding)?;
+
+                if fids_to_delete.contains(&fid) {
+                    keys_to_delete.push(key_bytes.to_vec().into_boxed_slice());
+                }
+            }
+
+            Ok(keys_to_delete) as crate::Result<_>
+        })
+        .collect_vec_list();
+
+    Ok(results)
+}
+
+/// Uses the FST to balance work between threads by generating word bounds.
+fn compute_bounds(wtxn: &mut RwTxn<'_>, index: &Index) -> crate::Result<Vec<Option<Box<[u8]>>>> {
+    let fst = index.words_fst(wtxn)?;
+
+    let threads_count = rayon::current_num_threads() * 4;
+    let keys_by_thread = fst.len().div_ceil(threads_count);
+
+    let mut bounds = vec![None];
+    let mut stream = fst.stream();
+    let mut count = 0;
+    while let Some(key) = stream.next() {
+        let is_first = count == 0;
+        let is_last = count == fst.len() - 1;
+
+        if count % keys_by_thread == 0 && !(is_first || is_last) {
+            bounds.push(Some(key.to_vec().into_boxed_slice()));
+        }
+
+        count += 1;
+    }
+
+    bounds.push(None);
+
+    Ok(bounds)
 }
 
 fn indexer_memory_settings(
