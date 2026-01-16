@@ -196,7 +196,7 @@ async fn run_http(
     if let Some(config) = opt_clone.get_ssl_config()? {
         http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
     } else {
-        http_server.bind(&opt_clone.http_addr)?.run().await?;
+        http_server.bind_auto_h2c(&opt_clone.http_addr)?.run().await?;
     }
     Ok(())
 }
