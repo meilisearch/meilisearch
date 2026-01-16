@@ -1,16 +1,6 @@
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 
-use super::{
-    get_task_id, Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
-};
-use crate::analytics::{Aggregate, Analytics};
-use crate::extractors::authentication::policies::*;
-use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
-use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
-use crate::routes::is_dry_run;
-use crate::Opt;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
@@ -32,6 +22,17 @@ use serde::{Serialize, Serializer};
 use time::OffsetDateTime;
 use tracing::debug;
 use utoipa::{IntoParams, OpenApi, ToSchema};
+
+use super::{
+    get_task_id, Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
+};
+use crate::analytics::{Aggregate, Analytics};
+use crate::extractors::authentication::policies::*;
+use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::extractors::sequential_extractor::SeqHandler;
+use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
+use crate::routes::is_dry_run;
+use crate::Opt;
 
 pub mod compact;
 pub mod documents;
