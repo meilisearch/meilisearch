@@ -187,18 +187,25 @@ pub enum KindWithContent {
     NetworkTopologyChange(network::NetworkTopologyChange),
 }
 
+/// Index swap operation
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct IndexSwap {
+    /// Pair of index UIDs to swap
+    #[schema(value_type = Vec<String>, example = json!(["indexA", "indexB"]))]
     pub indexes: (String, String),
+    /// Whether this is a rename operation
     #[serde(default)]
     pub rename: bool,
 }
 
+/// Export settings for an index
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
+    /// Filter expression to select documents for export
     pub filter: Option<Value>,
+    /// Whether to override settings on the destination index
     pub override_settings: bool,
 }
 
@@ -607,7 +614,7 @@ impl std::error::Error for ParseTaskStatusError {}
     ToSchema,
 )]
 #[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase", example = json!(enum_iterator::all::<Kind>().collect::<Vec<_>>()))]
+#[schema(rename_all = "camelCase", example = "documentAdditionOrUpdate")]
 pub enum Kind {
     DocumentAdditionOrUpdate,
     DocumentEdition,

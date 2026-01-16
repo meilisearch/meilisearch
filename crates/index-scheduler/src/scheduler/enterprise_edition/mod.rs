@@ -6,8 +6,6 @@
 use std::time::Duration;
 
 use bumpalo::Bump;
-use roaring::RoaringBitmap;
-
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
@@ -16,6 +14,7 @@ use meilisearch_types::milli::{self};
 use meilisearch_types::network::Remote;
 use meilisearch_types::tasks::network::{NetworkTopologyState, Origin};
 use meilisearch_types::tasks::{KindWithContent, Status, Task};
+use roaring::RoaringBitmap;
 
 use super::create_batch::Batch;
 use crate::scheduler::process_batch::ProcessBatchInfo;
@@ -389,8 +388,9 @@ impl IndexScheduler {
         opts: meilisearch_types::milli::update::S3SnapshotOptions,
         mut tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {
-        use meilisearch_types::milli::update::S3SnapshotOptions;
         use std::ffi::OsStr;
+
+        use meilisearch_types::milli::update::S3SnapshotOptions;
 
         let S3SnapshotOptions {
             s3_bucket_url,

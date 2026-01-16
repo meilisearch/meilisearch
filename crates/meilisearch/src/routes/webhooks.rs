@@ -56,15 +56,18 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// Configuration for a webhook endpoint
 #[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_webhook)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookSettings {
+    /// URL endpoint to call when tasks complete
     #[schema(value_type = Option<String>, example = "https://your.site/on-tasks-completed")]
     #[deserr(default, error = DeserrJsonError<InvalidWebhookUrl>)]
     #[serde(default)]
     url: Setting<String>,
+    /// HTTP headers to include in webhook requests
     #[schema(value_type = Option<BTreeMap<String, String>>, example = json!({"Authorization":"Bearer a-secret-token"}))]
     #[deserr(default, error = DeserrJsonError<InvalidWebhookHeaders>)]
     #[serde(default)]
@@ -87,12 +90,16 @@ fn deny_immutable_fields_webhook(
     }
 }
 
+/// A webhook with metadata and redacted authorization headers
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookWithMetadataRedactedAuthorization {
+    /// Unique identifier of the webhook
     uuid: Uuid,
+    /// Whether the webhook can be edited
     is_editable: bool,
+    /// Webhook settings
     #[schema(value_type = WebhookSettings)]
     #[serde(flatten)]
     webhook: Webhook,
@@ -105,12 +112,19 @@ impl WebhookWithMetadataRedactedAuthorization {
     }
 }
 
+/// Response containing a list of all registered webhooks
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WebhookResults {
+    /// Array of all webhooks configured in this Meilisearch instance. Each
+    /// webhook includes its UUID, URL, headers (with authorization values
+    /// redacted), and editability status.
     results: Vec<WebhookWithMetadataRedactedAuthorization>,
 }
 
+/// List webhooks
+///
+/// Get the list of all registered webhooks.
 #[utoipa::path(
     get,
     path = "",
@@ -296,6 +310,9 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
     Ok(())
 }
 
+/// Get a webhook
+///
+/// Get a single webhook by its UUID.
 #[utoipa::path(
     get,
     path = "/{uuid}",
@@ -331,6 +348,9 @@ async fn get_webhook(
     Ok(HttpResponse::Ok().json(webhook))
 }
 
+/// Create a webhook
+///
+/// Create a new webhook to receive task notifications.
 #[utoipa::path(
     post,
     path = "",
@@ -389,6 +409,9 @@ async fn post_webhook(
     Ok(HttpResponse::Created().json(response))
 }
 
+/// Update a webhook
+///
+/// Update an existing webhook's URL or headers.
 #[utoipa::path(
     patch,
     path = "/{uuid}",
@@ -441,6 +464,9 @@ async fn patch_webhook(
     Ok(HttpResponse::Ok().json(response))
 }
 
+/// Delete a webhook
+///
+/// Delete an existing webhook by its UUID.
 #[utoipa::path(
     delete,
     path = "/{uuid}",

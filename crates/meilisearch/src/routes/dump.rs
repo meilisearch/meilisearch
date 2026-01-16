@@ -54,7 +54,7 @@ crate::empty_analytics!(DumpAnalytics, "Dump Created");
                 "taskUid": 0,
                 "indexUid": null,
                 "status": "enqueued",
-                "type": "DumpCreation",
+                "type": "dumpCreation",
                 "enqueuedAt": "2021-01-01T09:39:00.000000Z"
             }
         )),

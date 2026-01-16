@@ -1,9 +1,11 @@
-use std::{collections::HashSet, process::Stdio};
+use std::collections::HashSet;
+use std::process::Stdio;
 
 use anyhow::Context;
 use clap::Parser;
 use semver::{Prerelease, Version};
-use xtask::{bench::BenchArgs, test::TestArgs};
+use xtask::bench::BenchArgs;
+use xtask::test::TestArgs;
 
 /// This is the version of the crate but also the current Meilisearch version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

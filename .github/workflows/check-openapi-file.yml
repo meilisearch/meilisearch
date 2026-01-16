@@ -1,0 +1,61 @@
+name: Check OpenAPI file
+
+on:
+  workflow_dispatch:
+  pull_request:
+  schedule:
+    # Run daily at 5 AM UTC
+    - cron: '0 5 * * *'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  check-openapi:
+    name: Check OpenAPI specification
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.91.1
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.8.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenAPI tools
+        run: npm install -g @apidevtools/swagger-cli @stoplight/spectral-cli
+
+      - name: Check all routes have summaries
+        run: cargo run --release -p openapi-generator -- --check-summaries
+
+      - name: Check for duplicate or malformed paths
+        run: cargo run --release -p openapi-generator -- --check-paths
+
+      - name: Generate OpenAPI files
+        run: |
+          cargo run --release -p openapi-generator -- --pretty --debug --output /tmp/meilisearch-openapi.json
+          cargo run --release -p openapi-generator -- --pretty --debug --with-mintlify-code-samples --output /tmp/meilisearch-openapi-mintlify.json
+
+      # Validates that the OpenAPI files are syntactically correct and conform to the OpenAPI specification
+      - name: Validate OpenAPI schema
+        run: |
+          swagger-cli validate /tmp/meilisearch-openapi.json
+          swagger-cli validate /tmp/meilisearch-openapi-mintlify.json
+
+      # Lints the OpenAPI files for best practices (descriptions, examples, naming conventions, etc.)
+      # Ruleset is defined in crates/openapi-generator/.spectral.yaml
+      - name: Lint OpenAPI specification
+        run: |
+          spectral lint /tmp/meilisearch-openapi.json --ruleset crates/openapi-generator/.spectral.yaml
+          spectral lint /tmp/meilisearch-openapi-mintlify.json --ruleset crates/openapi-generator/.spectral.yaml

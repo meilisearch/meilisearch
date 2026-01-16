@@ -117,7 +117,7 @@ With swagger:
 With the internal crate:
 ```bash
 cd crates/openapi-generator
-cargo run --release -- --pretty --output meilisearch.json
+cargo run --release -- --pretty
 ```
 
 ### Logging

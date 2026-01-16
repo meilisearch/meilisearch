@@ -1,5 +1,6 @@
-use clap::Parser;
 use std::path::PathBuf;
+
+use clap::Parser;
 
 pub fn default_asset_folder() -> String {
     "./bench/assets/".into()
