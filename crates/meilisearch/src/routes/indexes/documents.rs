@@ -1226,7 +1226,6 @@ async fn document_addition(
         }
     };
 
-
     //Persisting the file here after transaction commits.
     let persisted_file = update_file.persist()?;
 
