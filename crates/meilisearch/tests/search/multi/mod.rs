@@ -2732,6 +2732,366 @@ async fn federation_limit_offset() {
 }
 
 #[actix_rt::test]
+async fn federation_page_hits_per_page() {
+    let server = Server::new_shared();
+    let index = shared_index_with_documents().await;
+    let nested_index = shared_index_with_nested_documents().await;
+    let score_index = shared_index_with_score_documents().await;
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"hitsPerPage": 1}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [
+            {
+              "title": "Gläss",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 0,
+                "weightedRankingScore": 1.0
+              }
+            }
+          ],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 1,
+          "page": 1,
+          "totalPages": 12,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"page": 2, "hitsPerPage": 5}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [
+            {
+              "title": "Escape Room",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 3,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "id": 951,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 4,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Batman the dark knight returns: Part 1",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Batman the dark knight returns: Part 2",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "id": 654,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 2,
+                "weightedRankingScore": 0.7803030303030303
+              }
+            }
+          ],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 5,
+          "page": 2,
+          "totalPages": 3,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"page": 12}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 20,
+          "page": 12,
+          "totalPages": 1,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"page": 0}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 20,
+          "page": 0,
+          "totalPages": 1,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+}
+
+#[actix_rt::test]
+async fn federation_page_overrides_limit_offset() {
+    let server = Server::new_shared();
+    let index = shared_index_with_documents().await;
+    let nested_index = shared_index_with_nested_documents().await;
+    let score_index = shared_index_with_score_documents().await;
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"limit": 1, "hitsPerPage": 2}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [
+            {
+              "title": "Gläss",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 0,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "id": 852,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 2,
+                "weightedRankingScore": 1.0
+              }
+            }
+          ],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 2,
+          "page": 1,
+          "totalPages": 6,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"offset": 2, "page": 1}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [
+            {
+              "title": "Gläss",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 0,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "id": 852,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 2,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "title": "Batman",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "title": "Batman Returns",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 10,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "title": "Captain Marvel",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 1,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Escape Room",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 3,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "id": 951,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 4,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Batman the dark knight returns: Part 1",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Batman the dark knight returns: Part 2",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "id": 654,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 2,
+                "weightedRankingScore": 0.7803030303030303
+              }
+            },
+            {
+              "title": "Badman",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 8,
+                "weightedRankingScore": 0.5
+              }
+            },
+            {
+              "title": "How to Train Your Dragon: The Hidden World",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 6,
+                "weightedRankingScore": 0.4166666666666667
+              }
+            }
+          ],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 20,
+          "page": 1,
+          "totalPages": 1,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+}
+
+#[actix_rt::test]
 async fn federation_formatting() {
     let server = Server::new_shared();
     let index = shared_index_with_documents().await;
