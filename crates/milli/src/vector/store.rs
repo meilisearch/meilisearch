@@ -1,3 +1,6 @@
+use std::env::{self, VarError};
+use std::str::FromStr;
+
 use hannoy::distances::{Cosine, Hamming};
 use hannoy::{ItemId, Searched};
 use heed::{RoTxn, RwTxn, Unspecified};
@@ -13,6 +16,10 @@ use crate::Deadline;
 const HANNOY_EF_CONSTRUCTION: usize = 125;
 const HANNOY_M: usize = 16;
 const HANNOY_M0: usize = 32;
+
+const MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW: &str = "MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW";
+const MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW_RATIO: &str =
+    "MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW_RATIO";
 
 #[derive(
     Debug,
@@ -995,6 +1002,11 @@ impl VectorStore {
             let reader = reader?;
             let mut searcher = reader.nns(limit);
             searcher.ef_search((limit * 10).max(100)); // TODO find better ef
+            searcher.linear_below(env_var_or(MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW, 300_000));
+            searcher.linear_below_ratio(env_var_or(
+                MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW_RATIO,
+                0.1, // 10%
+            ));
             if let Some(filter) = filter {
                 searcher.candidates(filter);
             }
@@ -1050,6 +1062,11 @@ impl VectorStore {
             let reader = reader?;
             let mut searcher = reader.nns(limit);
             searcher.ef_search((limit * 10).max(100)); // TODO find better ef
+            searcher.linear_below(env_var_or(MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW, 300_000));
+            searcher.linear_below_ratio(env_var_or(
+                MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW_RATIO,
+                0.1, // 10%
+            ));
             if let Some(filter) = filter {
                 searcher.candidates(filter);
             }
@@ -1243,4 +1260,20 @@ fn vector_store_range_for_embedder(embedder_id: u8) -> impl Iterator<Item = u16>
 fn vector_store_for_embedder(embedder_id: u8, store_id: u8) -> u16 {
     let embedder_id = (embedder_id as u16) << 8;
     embedder_id | (store_id as u16)
+}
+
+/// Retrieve the content of an env variable or use a default value if not present.
+fn env_var_or<T>(var: &str, default: T) -> T
+where
+    <T as FromStr>::Err: std::fmt::Display,
+    T: FromStr,
+{
+    match env::var(var) {
+        Ok(value) => match value.parse() {
+            Ok(value) => value,
+            Err(error) => panic!("invalid content in `{var}`: {error}"),
+        },
+        Err(VarError::NotPresent) => default,
+        Err(error) => panic!("invalid UTF8 content in `{var}`: {error}"),
+    }
 }
