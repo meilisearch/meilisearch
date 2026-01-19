@@ -130,13 +130,16 @@ pub const MAX_FACET_VALUE_LENGTH: usize = MAX_LMDB_KEY_LENGTH - 32;
 
 /// The maximum length a word can be
 pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
-
+// The search module is private and will be used internally
+// The sub-object filtering feature will be implemented in issue #3642
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
+
+use std::time;
 
 #[derive(Clone)]
 pub struct TimeBudget {
-    started_at: std::time::Instant,
-    budget: std::time::Duration,
+    started_at: time::Instant,
+    budget: time::Duration,
 
     /// When testing the time budget, ensuring we did more than iteration of the bucket sort can be useful.
     /// But to avoid being flaky, the only option is to add the ability to stop after a specific number of calls instead of a `Duration`.

@@ -1,0 +1,44 @@
+name: Test Installation Script
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'download-latest.sh'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'download-latest.sh'
+  workflow_dispatch:
+
+jobs:
+  test-script:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Ensure script uses secure flags
+      run: |
+        grep -q -- "--proto '=https'" download-latest.sh
+        grep -q -- "--tlsv1.2" download-latest.sh
+        grep -q -- "--fail" download-latest.sh
+      shell: bash
+
+    - name: Test installation script
+      if: runner.os != 'Windows'
+      run: |
+        chmod +x download-latest.sh
+        ./download-latest.sh
+        [ -f "meilisearch" ] || exit 1
+
+    - name: Test installation script (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        ./download-latest.sh
+        if (!(Test-Path -Path "meilisearch.exe")) { exit 1 }
+      shell: bash
