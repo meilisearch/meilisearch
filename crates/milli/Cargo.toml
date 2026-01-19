@@ -91,7 +91,7 @@ rhai = { version = "1.23.6", features = [
     "sync",
 ] }
 arroy = "0.6.4-nested-rtxns"
-hannoy = { version = "0.1.4-nested-rtxns", features = ["arroy"] }
+hannoy = { git = "https://github.com/nnethercott/hannoy", branch = "sort-on-small-subset", features = ["arroy"] }
 rand = "0.8.5"
 tracing = "0.1.41"
 ureq = { version = "2.12.1", features = ["json"] }
