@@ -4212,6 +4212,7 @@ version = "1.33.0"
 dependencies = [
  "base64 0.22.1",
  "enum-iterator",
+ "hex",
  "hmac",
  "maplit",
  "meilisearch-types",
