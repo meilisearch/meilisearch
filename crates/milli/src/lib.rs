@@ -205,7 +205,7 @@ impl Deadline {
         let Some(deadline) = self.deadline else {
             return false;
         };
-        deadline < std::time::Instant::now()
+        std::time::Instant::now() > deadline
     }
 }
 
