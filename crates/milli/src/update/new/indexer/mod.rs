@@ -1,4 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, LinkedList};
+use std::iter;
+use std::ops::Bound;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Once, RwLock};
 use std::thread::{self, Builder};
@@ -7,11 +9,13 @@ use big_s::S;
 use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{IndexOperations, PayloadStats};
+use fst::Streamer as _;
 use hashbrown::HashMap;
-use heed::types::DecodeIgnore;
+use heed::types::{Bytes, DecodeIgnore, Unit};
 use heed::{BytesDecode, Database, RoTxn, RwTxn};
 pub use partial_dump::PartialDump;
 pub use post_processing::recompute_word_fst_from_word_docids_database;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 pub use settings_changes::settings_change_extract;
 pub use update_by_function::UpdateByFunction;
 pub use write::ChannelCongestion;
@@ -546,6 +550,8 @@ where
     )
 }
 
+/// Deletes entries related to field IDs that must no longer exist in the database.
+/// Uses parallel fetching to speed up the deletion process.
 pub fn delete_old_fid_based_databases_from_fids<MSP>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
@@ -556,47 +562,159 @@ pub fn delete_old_fid_based_databases_from_fids<MSP>(
 where
     MSP: Fn() -> bool + Sync,
 {
+    let bounds = compute_fst_bounds(wtxn, index)?;
+
     progress.update_progress(SettingsIndexerStep::DeletingOldWordFidDocids);
-    delete_old_word_fid_docids(wtxn, index.word_fid_docids, must_stop_processing, fids_to_delete)?;
+    delete_old_word_fid_docids_parallel(
+        wtxn,
+        index,
+        index.word_fid_docids.remap_data_type(),
+        must_stop_processing,
+        fids_to_delete,
+        &bounds,
+    )?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldFidWordCountDocids);
     delete_old_fid_word_count_docids(wtxn, index, must_stop_processing, fids_to_delete)?;
 
     progress.update_progress(SettingsIndexerStep::DeletingOldWordPrefixFidDocids);
-    delete_old_word_fid_docids(
+    delete_old_word_fid_docids_parallel(
         wtxn,
-        index.word_prefix_fid_docids,
+        index,
+        index.word_prefix_fid_docids.remap_data_type(),
         must_stop_processing,
         fids_to_delete,
+        &bounds,
     )?;
 
     Ok(())
 }
 
-fn delete_old_word_fid_docids<'txn, MSP, DC>(
-    wtxn: &mut RwTxn<'txn>,
-    database: Database<StrBEU16Codec, DC>,
+/// Use the FST to balance the work between threads
+/// by generating appropriate word bounds.
+fn compute_fst_bounds(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+) -> crate::Result<Vec<Option<Box<[u8]>>>> {
+    let fst = index.words_fst(wtxn)?;
+
+    let threads_count = rayon::current_num_threads() * 4;
+    let keys_by_thread = fst.len().div_ceil(threads_count);
+
+    // We iterate over the FST keys that represents the word dictionary and
+    // roughly represents what can be found in the database we are cleaning.
+    //
+    // The database we are cleaning contains different words from the word
+    // dictionary as it contains words from fields that are not indexed too
+    // but it is mixed with indexed ones.
+    //
+    // We then divide equally the entries of the database to clean by
+    // selecting ranges of keys that will be processed by each thread. We
+    // also make sure not to specify the first and last keys to make sure
+    // that if the fields to clean have keys that are higher or lower than
+    // the first or last keys in the word dictionary we still find them.
+
+    // Here we make sure to start with an unbounded
+    // left bound for the first range
+    let mut bounds = vec![None];
+    let mut stream = fst.stream();
+    let mut count = 0;
+    while let Some(key) = stream.next() {
+        let is_first = count == 0;
+        let is_last = count == fst.len() - 1;
+
+        // In this loop we make sure to account for every bounds
+        // to divide the work between threads but not send the bounds
+        // for the beginning or the end of the word dictionary
+        if count % keys_by_thread == 0 && !(is_first || is_last) {
+            bounds.push(Some(key.to_vec().into_boxed_slice()));
+        }
+
+        count += 1;
+    }
+
+    // We now push the last bound that
+    // defines the end of the last range
+    bounds.push(None);
+
+    Ok(bounds)
+}
+
+/// Fetches keys to delete in parallel by using the FST bounds
+/// to balance the work between threads.
+fn fetch_keys_to_delete_in_parallel(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    database: Database<StrBEU16Codec, Unit>,
+    fids_to_delete: &BTreeSet<u16>,
+    bounds: &[Option<Box<[u8]>>],
+) -> Result<LinkedList<Vec<Result<Vec<Box<[u8]>>>>>> {
+    // We generate enough read transactions for each thread.
+    let rtxns = iter::repeat_with(|| index.env.nested_read_txn(wtxn))
+        .take(bounds.len().saturating_sub(1))
+        .collect::<heed::Result<Vec<_>>>()?;
+
+    // Run parallel fetching directly in the current rayon threadpool
+    let results = rtxns
+        .into_par_iter()
+        .zip_eq(bounds.windows(2).collect::<Vec<_>>())
+        .map(|(rtxn, win)| {
+            let bound = match [win[0].as_deref(), win[1].as_deref()] {
+                [None, None] => (Bound::Unbounded, Bound::Unbounded),
+                [None, Some(end)] => (Bound::Unbounded, Bound::Excluded(end)),
+                [Some(start), None] => (Bound::Included(start), Bound::Unbounded),
+                [Some(start), Some(end)] => (Bound::Included(start), Bound::Excluded(end)),
+            };
+
+            let mut keys_to_delete = Vec::new();
+            let iter = database.remap_types::<Bytes, DecodeIgnore>().range(&rtxn, &bound);
+            for result in iter? {
+                let (key_bytes, ()) = result?;
+                let (_word, fid) =
+                    StrBEU16Codec::bytes_decode(key_bytes).map_err(heed::Error::Decoding)?;
+
+                if fids_to_delete.contains(&fid) {
+                    keys_to_delete.push(key_bytes.to_vec().into_boxed_slice());
+                }
+            }
+
+            Ok(keys_to_delete) as crate::Result<_>
+        })
+        .collect_vec_list();
+
+    Ok(results)
+}
+
+/// Parallel version of delete_old_word_fid_docids that fetches keys in parallel
+/// and then deletes them sequentially.
+fn delete_old_word_fid_docids_parallel<MSP>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    database: Database<StrBEU16Codec, Unit>,
     must_stop_processing: &MSP,
     fids_to_delete: &BTreeSet<u16>,
-) -> Result<(), Error>
+    bounds: &[Option<Box<[u8]>>],
+) -> crate::Result<usize>
 where
     MSP: Fn() -> bool + Sync,
-    DC: BytesDecode<'txn>,
 {
-    let mut iter = database.iter_mut(wtxn)?.remap_data_type::<DecodeIgnore>();
-    while let Some(((_word, fid), ())) = iter.next().transpose()? {
-        // TODO should I call it that often?
+    let results = fetch_keys_to_delete_in_parallel(wtxn, index, database, fids_to_delete, bounds)?;
+
+    let database = database.remap_key_type::<Bytes>();
+    let mut count = 0;
+    for result in results.into_iter().flatten() {
+        let keys = result?;
         if must_stop_processing() {
             return Err(Error::InternalError(InternalError::AbortedIndexation));
         }
-
-        if fids_to_delete.contains(&fid) {
-            // safety: We don't keep any references to the data.
-            unsafe { iter.del_current()? };
-        }
+        keys.into_iter().try_for_each(|key| {
+            database.delete(wtxn, &key)?;
+            count += 1;
+            Ok(()) as Result<()>
+        })?;
     }
 
-    Ok(())
+    Ok(count)
 }
 
 fn delete_old_fid_word_count_docids<MSP>(
