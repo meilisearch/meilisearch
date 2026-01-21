@@ -318,6 +318,7 @@ InvalidSearchShowMatchesPosition               , InvalidRequest       , BAD_REQU
 InvalidSearchShowRankingScore                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScore                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails           , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchUseNetwork                        , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScoreDetails          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchDistinct                          , InvalidRequest       , BAD_REQUEST ;

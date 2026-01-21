@@ -3,7 +3,7 @@ use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use deserr::Deserr;
 use either::Either;
@@ -22,8 +22,7 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
-    TimeBudget,
+    Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -44,8 +43,8 @@ use crate::error::MeilisearchHttpError;
 
 mod federated;
 pub use federated::{
-    perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    network_partition, perform_federated_search, FederatedSearch, FederatedSearchResult,
+    Federation, FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
 mod ranking_rules;
@@ -133,6 +132,37 @@ pub struct SearchQuery {
     /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
+    /// Experimental: Whether this query should be performed on the whole network or locally.
+    ///
+    /// When performing the query on the whole network, this is "as-if" a remote federated search were performed,
+    /// such that all shards are covered, and such that documents are deduplicated across the remotes.
+    ///
+    /// # Response
+    ///
+    /// The response will have the same shape as a federated search response.
+    ///
+    /// # Edition
+    ///
+    /// This feature is available in the Enterprise Edition.
+    ///
+    /// # Experimental
+    ///
+    /// - Setting this parameter to a value different from the default requires the `network` experimental feature.
+    ///
+    /// # Values
+    ///
+    /// - `Some(true)`: Use the whole network for this query.
+    /// - `Some(false)`: Make this query local.
+    /// - `None` (default): Same as `Some(false)`.
+    ///
+    /// # Assumptions when using the network
+    ///
+    /// Network queries assume that the following is true:
+    ///
+    /// - the target index exists with compatible settings on all remotes of the network.
+    /// - any document with the same document id between two remotes have the same content and can be deduplicated.
+    #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
+    pub use_network: Option<bool>,
     /// Filter queries by an attribute's value
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
@@ -228,6 +258,8 @@ impl From<SearchParameters> for SearchQuery {
             crop_marker: DEFAULT_CROP_MARKER(),
             locales: None,
             personalize: None,
+            // TODO: support `use_network` in chat route (not trivial)
+            use_network: None,
         }
     }
 }
@@ -310,6 +342,7 @@ impl fmt::Debug for SearchQuery {
             ranking_score_threshold,
             locales,
             personalize,
+            use_network,
         } = self;
 
         let mut debug = f.debug_struct("SearchQuery");
@@ -400,6 +433,10 @@ impl fmt::Debug for SearchQuery {
 
         if let Some(personalize) = personalize {
             debug.field("personalize", &personalize);
+        }
+
+        if let Some(use_network) = use_network {
+            debug.field("use_network", use_network);
         }
 
         debug.finish()
@@ -605,6 +642,8 @@ pub struct SearchQueryWithIndex {
     /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>, default)]
+    pub use_network: Option<bool>,
     /// Return matching terms location
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>, default)]
     pub show_matches_position: bool,
@@ -676,6 +715,11 @@ impl SearchQueryWithIndex {
         self.personalize.is_some()
     }
 
+    pub fn has_remote_and_use_network(&self) -> bool {
+        self.federation_options.as_ref().and_then(|opt| opt.remote.as_ref()).is_some()
+            && self.use_network == Some(true)
+    }
+
     pub fn from_index_query_federation(
         index_uid: IndexUid,
         query: SearchQuery,
@@ -710,6 +754,7 @@ impl SearchQueryWithIndex {
             ranking_score_threshold,
             locales,
             personalize,
+            use_network,
         } = query;
 
         SearchQueryWithIndex {
@@ -743,6 +788,7 @@ impl SearchQueryWithIndex {
             locales,
             personalize,
             federation_options,
+            use_network,
         }
     }
 
@@ -778,6 +824,7 @@ impl SearchQueryWithIndex {
             ranking_score_threshold,
             locales,
             personalize,
+            use_network,
         } = self;
         (
             index_uid,
@@ -810,6 +857,7 @@ impl SearchQueryWithIndex {
                 ranking_score_threshold,
                 locales,
                 personalize,
+                use_network,
                 // do not use ..Default::default() here,
                 // rather add any missing field from `SearchQuery` to `SearchQueryWithIndex`
             },
@@ -1014,6 +1062,9 @@ pub struct SearchResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<SearchMetadata>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_errors: Option<BTreeMap<String, ResponseError>>,
+
     /// Exhaustive number of semantic search matches (only present in
     /// AI-powered searches)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1041,6 +1092,7 @@ impl fmt::Debug for SearchResult {
             semantic_hit_count,
             degraded,
             used_negative_operator,
+            remote_errors,
         } = self;
 
         let mut debug = f.debug_struct("SearchResult");
@@ -1072,6 +1124,9 @@ impl fmt::Debug for SearchResult {
         }
         if let Some(metadata) = metadata {
             debug.field("metadata", &metadata);
+        }
+        if let Some(remote_errors) = remote_errors {
+            debug.field("remote_errors", &remote_errors);
         }
 
         debug.finish()
@@ -1177,7 +1232,7 @@ pub fn prepare_search<'t>(
     rtxn: &'t RoTxn,
     query: &'t SearchQuery,
     search_kind: &SearchKind,
-    time_budget: TimeBudget,
+    deadline: Deadline,
     features: RoFeatures,
     progress: &'t Progress,
 ) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
@@ -1185,7 +1240,7 @@ pub fn prepare_search<'t>(
         features.check_multimodal("passing `media` in a search query")?;
     }
     let mut search = index.search(rtxn, progress);
-    search.time_budget(time_budget);
+    search.deadline(deadline);
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
     }
@@ -1331,7 +1386,7 @@ pub fn perform_search(
     params: SearchParams,
     index: &Index,
     progress: &Progress,
-) -> Result<(SearchResult, TimeBudget), ResponseError> {
+) -> Result<(SearchResult, Deadline), ResponseError> {
     let SearchParams {
         index_uid,
         query,
@@ -1344,20 +1399,10 @@ pub fn perform_search(
     let before_search = Instant::now();
     let index_uid_for_metadata = index_uid.clone();
     let rtxn = index.read_txn()?;
-    let time_budget = match index.search_cutoff(&rtxn)? {
-        Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-        None => TimeBudget::default(),
-    };
+    let deadline = index.search_deadline(&rtxn)?;
 
-    let (search, is_finite_pagination, max_total_hits, offset) = prepare_search(
-        index,
-        &rtxn,
-        &query,
-        &search_kind,
-        time_budget.clone(),
-        features,
-        progress,
-    )?;
+    let (search, is_finite_pagination, max_total_hits, offset) =
+        prepare_search(index, &rtxn, &query, &search_kind, deadline.clone(), features, progress)?;
 
     let (
         milli::SearchResult {
@@ -1391,8 +1436,6 @@ pub fn perform_search(
         page,
         hits_per_page,
         attributes_to_retrieve,
-        // use the enum passed as parameter
-        retrieve_vectors: _,
         attributes_to_crop,
         crop_length,
         attributes_to_highlight,
@@ -1405,6 +1448,10 @@ pub fn perform_search(
         highlight_post_tag,
         crop_marker,
         locales,
+        // already used in callers
+        use_network: _,
+        // use the enum passed as parameter
+        retrieve_vectors: _,
         // already used in prepare_search
         vector: _,
         media: _,
@@ -1482,8 +1529,9 @@ pub fn perform_search(
         semantic_hit_count,
         request_uid: Some(request_uid),
         metadata,
+        remote_errors: None,
     };
-    Ok((result, time_budget))
+    Ok((result, deadline))
 }
 
 /// Computed facet data from a search
@@ -1883,10 +1931,7 @@ pub fn perform_facet_search(
     let before_search = Instant::now();
     let progress = Progress::default();
     let rtxn = index.read_txn()?;
-    let time_budget = match index.search_cutoff(&rtxn)? {
-        Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-        None => TimeBudget::default(),
-    };
+    let deadline = index.search_deadline(&rtxn)?;
 
     if !index.facet_search(&rtxn)? {
         return Err(ResponseError::from_msg(
@@ -1910,15 +1955,8 @@ pub fn perform_facet_search(
             .collect()
     });
 
-    let (search, _, _, _) = prepare_search(
-        index,
-        &rtxn,
-        &search_query,
-        &search_kind,
-        time_budget,
-        features,
-        &progress,
-    )?;
+    let (search, _, _, _) =
+        prepare_search(index, &rtxn, &search_query, &search_kind, deadline, features, &progress)?;
     let mut facet_search = SearchForFacetValues::new(
         facet_name,
         search,

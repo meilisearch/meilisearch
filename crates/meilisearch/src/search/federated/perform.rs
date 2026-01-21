@@ -15,10 +15,11 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, DocumentId, FederatingResultsStep, OrderBy, SearchStep, TimeBudget,
+    self, Deadline, DocumentId, FederatingResultsStep, OrderBy, SearchStep,
     DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
+use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -38,6 +39,7 @@ use super::weighted_scores;
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE};
+use crate::search::DEFAULT_SEARCH_LIMIT;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
@@ -49,7 +51,7 @@ pub async fn perform_federated_search(
     request_uid: Uuid,
     include_metadata: bool,
     progress: &Progress,
-) -> Result<FederatedSearchResult, ResponseError> {
+) -> Result<(FederatedSearchResult, Deadline), ResponseError> {
     if is_proxy {
         features.check_network("Performing a remote federated search")?;
     }
@@ -62,7 +64,19 @@ pub async fn perform_federated_search(
 
     let deadline = before_search + std::time::Duration::from_secs(timeout);
 
-    let required_hit_count = federation.limit + federation.offset;
+    let required_hit_count = match (federation.page, federation.hits_per_page) {
+        // no pagination, use limit and offset
+        (None, None) => federation.limit + federation.offset,
+        // pagination, default page (1)
+        (None, Some(hits_per_page)) => hits_per_page,
+        // pagination, no hits
+        (Some(0), _) => 0,
+        // pagination, default hits per page
+        (Some(page), None) => DEFAULT_SEARCH_LIMIT() * page,
+        // pagination
+        (Some(page), Some(hits_per_page)) => hits_per_page * page,
+    };
+
     let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
 
     let network = index_scheduler.network();
@@ -87,9 +101,17 @@ pub async fn perform_federated_search(
     // 1. partition queries by host and index
     let mut partitioned_queries = PartitionedQueries::new();
 
+    let mut federation = federation;
     for (query_index, federated_query) in queries.into_iter().enumerate() {
-        partitioned_queries.partition(federated_query, query_index, &network, features)?
+        partitioned_queries.partition(
+            &mut federation,
+            federated_query,
+            query_index,
+            &network,
+            features,
+        )?
     }
+    let federation = federation;
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
@@ -107,6 +129,7 @@ pub async fn perform_federated_search(
         is_proxy,
         network: &network,
         has_remote: partitioned_queries.has_remote,
+        is_exhaustive: federation.is_exhaustive(),
         required_hit_count,
     };
     let mut search_by_index = SearchByIndex::new(
@@ -115,9 +138,11 @@ pub async fn perform_federated_search(
         params.has_remote,
     );
 
+    let mut deadline = Deadline::never();
     for (index_uid, queries) in partitioned_queries.local_queries_by_index {
         // note: this is the only place we open `index_uid`
-        search_by_index.execute(index_uid, queries, &params, progress)?;
+        let index_deadline = search_by_index.execute(index_uid, queries, &params, progress)?;
+        deadline = Deadline::earliest(deadline, index_deadline);
     }
 
     // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
@@ -157,13 +182,25 @@ pub async fn perform_federated_search(
     });
 
     // 3.2. merge federation metadata
-    let (estimated_total_hits, degraded, used_negative_operator, facets, max_remote_duration) =
+    let (hit_number, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
+
+    let (skip, take) = match (federation.page, federation.hits_per_page) {
+        // no pagination
+        (None, None) => (federation.offset, federation.limit),
+        // pagination: default page (1)
+        (None, Some(hits_per_page)) => (0, hits_per_page),
+        // special page 0: no hits
+        (Some(0), _) => (0, 0),
+        // pagination: default hits per page
+        (Some(page), None) => ((page - 1) * DEFAULT_SEARCH_LIMIT(), DEFAULT_SEARCH_LIMIT()),
+        (Some(page), Some(hits_per_page)) => ((page - 1) * hits_per_page, hits_per_page),
+    };
 
     // 3.3. merge hits
     let merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
-        .skip(federation.offset)
-        .take(federation.limit)
+        .skip(skip)
+        .take(take)
         .inspect(|hit| {
             if let Some(semantic_hit_count) = &mut semantic_hit_count {
                 if hit.to_score().0.any(|score| matches!(&score, WeightedScoreValue::VectorSort(_)))
@@ -205,25 +242,43 @@ pub async fn perform_federated_search(
         + (after_merge - after_waiting_remote_results);
     let max_duration = Duration::max(local_duration, max_remote_duration);
 
-    Ok(FederatedSearchResult {
-        hits: merged_hits,
-        processing_time_ms: max_duration.as_millis(),
-        hits_info: HitsInfo::OffsetLimit {
+    let hits_info = match (federation.page, federation.hits_per_page) {
+        // no pagination
+        (None, None) => HitsInfo::OffsetLimit {
             limit: federation.limit,
             offset: federation.offset,
-            estimated_total_hits,
+            estimated_total_hits: hit_number,
         },
-        query_vectors,
-        semantic_hit_count,
-        degraded,
-        used_negative_operator,
-        facet_distribution,
-        facet_stats,
-        facets_by_index,
-        remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
-        request_uid: Some(request_uid),
-        metadata: query_metadata,
-    })
+        // pagination: default page number (1)
+        (page, hits_per_page) => {
+            let page = page.unwrap_or(1);
+            let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+            // If hit_per_page is 0, then pages can't be computed and so we respond 0.
+            let total_pages = (hit_number + hits_per_page.saturating_sub(1))
+                .checked_div(hits_per_page)
+                .unwrap_or(0);
+            HitsInfo::Pagination { hits_per_page, page, total_pages, total_hits: hit_number }
+        }
+    };
+
+    Ok((
+        FederatedSearchResult {
+            hits: merged_hits,
+            processing_time_ms: max_duration.as_millis(),
+            hits_info,
+            query_vectors,
+            semantic_hit_count,
+            degraded,
+            used_negative_operator,
+            facet_distribution,
+            facet_stats,
+            facets_by_index,
+            remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
+            request_uid: Some(request_uid),
+            metadata: query_metadata,
+        },
+        deadline,
+    ))
 }
 
 struct QueryByIndex {
@@ -587,7 +642,8 @@ impl PartitionedQueries {
 
     fn partition(
         &mut self,
-        federated_query: SearchQueryWithIndex,
+        federation: &mut Federation,
+        mut federated_query: SearchQueryWithIndex,
         query_index: usize,
         network: &Network,
         features: RoFeatures,
@@ -614,63 +670,95 @@ impl PartitionedQueries {
             return Err(MeilisearchHttpError::PersonalizationInFederatedQuery(query_index).into());
         }
 
-        let (index_uid, query, federation_options) = federated_query.into_index_query_federation();
+        if federated_query.has_remote_and_use_network() {
+            return Err(MeilisearchHttpError::RemoteAndUseNetwork(query_index).into());
+        }
 
-        let federation_options = federation_options.unwrap_or_default();
+        if federated_query.use_network.is_some() {
+            features.check_network("passing `.useNetwork` in a federated search query")?;
+        }
 
-        // local or remote node?
-        'local_query: {
-            let queries_by_index = match federation_options.remote {
-                None => self.local_queries_by_index.entry(index_uid.into_inner()).or_default(),
-                Some(remote_name) => {
-                    self.has_remote = true;
-                    features.check_network("Performing a remote federated search")?;
+        let (index_uid, query, federation_options);
+        let queries = if federated_query
+            .use_network
+            // avoid accidental recursion
+            .take()
+            .unwrap_or_default()
+        {
+            (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
-                    match &network.local {
-                        Some(local) if local == &remote_name => {
-                            self.local_queries_by_index.entry(index_uid.into_inner()).or_default()
-                        }
-                        _ => {
-                            // node from the network
-                            let Some(remote) = network.remotes.get(&remote_name) else {
-                                return Err(ResponseError::from_msg(format!("Invalid `queries[{query_index}].federation_options.remote`: remote `{remote_name}` is not registered"),
+            either::Left(super::network_partition(
+                federation,
+                &query,
+                federation_options,
+                &index_uid,
+                network.clone(),
+            ))
+        } else {
+            either::Right(std::iter::once(federated_query))
+        };
+
+        for federated_query in queries {
+            let (index_uid, query, federation_options) =
+                federated_query.into_index_query_federation();
+
+            let federation_options = federation_options.unwrap_or_default();
+
+            // local or remote node?
+            'local_query: {
+                let queries_by_index = match federation_options.remote {
+                    None => self.local_queries_by_index.entry(index_uid.into_inner()).or_default(),
+                    Some(remote_name) => {
+                        self.has_remote = true;
+                        features.check_network("Performing a remote federated search")?;
+
+                        match &network.local {
+                            Some(local) if local == &remote_name => self
+                                .local_queries_by_index
+                                .entry(index_uid.into_inner())
+                                .or_default(),
+                            _ => {
+                                // node from the network
+                                let Some(remote) = network.remotes.get(&remote_name) else {
+                                    return Err(ResponseError::from_msg(format!("Invalid `queries[{query_index}].federation_options.remote`: remote `{remote_name}` is not registered"),
                            meilisearch_types::error::Code::InvalidMultiSearchRemote));
-                            };
-                            let query = SearchQueryWithIndex::from_index_query_federation(
-                                index_uid,
-                                query,
-                                Some(FederationOptions {
-                                    weight: federation_options.weight,
-                                    // do not pass the `remote` to not require the remote instance to have itself has a local node
-                                    remote: None,
-                                    // pass an explicit query index
-                                    query_position: Some(query_index),
-                                }),
-                            );
+                                };
+                                let query = SearchQueryWithIndex::from_index_query_federation(
+                                    index_uid,
+                                    query,
+                                    Some(FederationOptions {
+                                        weight: federation_options.weight,
+                                        // do not pass the `remote` to not require the remote instance to have itself has a local node
+                                        remote: None,
+                                        // pass an explicit query index
+                                        query_position: Some(query_index),
+                                    }),
+                                );
 
-                            self.remote_queries_by_host
-                                .entry(remote_name)
-                                .or_insert_with(|| (remote.clone(), Default::default()))
-                                .1
-                                .push(query);
-                            break 'local_query;
+                                self.remote_queries_by_host
+                                    .entry(remote_name)
+                                    .or_insert_with(|| (remote.clone(), Default::default()))
+                                    .1
+                                    .push(query);
+                                break 'local_query;
+                            }
                         }
                     }
-                }
-            };
+                };
 
-            queries_by_index.push(QueryByIndex {
-                query,
-                weight: federation_options.weight,
-                // override query index here with the one in federation.
-                // this will fix-up error messages to refer to the global query index of the original request.
-                query_index: if let Some(query_index) = federation_options.query_position {
-                    features.check_network("Using `federationOptions.queryPosition`")?;
-                    query_index
-                } else {
-                    query_index
-                },
-            })
+                queries_by_index.push(QueryByIndex {
+                    query,
+                    weight: federation_options.weight,
+                    // override query index here with the one in federation.
+                    // this will fix-up error messages to refer to the global query index of the original request.
+                    query_index: if let Some(query_index) = federation_options.query_position {
+                        features.check_network("Using `federationOptions.queryPosition`")?;
+                        query_index
+                    } else {
+                        query_index
+                    },
+                })
+            }
         }
         Ok(())
     }
@@ -702,8 +790,22 @@ impl RemoteSearch {
                 tokio::spawn({
                     let mut proxy_federation = federation.clone();
                     // fixup limit and offset to not apply them twice
-                    proxy_federation.limit = federation.limit + federation.offset;
-                    proxy_federation.offset = 0;
+                    match (federation.page, federation.hits_per_page) {
+                        (None, None) => {
+                            proxy_federation.limit = federation.limit + federation.offset;
+                            proxy_federation.offset = 0;
+                        }
+                        (Some(0), _) => {
+                            // leave `proxy_federation.page` at Some(0)
+                        }
+                        (page, hits_per_page) => {
+                            let page = page.unwrap_or(1);
+                            let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
+                            proxy_federation.page = Some(1);
+                            proxy_federation.hits_per_page = Some(page * hits_per_page);
+                        }
+                    }
+
                     // never merge distant facets
                     proxy_federation.merge_facets = None;
                     let params = params.clone();
@@ -800,6 +902,7 @@ impl RemoteSearch {
 struct SearchByIndexParams<'a> {
     index_scheduler: &'a IndexScheduler,
     required_hit_count: usize,
+    is_exhaustive: bool,
     features: RoFeatures,
     is_proxy: bool,
     has_remote: bool,
@@ -841,7 +944,7 @@ impl SearchByIndex {
         queries: Vec<QueryByIndex>,
         params: &SearchByIndexParams<'_>,
         progress: &Progress,
-    ) -> Result<(), ResponseError> {
+    ) -> Result<Deadline, ResponseError> {
         let first_query_index = queries.first().map(|query| query.query_index);
         let index = match params.index_scheduler.index(&index_uid) {
             Ok(index) => index,
@@ -865,7 +968,15 @@ impl SearchByIndex {
         let separators = index.allowed_separators(&rtxn)?;
         let separators: Option<Vec<_>> =
             separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-        let cutoff = index.search_cutoff(&rtxn)?;
+
+        let max_total_hits = index
+            .pagination_max_total_hits(&rtxn)
+            .map_err(milli::Error::from)?
+            .map(|x| x as usize)
+            .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
+
+        let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
+
         let mut degraded = false;
         let mut used_negative_operator = false;
         let mut candidates = RoaringBitmap::new();
@@ -885,11 +996,9 @@ impl SearchByIndex {
         }
         let mut results_by_query = Vec::with_capacity(queries.len());
 
-        // all queries for an index share the same budget
-        let time_budget = match cutoff {
-            Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-            None => TimeBudget::default(),
-        };
+        // all queries for an index share the same deadline
+        let deadline = index.search_deadline(&rtxn)?;
+
         for QueryByIndex { query, weight, query_index } in queries {
             // use an immediately invoked lambda to capture the result without returning from the function
 
@@ -964,15 +1073,17 @@ impl SearchByIndex {
                     &rtxn,
                     &query,
                     &search_kind,
-                    // clones of `TimeBudget` share the budget rather than restart it
-                    time_budget.clone(),
+                    // clones of `Deadline` share the deadline rather than restart it
+                    deadline.clone(),
                     params.features,
                     progress,
                 )?;
 
                 search.scoring_strategy(milli::score_details::ScoringStrategy::Detailed);
+
                 search.offset(0);
-                search.limit(params.required_hit_count);
+                search.limit(required_hit_count);
+                search.exhaustive_number_hits(params.is_exhaustive);
 
                 let (result, _semantic_hit_count) =
                     super::super::search_from_kind(index_uid.to_string(), search_kind, search)?;
@@ -1045,7 +1156,7 @@ impl SearchByIndex {
             merge_index_local_results(results_by_query)
                 // skip documents we've already seen & mark that we saw the current document
                 .filter(|SearchResultByQueryIterItem { docid, .. }| documents_seen.insert(*docid))
-                .take(params.required_hit_count)
+                .take(required_hit_count)
                 // 2.3 make hits
                 .map(
                     |SearchResultByQueryIterItem {
@@ -1120,7 +1231,7 @@ impl SearchByIndex {
             used_negative_operator,
             facets,
         });
-        Ok(())
+        Ok(deadline)
     }
 
     fn check_unused_facets(

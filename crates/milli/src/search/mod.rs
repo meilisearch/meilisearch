@@ -16,8 +16,8 @@ use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::{Embedder, Embedding};
 use crate::{
-    execute_search, filtered_universe, AscDesc, DefaultSearchLogger, DocumentId, Error, Index,
-    Result, SearchContext, TimeBudget, UserError,
+    execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
+    Index, Result, SearchContext, UserError,
 };
 
 // Building these factories is not free.
@@ -60,7 +60,7 @@ pub struct Search<'a> {
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
     semantic: Option<SemanticSearch>,
-    time_budget: TimeBudget,
+    deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
     progress: &'a Progress,
@@ -87,7 +87,7 @@ impl<'a> Search<'a> {
             index,
             semantic: None,
             locales: None,
-            time_budget: TimeBudget::max(),
+            deadline: Deadline::never(),
             ranking_score_threshold: None,
             progress,
         }
@@ -184,8 +184,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn time_budget(&mut self, time_budget: TimeBudget) -> &mut Search<'a> {
-        self.time_budget = time_budget;
+    pub fn deadline(&mut self, deadline: Deadline) -> &mut Search<'a> {
+        self.deadline = deadline;
         self
     }
 
@@ -278,7 +278,7 @@ impl<'a> Search<'a> {
                     embedder_name,
                     embedder,
                     *quantized,
-                    self.time_budget.clone(),
+                    self.deadline.clone(),
                     self.ranking_score_threshold,
                     self.progress,
                 )?
@@ -299,7 +299,7 @@ impl<'a> Search<'a> {
                 Some(self.words_limit),
                 &mut DefaultSearchLogger,
                 &mut DefaultSearchLogger,
-                self.time_budget.clone(),
+                self.deadline.clone(),
                 self.ranking_score_threshold,
                 self.locales.as_ref(),
                 self.progress,
@@ -350,7 +350,7 @@ impl fmt::Debug for Search<'_> {
             rtxn: _,
             index: _,
             semantic,
-            time_budget,
+            deadline,
             ranking_score_threshold,
             locales,
             progress: _,
@@ -374,7 +374,7 @@ impl fmt::Debug for Search<'_> {
                 "semantic.embedder_name",
                 &semantic.as_ref().map(|semantic| &semantic.embedder_name),
             )
-            .field("time_budget", time_budget)
+            .field("deadline", deadline)
             .field("ranking_score_threshold", ranking_score_threshold)
             .field("locales", locales)
             .finish()

@@ -99,6 +99,9 @@ pub struct SearchAggregator<Method: AggregateMethod> {
     // personalization
     total_personalized: usize,
 
+    // transparent network requests
+    total_explicit_use_network: usize,
+
     marker: std::marker::PhantomData<Method>,
 }
 
@@ -134,6 +137,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             ranking_score_threshold,
             locales,
             personalize,
+            use_network,
         } = query;
 
         let mut ret = Self::default();
@@ -215,6 +219,10 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             MEILISEARCH_PERSONALIZED_SEARCH_REQUESTS.inc();
         }
 
+        if use_network.unwrap_or_default() {
+            ret.total_explicit_use_network = 1;
+        }
+
         ret.highlight_pre_tag = *highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
         ret.highlight_post_tag = *highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
         ret.crop_marker = *crop_marker != DEFAULT_CROP_MARKER();
@@ -240,13 +248,14 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             query_vector: _,
             processing_time_ms,
             hits_info: _,
-            semantic_hit_count: _,
             facet_distribution: _,
             facet_stats: _,
-            degraded,
-            used_negative_operator,
             request_uid: _,
             metadata: _,
+            remote_errors: _,
+            semantic_hit_count: _,
+            degraded,
+            used_negative_operator,
         } = result;
 
         self.total_succeeded = self.total_succeeded.saturating_add(1);
@@ -308,6 +317,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             ranking_score_threshold,
             mut locales,
             total_personalized,
+            total_explicit_use_network,
             marker: _,
         } = *new;
 
@@ -396,6 +406,10 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         // personalization
         self.total_personalized = self.total_personalized.saturating_add(total_personalized);
 
+        // network
+        self.total_explicit_use_network =
+            self.total_explicit_use_network.saturating_add(total_explicit_use_network);
+
         self
     }
 
@@ -442,6 +456,7 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             ranking_score_threshold,
             locales,
             total_personalized,
+            total_explicit_use_network,
             marker: _,
         } = *self;
 
@@ -518,6 +533,9 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             "personalization": {
                 "total_personalized": total_personalized,
             },
+            "network": {
+                "total_explicit_use_network": total_explicit_use_network,
+            }
         })
     }
 }

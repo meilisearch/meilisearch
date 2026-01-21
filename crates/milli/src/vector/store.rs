@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::progress::Progress;
 use crate::vector::Embeddings;
-use crate::TimeBudget;
+use crate::Deadline;
 
 const HANNOY_EF_CONSTRUCTION: usize = 125;
 const HANNOY_M: usize = 16;
@@ -618,7 +618,7 @@ impl VectorStore {
         vector: &[f32],
         limit: usize,
         filter: Option<&RoaringBitmap>,
-        time_budget: &TimeBudget,
+        deadline: &Deadline,
     ) -> crate::Result<Vec<(ItemId, f32)>> {
         if self.backend == VectorStoreBackend::Arroy {
             if self.quantized {
@@ -635,7 +635,7 @@ impl VectorStore {
                 vector,
                 limit,
                 filter,
-                time_budget,
+                deadline,
             )
             .map_err(Into::into)
         } else {
@@ -645,7 +645,7 @@ impl VectorStore {
                 vector,
                 limit,
                 filter,
-                time_budget,
+                deadline,
             )
             .map_err(Into::into)
         }
@@ -1042,7 +1042,7 @@ impl VectorStore {
         vector: &[f32],
         limit: usize,
         filter: Option<&RoaringBitmap>,
-        time_budget: &TimeBudget,
+        deadline: &Deadline,
     ) -> Result<Vec<(ItemId, f32)>, hannoy::Error> {
         let mut results = Vec::new();
 
@@ -1055,7 +1055,7 @@ impl VectorStore {
             }
 
             let Searched { mut nns, did_cancel: _ } =
-                searcher.by_vector_with_cancellation(rtxn, vector, || time_budget.exceeded())?;
+                searcher.by_vector_with_cancellation(rtxn, vector, || deadline.exceeded())?;
             results.append(&mut nns);
         }
 

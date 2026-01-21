@@ -1,3 +1,4 @@
+use actix_http::StatusCode;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
@@ -21,14 +22,15 @@ use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
-use crate::metrics::MEILISEARCH_DEGRADED_SEARCH_REQUESTS;
+use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, perform_search, HybridQuery, MatchingStrategy, Personalize,
-    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult,
-    SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    add_search_rules, network_partition, perform_federated_search, perform_search, Federation,
+    HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
+    SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
+    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -214,6 +216,9 @@ pub struct SearchQueryGet {
     /// depends on your personalization configuration.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
     pub personalize_user_context: Option<String>,
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchUseNetwork>)]
+    #[param(value_type = Option<bool>)]
+    use_network: Option<Param<bool>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]
@@ -288,6 +293,8 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
         let personalize =
             other.personalize_user_context.map(|user_context| Personalize { user_context });
 
+        let use_network = other.use_network.map(|use_network| use_network.0);
+
         Ok(Self {
             q: other.q,
             // `media` not supported for `GET`
@@ -318,6 +325,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             ranking_score_threshold: other.ranking_score_threshold.map(|o| o.0),
             locales: other.locales.map(|o| o.into_iter().collect()),
             personalize,
+            use_network,
         })
     }
 }
@@ -429,62 +437,131 @@ pub async fn search_with_url_query(
 
     let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
 
-    let index = index_scheduler.index(&index_uid)?;
-
-    // Extract personalization and query string before moving query
-    let personalize = query.personalize.take();
-
-    let search_kind =
-        search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
-    let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
-
-    // Save the query string for personalization if requested
-    let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
-
     let include_metadata = parse_include_metadata_header(&req);
 
-    let progress_clone = progress.clone();
-    let search_result = tokio::task::spawn_blocking(move || {
-        perform_search(
-            SearchParams {
-                index_uid: index_uid.to_string(),
-                query,
-                search_kind,
-                retrieve_vectors: retrieve_vector,
-                features: index_scheduler.features(),
-                request_uid,
-                include_metadata,
-            },
-            &index,
-            &progress_clone,
-        )
-    })
+    let search_result = search(
+        query,
+        index_scheduler.clone(),
+        index_uid,
+        request_uid,
+        include_metadata,
+        &progress,
+        &personalization_service,
+        StatusCode::NOT_FOUND,
+    )
     .await;
-    permit.drop().await;
-    let search_result = search_result?;
 
-    if let Ok((search_result, _)) = search_result.as_ref() {
+    permit.drop().await;
+
+    if let Ok(search_result) = search_result.as_ref() {
         aggregate.succeed(search_result);
     }
     analytics.publish(aggregate, &req);
 
-    let (mut search_result, time_budget) = search_result?;
+    let search_result = search_result?;
+
+    debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
+
+    Ok(HttpResponse::Ok().json(search_result))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn search(
+    mut query: SearchQuery,
+    index_scheduler: Data<IndexScheduler>,
+    index_uid: IndexUid,
+    request_uid: Uuid,
+    include_metadata: bool,
+    progress: &Progress,
+    service: &PersonalizationService,
+    index_not_found_http_code: StatusCode,
+) -> Result<SearchResult, ResponseError> {
+    // Extract personalization and query string before moving query
+    let personalize = query.personalize.take();
+    // Save the query string for personalization if requested
+    let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
+
+    let features = index_scheduler.features();
+    if query.use_network.is_some() {
+        features.check_network("passing `useNetwork` in a search query")?
+    }
+
+    let (mut search_result, deadline) = if query
+        .use_network
+        // avoid accidental recursion
+        .take()
+        // false by default for now
+        .unwrap_or_default()
+    {
+        let network = index_scheduler.network();
+        let mut federation = Federation::default();
+        let queries =
+            network_partition(&mut federation, &query, None, &index_uid, network).collect();
+        let search_result = perform_federated_search(
+            &index_scheduler,
+            queries,
+            federation,
+            features,
+            false,
+            request_uid,
+            include_metadata,
+            progress,
+        )
+        .await;
+
+        let (search_result, deadline) = search_result?;
+        let search_result =
+            search_result.into_search_result(query.q.unwrap_or_default(), index_uid.as_str());
+
+        (search_result, deadline)
+    } else {
+        let index = index_scheduler.index(&index_uid).map_err(|err| match &err {
+            index_scheduler::Error::IndexNotFound(_) => {
+                let mut err = ResponseError::from(err);
+                err.code = index_not_found_http_code;
+                err
+            }
+            _ => ResponseError::from(err),
+        })?;
+
+        let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
+        let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
+
+        let progress_clone = progress.clone();
+        let search_result = tokio::task::spawn_blocking(move || {
+            perform_search(
+                SearchParams {
+                    index_uid: index_uid.to_string(),
+                    query,
+                    search_kind,
+                    retrieve_vectors: retrieve_vector,
+                    features,
+                    request_uid,
+                    include_metadata,
+                },
+                &index,
+                &progress_clone,
+            )
+        })
+        .await;
+
+        search_result??
+    };
 
     // Apply personalization if requested
-    if let Some(personalize) = personalize.as_ref() {
-        search_result = personalization_service
+    if let Some(personalize) = personalize {
+        search_result.hits = service
             .rerank_search_results(
-                search_result,
-                personalize,
+                std::mem::take(&mut search_result.hits),
+                &personalize,
                 personalize_query.as_deref(),
-                time_budget,
-                &progress,
+                deadline,
+                progress,
             )
             .await?;
     }
 
-    debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
-    Ok(HttpResponse::Ok().json(search_result))
+    Ok(search_result)
 }
 
 /// Search with POST
@@ -570,63 +647,31 @@ pub async fn search_with_post(
 
     let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
 
-    let index = index_scheduler.index(&index_uid)?;
-
-    // Extract personalization and query string before moving query
-    let personalize = query.personalize.take();
-
-    let search_kind =
-        search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
-    let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
-
     let include_metadata = parse_include_metadata_header(&req);
 
-    // Save the query string for personalization if requested
-    let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
-
-    let progress_clone = progress.clone();
-    let search_result = tokio::task::spawn_blocking(move || {
-        perform_search(
-            SearchParams {
-                index_uid: index_uid.to_string(),
-                query,
-                search_kind,
-                retrieve_vectors,
-                features: index_scheduler.features(),
-                request_uid,
-                include_metadata,
-            },
-            &index,
-            &progress_clone,
-        )
-    })
+    let search_result = search(
+        query,
+        index_scheduler.clone(),
+        index_uid,
+        request_uid,
+        include_metadata,
+        &progress,
+        &personalization_service,
+        StatusCode::NOT_FOUND,
+    )
     .await;
+
     permit.drop().await;
-    let search_result = search_result?;
-    if let Ok((ref search_result, _)) = search_result {
+
+    if let Ok(search_result) = search_result.as_ref() {
         aggregate.succeed(search_result);
-        if search_result.degraded {
-            MEILISEARCH_DEGRADED_SEARCH_REQUESTS.inc();
-        }
     }
     analytics.publish(aggregate, &req);
 
-    let (mut search_result, time_budget) = search_result?;
-
-    // Apply personalization if requested
-    if let Some(personalize) = personalize.as_ref() {
-        search_result = personalization_service
-            .rerank_search_results(
-                search_result,
-                personalize,
-                personalize_query.as_deref(),
-                time_budget,
-                &progress,
-            )
-            .await?;
-    }
+    let search_result = search_result?;
 
     debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
+
     Ok(HttpResponse::Ok().json(search_result))
 }
 

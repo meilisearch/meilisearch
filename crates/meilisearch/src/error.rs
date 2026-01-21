@@ -44,6 +44,8 @@ pub enum MeilisearchHttpError {
     FacetsInFederatedQuery(usize, String, Vec<String>),
     #[error("Inside `.queries[{0}]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from query #{0} or remove `federation` from the request")]
     PersonalizationInFederatedQuery(usize),
+    #[error("Inside `.queries[{0}]`: Using `.useNetwork` is not allowed as the same time as `.federationOptions.remote`.\n  - Hint: to perform an explicit query against a remote, remove `.useNetwork`.\n  - Hint: to automatically perform queries against the entire network, remove `.federationOptions.remote`.")]
+    RemoteAndUseNetwork(usize),
     #[error("Inconsistent order for values in facet `{facet}`: index `{previous_uid}` orders {previous_facet_order}, but index `{current_uid}` orders {index_facet_order}.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.")]
     InconsistentFacetOrder {
         facet: String,
@@ -184,7 +186,8 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::Join(_) => Code::Internal,
             MeilisearchHttpError::MissingSearchHybrid => Code::MissingSearchHybrid,
             MeilisearchHttpError::MediaAndVector => Code::InvalidSearchMediaAndVector,
-            MeilisearchHttpError::FederationOptionsInNonFederatedRequest(_) => {
+            MeilisearchHttpError::FederationOptionsInNonFederatedRequest(_)
+            | MeilisearchHttpError::RemoteAndUseNetwork(_) => {
                 Code::InvalidMultiSearchFederationOptions
             }
             MeilisearchHttpError::PaginationInFederatedQuery(_, _) => {

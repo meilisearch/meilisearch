@@ -7,7 +7,7 @@ use crate::score_details::{self, ScoreDetails};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::ExactTerm;
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{CboRoaringBitmapCodec, Result, SearchContext, SearchLogger, TimeBudget};
+use crate::{CboRoaringBitmapCodec, Deadline, Result, SearchContext, SearchLogger};
 
 /// A ranking rule that produces 3 disjoint buckets:
 ///
@@ -36,7 +36,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for ExactAttribute {
         _logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &roaring::RoaringBitmap,
         query: &QueryGraph,
-        _time_budget: &TimeBudget,
+        _deadline: &Deadline,
     ) -> Result<()> {
         self.state = State::start_iteration(ctx, universe, query)?;
         Ok(())
@@ -48,7 +48,7 @@ impl<'ctx> RankingRule<'ctx, QueryGraph> for ExactAttribute {
         _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &roaring::RoaringBitmap,
-        _time_budget: &TimeBudget,
+        _deadline: &Deadline,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
         let state = std::mem::take(&mut self.state);
         let (state, output) = State::next(state, universe);

@@ -8,7 +8,7 @@ use crate::documents::geo_sort::{fill_cache, next_bucket};
 use crate::documents::{GeoSortParameter, GeoSortStrategy};
 use crate::score_details::{self, ScoreDetails};
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{GeoPoint, Result, SearchContext, SearchLogger, TimeBudget};
+use crate::{Deadline, GeoPoint, Result, SearchContext, SearchLogger};
 
 pub struct GeoSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
@@ -85,7 +85,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
         query: &Q,
-        _time_budget: &TimeBudget,
+        _deadline: &Deadline,
     ) -> Result<()> {
         assert!(self.query.is_none());
 
@@ -112,7 +112,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
-        _time_budget: &TimeBudget,
+        _deadline: &Deadline,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
         let query = self.query.as_ref().unwrap().clone();
 

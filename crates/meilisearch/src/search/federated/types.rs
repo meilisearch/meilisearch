@@ -8,7 +8,8 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
     InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition, InvalidMultiSearchRemote,
-    InvalidMultiSearchWeight, InvalidSearchLimit, InvalidSearchOffset,
+    InvalidMultiSearchWeight, InvalidSearchHitsPerPage, InvalidSearchLimit, InvalidSearchOffset,
+    InvalidSearchPage,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -20,7 +21,7 @@ use uuid::Uuid;
 
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
-use crate::search::SearchMetadata;
+use crate::search::{SearchMetadata, SearchResult};
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
@@ -93,6 +94,10 @@ pub struct Federation {
     /// Number of results to skip
     #[deserr(default = super::super::DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    pub page: Option<usize>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    pub hits_per_page: Option<usize>,
     /// Facets to retrieve per index
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
     pub facets_by_index: BTreeMap<IndexUid, Option<Vec<String>>>,
@@ -100,6 +105,25 @@ pub struct Federation {
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
     #[schema(value_type = Option<MergeFacets>)]
     pub merge_facets: Option<MergeFacets>,
+}
+
+impl Default for Federation {
+    fn default() -> Self {
+        Self {
+            limit: super::super::DEFAULT_SEARCH_LIMIT(),
+            offset: super::super::DEFAULT_SEARCH_OFFSET(),
+            page: Default::default(),
+            hits_per_page: Default::default(),
+            facets_by_index: Default::default(),
+            merge_facets: Default::default(),
+        }
+    }
+}
+
+impl Federation {
+    pub fn is_exhaustive(&self) -> bool {
+        self.page.is_some() || self.hits_per_page.is_some()
+    }
 }
 
 /// Options for merging facets from multiple indexes in federated search.
@@ -148,21 +172,15 @@ pub struct FederatedSearch {
 pub struct FederatedSearchResult {
     /// Combined search results from all queries
     pub hits: Vec<SearchHit>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_vectors: Option<BTreeMap<usize, Embedding>>,
     /// Total processing time in milliseconds
     pub processing_time_ms: u128,
     /// Pagination information
     #[serde(flatten)]
     pub hits_info: HitsInfo,
 
-    /// Vector representations used for each query
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub query_vectors: Option<BTreeMap<usize, Embedding>>,
-
-    /// Number of results from semantic search
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub semantic_hit_count: Option<u32>,
-
-    /// Merged facet distribution across all indexes
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<BTreeMap<String, BTreeMap<String, u64>>>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
@@ -183,11 +201,59 @@ pub struct FederatedSearchResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_errors: Option<BTreeMap<String, ResponseError>>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_hit_count: Option<u32>,
+
     // These fields are only used for analytics purposes
     #[serde(skip)]
     pub degraded: bool,
     #[serde(skip)]
     pub used_negative_operator: bool,
+}
+
+impl FederatedSearchResult {
+    pub fn into_search_result(self, query: String, index_uid: &str) -> SearchResult {
+        let Self {
+            hits,
+            query_vectors,
+            processing_time_ms,
+            hits_info,
+            mut facet_distribution,
+            mut facet_stats,
+            facets_by_index,
+            request_uid,
+            metadata,
+            remote_errors,
+            semantic_hit_count,
+            degraded,
+            used_negative_operator,
+        } = self;
+        let query_vector =
+            query_vectors.and_then(|mut query_vectors| query_vectors.pop_last().map(|(_, v)| v));
+        let metadata = metadata.and_then(|mut metadata| metadata.pop());
+        let FederatedFacets(mut facets) = facets_by_index;
+        if let Some(ComputedFacets { mut distribution, mut stats }) = facets.remove(index_uid) {
+            let facet_distribution = facet_distribution.get_or_insert_default();
+            facet_distribution.append(&mut distribution);
+            let facet_stats = facet_stats.get_or_insert_default();
+            facet_stats.append(&mut stats);
+        }
+        SearchResult {
+            hits,
+            query,
+            query_vector,
+            processing_time_ms,
+            hits_info,
+            facet_distribution,
+            facet_stats,
+            request_uid,
+            metadata,
+            remote_errors,
+            semantic_hit_count,
+            degraded,
+            used_negative_operator,
+        }
+    }
 }
 
 impl fmt::Debug for FederatedSearchResult {

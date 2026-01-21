@@ -364,6 +364,8 @@ impl From<FacetSearchQuery> for SearchQuery {
             ranking_score_threshold,
             locales,
             personalize: None,
+            // TODO: remote federated facet search not supported
+            use_network: None,
         }
     }
 }
