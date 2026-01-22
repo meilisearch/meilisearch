@@ -38,8 +38,8 @@ use crate::{
     default_criteria, Criterion, DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, Deadline,
     DocumentId, ExternalDocumentsIds, FacetDistribution, FieldDistribution, FieldId,
     FieldIdMapMissingEntry, FieldIdWordCountCodec, FieldidsWeightsMap, FilterableAttributesRule,
-    GeoPoint, LocalizedAttributesRule, ObkvCodec, Result, RoaringBitmapCodec,
-    RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
+    GeoPoint, LocalizedAttributesRule, ObkvCodec, Result, Search, U8StrStrCodec, Weight, BEU16,
+    BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
