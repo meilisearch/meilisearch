@@ -421,6 +421,7 @@ pub(crate) mod test {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::ArchiveExt;
 
     #[test]
     fn compat_v2_v3() {
@@ -429,7 +430,7 @@ pub(crate) mod test {
         let mut dump = BufReader::new(dump);
         let gz = GzDecoder::new(&mut dump);
         let mut archive = tar::Archive::new(gz);
-        archive.unpack(dir.path()).unwrap();
+        archive.safe_unpack(dir.path()).unwrap();
 
         let mut dump = v2::V2Reader::open(dir).unwrap().to_v3();
 

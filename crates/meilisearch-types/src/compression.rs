@@ -7,6 +7,8 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use tar::{Archive, Builder};
 
+use crate::ArchiveExt as _;
+
 pub fn to_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Result<()> {
     let mut f = File::create(dest)?;
     let gz_encoder = GzEncoder::new(&mut f, Compression::default());
@@ -23,6 +25,6 @@ pub fn from_tar_gz(src: impl AsRef<Path>, dest: impl AsRef<Path>) -> anyhow::Res
     let gz = GzDecoder::new(f);
     let mut ar = Archive::new(gz);
     create_dir_all(&dest)?;
-    ar.unpack(&dest)?;
+    ar.safe_unpack(&dest)?;
     Ok(())
 }

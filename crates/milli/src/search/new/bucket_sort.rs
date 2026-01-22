@@ -181,14 +181,14 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         }
 
         let next_bucket = if deadline.exceeded() {
-            match ranking_rules[cur_ranking_rule_index].non_blocking_next_bucket(
-                ctx,
-                logger,
-                &ranking_rule_universes[cur_ranking_rule_index],
-            )? {
-                std::task::Poll::Ready(bucket) => bucket,
-                std::task::Poll::Pending => {
-                    loop {
+            loop {
+                match ranking_rules[cur_ranking_rule_index].non_blocking_next_bucket(
+                    ctx,
+                    logger,
+                    &ranking_rule_universes[cur_ranking_rule_index],
+                )? {
+                    std::task::Poll::Ready(bucket) => break bucket,
+                    std::task::Poll::Pending => {
                         let bucket =
                             std::mem::take(&mut ranking_rule_universes[cur_ranking_rule_index]);
                         ranking_rule_scores.push(ScoreDetails::Skipped);
@@ -211,18 +211,27 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                         ranking_rule_scores.pop();
 
                         if cur_ranking_rule_index == 0 {
-                            break;
+                            return Ok(BucketSortOutput {
+                                scores: valid_scores,
+                                docids: valid_docids,
+                                all_candidates,
+                                degraded: true,
+                            });
                         }
 
-                        back!();
+                        // This is a copy/paste/adapted of the ugly back!() macro
+                        logger.end_iteration_ranking_rule(
+                            cur_ranking_rule_index,
+                            ranking_rules[cur_ranking_rule_index].as_ref(),
+                            &ranking_rule_universes[cur_ranking_rule_index],
+                        );
+                        ranking_rule_universes[cur_ranking_rule_index].clear();
+                        ranking_rules[cur_ranking_rule_index].end_iteration(ctx, logger);
+                        cur_ranking_rule_index -= 1;
+                        if ranking_rule_scores.len() > cur_ranking_rule_index {
+                            ranking_rule_scores.pop();
+                        }
                     }
-
-                    return Ok(BucketSortOutput {
-                        scores: valid_scores,
-                        docids: valid_docids,
-                        all_candidates,
-                        degraded: true,
-                    });
                 }
             }
         } else {

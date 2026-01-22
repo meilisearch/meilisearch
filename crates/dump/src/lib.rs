@@ -23,6 +23,7 @@ mod reader;
 mod writer;
 
 pub use error::Error;
+use meilisearch_types::ArchiveExt;
 pub use reader::{DumpReader, UpdateFile};
 pub use writer::DumpWriter;
 

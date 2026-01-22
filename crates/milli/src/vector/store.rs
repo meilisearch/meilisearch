@@ -14,6 +14,35 @@ const HANNOY_EF_CONSTRUCTION: usize = 125;
 const HANNOY_M: usize = 16;
 const HANNOY_M0: usize = 32;
 
+mod hnsw_params {
+    use std::env::{self, VarError};
+    use std::str::FromStr;
+    use std::sync::LazyLock;
+
+    pub static LINEAR_BELOW: LazyLock<usize> =
+        LazyLock::new(|| env_var_or("MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW", 300_000));
+
+    pub static LINEAR_BELOW_RATIO: LazyLock<f32> = LazyLock::new(|| {
+        env_var_or("MEILI_EXPERIMENTAL_HNSW_LINEAR_BELOW_RATIO", 0.1 /* 10% */)
+    });
+
+    /// Retrieve the content of an env variable or use a default value if not present.
+    fn env_var_or<T>(var: &str, default: T) -> T
+    where
+        <T as FromStr>::Err: std::fmt::Display,
+        T: FromStr,
+    {
+        match env::var(var) {
+            Ok(value) => match value.parse() {
+                Ok(value) => value,
+                Err(error) => panic!("invalid content in `{var}`: {error}"),
+            },
+            Err(VarError::NotPresent) => default,
+            Err(error) => panic!("invalid UTF8 content in `{var}`: {error}"),
+        }
+    }
+}
+
 #[derive(
     Debug,
     Clone,
@@ -995,6 +1024,8 @@ impl VectorStore {
             let reader = reader?;
             let mut searcher = reader.nns(limit);
             searcher.ef_search((limit * 10).max(100)); // TODO find better ef
+            searcher.linear_below(*hnsw_params::LINEAR_BELOW);
+            searcher.linear_below_ratio(*hnsw_params::LINEAR_BELOW_RATIO);
             if let Some(filter) = filter {
                 searcher.candidates(filter);
             }
@@ -1050,6 +1081,8 @@ impl VectorStore {
             let reader = reader?;
             let mut searcher = reader.nns(limit);
             searcher.ef_search((limit * 10).max(100)); // TODO find better ef
+            searcher.linear_below(*hnsw_params::LINEAR_BELOW);
+            searcher.linear_below_ratio(*hnsw_params::LINEAR_BELOW_RATIO);
             if let Some(filter) = filter {
                 searcher.candidates(filter);
             }
