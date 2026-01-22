@@ -1697,7 +1697,7 @@ pub struct InnerIndexSettingsDiff {
 
 impl InnerIndexSettingsDiff {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::settings")]
-    pub(crate) fn new(
+    pub fn new(
         old_settings: InnerIndexSettings,
         new_settings: InnerIndexSettings,
         primary_key_id: Option<FieldId>,
@@ -1995,7 +1995,7 @@ impl InnerIndexSettingsDiff {
 }
 
 #[derive(Clone)]
-pub(crate) struct InnerIndexSettings {
+pub struct InnerIndexSettings {
     pub stop_words: Option<fst::Set<Vec<u8>>>,
     pub allowed_separators: Option<BTreeSet<String>>,
     pub dictionary: Option<BTreeSet<String>>,
