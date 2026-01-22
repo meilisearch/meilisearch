@@ -119,7 +119,7 @@ twox-hash = { version = "2.1.2", default-features = false, features = [
     "xxhash3_64",
     "xxhash64",
 ] }
-geo-types = "0.7.17"
+geo-types = "=0.7.17" # fixed version: see <https://github.com/meilisearch/meilisearch/pull/6118>
 zerometry = "0.3.0"
 
 [dev-dependencies]
