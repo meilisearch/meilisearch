@@ -12,7 +12,7 @@ jobs:
       # Use ubuntu-22.04 to compile with glibc 2.35
       image: ubuntu:22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true

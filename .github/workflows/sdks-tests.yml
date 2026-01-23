@@ -22,7 +22,7 @@ jobs:
     outputs:
       docker-image: ${{ steps.define-image.outputs.docker-image }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Define the Docker image we need to use
         id: define-image
         env:
@@ -50,7 +50,7 @@ jobs:
       MEILISEARCH_VERSION: ${{ needs.define-docker-image.outputs.docker-image }}
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-dotnet
       - name: Setup .NET Core
@@ -79,7 +79,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-dart
       - uses: dart-lang/setup-dart@v1
@@ -107,7 +107,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: stable
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-go
       - name: Get dependencies
@@ -133,7 +133,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-java
       - name: Set up Java
@@ -160,7 +160,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-js
       - name: Install pnpm
@@ -197,7 +197,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-php
       - name: Install PHP
@@ -226,7 +226,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-python
       - name: Set up Python
@@ -251,7 +251,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-ruby
       - name: Set up Ruby 3
@@ -276,7 +276,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-rust
       - name: Build
@@ -297,7 +297,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-swift
       - name: Run tests
@@ -320,7 +320,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-js-plugins
       - name: Install pnpm
@@ -355,7 +355,7 @@ jobs:
     env:
       RAILS_VERSION: "7.0"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-rails
       - name: Install SQLite dependencies
@@ -385,7 +385,7 @@ jobs:
         ports:
           - "7700:7700"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: meilisearch/meilisearch-symfony
       - name: Install PHP
