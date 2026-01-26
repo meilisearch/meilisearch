@@ -10,11 +10,23 @@ If Meilisearch does not offer optimized support for your language, please consid
 
 ## Table of Contents
 
+- [Coding with AI](#coding-with-ai)
 - [Assumptions](#assumptions)
 - [How to Contribute](#how-to-contribute)
 - [Development Workflow](#development-workflow)
 - [Git Guidelines](#git-guidelines)
 - [Release Process (for internal team only)](#release-process-for-internal-team-only)
+
+## Coding with AI
+
+We accept the use of AI-powered tools (GitHub Copilot, ChatGPT, Claude, Cursor, etc.) for contributions, whether for code, tests, or documentation.
+
+⚠️ However, transparency is required: if you use AI assistance, please mention it in your PR description. This helps maintainers during code review and ensure the quality of contributions.
+
+What we expect:
+- **Disclose AI usage**: A simple note like "Used GitHub Copilot for autocompletion" or "Generated initial test structure with ChatGPT" is sufficient.
+- **Specify the scope**: Indicate which parts of your contribution involved AI assistance.
+- **Review AI-generated content**: Ensure you understand and have verified any AI-generated code before submitting.
 
 ## Assumptions
 
@@ -31,7 +43,7 @@ If Meilisearch does not offer optimized support for your language, please consid
 2. Once approved, [fork the Meilisearch repository](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) in your own GitHub account.
 3. [Create a new Git branch](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-and-deleting-branches-within-your-repository)
 4. Review the [Development Workflow](#development-workflow) section that describes the steps to maintain the repository.
-5. Make your changes on your branch.
+5. Make your changes on your branch. If you use AI tools during your work, remember to disclose it in your PR description (see [Coding with AI](#coding-with-ai)).
 6. [Submit the branch as a Pull Request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork) pointing to the `main` branch of the Meilisearch repository. A maintainer should comment and/or review your Pull Request within a few days. Although depending on the circumstances, it may take longer.
 
 ## Development Workflow
