@@ -159,7 +159,10 @@ impl ListFields {
     fn apply_filter(&self, field: &Field) -> bool {
         if let Some(filter) = &self.filter {
             if let Some(patterns) = &filter.attribute_patterns {
-                if matches!(patterns.match_str(field.name), PatternMatch::NoMatch) {
+                if matches!(
+                    patterns.match_str(field.name),
+                    PatternMatch::NoMatch | PatternMatch::Parent
+                ) {
                     return false;
                 }
             }
