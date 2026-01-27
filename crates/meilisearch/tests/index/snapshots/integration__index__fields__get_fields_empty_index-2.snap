@@ -4,5 +4,10 @@ expression: "(code.as_u16(), response)"
 ---
 [
   200,
-  []
+  {
+    "results": [],
+    "offset": 0,
+    "limit": 20,
+    "total": 0
+  }
 ]
