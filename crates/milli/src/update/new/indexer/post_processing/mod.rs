@@ -55,7 +55,7 @@ where
             indexing_context.grenad_parameters,
             indexing_context.progress,
         )?;
-    };
+    }
     Ok(())
 }
 
@@ -93,6 +93,7 @@ fn compute_word_fst(
 
     let words_fst = index.words_fst(&rtxn)?;
     let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
+    // TODO Are you sure you want to use a rtxn, here?
     let prefix_settings = index.prefix_settings(&rtxn)?;
     word_fst_builder.with_prefix_settings(prefix_settings);
 
@@ -169,8 +170,8 @@ fn compute_facet_search_database(
         return Ok(());
     }
 
-    let localized_attributes_rules = index.localized_attributes_rules(&rtxn)?;
-    let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;
+    let localized_attributes_rules = index.localized_attributes_rules(wtxn)?;
+    let filterable_attributes_rules = index.filterable_attributes_rules(wtxn)?;
     let mut facet_search_builder = FacetSearchBuilder::new(
         global_fields_ids_map,
         localized_attributes_rules.unwrap_or_default(),
@@ -223,9 +224,7 @@ fn compute_facet_level_database(
     grenad_parameters: &GrenadParameters,
     progress: &Progress,
 ) -> Result<()> {
-    let rtxn = index.read_txn()?;
-
-    let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;
+    let filterable_attributes_rules = index.filterable_attributes_rules(wtxn)?;
     let mut deltas: Vec<_> = facet_field_ids_delta.consume_facet_string_delta().collect();
     // We move all bulks at the front and incrementals (others) at the end.
     deltas.sort_by_key(|(_, delta)| if let FacetFieldIdDelta::Bulk = delta { 0 } else { 1 });

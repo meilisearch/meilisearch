@@ -30,7 +30,6 @@ use crate::heed_codec::StrBEU16Codec;
 use crate::progress::{EmbedderStats, Progress};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::steps::SettingsIndexerStep;
-use crate::update::new::FacetFieldIdsDelta;
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
@@ -352,7 +351,7 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let index_embeddings = extractor_handle.join().unwrap()?;
+        let (index_embeddings, facet_field_ids_delta) = extractor_handle.join().unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -371,8 +370,6 @@ where
         .unwrap()?;
 
         pool.install(|| {
-            // WARN When implementing the facets don't forget this
-            let facet_field_ids_delta = FacetFieldIdsDelta::new(0, 0);
             post_processing::post_process(
                 indexing_context,
                 wtxn,
