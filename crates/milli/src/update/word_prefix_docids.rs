@@ -6,15 +6,15 @@ use heed::Database;
 
 use crate::update::del_add::{deladd_serialize_add_side, DelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{
-    create_sorter, merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
-    write_sorter_into_database, CursorClonableMmap, MergeDeladdCboRoaringBitmaps,
+    create_sorter, merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap, valid_lmdb_key,
+    write_sorter_into_database, CursorClonableMmap, MergeDeladdDeCboRoaringBitmaps,
 };
-use crate::{CboRoaringBitmapCodec, Result};
+use crate::{DeCboRoaringBitmapCodec, Result};
 
 pub struct WordPrefixDocids<'t, 'i> {
     wtxn: &'t mut heed::RwTxn<'i>,
-    word_docids: Database<Str, CboRoaringBitmapCodec>,
-    word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+    word_docids: Database<Str, DeCboRoaringBitmapCodec>,
+    word_prefix_docids: Database<Str, DeCboRoaringBitmapCodec>,
     pub(crate) chunk_compression_type: CompressionType,
     pub(crate) chunk_compression_level: Option<u32>,
     pub(crate) max_nb_chunks: Option<usize>,
@@ -24,8 +24,8 @@ pub struct WordPrefixDocids<'t, 'i> {
 impl<'t, 'i> WordPrefixDocids<'t, 'i> {
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i>,
-        word_docids: Database<Str, CboRoaringBitmapCodec>,
-        word_prefix_docids: Database<Str, CboRoaringBitmapCodec>,
+        word_docids: Database<Str, DeCboRoaringBitmapCodec>,
+        word_prefix_docids: Database<Str, DeCboRoaringBitmapCodec>,
     ) -> WordPrefixDocids<'t, 'i> {
         WordPrefixDocids {
             wtxn,
@@ -46,7 +46,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
     )]
     pub fn execute(
         self,
-        new_word_docids: grenad::Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>,
+        new_word_docids: grenad::Merger<CursorClonableMmap, MergeDeladdDeCboRoaringBitmaps>,
         new_prefix_fst_words: &[String],
         common_prefix_fst_words: &[&[String]],
         del_prefix_fst_words: &HashSet<Vec<u8>>,
@@ -55,7 +55,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
         // and write into it at the same time, therefore we write into another file.
         let mut prefix_docids_sorter = create_sorter(
             grenad::SortAlgorithm::Unstable,
-            MergeDeladdCboRoaringBitmaps,
+            MergeDeladdDeCboRoaringBitmaps,
             self.chunk_compression_type,
             self.chunk_compression_level,
             self.max_nb_chunks,
@@ -130,7 +130,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
             self.wtxn,
             database_is_empty,
             deladd_serialize_add_side,
-            merge_deladd_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
+            merge_deladd_de_cbo_roaring_bitmaps_into_cbo_roaring_bitmap,
         )?;
 
         Ok(())
@@ -139,7 +139,7 @@ impl<'t, 'i> WordPrefixDocids<'t, 'i> {
 
 fn write_prefixes_in_sorter(
     prefixes: &mut HashMap<Vec<u8>, Vec<Vec<u8>>>,
-    sorter: &mut grenad::Sorter<MergeDeladdCboRoaringBitmaps>,
+    sorter: &mut grenad::Sorter<MergeDeladdDeCboRoaringBitmaps>,
 ) -> Result<()> {
     for (key, data_slices) in prefixes.drain() {
         for data in data_slices {

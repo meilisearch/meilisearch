@@ -10,7 +10,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupLazyValueCodec, FacetGroupValueCodec,
 };
 use crate::heed_codec::BytesRefCodec;
-use crate::{CboRoaringBitmapCodec, DocumentId};
+use crate::{DeCboRoaringBitmapCodec, DocumentId};
 
 /// Call the given closure on the facet distribution of the candidate documents.
 ///
@@ -88,7 +88,7 @@ where
             if key.field_id != field_id {
                 break;
             }
-            let intersection = CboRoaringBitmapCodec::intersection_with_serialized(
+            let intersection = DeCboRoaringBitmapCodec::intersection_with_serialized(
                 value.bitmap_bytes,
                 candidates,
             )?;
@@ -120,7 +120,7 @@ where
                     if key.field_id != field_id {
                         break;
                     }
-                    let intersection = CboRoaringBitmapCodec::intersection_with_serialized(
+                    let intersection = DeCboRoaringBitmapCodec::intersection_with_serialized(
                         value.bitmap_bytes,
                         candidates,
                     )?;
@@ -173,7 +173,7 @@ where
             if key.field_id != self.field_id {
                 return Ok(ControlFlow::Break(()));
             }
-            let docids_in_common = CboRoaringBitmapCodec::intersection_with_serialized(
+            let docids_in_common = DeCboRoaringBitmapCodec::intersection_with_serialized(
                 value.bitmap_bytes,
                 candidates,
             )?;
@@ -210,7 +210,7 @@ where
             if key.field_id != self.field_id {
                 return Ok(ControlFlow::Break(()));
             }
-            let docids_in_common = CboRoaringBitmapCodec::intersection_with_serialized(
+            let docids_in_common = DeCboRoaringBitmapCodec::intersection_with_serialized(
                 value.bitmap_bytes,
                 candidates,
             )?;

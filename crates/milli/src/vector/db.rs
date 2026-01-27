@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::vector::settings::RemoveFragments;
 use crate::vector::EmbeddingConfig;
-use crate::{CboRoaringBitmapCodec, DocumentId, UserError};
+use crate::{DeCboRoaringBitmapCodec, DocumentId, UserError};
 
 /// DB representation of an embedder configuration.
 ///
@@ -273,9 +273,9 @@ impl<'a> heed::BytesDecode<'a> for EmbedderInfoCodec {
         }
         let first_bitmap_size = bytes.read_u32::<BigEndian>()?;
         let first_bitmap_bytes = &bytes[..first_bitmap_size as usize];
-        let user_provided = CboRoaringBitmapCodec::bytes_decode(first_bitmap_bytes)?;
+        let user_provided = DeCboRoaringBitmapCodec::bytes_decode(first_bitmap_bytes)?;
         let skip_regenerate_different_from_user_provided =
-            CboRoaringBitmapCodec::bytes_decode(&bytes[first_bitmap_size as usize..])?;
+            DeCboRoaringBitmapCodec::bytes_decode(&bytes[first_bitmap_size as usize..])?;
         Ok(EmbedderInfo {
             embedder_id,
             embedding_status: EmbeddingStatus {
@@ -290,20 +290,21 @@ impl<'a> heed::BytesEncode<'a> for EmbedderInfoCodec {
     type EItem = EmbedderInfo;
 
     fn bytes_encode(item: &'a Self::EItem) -> Result<Cow<'a, [u8]>, heed::BoxedError> {
-        let first_bitmap_size =
-            CboRoaringBitmapCodec::serialized_size(&item.embedding_status.user_provided);
-        let second_bitmap_size = CboRoaringBitmapCodec::serialized_size(
+        let mut tmp_buffer = Vec::new();
+        let first_bitmap_size = DeCboRoaringBitmapCodec::serialized_size_with_tmp_buffer(
+            &item.embedding_status.user_provided,
+            &mut tmp_buffer,
+        );
+        let second_bitmap_size = DeCboRoaringBitmapCodec::serialized_size_with_tmp_buffer(
             &item.embedding_status.skip_regenerate_different_from_user_provided,
+            &mut tmp_buffer,
         );
 
         let mut bytes = Vec::with_capacity(1 + 4 + first_bitmap_size + second_bitmap_size);
         bytes.write_u8(item.embedder_id)?;
         bytes.write_u32::<BigEndian>(first_bitmap_size.try_into()?)?;
-        CboRoaringBitmapCodec::serialize_into_writer(
-            &item.embedding_status.user_provided,
-            &mut bytes,
-        )?;
-        CboRoaringBitmapCodec::serialize_into_writer(
+        DeCboRoaringBitmapCodec::serialize_into(&item.embedding_status.user_provided, &mut bytes)?;
+        DeCboRoaringBitmapCodec::serialize_into(
             &item.embedding_status.skip_regenerate_different_from_user_provided,
             &mut bytes,
         )?;
