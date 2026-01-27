@@ -3106,7 +3106,7 @@ dependencies = [
 
 [[package]]
 name = "http-client"
-version = "1.33.1"
+version = "1.34.1"
 dependencies = [
  "cidr",
  "hyper-util",
