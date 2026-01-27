@@ -208,6 +208,7 @@ struct Infos {
     experimental_no_edition_2024_for_prefix_post_processing: bool,
     experimental_no_edition_2024_for_facet_post_processing: bool,
     experimental_vector_store_setting: bool,
+    experimental_mcp: bool,
     experimental_personalization: bool,
     gpu_enabled: bool,
     db_path: bool,
@@ -317,6 +318,7 @@ impl Infos {
             chat_completions,
             multimodal,
             vector_store_setting,
+            mcp,
         } = features;
 
         // We're going to override every sensible information.
@@ -343,6 +345,7 @@ impl Infos {
             experimental_no_snapshot_compaction,
             experimental_no_edition_2024_for_dumps,
             experimental_vector_store_setting: vector_store_setting,
+            experimental_mcp: mcp,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != Path::new("./data.ms"),
             import_dump: import_dump.is_some(),

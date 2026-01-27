@@ -22,6 +22,7 @@ pub struct RuntimeTogglableFeatures {
     pub chat_completions: bool,
     pub multimodal: bool,
     pub vector_store_setting: bool,
+    pub mcp: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

@@ -10,6 +10,7 @@ use meili_snap::snapshot;
 use meilisearch::analytics::Analytics;
 use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
+use meilisearch::mcp::McpSessionStore;
 use meilisearch::{create_app, Opt, ServicesData, SubscriberForSecondLayer};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -50,16 +51,19 @@ async fn basic_test_log_stream_route() {
         NonZeroUsize::new(1).unwrap(),
     );
 
+    let services_data = ServicesData {
+        index_scheduler: server.service.index_scheduler.clone().into(),
+        auth: server.service.auth.clone().into(),
+        search_queue: Data::new(search_queue),
+        personalization_service: Data::new(PersonalizationService::disabled()),
+        logs_route_handle: Data::new(route_layer_handle),
+        logs_stderr_handle: Data::new(stderr_layer_handle),
+        analytics: Data::new(Analytics::no_analytics()),
+        mcp_session_store: Data::new(McpSessionStore::new()),
+    };
+
     let app = actix_web::test::init_service(create_app(
-        ServicesData {
-            index_scheduler: server.service.index_scheduler.clone().into(),
-            auth: server.service.auth.clone().into(),
-            search_queue: Data::new(search_queue),
-            personalization_service: Data::new(PersonalizationService::disabled()),
-            logs_route_handle: Data::new(route_layer_handle),
-            logs_stderr_handle: Data::new(stderr_layer_handle),
-            analytics: Data::new(Analytics::no_analytics()),
-        },
+        services_data,
         server.service.options.clone(),
         true,
     ))

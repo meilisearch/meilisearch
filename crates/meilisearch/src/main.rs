@@ -177,6 +177,8 @@ async fn run_http(
     let logs_route_handle = Data::new(logs_route_handle);
     let logs_stderr_handle = Data::new(logs_stderr_handle);
 
+    let mcp_session_store = Data::new(meilisearch::mcp::McpSessionStore::new());
+
     let services = ServicesData {
         index_scheduler,
         auth,
@@ -185,6 +187,7 @@ async fn run_http(
         logs_route_handle,
         logs_stderr_handle,
         analytics,
+        mcp_session_store,
     };
 
     let http_server =
