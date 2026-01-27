@@ -24,7 +24,7 @@ use utoipa::ToSchema;
 
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::PAGINATION_DEFAULT_LIMIT;
+use crate::routes::{Pagination, PAGINATION_DEFAULT_LIMIT};
 
 #[derive(Debug, Serialize, Clone, Copy, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -244,9 +244,11 @@ pub async fn post_index_fields(
 
             Some(field)
         })
-        .skip(body.0.offset)
-        .take(body.0.limit)
+        // collect into a vector to get the total length for pagination
         .collect::<Vec<_>>();
 
-    Ok(HttpResponse::Ok().json(fields))
+    let pagination = Pagination { offset: body.0.offset, limit: body.0.limit };
+    let pagination_view = pagination.auto_paginate_sized(fields.into_iter());
+
+    Ok(HttpResponse::Ok().json(pagination_view))
 }
