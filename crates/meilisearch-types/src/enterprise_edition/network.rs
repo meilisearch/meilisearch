@@ -3,7 +3,7 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
-use milli::update::new::indexer::enterprise_edition::sharding::Shards;
+use milli::sharding::Shards;
 
 use crate::network::Network;
 

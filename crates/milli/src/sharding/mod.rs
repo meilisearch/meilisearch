@@ -1,8 +1,21 @@
+#[cfg(not(feature = "enterprise"))]
+pub mod community_edition;
+#[cfg(feature = "enterprise")]
+pub mod enterprise_edition;
 use heed::types::{DecodeIgnore, Str};
 use heed::{Database, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
 use crate::{CboRoaringBitmapCodec, Index, Result};
+
+#[derive(Debug, Clone)]
+pub struct Shards(pub Vec<Shard>);
+
+#[derive(Debug, Clone)]
+pub struct Shard {
+    pub is_own: bool,
+    pub name: String,
+}
 
 /// View over the `shard_docids` DB of an index
 pub struct DbShardDocids(Database<Str, CboRoaringBitmapCodec>);
