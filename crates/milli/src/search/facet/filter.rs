@@ -28,6 +28,8 @@ use crate::{
 
 /// The maximum number of filters the filter AST can process.
 const MAX_FILTER_DEPTH: usize = 2000;
+/// magic field name to use filter on shards
+const SHARD_FIELD: &str = "_shard";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Filter<'a> {
@@ -241,6 +243,10 @@ impl<'a> Filter<'a> {
 
     pub fn use_vector_filter(&self) -> Option<&Token<'_>> {
         self.condition.use_vector_filter()
+    }
+
+    pub fn use_shard_filter(&self) -> Option<&Token<'_>> {
+        self.condition.use_field(SHARD_FIELD)
     }
 }
 
@@ -514,6 +520,51 @@ impl<'a> Filter<'a> {
         Ok(output)
     }
 
+    fn evaluate_shard_operator(
+        rtxn: &heed::RoTxn<'_>,
+        index: &Index,
+        universe: Option<&RoaringBitmap>,
+        operator: &Condition<'a>,
+    ) -> Result<RoaringBitmap> {
+        Ok(match operator {
+            Condition::Equal(token) => {
+                let shard_name = token.value();
+                let mut docids =
+                    index.shard_docids().docids(rtxn, shard_name)?.ok_or_else(|| {
+                        Error::UserError(UserError::FilterShardNotExist {
+                            shard: shard_name.to_owned(),
+                        })
+                    })?;
+
+                if let Some(universe) = universe {
+                    docids |= universe
+                }
+
+                docids
+            }
+            Condition::NotEqual(token) => {
+                let to_remove = Self::evaluate_shard_operator(
+                    rtxn,
+                    index,
+                    universe,
+                    &Condition::Equal(token.clone()),
+                )?;
+
+                let universe = match universe {
+                    Some(universe) => universe.clone(),
+                    None => index.documents_ids(rtxn)?,
+                };
+
+                universe - to_remove
+            }
+            unsupported => {
+                return Err(Error::UserError(UserError::FilterShardOperatorNotAllowed {
+                    operator: unsupported.operator().to_string(),
+                }))
+            }
+        })
+    }
+
     /// Aggregates the documents ids that are part of the specified range automatically
     /// going deeper through the levels.
     fn explore_facet_levels<'data, BoundCodec>(
@@ -574,6 +625,11 @@ impl<'a> Filter<'a> {
                     }
                 }
             }
+            FilterCondition::In { fid, els } if fid.value() == SHARD_FIELD => els
+                .iter()
+                .map(|el| Condition::Equal(el.clone()))
+                .map(|op| Self::evaluate_shard_operator(rtxn, index, universe, &op))
+                .union(),
             FilterCondition::In { fid, els } => {
                 let Some(field_id) = field_ids_map.id(fid.value()) else {
                     return Ok(RoaringBitmap::new());
@@ -592,6 +648,9 @@ impl<'a> Filter<'a> {
                         )
                     })
                     .union()
+            }
+            FilterCondition::Condition { fid, op } if fid.value() == SHARD_FIELD => {
+                Self::evaluate_shard_operator(rtxn, index, universe, op)
             }
             FilterCondition::Condition { fid, op } => {
                 let value = fid.value();

@@ -481,7 +481,6 @@ impl ErrorCode for milli::Error {
             Error::IoError(e) => e.error_code(),
             Error::UserError(ref error) => {
                 match error {
-                    // TODO: wait for spec for new error codes.
                     UserError::SerdeJson(_)
                     | UserError::EnvAlreadyOpened
                     | UserError::DocumentLimitReached
@@ -490,9 +489,11 @@ impl ErrorCode for milli::Error {
                     UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
                     UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
                     UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
-                    UserError::InvalidFilter(_) => Code::InvalidSearchFilter,
-                    UserError::InvalidFilterExpression(..) => Code::InvalidSearchFilter,
-                    UserError::FilterOperatorNotAllowed { .. } => Code::InvalidSearchFilter,
+                    UserError::InvalidFilter(_)
+                    | UserError::InvalidFilterExpression(..)
+                    | UserError::FilterOperatorNotAllowed { .. }
+                    | UserError::FilterShardNotExist { .. }
+                    | UserError::FilterShardOperatorNotAllowed { .. } => Code::InvalidSearchFilter,
                     UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
                     UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
                         Code::InvalidDocumentId
