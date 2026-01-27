@@ -9,7 +9,7 @@ use bumpalo::Bump;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
-use meilisearch_types::milli::update::new::indexer::current_edition::sharding::Shards;
+use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::{self};
 use meilisearch_types::network::Remote;
 use meilisearch_types::tasks::network::{NetworkTopologyState, Origin};
