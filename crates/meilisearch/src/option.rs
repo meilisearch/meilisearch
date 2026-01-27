@@ -515,6 +515,7 @@ pub struct Opt {
     ///
     /// Sets this to override the default IP policy of blocking all internal IPs and allow some internal IPs.
     #[clap(long, env = MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS, value_delimiter=',', action=clap::ArgAction::Set)]
+    #[serde(default)]
     pub experimental_allowed_ip_networks: Vec<cidr::AnyIpCidr>,
 
     #[serde(flatten)]
