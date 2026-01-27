@@ -17,7 +17,7 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::milli::tokenizer::Language;
 use meilisearch_types::milli::{
     AttributePatterns, FieldSortOrder, FilterFeatures, FilterableAttributesFeatures,
-    MetadataBuilder, PatternMatch,
+    FilterableAttributesRule, LocalizedAttributesRule, Metadata, MetadataBuilder, PatternMatch,
 };
 use serde::{Serialize, Serializer};
 use utoipa::ToSchema;
@@ -37,6 +37,44 @@ pub struct Field<'a> {
     pub ranking_rule: FieldRankingRuleConfig,
     pub filterable: FieldFilterableConfig,
     pub localized: FieldLocalizedConfig<'a>,
+}
+
+impl<'a> Field<'a> {
+    pub fn new(
+        name: &'a str,
+        metadata: &Metadata,
+        filterable_attributes: &[FilterableAttributesRule],
+        localized_attributes_rules: Option<&'a [LocalizedAttributesRule]>,
+    ) -> Self {
+        let FilterableAttributesFeatures { facet_search, filter } =
+            metadata.filterable_attributes_features(filterable_attributes);
+        let FilterFeatures { equality, comparison } = filter;
+        let is_filterable = equality || comparison || facet_search;
+
+        let locales = localized_attributes_rules
+            .and_then(|rules| metadata.locales(rules))
+            .unwrap_or_default();
+
+        Field {
+            name,
+            displayed: FieldDisplayConfig { enabled: metadata.displayed },
+            searchable: FieldSearchConfig { enabled: metadata.searchable.is_some() },
+            sortable: FieldSortableConfig { enabled: metadata.sortable },
+            distinct: FieldDistinctConfig { enabled: metadata.distinct },
+            ranking_rule: FieldRankingRuleConfig {
+                enabled: metadata.is_asc_desc(),
+                order: metadata.asc_desc,
+            },
+            filterable: FieldFilterableConfig {
+                enabled: is_filterable,
+                sort_by: metadata.sort_by.into(),
+                facet_search,
+                equality,
+                comparison,
+            },
+            localized: FieldLocalizedConfig { locales },
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Clone, Copy, ToSchema)]
@@ -208,35 +246,12 @@ pub async fn post_index_fields(
         .fields_metadata()
         .iter()
         .filter_map(|(name, metadata)| {
-            let FilterableAttributesFeatures { facet_search, filter } =
-                metadata.filterable_attributes_features(builder.filterable_attributes());
-            let FilterFeatures { equality, comparison } = filter;
-            let is_filterable = equality || comparison || facet_search;
-
-            let locales = builder
-                .localized_attributes_rules()
-                .and_then(|rules| metadata.locales(rules))
-                .unwrap_or_default();
-
-            let field = Field {
+            let field = Field::new(
                 name,
-                displayed: FieldDisplayConfig { enabled: metadata.displayed },
-                searchable: FieldSearchConfig { enabled: metadata.searchable.is_some() },
-                sortable: FieldSortableConfig { enabled: metadata.sortable },
-                distinct: FieldDistinctConfig { enabled: metadata.distinct },
-                ranking_rule: FieldRankingRuleConfig {
-                    enabled: metadata.is_asc_desc(),
-                    order: metadata.asc_desc,
-                },
-                filterable: FieldFilterableConfig {
-                    enabled: is_filterable,
-                    sort_by: metadata.sort_by.into(),
-                    facet_search,
-                    equality,
-                    comparison,
-                },
-                localized: FieldLocalizedConfig { locales },
-            };
+                metadata,
+                builder.filterable_attributes(),
+                builder.localized_attributes_rules(),
+            );
 
             if !body.0.apply_filter(&field) {
                 return None;
