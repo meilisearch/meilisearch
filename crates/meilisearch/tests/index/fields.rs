@@ -61,6 +61,22 @@ async fn get_fields_with_documents_and_filters() {
     insta::assert_json_snapshot!((code.as_u16(), response), {
         "[1]" => insta::sorted_redaction(),
     });
+
+    // search parameter should filter
+    // no field should match
+    let (response, code) = index
+        .fields(&ListFieldsPayload {
+            filter: Some(ListFieldsFilterPayload {
+                attribute_patterns: Some(&["title.to*"]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await;
+
+    insta::assert_json_snapshot!((code.as_u16(), response), {
+        "[1]" => insta::sorted_redaction(),
+    });
 }
 
 #[actix_rt::test]

@@ -4,34 +4,39 @@ expression: "(code.as_u16(), response)"
 ---
 [
   200,
-  [
-    {
-      "name": "title",
-      "displayed": {
-        "enabled": true
-      },
-      "searchable": {
-        "enabled": true
-      },
-      "sortable": {
-        "enabled": false
-      },
-      "distinct": {
-        "enabled": false
-      },
-      "rankingRule": {
-        "enabled": false
-      },
-      "filterable": {
-        "enabled": false,
-        "sortBy": "alpha",
-        "facetSearch": false,
-        "equality": false,
-        "comparison": false
-      },
-      "localized": {
-        "locales": []
+  {
+    "limit": 20,
+    "offset": 0,
+    "results": [
+      {
+        "name": "title",
+        "displayed": {
+          "enabled": true
+        },
+        "searchable": {
+          "enabled": true
+        },
+        "sortable": {
+          "enabled": false
+        },
+        "distinct": {
+          "enabled": false
+        },
+        "rankingRule": {
+          "enabled": false
+        },
+        "filterable": {
+          "enabled": false,
+          "sortBy": "alpha",
+          "facetSearch": false,
+          "equality": false,
+          "comparison": false
+        },
+        "localized": {
+          "locales": []
+        }
       }
-    }
-  ]
+    ],
+    "total": 1
+  }
 ]

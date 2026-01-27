@@ -4,118 +4,123 @@ expression: "(code.as_u16(), response)"
 ---
 [
   200,
-  [
-    {
-      "name": "color",
-      "displayed": {
-        "enabled": true
+  {
+    "limit": 20,
+    "offset": 0,
+    "results": [
+      {
+        "name": "color",
+        "displayed": {
+          "enabled": true
+        },
+        "searchable": {
+          "enabled": true
+        },
+        "sortable": {
+          "enabled": false
+        },
+        "distinct": {
+          "enabled": false
+        },
+        "rankingRule": {
+          "enabled": false
+        },
+        "filterable": {
+          "enabled": false,
+          "sortBy": "alpha",
+          "facetSearch": false,
+          "equality": false,
+          "comparison": false
+        },
+        "localized": {
+          "locales": []
+        }
       },
-      "searchable": {
-        "enabled": true
+      {
+        "name": "genre",
+        "displayed": {
+          "enabled": true
+        },
+        "searchable": {
+          "enabled": true
+        },
+        "sortable": {
+          "enabled": false
+        },
+        "distinct": {
+          "enabled": false
+        },
+        "rankingRule": {
+          "enabled": false
+        },
+        "filterable": {
+          "enabled": false,
+          "sortBy": "alpha",
+          "facetSearch": false,
+          "equality": false,
+          "comparison": false
+        },
+        "localized": {
+          "locales": []
+        }
       },
-      "sortable": {
-        "enabled": false
+      {
+        "name": "id",
+        "displayed": {
+          "enabled": true
+        },
+        "searchable": {
+          "enabled": true
+        },
+        "sortable": {
+          "enabled": false
+        },
+        "distinct": {
+          "enabled": false
+        },
+        "rankingRule": {
+          "enabled": false
+        },
+        "filterable": {
+          "enabled": false,
+          "sortBy": "alpha",
+          "facetSearch": false,
+          "equality": false,
+          "comparison": false
+        },
+        "localized": {
+          "locales": []
+        }
       },
-      "distinct": {
-        "enabled": false
-      },
-      "rankingRule": {
-        "enabled": false
-      },
-      "filterable": {
-        "enabled": false,
-        "sortBy": "alpha",
-        "facetSearch": false,
-        "equality": false,
-        "comparison": false
-      },
-      "localized": {
-        "locales": []
+      {
+        "name": "title",
+        "displayed": {
+          "enabled": true
+        },
+        "searchable": {
+          "enabled": true
+        },
+        "sortable": {
+          "enabled": false
+        },
+        "distinct": {
+          "enabled": false
+        },
+        "rankingRule": {
+          "enabled": false
+        },
+        "filterable": {
+          "enabled": false,
+          "sortBy": "alpha",
+          "facetSearch": false,
+          "equality": false,
+          "comparison": false
+        },
+        "localized": {
+          "locales": []
+        }
       }
-    },
-    {
-      "name": "genre",
-      "displayed": {
-        "enabled": true
-      },
-      "searchable": {
-        "enabled": true
-      },
-      "sortable": {
-        "enabled": false
-      },
-      "distinct": {
-        "enabled": false
-      },
-      "rankingRule": {
-        "enabled": false
-      },
-      "filterable": {
-        "enabled": false,
-        "sortBy": "alpha",
-        "facetSearch": false,
-        "equality": false,
-        "comparison": false
-      },
-      "localized": {
-        "locales": []
-      }
-    },
-    {
-      "name": "id",
-      "displayed": {
-        "enabled": true
-      },
-      "searchable": {
-        "enabled": true
-      },
-      "sortable": {
-        "enabled": false
-      },
-      "distinct": {
-        "enabled": false
-      },
-      "rankingRule": {
-        "enabled": false
-      },
-      "filterable": {
-        "enabled": false,
-        "sortBy": "alpha",
-        "facetSearch": false,
-        "equality": false,
-        "comparison": false
-      },
-      "localized": {
-        "locales": []
-      }
-    },
-    {
-      "name": "title",
-      "displayed": {
-        "enabled": true
-      },
-      "searchable": {
-        "enabled": true
-      },
-      "sortable": {
-        "enabled": false
-      },
-      "distinct": {
-        "enabled": false
-      },
-      "rankingRule": {
-        "enabled": false
-      },
-      "filterable": {
-        "enabled": false,
-        "sortBy": "alpha",
-        "facetSearch": false,
-        "equality": false,
-        "comparison": false
-      },
-      "localized": {
-        "locales": []
-      }
-    }
-  ]
+    ],
+    "total": 4
+  }
 ]
