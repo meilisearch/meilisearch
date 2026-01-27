@@ -42,7 +42,6 @@ where
         wtxn,
         facet_field_ids_delta,
         &mut global_fields_ids_map,
-        indexing_context.grenad_parameters,
         indexing_context.progress,
     )?;
     compute_facet_search_database(index, wtxn, global_fields_ids_map, indexing_context.progress)?;
@@ -220,7 +219,6 @@ fn compute_facet_level_database(
     wtxn: &mut RwTxn,
     mut facet_field_ids_delta: FacetFieldIdsDelta,
     global_fields_ids_map: &mut GlobalFieldsIdsMap,
-    grenad_parameters: &GrenadParameters,
     progress: &Progress,
 ) -> Result<()> {
     let rtxn = index.read_txn()?;
@@ -244,14 +242,8 @@ fn compute_facet_level_database(
         match delta {
             FacetFieldIdDelta::Bulk => {
                 progress.update_progress(PostProcessingFacets::StringsBulk);
-                if grenad_parameters.experimental_no_edition_2024_for_facet_post_processing {
-                    tracing::debug!(%fid, "bulk string facet processing");
-                    FacetsUpdateBulk::new_not_updating_level_0(index, vec![fid], FacetType::String)
-                        .execute(wtxn)?
-                } else {
-                    tracing::debug!(%fid, "bulk string facet processing in parallel");
-                    generate_facet_levels(index, wtxn, fid, FacetType::String)?
-                }
+                tracing::debug!(%fid, "bulk string facet processing in parallel");
+                generate_facet_levels(index, wtxn, fid, FacetType::String)?
             }
             FacetFieldIdDelta::Incremental(delta_data) => {
                 progress.update_progress(PostProcessingFacets::StringsIncremental);

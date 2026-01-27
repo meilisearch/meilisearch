@@ -21,8 +21,6 @@ struct WordPrefixDocids<'i> {
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
     max_memory_by_thread: Option<usize>,
-    /// Do not use an experimental LMDB feature to read uncommitted data in parallel.
-    no_experimental_post_processing: bool,
 }
 
 impl<'i> WordPrefixDocids<'i> {
@@ -37,8 +35,6 @@ impl<'i> WordPrefixDocids<'i> {
             database,
             prefix_database,
             max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
-            no_experimental_post_processing: grenad_parameters
-                .experimental_no_edition_2024_for_prefix_post_processing,
         }
     }
 
@@ -49,11 +45,7 @@ impl<'i> WordPrefixDocids<'i> {
         prefix_to_delete: &BTreeSet<Prefix>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
-        if self.no_experimental_post_processing {
-            self.recompute_modified_prefixes(wtxn, prefix_to_compute)
-        } else {
-            self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
-        }
+        self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
@@ -234,8 +226,6 @@ struct WordPrefixIntegerDocids<'i> {
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
     max_memory_by_thread: Option<usize>,
-    /// Do not use an experimental LMDB feature to read uncommitted data in parallel.
-    no_experimental_post_processing: bool,
 }
 
 impl<'i> WordPrefixIntegerDocids<'i> {
@@ -250,8 +240,6 @@ impl<'i> WordPrefixIntegerDocids<'i> {
             database,
             prefix_database,
             max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
-            no_experimental_post_processing: grenad_parameters
-                .experimental_no_edition_2024_for_prefix_post_processing,
         }
     }
 
@@ -262,11 +250,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         prefix_to_delete: &BTreeSet<Prefix>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
-        if self.no_experimental_post_processing {
-            self.recompute_modified_prefixes(wtxn, prefix_to_compute)
-        } else {
-            self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
-        }
+        self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
     }
 
     /// Computes the same as `recompute_modified_prefixes`.
