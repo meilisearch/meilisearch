@@ -274,7 +274,7 @@ pub(crate) mod test {
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
     use meilisearch_types::milli::{self, FilterableAttributesRule};
-    use meilisearch_types::network::{Network, Remote};
+    use meilisearch_types::network::{Network, Remote, Shard};
     use meilisearch_types::settings::{Checked, FacetingSettings, Settings};
     use meilisearch_types::task_view::DetailsView;
     use meilisearch_types::tasks::{BatchStopReason, Details, Kind, Status};
@@ -568,6 +568,7 @@ pub(crate) mod test {
             remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
             leader: None,
             version: Default::default(),
+            shards: maplit::btreemap! {"shard".to_string() => Shard { remotes: maplit::btreeset!["other".to_string()]} },
         }
     }
 

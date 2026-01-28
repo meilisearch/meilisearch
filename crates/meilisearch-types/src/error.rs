@@ -277,6 +277,7 @@ InvalidMultiSearchRemote                       , InvalidRequest       , BAD_REQU
 InvalidMultiSearchWeight                       , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkLeader                           , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkRemotes                          , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkShards                           , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSelf                             , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSearchApiKey                     , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkWriteApiKey                      , InvalidRequest       , BAD_REQUEST ;

@@ -3,7 +3,7 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use actix_web::web::Data;
 use actix_web::{HttpRequest, HttpResponse};
@@ -17,12 +17,12 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::network::{Network as DbNetwork, Remote as DbRemote};
+use meilisearch_types::network::{Network as DbNetwork, Remote as DbRemote, Shard as DbShard};
 use meilisearch_types::tasks::network::{headers, NetworkTopologyChange, Origin, TaskNetwork};
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
 
-use super::{merge_networks, Network, PatchNetworkAnalytics, Remote};
+use super::{merge_networks, Network, PatchNetworkAnalytics, Remote, Shard};
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -254,6 +254,8 @@ async fn patch_network_without_origin(
             local: Setting::NotSet,
             leader: Setting::some_or_not_set(merged_network.leader.clone()),
             previous_remotes: Setting::Set(to_settings_remotes(&old_network.remotes)),
+            previous_shards: Setting::Set(to_settings_shards(&old_network.shards)),
+            shards: Setting::Set(to_settings_shards(&merged_network.shards)),
         };
         let mut deleted_network = old_network;
 
@@ -311,15 +313,25 @@ async fn patch_network_with_origin(
     origin: Origin,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    /// TODO:
+    ///
+    /// 1. make sure no leader => no shards
+    /// 2. since dump removes leader => removes shards
     let merged_network = merged_network.into_inner();
     debug!(parameters = ?merged_network, ?origin, "Patch network");
     let mut remotes = BTreeMap::new();
+    let mut shards = BTreeMap::new();
     let mut old_network = index_scheduler.network();
 
     for (name, remote) in merged_network.remotes.set().into_iter().flat_map(|x| x.into_iter()) {
         let Some(remote) = remote else { continue };
         let remote = remote.try_into_db_node(&name)?;
         remotes.insert(name, remote);
+    }
+    for (name, shard) in merged_network.shards.set().into_iter().flat_map(|x| x.into_iter()) {
+        let Some(shard) = shard else { continue };
+        let shard = shard.into_db_shard(BTreeSet::new());
+        shards.insert(name, shard);
     }
     let mut previous_remotes = BTreeMap::new();
     for (name, remote) in
@@ -332,7 +344,19 @@ async fn patch_network_with_origin(
         previous_remotes.insert(name, remote);
     }
 
+    let mut previous_shards = BTreeMap::new();
+    for (name, shard) in
+        merged_network.previous_shards.set().into_iter().flat_map(|x| x.into_iter())
+    {
+        let Some(shard) = shard else {
+            continue;
+        };
+        let shard = shard.into_db_shard(BTreeSet::new());
+        previous_shards.insert(name, shard);
+    }
+
     old_network.remotes = previous_remotes;
+    old_network.shards = previous_shards;
 
     let new_leader = merged_network.leader.set().ok_or_else(|| {
         ResponseError::from_msg("Duplicated task without leader".into(), Code::InvalidNetworkLeader)
@@ -343,6 +367,7 @@ async fn patch_network_with_origin(
         remotes,
         leader: Some(new_leader),
         version: origin.network_version,
+        shards,
     };
     index_scheduler.put_network(new_network.clone())?;
 
@@ -386,6 +411,22 @@ fn to_settings_remotes(
                     url: Setting::Set(remote.url.clone()),
                     search_api_key: Setting::some_or_not_set(remote.search_api_key.clone()),
                     write_api_key: Setting::some_or_not_set(remote.write_api_key.clone()),
+                }),
+            )
+        })
+        .collect()
+}
+
+fn to_settings_shards(db_shards: &BTreeMap<String, DbShard>) -> BTreeMap<String, Option<Shard>> {
+    db_shards
+        .iter()
+        .map(|(name, shard)| {
+            (
+                name.clone(),
+                Some(Shard {
+                    remotes: Some(shard.remotes.clone()),
+                    add_remotes: None,
+                    remove_remotes: None,
                 }),
             )
         })
