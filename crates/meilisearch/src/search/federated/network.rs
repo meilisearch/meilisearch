@@ -34,6 +34,7 @@ pub fn network_partition<'a>(
         attributes_to_highlight: _,
         show_ranking_score: _,
         show_ranking_score_details: _,
+        show_performance_details: _,
         use_network: _,
         show_matches_position: _,
         filter: _,

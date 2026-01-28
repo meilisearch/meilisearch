@@ -264,6 +264,7 @@ InvalidMultiSearchFacets                       , InvalidRequest       , BAD_REQU
 InvalidMultiSearchFacetsByIndex                , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacetOrder                   , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPersonalization         , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchQueryShowPerformanceDetails  , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederated                    , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederationOptions            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchMaxValuesPerFacet            , InvalidRequest       , BAD_REQUEST ;
@@ -318,8 +319,10 @@ InvalidSearchShowMatchesPosition               , InvalidRequest       , BAD_REQU
 InvalidSearchShowRankingScore                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScore                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails           , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchShowPerformanceDetails            , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchUseNetwork                        , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScoreDetails          , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarShowPerformanceDetails           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchDistinct                          , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchPersonalize                       , InvalidRequest       , BAD_REQUEST ;

@@ -59,6 +59,7 @@ impl<Method: AggregateMethod> SimilarAggregator<Method> {
             retrieve_vectors,
             show_ranking_score,
             show_ranking_score_details,
+            show_performance_details: _,
             filter,
             ranking_score_threshold,
         } = query;

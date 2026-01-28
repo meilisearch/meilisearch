@@ -124,6 +124,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             show_matches_position,
             show_ranking_score,
             show_ranking_score_details,
+            show_performance_details: _,
             filter,
             sort,
             distinct,
@@ -256,6 +257,7 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             semantic_hit_count: _,
             degraded,
             used_negative_operator,
+            performance_details: _,
         } = result;
 
         self.total_succeeded = self.total_succeeded.saturating_add(1);

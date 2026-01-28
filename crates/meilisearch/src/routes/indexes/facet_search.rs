@@ -350,6 +350,7 @@ impl From<FacetSearchQuery> for SearchQuery {
             show_matches_position: false,
             show_ranking_score: false,
             show_ranking_score_details: false,
+            show_performance_details: false,
             filter,
             sort: None,
             distinct: None,
