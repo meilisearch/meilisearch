@@ -22,8 +22,6 @@ pub struct IndexerConfig {
     pub skip_index_budget: bool,
     pub experimental_no_edition_2024_for_settings: bool,
     pub experimental_no_edition_2024_for_dumps: bool,
-    pub experimental_no_edition_2024_for_prefix_post_processing: bool,
-    pub experimental_no_edition_2024_for_facet_post_processing: bool,
     pub s3_snapshot_options: Option<S3SnapshotOptions>,
 }
 
@@ -34,10 +32,6 @@ impl IndexerConfig {
             chunk_compression_level: self.chunk_compression_level,
             max_memory: self.max_memory,
             max_nb_chunks: self.max_nb_chunks,
-            experimental_no_edition_2024_for_prefix_post_processing: self
-                .experimental_no_edition_2024_for_prefix_post_processing,
-            experimental_no_edition_2024_for_facet_post_processing: self
-                .experimental_no_edition_2024_for_facet_post_processing,
         }
     }
 }
@@ -95,8 +89,6 @@ impl Default for IndexerConfig {
             skip_index_budget: false,
             experimental_no_edition_2024_for_settings: false,
             experimental_no_edition_2024_for_dumps: false,
-            experimental_no_edition_2024_for_prefix_post_processing: false,
-            experimental_no_edition_2024_for_facet_post_processing: false,
             s3_snapshot_options: None,
         }
     }
