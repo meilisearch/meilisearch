@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet, LinkedList};
 use std::iter;
 use std::ops::Bound;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Once, RwLock};
 use std::thread::{self, Builder};
 
@@ -27,7 +27,7 @@ use super::thread_local::ThreadLocal;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::heed_codec::StrBEU16Codec;
-use crate::progress::{EmbedderStats, Progress};
+use crate::progress::{AtomicDatabaseStep, EmbedderStats, Progress};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::steps::SettingsIndexerStep;
 use crate::update::settings::SettingsDelta;
@@ -631,6 +631,10 @@ where
             facet_id_string_docids.remap_types(),
         ];
 
+        progress.update_progress(IndexingStep::DeletingFromAllFilters);
+        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
+        progress.update_progress(db_progress_obj);
+
         for database in databases {
             if must_stop_processing() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
@@ -643,6 +647,8 @@ where
                     unsafe { iter.del_current()? };
                 }
             }
+
+            db_progress.fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -650,6 +656,10 @@ where
     if !remove_from_facet_search.is_empty() {
         let databases: [Database<Bytes, DecodeIgnore>; _] =
             [facet_id_normalized_string_strings.remap_types(), facet_id_string_fst.remap_types()];
+
+        progress.update_progress(IndexingStep::DeletingFromFacetsOnly);
+        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
+        progress.update_progress(db_progress_obj);
 
         for database in databases {
             if must_stop_processing() {
@@ -663,6 +673,8 @@ where
                     unsafe { iter.del_current()? };
                 }
             }
+
+            db_progress.fetch_add(1, Ordering::Relaxed);
         }
     }
 
@@ -671,6 +683,10 @@ where
     if !remove_comparison_levels_only.is_empty() {
         let databases: [Database<Bytes, DecodeIgnore>; _] =
             [facet_id_f64_docids.remap_types(), facet_id_string_docids.remap_types()];
+
+        progress.update_progress(IndexingStep::DeletingFromComparisonsOnly);
+        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
+        progress.update_progress(db_progress_obj);
 
         for database in databases {
             if must_stop_processing() {
@@ -691,6 +707,8 @@ where
                     }
                 }
             }
+
+            db_progress.fetch_add(1, Ordering::Relaxed);
         }
     }
 
