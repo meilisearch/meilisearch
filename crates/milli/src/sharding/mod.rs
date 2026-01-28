@@ -2,7 +2,7 @@
 pub mod community_edition;
 #[cfg(feature = "enterprise")]
 pub mod enterprise_edition;
-use heed::types::{DecodeIgnore, Str};
+use heed::types::{Bytes, DecodeIgnore, Str};
 use heed::{Database, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
@@ -28,11 +28,23 @@ impl DbShardDocids {
         Self(index.shard_docids)
     }
 
-    /// The docids for the specified shard.
+    /// Intersection of the specified roaring with the docids for the specified shard.
     ///
     /// Returns `Ok(None)` if the specified shard doesn't exist in the index.
-    pub fn docids(&self, rtxn: &RoTxn<'_>, shard: &str) -> Result<Option<RoaringBitmap>> {
-        Ok(self.0.get(rtxn, shard)?)
+    pub fn docids_intersection(
+        &self,
+        rtxn: &RoTxn<'_>,
+        shard: &str,
+        universe: Option<&RoaringBitmap>,
+    ) -> Result<Option<RoaringBitmap>> {
+
+        Ok(if let Some(universe) = universe {
+            let db = self.0.remap_data_type::<Bytes>();
+        let Some(docids) = db.get(rtxn, shard)? else { return Ok(None) };
+            Some(CboRoaringBitmapCodec::intersection_with_serialized(docids, universe)?)
+        } else {
+            self.0.get(rtxn, shard)?
+        })
     }
 
     /// Updates the docids that belong to a shard.
