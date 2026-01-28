@@ -2056,7 +2056,7 @@ impl InnerIndexSettings {
             }
             _ => None,
         };
-        let geo_json_fid = fields_ids_map.id(RESERVED_GEOJSON_FIELD_NAME);
+        let geojson_fid = fields_ids_map.id(RESERVED_GEOJSON_FIELD_NAME);
         let localized_attributes_rules =
             index.localized_attributes_rules(rtxn)?.unwrap_or_default();
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
@@ -2088,7 +2088,7 @@ impl InnerIndexSettings {
             runtime_embedders,
             embedder_category_id,
             geo_fields_ids,
-            geojson_fid: geo_json_fid,
+            geojson_fid,
             prefix_search,
             facet_search,
             disabled_typos_terms,
@@ -2597,6 +2597,12 @@ pub trait SettingsDelta {
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
 
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+
+    fn old_geojson_field_id(&self) -> Option<FieldId>;
+    fn new_geojson_field_id(&self) -> Option<FieldId>;
+
     fn old_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
@@ -2649,6 +2655,20 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule] {
         &self.new.filterable_attributes_rules
+    }
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.old.geo_fields_ids
+    }
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.new.geo_fields_ids
+    }
+
+    fn old_geojson_field_id(&self) -> Option<FieldId> {
+        self.old.geojson_fid
+    }
+    fn new_geojson_field_id(&self) -> Option<FieldId> {
+        self.new.geojson_fid
     }
 
     fn old_embedders(&self) -> &RuntimeEmbedders {

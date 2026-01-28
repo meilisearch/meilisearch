@@ -15,8 +15,8 @@ use crate::filterable_attributes_rules::match_faceted_field;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
-use crate::update::new::document::DocumentContext;
-use crate::update::new::extract::perm_json_p;
+use crate::update::new::document::{Document as _, DocumentContext};
+use crate::update::new::extract::{extract_geo_coordinates, perm_json_p};
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
 };
@@ -597,14 +597,14 @@ impl FacetedDocidsExtractor {
         Ok(datastore.into_iter().map(RefCell::into_inner).collect())
     }
 
-    fn extract_document_from_settings_change<SD: SettingsDelta>(
+    fn extract_document_from_settings_change<SD>(
         document: DocumentIdentifiers<'_>,
         context: &DocumentContext<RefCell<BalancedCaches>>,
         settings_delta: &SD,
-    ) -> Result<()> {
-        let index = context.index;
-        let rtxn = &context.rtxn;
-        let mut new_fields_ids_map = context.new_fields_ids_map.borrow_mut_or_yield();
+    ) -> Result<()>
+    where
+        SD: SettingsDelta,
+    {
         let mut cached_sorter = context.data.borrow_mut_or_yield();
         let mut del_add_facet_value = DelAddFacetValue::new(&context.doc_alloc);
         let new_filterable_attributes_rules = settings_delta.new_filterable_rules();
@@ -727,14 +727,23 @@ impl FacetedDocidsExtractor {
             &mut add,
         )?;
 
-        if is_geo_enabled {
-            extract_geo_document(
-                current_document,
-                inner.external_document_id(),
-                new_fields_ids_map.deref_mut(),
-                &mut add,
-            )?;
+        // TODO do not duplicate the content of the extract_geo_document function
+        if let Some((lat_fid, lng_fid)) = settings_delta.new_geo_fields_ids() {
+            if settings_delta.old_geo_fields_ids().is_none() {
+                if let Some(geo_value) = current_document.geo_field()? {
+                    let external_id = document.external_document_id();
+                    if let Some([lat, lng]) = extract_geo_coordinates(external_id, geo_value)? {
+                        let lat_meta = new_fields_ids_map.metadata(lat_fid).unwrap();
+                        let lng_meta = new_fields_ids_map.metadata(lng_fid).unwrap();
+
+                        add(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
+                        add(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
+                    }
+                }
+            }
         }
+
+        // TODO support geojson in the new indexer
 
         Ok(())
     }
