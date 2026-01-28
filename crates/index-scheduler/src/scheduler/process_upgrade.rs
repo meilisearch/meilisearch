@@ -15,6 +15,8 @@ impl IndexScheduler {
         let indexes = self.index_names()?;
         let must_stop_processing = &self.scheduler.must_stop_processing;
 
+        let shards = self.network().shards();
+
         for (i, uid) in indexes.iter().enumerate() {
             if must_stop_processing.get() {
                 return Err(Error::AbortedTask);
@@ -31,8 +33,11 @@ impl IndexScheduler {
                 &mut index_wtxn,
                 &index,
                 db_version,
-                must_stop_processing,
-                progress.clone(),
+                milli::update::upgrade::UpgradeParams {
+                    must_stop_processing,
+                    progress: &progress,
+                    shards: shards.as_ref(),
+                },
             )
             .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
             if regen_stats {

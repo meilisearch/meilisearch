@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use milli::update::new::indexer::current_edition::sharding::Shards;
+use milli::sharding::Shards;
 use milli::DocumentId;
 use roaring::RoaringBitmap;
 
