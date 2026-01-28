@@ -101,8 +101,8 @@ impl FrozenGeoJsonExtractorData<'_> {
     }
 
     pub fn iter_and_clear_inserted(&mut self, channel: GeoJsonSender<'_, '_>) -> Result<()> {
-        for (docid, _buf) in mem::take(&mut self.inserted) {
-            channel.send_geojson(*docid, _buf.to_vec()).unwrap();
+        for (docid, buf) in mem::take(&mut self.inserted) {
+            channel.send_geojson(*docid, buf).unwrap();
         }
 
         if let Some(mut spilled) = self.spilled_inserted.take() {
@@ -122,7 +122,7 @@ impl FrozenGeoJsonExtractorData<'_> {
                 spilled
                     .read_exact(&mut buf)
                     .map_err(|e| InternalError::SerdeJson(serde_json::Error::io(e)))?;
-                channel.send_geojson(docid, buf).unwrap();
+                channel.send_geojson(docid, &buf[..]).unwrap();
             }
         }
 

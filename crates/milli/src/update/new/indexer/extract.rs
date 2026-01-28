@@ -366,7 +366,7 @@ pub(super) fn extract_all_settings_changes<MSP, SD>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     embedder_stats: &EmbedderStats,
-) -> Result<Vec<IndexEmbeddingConfig>>
+) -> Result<(Vec<IndexEmbeddingConfig>, FacetFieldIdsDelta)>
 where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
@@ -390,6 +390,37 @@ where
         extractor_allocs,
     )?;
 
+    let facet_field_ids_delta;
+
+    {
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", parent: &indexer_span, "faceted");
+            let _entered = span.enter();
+
+            FacetedDocidsExtractor::run_extraction_from_settings(
+                settings_delta,
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::ExtractingFacets,
+            )?
+        };
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", parent: &indexer_span, "faceted");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(IndexingStep::MergingFacetCaches);
+
+            facet_field_ids_delta = merge_and_send_facet_docids(
+                caches,
+                FacetDatabases::new(index),
+                index,
+                &rtxn,
+                extractor_sender.facet_docids(),
+            )?;
+        }
+    }
+
     {
         let WordDocidsCaches {
             word_docids,
@@ -400,7 +431,7 @@ where
         } = {
             let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
             let _entered = span.enter();
-            SettingsChangeWordDocidsExtractors::run_extraction(
+            WordDocidsExtractors::run_extraction_from_settings(
                 settings_delta,
                 &documents,
                 indexing_context,
@@ -576,7 +607,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
-    Result::Ok(index_embeddings)
+    Result::Ok((index_embeddings, facet_field_ids_delta))
 }
 
 fn primary_key_from_db<'indexer>(
