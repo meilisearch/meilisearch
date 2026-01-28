@@ -263,6 +263,13 @@ where
         progress,
     )?;
 
+    // Clear the cellulite database when the geojson support is removed
+    if settings_delta.old_geo_fields_ids().is_some()
+        && settings_delta.new_geo_fields_ids().is_none()
+    {
+        index.cellulite.clear(wtxn)?;
+    }
+
     // Clear word_pair_proximity if byWord to byAttribute
     let old_proximity_precision = settings_delta.old_proximity_precision();
     let new_proximity_precision = settings_delta.new_proximity_precision();
