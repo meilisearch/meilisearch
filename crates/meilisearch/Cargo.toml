@@ -66,7 +66,7 @@ prometheus = { version = "0.14.0", features = ["process"] }
 rand = "0.8.5"
 rayon = "1.11.0"
 regex = "1.12.2"
-rustls = { version = "0.23.35", features = ["ring"], default-features = false }
+rustls = { version = "0.23.36", features = ["ring"], default-features = false }
 rustls-pki-types = { version = "1.13.0", features = ["alloc"] }
 rustls-pemfile = "2.2.0"
 segment = { version = "0.2.6" }
