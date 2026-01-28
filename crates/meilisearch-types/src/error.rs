@@ -479,99 +479,93 @@ impl ErrorCode for milli::Error {
         match self {
             Error::InternalError(_) => Code::Internal,
             Error::IoError(e) => e.error_code(),
-            Error::UserError(ref error) => {
-                match error {
-                    UserError::SerdeJson(_)
-                    | UserError::EnvAlreadyOpened
-                    | UserError::DocumentLimitReached
-                    | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
-                    UserError::InvalidStoreFile => Code::InvalidStoreFile,
-                    UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
-                    UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
-                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
-                    UserError::InvalidFilter(_)
-                    | UserError::InvalidFilterExpression(..)
-                    | UserError::FilterOperatorNotAllowed { .. }
-                    | UserError::FilterShardNotExist { .. }
-                    | UserError::FilterShardOperatorNotAllowed { .. } => Code::InvalidSearchFilter,
-                    UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
-                    UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
-                        Code::InvalidDocumentId
-                    }
-                    UserError::MissingDocumentField(_) => Code::InvalidDocumentFields,
-                    UserError::InvalidFieldForSource { .. }
-                    | UserError::MissingFieldForSource { .. }
-                    | UserError::InvalidOpenAiModel { .. }
-                    | UserError::InvalidOpenAiModelDimensions { .. }
-                    | UserError::InvalidOpenAiModelDimensionsMax { .. }
-                    | UserError::InvalidSettingsDimensions { .. }
-                    | UserError::InvalidUrl { .. }
-                    | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
-                    | UserError::InvalidChatSettingsDocumentTemplateMaxBytes
-                    | UserError::InvalidPrompt(_)
-                    | UserError::InvalidDisableBinaryQuantization { .. }
-                    | UserError::InvalidSourceForNested { .. }
-                    | UserError::MissingSourceForNested { .. }
-                    | UserError::InvalidSettingsEmbedder { .. } => Code::InvalidSettingsEmbedders,
-                    UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
-                    UserError::TooManyFragments(_) => Code::InvalidSettingsEmbedders,
-                    UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
-                    UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
-                    UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
-                        Code::IndexPrimaryKeyMultipleCandidatesFound
-                    }
-                    UserError::PrimaryKeyCannotBeChanged(_) => Code::IndexPrimaryKeyAlreadyExists,
-                    UserError::InvalidDistinctAttribute { .. } => Code::InvalidSearchDistinct,
-                    UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
-                    UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
-                    UserError::InvalidSearchSortableAttribute { .. } => Code::InvalidSearchSort,
-                    UserError::InvalidDocumentSortableAttribute { .. } => Code::InvalidDocumentSort,
-                    UserError::InvalidSearchableAttribute { .. } => {
-                        Code::InvalidSearchAttributesToSearchOn
-                    }
-                    UserError::InvalidFacetSearchFacetName { .. } => {
-                        Code::InvalidFacetSearchFacetName
-                    }
-                    UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
-                    UserError::InvalidGeoField { .. } | UserError::GeoJsonError(_) => {
-                        Code::InvalidDocumentGeoField
-                    }
-                    UserError::InvalidVectorDimensions { .. }
-                    | UserError::InvalidIndexingVectorDimensions { .. } => {
-                        Code::InvalidVectorDimensions
-                    }
-                    UserError::InvalidVectorsMapType { .. }
-                    | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
-                    UserError::TooManyVectors(_, _) => Code::TooManyVectors,
-                    UserError::SortError { search: true, .. } => Code::InvalidSearchSort,
-                    UserError::SortError { search: false, .. } => Code::InvalidDocumentSort,
-                    UserError::InvalidMinTypoWordLenSetting(_, _) => {
-                        Code::InvalidSettingsTypoTolerance
-                    }
-                    UserError::InvalidSearchEmbedder(_) => Code::InvalidSearchEmbedder,
-                    UserError::InvalidSimilarEmbedder(_) => Code::InvalidSimilarEmbedder,
-                    UserError::VectorEmbeddingError(_) | UserError::DocumentEmbeddingError(_) => {
-                        Code::VectorEmbeddingError
-                    }
-                    UserError::DocumentEditionCannotModifyPrimaryKey
-                    | UserError::DocumentEditionDocumentMustBeObject
-                    | UserError::DocumentEditionRuntimeError(_)
-                    | UserError::DocumentEditionCompilationError(_) => {
-                        Code::EditDocumentsByFunctionError
-                    }
-                    UserError::CelluliteError(err) => match err {
-                        cellulite::Error::BuildCanceled
-                        | cellulite::Error::VersionMismatchOnBuild(_)
-                        | cellulite::Error::DatabaseDoesntExists
-                        | cellulite::Error::Heed(_)
-                        | cellulite::Error::InvalidGeometry(_)
-                        | cellulite::Error::InternalDocIdMissing(_, _)
-                        | cellulite::Error::CannotConvertLineToCell(_, _, _) => Code::Internal,
-                        cellulite::Error::InvalidGeoJson(_) => Code::InvalidDocumentGeojsonField,
-                    },
-                    UserError::MalformedGeojson(_) => Code::InvalidDocumentGeojsonField,
+            Error::UserError(ref error) => match error {
+                UserError::SerdeJson(_)
+                | UserError::EnvAlreadyOpened
+                | UserError::DocumentLimitReached
+                | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
+                UserError::InvalidStoreFile => Code::InvalidStoreFile,
+                UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
+                UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
+                UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
+                UserError::InvalidFilter(_)
+                | UserError::InvalidFilterExpression(..)
+                | UserError::FilterOperatorNotAllowed { .. }
+                | UserError::FilterShardNotExist { .. }
+                | UserError::FilterShardOperatorNotAllowed { .. } => Code::InvalidSearchFilter,
+                UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
+                UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
+                    Code::InvalidDocumentId
                 }
-            }
+                UserError::MissingDocumentField(_) => Code::InvalidDocumentFields,
+                UserError::InvalidFieldForSource { .. }
+                | UserError::MissingFieldForSource { .. }
+                | UserError::InvalidOpenAiModel { .. }
+                | UserError::InvalidOpenAiModelDimensions { .. }
+                | UserError::InvalidOpenAiModelDimensionsMax { .. }
+                | UserError::InvalidSettingsDimensions { .. }
+                | UserError::InvalidUrl { .. }
+                | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
+                | UserError::InvalidChatSettingsDocumentTemplateMaxBytes
+                | UserError::InvalidPrompt(_)
+                | UserError::InvalidDisableBinaryQuantization { .. }
+                | UserError::InvalidSourceForNested { .. }
+                | UserError::MissingSourceForNested { .. }
+                | UserError::InvalidSettingsEmbedder { .. } => Code::InvalidSettingsEmbedders,
+                UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
+                UserError::TooManyFragments(_) => Code::InvalidSettingsEmbedders,
+                UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
+                UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
+                UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
+                    Code::IndexPrimaryKeyMultipleCandidatesFound
+                }
+                UserError::PrimaryKeyCannotBeChanged(_) => Code::IndexPrimaryKeyAlreadyExists,
+                UserError::InvalidDistinctAttribute { .. } => Code::InvalidSearchDistinct,
+                UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
+                UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
+                UserError::InvalidSearchSortableAttribute { .. } => Code::InvalidSearchSort,
+                UserError::InvalidDocumentSortableAttribute { .. } => Code::InvalidDocumentSort,
+                UserError::InvalidSearchableAttribute { .. } => {
+                    Code::InvalidSearchAttributesToSearchOn
+                }
+                UserError::InvalidFacetSearchFacetName { .. } => Code::InvalidFacetSearchFacetName,
+                UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
+                UserError::InvalidGeoField { .. } | UserError::GeoJsonError(_) => {
+                    Code::InvalidDocumentGeoField
+                }
+                UserError::InvalidVectorDimensions { .. }
+                | UserError::InvalidIndexingVectorDimensions { .. } => {
+                    Code::InvalidVectorDimensions
+                }
+                UserError::InvalidVectorsMapType { .. }
+                | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
+                UserError::TooManyVectors(_, _) => Code::TooManyVectors,
+                UserError::SortError { search: true, .. } => Code::InvalidSearchSort,
+                UserError::SortError { search: false, .. } => Code::InvalidDocumentSort,
+                UserError::InvalidMinTypoWordLenSetting(_, _) => Code::InvalidSettingsTypoTolerance,
+                UserError::InvalidSearchEmbedder(_) => Code::InvalidSearchEmbedder,
+                UserError::InvalidSimilarEmbedder(_) => Code::InvalidSimilarEmbedder,
+                UserError::VectorEmbeddingError(_) | UserError::DocumentEmbeddingError(_) => {
+                    Code::VectorEmbeddingError
+                }
+                UserError::DocumentEditionCannotModifyPrimaryKey
+                | UserError::DocumentEditionDocumentMustBeObject
+                | UserError::DocumentEditionRuntimeError(_)
+                | UserError::DocumentEditionCompilationError(_) => {
+                    Code::EditDocumentsByFunctionError
+                }
+                UserError::CelluliteError(err) => match err {
+                    cellulite::Error::BuildCanceled
+                    | cellulite::Error::VersionMismatchOnBuild(_)
+                    | cellulite::Error::DatabaseDoesntExists
+                    | cellulite::Error::Heed(_)
+                    | cellulite::Error::InvalidGeometry(_)
+                    | cellulite::Error::InternalDocIdMissing(_, _)
+                    | cellulite::Error::CannotConvertLineToCell(_, _, _) => Code::Internal,
+                    cellulite::Error::InvalidGeoJson(_) => Code::InvalidDocumentGeojsonField,
+                },
+                UserError::MalformedGeojson(_) => Code::InvalidDocumentGeojsonField,
+            },
         }
     }
 }
