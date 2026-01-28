@@ -22,7 +22,7 @@ use uuid::Uuid;
 use super::error::{AuthControllerError, Result};
 use super::{Action, Key};
 
-const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
+const AUTH_STORE_SIZE: usize = 2 * 1024 * 1024 * 1024; // 2 GiB
 const KEY_DB_NAME: &str = "api-keys";
 const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expiration";
 
@@ -36,7 +36,7 @@ pub struct HeedAuthStore {
 pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
-    options.map_size(AUTH_STORE_SIZE); // 1GB
+    options.map_size(AUTH_STORE_SIZE);
     options.max_dbs(2);
     unsafe { options.open(path) }
 }
