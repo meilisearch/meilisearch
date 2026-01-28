@@ -4,6 +4,7 @@ mod v1_14;
 mod v1_15;
 mod v1_16;
 mod v1_32;
+mod v1_35;
 
 use heed::RwTxn;
 use v1_12::{FixFieldDistribution, RecomputeStats};
@@ -46,6 +47,7 @@ const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
     &SwitchToMultimodal {},
     &CleanupFidBasedDatabases {},
     &RebuildHannoyGraph {},
+    &AddShards {},
 ];
 
 /// Return true if the cached stats of the index must be regenerated
