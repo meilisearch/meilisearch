@@ -1173,6 +1173,10 @@ pub struct SimilarResult {
     /// Pagination information
     #[serde(flatten)]
     pub hits_info: HitsInfo,
+    /// Performance details of the query
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Value>)]
+    pub performance_details: Option<IndexMap<String, String>>,
 }
 
 /// Search result with index identifier for multi-search responses
@@ -2036,7 +2040,7 @@ pub fn perform_similar(
         retrieve_vectors: _,
         show_ranking_score,
         show_ranking_score_details,
-        show_performance_details: _,
+        show_performance_details,
         ranking_score_threshold,
     } = query;
 
@@ -2125,11 +2129,14 @@ pub fn perform_similar(
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
     let hits_info = HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits };
 
+    let performance_details = show_performance_details.then(|| progress.accumulated_durations());
+
     let result = SimilarResult {
         hits,
         hits_info,
         id: id.into_inner(),
         processing_time_ms: before_search.elapsed().as_millis(),
+        performance_details,
     };
     Ok(result)
 }

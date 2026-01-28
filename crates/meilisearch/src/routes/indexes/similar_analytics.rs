@@ -105,7 +105,13 @@ impl<Method: AggregateMethod> SimilarAggregator<Method> {
     }
 
     pub fn succeed(&mut self, result: &SimilarResult) {
-        let SimilarResult { id: _, hits: _, processing_time_ms, hits_info: _ } = result;
+        let SimilarResult {
+            id: _,
+            hits: _,
+            processing_time_ms,
+            hits_info: _,
+            performance_details: _,
+        } = result;
 
         self.total_succeeded = self.total_succeeded.saturating_add(1);
 
