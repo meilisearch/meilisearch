@@ -1,9 +1,8 @@
 use heed::RwTxn;
 
-use super::UpgradeIndex;
+use super::{UpgradeIndex, UpgradeParams};
 use crate::database_stats::DatabaseStats;
-use crate::progress::Progress;
-use crate::{make_enum_progress, Index, MustStopProcessing, Result};
+use crate::{make_enum_progress, Index, Result};
 
 pub(super) struct AddNewStats();
 
@@ -12,8 +11,7 @@ impl UpgradeIndex for AddNewStats {
         &self,
         wtxn: &mut RwTxn,
         index: &Index,
-        _must_stop_processing: &MustStopProcessing,
-        progress: Progress,
+        UpgradeParams { progress, .. }: UpgradeParams<'_>,
     ) -> Result<bool> {
         make_enum_progress! {
             enum DocumentsStats {
