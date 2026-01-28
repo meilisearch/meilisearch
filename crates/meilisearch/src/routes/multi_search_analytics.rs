@@ -54,6 +54,7 @@ impl MultiSearchAggregator {
             attributes_to_highlight: _,
             show_ranking_score: _,
             show_ranking_score_details: _,
+            show_performance_details: _,
             show_matches_position: _,
             filter: _,
             sort: _,

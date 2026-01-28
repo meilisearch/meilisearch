@@ -159,6 +159,11 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScoreDetails>)]
     #[param(value_type = bool)]
     show_ranking_score_details: Param<bool>,
+    /// When `true`, includes a `_performanceDetails` object showing the
+    /// performance details of the search.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowPerformanceDetails>)]
+    #[param(value_type = bool)]
+    show_performance_details: Param<bool>,
     /// Comma-separated list of attributes for which to return facet
     /// distribution (value counts). Only attributes in `filterableAttributes`
     /// can be used. Returns the count of documents matching each facet value.
@@ -315,6 +320,7 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
             show_matches_position: other.show_matches_position.0,
             show_ranking_score: other.show_ranking_score.0,
             show_ranking_score_details: other.show_ranking_score_details.0,
+            show_performance_details: other.show_performance_details.0,
             facets: other.facets.map(|o| o.into_iter().collect()),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,

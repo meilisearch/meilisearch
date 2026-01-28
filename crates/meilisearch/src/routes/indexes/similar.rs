@@ -316,6 +316,11 @@ pub struct SimilarQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScoreDetails>)]
     #[param(value_type = bool, default)]
     show_ranking_score_details: Param<bool>,
+    /// When `true`, includes a `_performanceDetails` object showing the
+    /// performance details of the search.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowPerformanceDetails>)]
+    #[param(value_type = bool, default)]
+    show_performance_details: Param<bool>,
     /// Minimum ranking score threshold (between 0.0 and 1.0) that documents
     /// must meet to be included in results. Documents with a similarity score
     /// below this threshold will be excluded. Useful for ensuring only highly
@@ -355,6 +360,7 @@ impl From<SimilarQueryGet> for SimilarQuery {
             filter,
             show_ranking_score,
             show_ranking_score_details,
+            show_performance_details,
             embedder,
             ranking_score_threshold,
         }: SimilarQueryGet,
@@ -377,6 +383,7 @@ impl From<SimilarQueryGet> for SimilarQuery {
             retrieve_vectors: retrieve_vectors.0,
             show_ranking_score: show_ranking_score.0,
             show_ranking_score_details: show_ranking_score_details.0,
+            show_performance_details: show_performance_details.0,
             ranking_score_threshold: ranking_score_threshold.map(|x| x.0),
         }
     }

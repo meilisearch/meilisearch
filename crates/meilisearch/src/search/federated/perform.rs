@@ -262,6 +262,9 @@ pub async fn perform_federated_search(
         }
     };
 
+    let performance_details =
+        federation.show_performance_details.then(|| progress.accumulated_durations());
+
     Ok((
         FederatedSearchResult {
             hits: merged_hits,
@@ -277,6 +280,7 @@ pub async fn perform_federated_search(
             remote_errors: partitioned_queries.has_remote.then_some(remote_errors),
             request_uid: Some(request_uid),
             metadata: query_metadata,
+            performance_details,
         },
         deadline,
     ))
@@ -607,6 +611,7 @@ fn merge_metadata(
         remote_errors: _,
         metadata: _,
         request_uid: _,
+        performance_details: _,
     } in remote_results
     {
         let this_remote_duration = Duration::from_millis(*processing_time_ms as u64);
@@ -673,6 +678,12 @@ impl PartitionedQueries {
 
         if federated_query.has_remote_and_use_network() {
             return Err(MeilisearchHttpError::RemoteAndUseNetwork(query_index).into());
+        }
+
+        if federated_query.has_show_performance_details() {
+            return Err(
+                MeilisearchHttpError::ShowPerformanceDetailsInFederatedQuery(query_index).into()
+            );
         }
 
         if federated_query.use_network.is_some() {

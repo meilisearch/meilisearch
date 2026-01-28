@@ -14,6 +14,7 @@ mod matching_strategy;
 mod metadata;
 mod multi;
 mod pagination;
+mod performance_details;
 mod restrict_searchable;
 mod search_queue;
 

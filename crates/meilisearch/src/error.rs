@@ -44,6 +44,8 @@ pub enum MeilisearchHttpError {
     FacetsInFederatedQuery(usize, String, Vec<String>),
     #[error("Inside `.queries[{0}]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from query #{0} or remove `federation` from the request")]
     PersonalizationInFederatedQuery(usize),
+    #[error("Inside `.queries[{0}]`: Using `.showPerformanceDetails` is not allowed in federated queries.\n - Hint: remove `showPerformanceDetails` from query #{0} or remove `federation` from the request")]
+    ShowPerformanceDetailsInFederatedQuery(usize),
     #[error("Inside `.queries[{0}]`: Using `.useNetwork` is not allowed as the same time as `.federationOptions.remote`.\n  - Hint: to perform an explicit query against a remote, remove `.useNetwork`.\n  - Hint: to automatically perform queries against the entire network, remove `.federationOptions.remote`.")]
     RemoteAndUseNetwork(usize),
     #[error("Inconsistent order for values in facet `{facet}`: index `{previous_uid}` orders {previous_facet_order}, but index `{current_uid}` orders {index_facet_order}.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.")]
@@ -199,6 +201,9 @@ impl ErrorCode for MeilisearchHttpError {
             }
             MeilisearchHttpError::PersonalizationInFederatedQuery(_) => {
                 Code::InvalidMultiSearchQueryPersonalization
+            }
+            MeilisearchHttpError::ShowPerformanceDetailsInFederatedQuery(_) => {
+                Code::InvalidMultiSearchQueryShowPerformanceDetails
             }
             MeilisearchHttpError::InconsistentOriginHeaders { .. }
             | MeilisearchHttpError::InconsistentImportHeaders { .. }
