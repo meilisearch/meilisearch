@@ -128,7 +128,14 @@ impl IndexScheduler {
         must_stop_processing: &crate::scheduler::MustStopProcessing,
     ) -> crate::Result<u64> {
         // TECHDEBT: this spawns a `ureq` agent additionally to `reqwest`. We probably want to harmonize all of this.
-        let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(5)).build();
+        let config = http_client::ureq::config::Config::builder()
+            .prepare(|config| {
+                config.timeout_global(Some(Duration::from_secs(5))).http_status_as_error(false)
+            })
+            .build();
+
+        let agent =
+            http_client::ureq::Agent::new_with_config(config, self.scheduler.ip_policy.clone());
 
         let mut indexer_alloc = Bump::new();
 
@@ -290,6 +297,7 @@ impl IndexScheduler {
             embedders,
             &|| must_stop_processing.get(),
             progress,
+            self.ip_policy(),
             &EmbedderStats::default(),
         )
         .map_err(err)?;
@@ -310,6 +318,7 @@ impl IndexScheduler {
     async fn assume_role_with_web_identity(
         role_arn: &str,
         web_identity_token_file: &std::path::Path,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> anyhow::Result<StsCredentials> {
         use std::env::VarError;
 
@@ -335,12 +344,20 @@ impl IndexScheduler {
             ("DurationSeconds", &duration.to_string()),
         ];
 
-        let client = reqwest::Client::new();
+        let client = http_client::reqwest::Client::builder()
+            .build_with_policies(ip_policy, Default::default())
+            .unwrap();
         let response = client
             .post("https://sts.amazonaws.com/")
-            .header(reqwest::header::ACCEPT, "application/json")
-            .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .form(&form_data)
+            .prepare(|inner| {
+                inner
+                    .header(http_client::reqwest::header::ACCEPT, "application/json")
+                    .header(
+                        http_client::reqwest::header::CONTENT_TYPE,
+                        "application/x-www-form-urlencoded",
+                    )
+                    .form(&form_data)
+            })
             .send()
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send STS request: {e}"))?;
@@ -367,6 +384,7 @@ impl IndexScheduler {
         s3_secret_key: Option<String>,
         s3_role_arn: Option<String>,
         s3_web_identity_token_file: Option<std::path::PathBuf>,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> anyhow::Result<(String, String, Option<String>)> {
         let static_credentials = s3_access_key.zip(s3_secret_key);
         let web_identity = s3_role_arn.zip(s3_web_identity_token_file);
@@ -374,7 +392,7 @@ impl IndexScheduler {
             (Some((access_key, secret_key)), None) => Ok((access_key, secret_key, None)),
             (None, Some((role_arn, token_file))) => {
                 let StsCredentials { access_key_id, secret_access_key, session_token } =
-                    Self::assume_role_with_web_identity(&role_arn, &token_file).await?;
+                    Self::assume_role_with_web_identity(&role_arn, &token_file, ip_policy).await?;
                 Ok((access_key_id, secret_access_key, Some(session_token)))
             }
             (_, _) => anyhow::bail!("Clap must pass valid auth parameters"),
@@ -416,12 +434,15 @@ impl IndexScheduler {
         };
 
         let (reader, writer) = std::io::pipe()?;
+        let ip_policy = self.scheduler.ip_policy.clone();
+
         let uploader_task = tokio::spawn(async move {
             let (s3_access_key, s3_secret_key, s3_token) = Self::extract_credentials_from_options(
                 s3_access_key,
                 s3_secret_key,
                 s3_role_arn,
                 s3_web_identity_token_file,
+                ip_policy.clone(),
             )
             .await?;
 
@@ -440,6 +461,7 @@ impl IndexScheduler {
                 retry_backoff,
                 db_name,
                 reader,
+                ip_policy,
             )
             .await
         });
@@ -643,6 +665,7 @@ async fn multipart_stream_to_s3(
     retry_backoff: backoff::exponential::ExponentialBackoff<backoff::SystemClock>,
     db_name: String,
     reader: std::io::PipeReader,
+    ip_policy: http_client::policy::IpPolicy,
 ) -> Result<(), Error> {
     use std::collections::VecDeque;
     use std::io;
@@ -650,7 +673,7 @@ async fn multipart_stream_to_s3(
     use std::path::PathBuf;
 
     use bytes::{Bytes, BytesMut};
-    use reqwest::{Client, Response};
+    use http_client::reqwest::{Client, Response};
     use rusty_s3::actions::CreateMultipartUpload;
     use rusty_s3::{Bucket, BucketError, Credentials, S3Action as _, UrlStyle};
     use tokio::task::JoinHandle;
@@ -676,12 +699,16 @@ async fn multipart_stream_to_s3(
     let action = bucket.create_multipart_upload(Some(&credential), &object);
     let url = action.sign(s3_signature_duration);
 
-    let client = Client::new();
+    let client = Client::builder().build_with_policies(ip_policy, Default::default()).unwrap();
     let resp = client.post(url).send().await.map_err(Error::S3HttpError)?;
     let status = resp.status();
 
     let body = match resp.error_for_status_ref() {
-        Ok(_) => resp.text().await.map_err(Error::S3HttpError)?,
+        Ok(_) => resp
+            .text()
+            .await
+            .map_err(http_client::reqwest::Error::from)
+            .map_err(Error::S3HttpError)?,
         Err(_) => {
             return Err(Error::S3Error { status, body: resp.text().await.unwrap_or_default() })
         }
@@ -694,9 +721,10 @@ async fn multipart_stream_to_s3(
     // We use this bumpalo for etags strings.
     let bump = bumpalo::Bump::new();
     let mut etags = Vec::<&str>::new();
-    let mut in_flight = VecDeque::<(JoinHandle<reqwest::Result<Response>>, Bytes)>::with_capacity(
-        s3_max_in_flight_parts.get(),
-    );
+    let mut in_flight =
+        VecDeque::<(JoinHandle<http_client::reqwest::Result<Response>>, Bytes)>::with_capacity(
+            s3_max_in_flight_parts.get(),
+        );
 
     // Part numbers start at 1 and cannot be larger than 10k
     for part_number in 1u16.. {
@@ -757,10 +785,11 @@ async fn multipart_stream_to_s3(
                 let url = url.clone();
                 let body = body.clone();
                 async move {
-                    match client.put(url).body(body).send().await {
-                        Ok(resp) if resp.status().is_client_error() => {
-                            resp.error_for_status().map_err(backoff::Error::Permanent)
-                        }
+                    match client.put(url).prepare(|inner| inner.body(body)).send().await {
+                        Ok(resp) if resp.status().is_client_error() => resp
+                            .error_for_status()
+                            .map_err(http_client::reqwest::Error::from)
+                            .map_err(backoff::Error::Permanent),
                         Ok(resp) => Ok(resp),
                         Err(e) => Err(backoff::Error::transient(e)),
                     }
@@ -790,7 +819,7 @@ async fn multipart_stream_to_s3(
         let url = url.clone();
         let body = body.clone();
         async move {
-            match client.post(url).body(body).send().await {
+            match client.post(url).prepare(|inner| inner.body(body)).send().await {
                 Ok(resp) if resp.status().is_client_error() => {
                     Err(backoff::Error::Permanent(Error::S3Error {
                         status: resp.status(),
@@ -815,8 +844,10 @@ async fn multipart_stream_to_s3(
 
 #[cfg(unix)]
 async fn join_and_map_error(
-    join_handle: tokio::task::JoinHandle<Result<reqwest::Response, reqwest::Error>>,
-) -> Result<reqwest::Response> {
+    join_handle: tokio::task::JoinHandle<
+        Result<http_client::reqwest::Response, http_client::reqwest::Error>,
+    >,
+) -> Result<http_client::reqwest::Response> {
     // safety: Panic happens if the task (JoinHandle) was aborted, cancelled, or panicked
     let request = join_handle.await.unwrap();
     let resp = request.map_err(Error::S3HttpError)?;
@@ -833,9 +864,9 @@ async fn join_and_map_error(
 fn extract_and_append_etag<'b>(
     bump: &'b bumpalo::Bump,
     etags: &mut Vec<&'b str>,
-    headers: &reqwest::header::HeaderMap,
+    headers: &http_client::reqwest::header::HeaderMap,
 ) -> Result<()> {
-    use reqwest::header::ETAG;
+    use http_client::reqwest::header::ETAG;
 
     let etag = headers.get(ETAG).ok_or_else(|| Error::S3XmlError("Missing ETag header".into()))?;
     let etag = etag.to_str().map_err(|e| Error::S3XmlError(Box::new(e)))?;

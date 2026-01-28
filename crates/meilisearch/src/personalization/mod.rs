@@ -1,10 +1,10 @@
 use std::time::Duration;
 
+use http_client::reqwest::Client;
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{Deadline, SearchStep};
 use rand::Rng;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -16,7 +16,7 @@ const MAX_RETRIES: u32 = 10;
 #[derive(Debug, thiserror::Error)]
 enum PersonalizationError {
     #[error("Personalization service: HTTP request failed: {0}")]
-    Request(#[from] reqwest::Error),
+    Request(#[from] http_client::reqwest::Error),
     #[error("Personalization service: Failed to parse response: {0}")]
     Parse(String),
     #[error("Personalization service: Cohere API error: {0}")]
@@ -62,11 +62,11 @@ pub struct CohereService {
 }
 
 impl CohereService {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, ip_policy: http_client::policy::IpPolicy) -> Self {
         info!("Personalization service initialized with Cohere API");
         let client = Client::builder()
-            .timeout(Duration::from_secs(30))
-            .build()
+            .prepare(|inner| inner.timeout(Duration::from_secs(30)))
+            .build_with_policies(ip_policy, Default::default())
             .expect("Failed to create HTTP client");
         Self { client, api_key }
     }
@@ -183,23 +183,26 @@ impl CohereService {
     async fn send_rerank_request(
         &self,
         request_body: &CohereRerankRequest,
-    ) -> Result<reqwest::Response, reqwest::Error> {
+    ) -> Result<http_client::reqwest::Response, http_client::reqwest::Error> {
         self.client
             .post(COHERE_API_URL)
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
-            .json(request_body)
+            .prepare(|inner| {
+                inner
+                    .header("Authorization", format!("Bearer {}", self.api_key))
+                    .header("Content-Type", "application/json")
+                    .json(request_body)
+            })
             .send()
             .await
     }
 
     async fn handle_response(
         &self,
-        response_result: Result<reqwest::Response, reqwest::Error>,
+        response_result: Result<http_client::reqwest::Response, http_client::reqwest::Error>,
     ) -> Result<Vec<usize>, Retry> {
         let response = match response_result {
             Ok(r) => r,
-            Err(e) if e.is_timeout() => {
+            Err(http_client::reqwest::Error::Reqwest(e)) if e.is_timeout() => {
                 return Err(Retry::retry_later(PersonalizationError::Network(format!(
                     "Request timeout: {}",
                     e
@@ -326,12 +329,12 @@ pub enum PersonalizationService {
 }
 
 impl PersonalizationService {
-    pub fn cohere(api_key: String) -> Self {
+    pub fn cohere(api_key: String, ip_policy: http_client::policy::IpPolicy) -> Self {
         // If the API key is empty, consider the personalization service as disabled
         if api_key.trim().is_empty() {
             Self::disabled()
         } else {
-            Self::Cohere(CohereService::new(api_key))
+            Self::Cohere(CohereService::new(api_key, ip_policy))
         }
     }
 

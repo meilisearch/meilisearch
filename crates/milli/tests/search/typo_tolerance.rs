@@ -2,15 +2,15 @@ use std::collections::BTreeSet;
 
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
+use http_client::policy::IpPolicy;
 use milli::documents::mmap_from_objects;
 use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
-use serde_json::from_value;
+use serde_json::{from_value, json};
 use tempfile::tempdir;
-use ureq::json;
 use Criterion::*;
 
 #[test]
@@ -48,7 +48,15 @@ fn test_typo_tolerance_one_typo() {
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut txn, &index, &config);
     builder.set_min_word_len_one_typo(4);
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
 
     // typo is now supported for 4 letters words
     let progress = Progress::default();
@@ -97,7 +105,15 @@ fn test_typo_tolerance_two_typo() {
     let config = IndexerConfig::default();
     let mut builder = Settings::new(&mut txn, &index, &config);
     builder.set_min_word_len_two_typos(7);
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
 
     // typo is now supported for 4 letters words
     let progress = Progress::default();
@@ -160,6 +176,8 @@ fn test_typo_disabled_on_word() {
         embedders,
         &|| false,
         &Progress::default(),
+        // NO DANGER: test
+        &IpPolicy::danger_always_allow(),
         &Default::default(),
     )
     .unwrap();
@@ -189,7 +207,15 @@ fn test_typo_disabled_on_word() {
     // `zealand` doesn't allow typos anymore
     exact_words.insert("zealand".to_string());
     builder.set_exact_words(exact_words);
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
 
     let progress = Progress::default();
     let mut search = Search::new(&txn, &index, &progress);
@@ -229,7 +255,15 @@ fn test_disable_typo_on_attribute() {
     let mut builder = Settings::new(&mut txn, &index, &config);
     // disable typos on `description`
     builder.set_exact_attributes(vec!["description".to_string()].into_iter().collect());
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
 
     let progress = Progress::default();
     let mut search = Search::new(&txn, &index, &progress);

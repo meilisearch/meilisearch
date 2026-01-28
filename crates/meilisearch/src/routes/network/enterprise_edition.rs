@@ -120,6 +120,7 @@ async fn patch_network_without_origin(
         }
 
         let mut kept_leader = false;
+        let ip_policy = index_scheduler.ip_policy().clone();
 
         futures::stream::iter(
             old_network
@@ -142,16 +143,18 @@ async fn patch_network_without_origin(
                 }),
         )
         .try_for_each_concurrent(Some(40), |(remote_name, remote, allow_unreachable)| {
+            let ip_policy = ip_policy.clone();
             async move {
                 {
                     // 1. check that the experimental feature is enabled
                     let remote_features: RuntimeTogglableFeatures = match proxy::send_request(
                         "/experimental-features",
-                        reqwest::Method::GET,
+                        http_client::reqwest::Method::GET,
                         None,
                         Body::none(),
                         remote_name,
                         remote,
+                        ip_policy.clone(),
                     )
                     .await
                     {
@@ -174,11 +177,12 @@ async fn patch_network_without_origin(
                     // 2. check whether there are any unfinished network task
                     let network_tasks: AllTasks = match proxy::send_request(
                         "/tasks?types=networkTopologyChange&statuses=enqueued,processing&limit=1",
-                        reqwest::Method::GET,
+                        http_client::reqwest::Method::GET,
                         None,
                         Body::none(),
                         remote_name,
                         remote,
+                        ip_policy,
                     )
                     .await
                     {

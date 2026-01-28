@@ -22,11 +22,13 @@ use meilisearch_types::tasks::network::{headers, ImportData, ImportMetadata, Ori
 use meilisearch_types::tasks::{DetailsExportIndexSettings, ExportIndexSettings};
 use roaring::RoaringBitmap;
 use serde::Deserialize;
-use ureq::{json, Response};
+use serde_json::json;
 
 use super::MustStopProcessing;
 use crate::processing::AtomicDocumentStep;
 use crate::{Error, IndexScheduler, Result};
+
+type Response = http_client::ureq::http::Response<http_client::ureq::Body>;
 
 impl IndexScheduler {
     pub(super) fn process_export(
@@ -52,7 +54,16 @@ impl IndexScheduler {
             .collect();
 
         let mut output = BTreeMap::new();
-        let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(5)).build();
+
+        let config = http_client::ureq::config::Config::builder()
+            .prepare(|config| {
+                config.timeout_global(Some(Duration::from_secs(5))).http_status_as_error(false)
+            })
+            .build();
+
+        let agent =
+            http_client::ureq::Agent::new_with_config(config, self.scheduler.ip_policy.clone());
+
         let must_stop_processing = self.scheduler.must_stop_processing.clone();
         for (i, (_pattern, uid, export_settings)) in indexes.iter().enumerate() {
             let err = |err| Error::from_milli(err, Some(uid.to_string()));
@@ -124,10 +135,10 @@ impl IndexScheduler {
         let response = retry(ctx.must_stop_processing, || {
             let mut request = ctx.agent.get(&url);
             if let Some(bearer) = &bearer {
-                request = request.set("Authorization", bearer);
+                request = request.header("Authorization", bearer);
             }
 
-            request.send_bytes(Default::default()).map_err(into_backoff_error)
+            request.call()
         });
         let index_exists = match response {
             Ok(response) => response.status() == 200,
@@ -152,12 +163,12 @@ impl IndexScheduler {
                     }
 
                     if let Some(bearer) = bearer.as_ref() {
-                        request = request.set("Authorization", bearer);
+                        request = request.header("Authorization", bearer);
                     }
                     let index_param =
                         json!({ "uid": options.index_uid, "primaryKey": primary_key });
 
-                    request.send_json(&index_param).map_err(into_backoff_error)
+                    request.send_json(&index_param)
                 }),
             )?;
         }
@@ -170,10 +181,10 @@ impl IndexScheduler {
                         request = set_network_ureq_headers(request, import_data, origin, metadata);
                     }
                     if let Some(bearer) = &bearer {
-                        request = request.set("Authorization", bearer);
+                        request = request.header("Authorization", bearer);
                     }
                     let index_param = json!({ "primaryKey": primary_key });
-                    request.send_json(&index_param).map_err(into_backoff_error)
+                    request.send_json(&index_param)
                 }),
             )?;
         }
@@ -202,9 +213,9 @@ impl IndexScheduler {
                     }
 
                     if let Some(bearer) = bearer.as_ref() {
-                        request = request.set("Authorization", bearer);
+                        request = request.header("Authorization", bearer);
                     }
-                    request.send_json(settings.clone()).map_err(into_backoff_error)
+                    request.send_json(settings.clone())
                 }),
             )?;
         }
@@ -389,7 +400,7 @@ impl IndexScheduler {
         target: TargetInstance<'_>,
         export_old_remote_name: &str,
         network_change_origin: &Origin,
-        agent: &ureq::Agent,
+        agent: &http_client::ureq::Agent,
         must_stop_processing: &MustStopProcessing,
     ) -> Result<(), Error> {
         let bearer = target.api_key.map(|api_key| format!("Bearer {api_key}"));
@@ -414,16 +425,14 @@ impl IndexScheduler {
                             total_index_documents: 0,
                         },
                     );
-                    request = request.set("Content-Type", "application/json");
+                    request = request.header("Content-Type", "application/json");
                     if let Some(bearer) = &bearer {
-                        request = request.set("Authorization", bearer);
+                        request = request.header("Authorization", bearer);
                     }
-                    request
-                        .send_json(
-                            // empty payload that will be disregarded
-                            serde_json::Value::Object(Default::default()),
-                        )
-                        .map_err(into_backoff_error)
+                    request.send_json(
+                        // empty payload that will be disregarded
+                        serde_json::Value::Object(Default::default()),
+                    )
                 }),
             )?;
         }
@@ -432,12 +441,12 @@ impl IndexScheduler {
     }
 }
 
-fn set_network_ureq_headers(
-    request: ureq::Request,
+fn set_network_ureq_headers<P>(
+    request: http_client::ureq::RequestBuilder<P>,
     import_data: &ImportData,
     origin: &Origin,
     metadata: &ImportMetadata,
-) -> ureq::Request {
+) -> http_client::ureq::RequestBuilder<P> {
     let request = RequestWrapper(request);
 
     let ImportMetadata { index_count, task_key, total_index_documents } = metadata;
@@ -467,10 +476,10 @@ fn set_network_ureq_headers(
     request
 }
 
-struct RequestWrapper(ureq::Request);
-impl headers::SetHeader for RequestWrapper {
+struct RequestWrapper<P>(http_client::ureq::RequestBuilder<P>);
+impl<P> headers::SetHeader for RequestWrapper<P> {
     fn set_header(self, name: &str, value: &str) -> Self {
-        Self(self.0.set(name, value))
+        Self(self.0.header(name, value))
     }
 }
 
@@ -479,7 +488,7 @@ fn send_buffer<'a>(
     buffer: &'a [u8],
     mut compressed_buffer: &'a mut Vec<u8>,
     must_stop_processing: &MustStopProcessing,
-    agent: &ureq::Agent,
+    agent: &http_client::ureq::Agent,
     documents_url: &'a str,
     remote_name: Option<&str>,
     bearer: Option<&'a str>,
@@ -494,15 +503,15 @@ fn send_buffer<'a>(
 
     let res = retry(must_stop_processing, || {
         let mut request = agent.post(documents_url);
-        request = request.set("Content-Type", "application/x-ndjson");
-        request = request.set("Content-Encoding", "gzip");
+        request = request.header("Content-Type", "application/x-ndjson");
+        request = request.header("Content-Encoding", "gzip");
         if let Some(bearer) = bearer {
-            request = request.set("Authorization", bearer);
+            request = request.header("Authorization", bearer);
         }
         if let Some((import_data, origin, metadata)) = task_network {
             request = set_network_ureq_headers(request, import_data, origin, metadata);
         }
-        request.send_bytes(compressed_buffer).map_err(into_backoff_error)
+        request.send(compressed_buffer.as_slice())
     });
 
     handle_response(remote_name, res)
@@ -537,40 +546,59 @@ fn handle_response(remote_name: Option<&str>, res: Result<Response>) -> Result<C
     }
 }
 
-fn retry<F>(must_stop_processing: &MustStopProcessing, send_request: F) -> Result<ureq::Response>
+fn retry<F>(must_stop_processing: &MustStopProcessing, send_request: F) -> Result<Response>
 where
-    F: Fn() -> Result<ureq::Response, backoff::Error<ureq::Error>>,
+    F: Fn() -> Result<Response, http_client::ureq::Error>,
 {
-    match backoff::retry(ExponentialBackoff::default(), || {
-        if must_stop_processing.get() {
-            return Err(backoff::Error::Permanent(ureq::Error::Status(
-                u16::MAX,
-                // 444: Connection Closed Without Response
-                Response::new(444, "Abort", "Aborted task").unwrap(),
-            )));
-        }
-        send_request()
-    }) {
+    match backoff::retry(
+        ExponentialBackoff::default(),
+        || -> Result<Response, backoff::Error<ResponseError>> {
+            if must_stop_processing.get() {
+                return Err(backoff::Error::Permanent(ResponseError::AbortedTask));
+            }
+            match send_request() {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        Ok(response)
+                    } else {
+                        Err(into_backoff_error(response))
+                    }
+                }
+                Err(err) => Err(backoff::Error::Transient {
+                    err: ResponseError::Transport(err),
+                    retry_after: None,
+                }),
+            }
+        },
+    ) {
         Ok(response) => Ok(response),
-        Err(backoff::Error::Permanent(e)) => Err(ureq_error_into_error(e)),
-        Err(backoff::Error::Transient { err, retry_after: _ }) => Err(ureq_error_into_error(err)),
+        Err(backoff::Error::Permanent(e)) => Err(response_error_into_error(e)),
+        Err(backoff::Error::Transient { err, retry_after: _ }) => {
+            Err(response_error_into_error(err))
+        }
     }
 }
 
-fn into_backoff_error(err: ureq::Error) -> backoff::Error<ureq::Error> {
-    match err {
+enum ResponseError {
+    AbortedTask,
+    FailedResponse(Response),
+    Transport(http_client::ureq::Error),
+}
+
+fn into_backoff_error(failed_response: Response) -> backoff::Error<ResponseError> {
+    match failed_response.status().as_u16() {
         // Those code status must trigger an automatic retry
         // <https://www.restapitutorial.com/advanced/responses/retries>
-        ureq::Error::Status(408 | 429 | 500 | 502 | 503 | 504, _) => {
-            backoff::Error::Transient { err, retry_after: None }
-        }
-        ureq::Error::Status(_, _) => backoff::Error::Permanent(err),
-        ureq::Error::Transport(_) => backoff::Error::Transient { err, retry_after: None },
+        408 | 429 | 500 | 502 | 503 | 504 => backoff::Error::Transient {
+            err: ResponseError::FailedResponse(failed_response),
+            retry_after: None,
+        },
+        _ => backoff::Error::Permanent(ResponseError::FailedResponse(failed_response)),
     }
 }
 
 /// Converts a `ureq::Error` into an `Error`.
-fn ureq_error_into_error(error: ureq::Error) -> Error {
+fn response_error_into_error(error: ResponseError) -> Error {
     #[derive(Deserialize)]
     struct MeiliError {
         message: String,
@@ -580,16 +608,14 @@ fn ureq_error_into_error(error: ureq::Error) -> Error {
     }
 
     match error {
-        // This is a workaround to handle task abortion - the error propagation path
-        // makes it difficult to cleanly surface the abortion at this level.
-        ureq::Error::Status(u16::MAX, _) => Error::AbortedTask,
-        ureq::Error::Status(_, response) => match response.into_json() {
+        ResponseError::AbortedTask => Error::AbortedTask,
+        ResponseError::FailedResponse(mut response) => match response.body_mut().read_json() {
             Ok(MeiliError { message, code, r#type, link }) => {
                 Error::FromRemoteWhenExporting { message, code, r#type, link }
             }
-            Err(e) => e.into(),
+            Err(e) => io::Error::other(e.into_io()).into(),
         },
-        ureq::Error::Transport(transport) => io::Error::other(transport).into(),
+        ResponseError::Transport(error) => io::Error::other(error.into_io()).into(),
     }
 }
 
@@ -638,7 +664,7 @@ pub(super) struct ExportContext<'a> {
     pub(super) index_rtxn: &'a milli::heed::RoTxn<'a>,
     pub(super) universe: &'a RoaringBitmap,
     pub(super) progress: &'a Progress,
-    pub(super) agent: &'a ureq::Agent,
+    pub(super) agent: &'a http_client::ureq::Agent,
     pub(super) must_stop_processing: &'a MustStopProcessing,
 }
 

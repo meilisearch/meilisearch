@@ -12,6 +12,7 @@ use std::{env, fmt, fs};
 
 use byte_unit::{Byte, ParseError, UnitType};
 use clap::Parser;
+use itertools::Itertools as _;
 use meilisearch_types::features::InstanceTogglableFeatures;
 use meilisearch_types::milli::update::{IndexerConfig, S3SnapshotOptions};
 use meilisearch_types::milli::ThreadPoolNoAbortBuilder;
@@ -73,6 +74,8 @@ const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
 const MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY: &str =
     "MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY";
+
+const MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: &str = "MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS";
 
 // Related to S3 snapshots
 const MEILI_S3_BUCKET_URL: &str = "MEILI_S3_BUCKET_URL";
@@ -504,6 +507,13 @@ pub struct Opt {
     #[clap(long, env = MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY)]
     pub experimental_personalization_api_key: Option<String>,
 
+    /// Experimental control over IP policy.
+    ///
+    /// Sets this to override the default IP policy of blocking all internal IPs and allow some internal IPs.
+    #[clap(long, env = MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS, value_delimiter=',', action=clap::ArgAction::Set)]
+    #[serde(default)]
+    pub experimental_allowed_ip_networks: Vec<cidr::AnyIpCidr>,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -614,6 +624,7 @@ impl Opt {
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
             experimental_personalization_api_key,
+            experimental_allowed_ip_networks,
             s3_snapshot_options,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
@@ -723,6 +734,18 @@ impl Opt {
                 experimental_personalization_api_key,
             );
         }
+
+        if !experimental_allowed_ip_networks.is_empty() {
+            let experimental_allowed_ip_networks: String = experimental_allowed_ip_networks
+                .iter()
+                .map(|any_or_cidr| any_or_cidr.to_string())
+                .join(",");
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS,
+                experimental_allowed_ip_networks,
+            );
+        }
+
         indexer_options.export_to_env();
         if let Some(s3_snapshot_options) = s3_snapshot_options {
             #[cfg(not(unix))]

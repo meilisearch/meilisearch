@@ -20,10 +20,13 @@ members = [
     "crates/xtask",
     "crates/build-info",
     "crates/openapi-generator",
+    "crates/http-client",
+    "external-crates/async-openai",
+    "external-crates/async-openai-macros",
 ]
 
 [workspace.package]
-version = "1.34.0"
+version = "1.34.2"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
     "Clément Renault <clement@meilisearch.com>",

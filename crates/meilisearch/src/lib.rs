@@ -37,6 +37,7 @@ use anyhow::bail;
 use bumpalo::Bump;
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
+use http_client::policy::IpPolicy;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
@@ -210,6 +211,26 @@ pub fn setup_meilisearch(
     opt: &Opt,
     handle: tokio::runtime::Handle,
 ) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
+    let exceptions = opt.experimental_allowed_ip_networks.as_slice();
+    let ip_policy = match exceptions {
+        [] => IpPolicy::deny_all_local_ips(),
+        exceptions => {
+            let exceptions: Option<Vec<cidr::IpCidr>> = exceptions
+                .iter()
+                .map(|cidr_or_any|
+                    // some unless `any`
+                    Option::<cidr::IpCidr>::from(*cidr_or_any))
+                .collect();
+            // some unless there was an `any`
+            if let Some(exceptions) = exceptions {
+                IpPolicy::deny_local_ips(exceptions)
+            } else {
+                // DANGER: explicitly requested
+                IpPolicy::danger_always_allow()
+            }
+        }
+    };
+
     let index_scheduler_opt = IndexSchedulerOptions {
         version_file_path: opt.db_path.join(VERSION_FILE_NAME),
         auth_path: opt.db_path.join("auth"),
@@ -250,6 +271,7 @@ pub fn setup_meilisearch(
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
         experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
+        ip_policy,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
@@ -583,7 +605,12 @@ fn import_dump(
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
         let embedder_stats: Arc<EmbedderStats> = Default::default();
-        builder.execute(&|| false, &progress, embedder_stats.clone())?;
+        builder.execute(
+            &|| false,
+            &progress,
+            index_scheduler.ip_policy(),
+            embedder_stats.clone(),
+        )?;
         wtxn.commit()?;
 
         let mut wtxn = index.write_txn()?;
@@ -620,6 +647,7 @@ fn import_dump(
                 |indexing_step| tracing::trace!("update: {:?}", indexing_step),
                 || false,
                 &embedder_stats,
+                index_scheduler.ip_policy(),
             )?;
 
             let builder = builder.with_embedders(embedders);
@@ -673,6 +701,7 @@ fn import_dump(
                 embedders,
                 &|| false, // never stop processing a dump
                 &progress,
+                index_scheduler.ip_policy(),
                 &embedder_stats,
             )?;
         }

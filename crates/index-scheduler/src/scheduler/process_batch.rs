@@ -282,6 +282,7 @@ impl IndexScheduler {
                         .execute(
                             &|| must_stop_processing.get(),
                             &progress,
+                            self.ip_policy(),
                             current_batch.embedder_stats.clone(),
                         )
                         .map_err(|e| Error::from_milli(e, Some(final_index_uid.to_string())))?;

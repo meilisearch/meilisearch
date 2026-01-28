@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::HttpRequest;
 use bytes::Bytes;
+use http_client::reqwest::{ClientBuilder, RequestBuilder, StatusCode};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::network::Remote;
@@ -16,7 +17,6 @@ use meilisearch_types::tasks::network::{
     DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,
 };
 use meilisearch_types::tasks::{Task, TaskId};
-use reqwest::{RequestBuilder, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use uuid::Uuid;
@@ -213,9 +213,11 @@ where
         };
 
         let mut in_flight_remote_queries = BTreeMap::new();
-        let client = reqwest::ClientBuilder::new()
-            .connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
-            .build()
+        let client = ClientBuilder::new()
+            .prepare(|inner| {
+                inner.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
+            })
+            .build_with_policies(index_scheduler.ip_policy().clone(), Default::default())
             .unwrap();
 
         let method = from_old_http_method(req.method());
@@ -320,11 +322,12 @@ where
 
 pub async fn send_request<T, F, U>(
     path_and_query: &str,
-    method: reqwest::Method,
+    method: http_client::reqwest::Method,
     content_type: Option<String>,
     body: Body<T, F>,
     remote_name: &str,
     remote: &Remote,
+    ip_policy: http_client::policy::IpPolicy,
 ) -> Result<U, ProxyError>
 where
     T: serde::Serialize,
@@ -340,9 +343,11 @@ where
 
     let body = body.into_bytes(remote_name, remote).map_err(Box::new)?;
 
-    let client = reqwest::ClientBuilder::new()
-        .connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
-        .build()
+    let client = ClientBuilder::new()
+        .prepare(|inner| {
+            inner.connect_timeout(std::time::Duration::from_secs(*timeouts::CONNECT_SECONDS))
+        })
+        .build_with_policies(ip_policy, Default::default())
         .unwrap();
 
     let url = format!("{}{}", remote.url, path_and_query);
@@ -365,22 +370,27 @@ where
         let method = method.clone();
 
         async move {
-            let request = client
-                .request(method, url)
-                .timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
-            let request = if let Some(body) = body { request.body(body) } else { request };
-            let request =
-                if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
-            let request = if let Some(content_type) = content_type {
-                request.header(CONTENT_TYPE.as_str(), content_type)
-            } else {
+            let request = client.request(method, url).prepare(|request| {
+                let request =
+                    request.timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
+                let request = if let Some(body) = body { request.body(body) } else { request };
+                let request = if let Some(api_key) = api_key {
+                    request.bearer_auth(api_key)
+                } else {
+                    request
+                };
+                let request = if let Some(content_type) = content_type {
+                    request.header(CONTENT_TYPE.as_str(), content_type)
+                } else {
+                    request
+                };
                 request
-            };
+            });
 
             let response = request.send().await;
             let response = match response {
                 Ok(response) => response,
-                Err(error) if error.is_timeout() => {
+                Err(http_client::reqwest::Error::Reqwest(error)) if error.is_timeout() => {
                     return Err(backoff::Error::transient(ProxyError::Timeout))
                 }
                 Err(error) => {
@@ -396,7 +406,9 @@ where
     .await
 }
 
-async fn handle_response<U>(response: reqwest::Response) -> Result<U, backoff::Error<ProxyError>>
+async fn handle_response<U>(
+    response: http_client::reqwest::Response,
+) -> Result<U, backoff::Error<ProxyError>>
 where
     U: DeserializeOwned,
 {
@@ -435,48 +447,50 @@ where
     Ok(response)
 }
 
-fn from_old_http_method(method: &actix_http::Method) -> reqwest::Method {
+fn from_old_http_method(method: &actix_http::Method) -> http_client::reqwest::Method {
     match method {
-        &actix_http::Method::CONNECT => reqwest::Method::CONNECT,
-        &actix_http::Method::DELETE => reqwest::Method::DELETE,
-        &actix_http::Method::GET => reqwest::Method::GET,
-        &actix_http::Method::HEAD => reqwest::Method::HEAD,
-        &actix_http::Method::OPTIONS => reqwest::Method::OPTIONS,
-        &actix_http::Method::PATCH => reqwest::Method::PATCH,
-        &actix_http::Method::POST => reqwest::Method::POST,
-        &actix_http::Method::PUT => reqwest::Method::PUT,
-        &actix_http::Method::TRACE => reqwest::Method::TRACE,
-        method => reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap(),
+        &actix_http::Method::CONNECT => http_client::reqwest::Method::CONNECT,
+        &actix_http::Method::DELETE => http_client::reqwest::Method::DELETE,
+        &actix_http::Method::GET => http_client::reqwest::Method::GET,
+        &actix_http::Method::HEAD => http_client::reqwest::Method::HEAD,
+        &actix_http::Method::OPTIONS => http_client::reqwest::Method::OPTIONS,
+        &actix_http::Method::PATCH => http_client::reqwest::Method::PATCH,
+        &actix_http::Method::POST => http_client::reqwest::Method::POST,
+        &actix_http::Method::PUT => http_client::reqwest::Method::PUT,
+        &actix_http::Method::TRACE => http_client::reqwest::Method::TRACE,
+        method => http_client::reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap(),
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn try_proxy(
-    method: reqwest::Method,
+    method: http_client::reqwest::Method,
     url: &str,
     content_type: Option<&[u8]>,
     network_version: Uuid,
     api_key: Option<&str>,
-    client: &reqwest::Client,
+    client: &http_client::reqwest::Client,
     this: &str,
     task_uid: TaskId,
     body: Option<Bytes>,
 ) -> Result<SummarizedTaskView, backoff::Error<ProxyError>> {
-    let request = client
-        .request(method, url)
-        .timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
-    let request = if let Some(body) = body { request.body(body) } else { request };
-    let request = if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
+    let request = client.request(method, url).prepare(|request| {
+        let request = request.timeout(std::time::Duration::from_secs(*timeouts::REQUEST_SECONDS));
+        let request = if let Some(body) = body { request.body(body) } else { request };
+        let request =
+            if let Some(api_key) = api_key { request.bearer_auth(api_key) } else { request };
+
+        let request = if let Some(content_type) = content_type {
+            request.header(CONTENT_TYPE.as_str(), content_type)
+        } else {
+            request
+        };
+        request
+    });
     let RequestWrapper(request) = RequestWrapper(request)
         .set_origin_task_uid(task_uid)
         .set_origin_network_version(network_version)
         .set_origin_remote(this);
-
-    let request = if let Some(content_type) = content_type {
-        request.header(CONTENT_TYPE.as_str(), content_type)
-    } else {
-        request
-    };
 
     let response = request.send().await;
     let response = match response {
@@ -497,14 +511,16 @@ async fn try_proxy(
 struct RequestWrapper(RequestBuilder);
 impl meilisearch_types::tasks::network::headers::SetHeader for RequestWrapper {
     fn set_header(self, name: &str, value: &str) -> Self {
-        Self(self.0.header(name, value))
+        Self(self.0.prepare(|request| request.header(name, value)))
     }
 }
 
-async fn parse_error(response: reqwest::Response) -> Result<String, ReqwestErrorWithoutUrl> {
+async fn parse_error(
+    response: http_client::reqwest::Response,
+) -> Result<String, ReqwestErrorWithoutUrl> {
     let bytes = match response.bytes().await {
         Ok(bytes) => bytes,
-        Err(error) => return Err(ReqwestErrorWithoutUrl::new(error)),
+        Err(error) => return Err(ReqwestErrorWithoutUrl::new(error.into())),
     };
 
     Ok(parse_bytes_as_error(&bytes))
@@ -518,11 +534,11 @@ fn parse_bytes_as_error(bytes: &[u8]) -> String {
 }
 
 async fn parse_response<T: DeserializeOwned>(
-    response: reqwest::Response,
+    response: http_client::reqwest::Response,
 ) -> Result<T, Result<String, ReqwestErrorWithoutUrl>> {
     let bytes = match response.bytes().await {
         Ok(bytes) => bytes,
-        Err(error) => return Err(Err(ReqwestErrorWithoutUrl::new(error))),
+        Err(error) => return Err(Err(ReqwestErrorWithoutUrl::new(error.into()))),
     };
 
     match serde_json::from_slice::<T>(&bytes) {

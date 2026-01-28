@@ -16,6 +16,8 @@ use crate::vector::json_template::{InjectableValue, JsonTemplate};
 use crate::vector::{DistributionShift, Embedding, SearchQuery, REQUEST_PARALLELISM};
 use crate::ThreadPoolNoAbort;
 
+type UreqResponse = http_client::ureq::http::Response<http_client::ureq::Body>;
+
 // retrying in case of failure
 pub struct Retry {
     pub error: EmbedError,
@@ -84,7 +86,7 @@ pub struct Embedder {
 /// All data needed to perform requests and parse responses
 #[derive(Debug)]
 struct EmbedderData {
-    client: ureq::Agent,
+    client: http_client::ureq::Agent,
     bearer: Option<String>,
     headers: BTreeMap<String, String>,
     url: String,
@@ -180,6 +182,7 @@ impl Embedder {
         options: EmbedderOptions,
         cache_cap: usize,
         configuration_source: ConfigurationSource,
+        ip_policy: http_client::policy::IpPolicy,
     ) -> Result<Self, NewEmbedderError> {
         let bearer = options.api_key.as_deref().map(|api_key| format!("Bearer {api_key}"));
 
@@ -188,11 +191,18 @@ impl Embedder {
             .map(|p| p.parse().unwrap())
             .unwrap_or(30);
 
-        let client = ureq::AgentBuilder::new()
-            .max_idle_connections(REQUEST_PARALLELISM * 2)
-            .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
-            .timeout(std::time::Duration::from_secs(timeout))
+        let config = http_client::ureq::config::Config::builder()
+            .prepare(|config| {
+                config
+                    .max_idle_connections(REQUEST_PARALLELISM * 2)
+                    .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
+                    .timeout_global(Some(std::time::Duration::from_secs(timeout)))
+                    // important in ureq 3: to be able to retrieve the response for HTTP 400
+                    .http_status_as_error(false)
+            })
             .build();
+
+        let client = http_client::ureq::Agent::new_with_config(config, ip_policy);
 
         let request = RequestData::new(
             options.request,
@@ -419,16 +429,21 @@ where
         return Ok(Vec::new());
     }
 
-    let request = data.client.post(&data.url);
-    let request = if let Some(bearer) = &data.bearer {
-        request.set("Authorization", bearer)
-    } else {
+    // for some reason, ureq 3 `Request` is not `Clone`.
+    // So write a closure that will be called each time to setup the request
+    let request_builder = || {
+        let request = data.client.post(&data.url);
+        let request = if let Some(bearer) = &data.bearer {
+            request.header("Authorization", bearer)
+        } else {
+            request
+        };
+        let mut request = request.header("Content-Type", "application/json");
+        for (header, value) in &data.headers {
+            request = request.header(header.as_str(), value.as_str());
+        }
         request
     };
-    let mut request = request.set("Content-Type", "application/json");
-    for (header, value) in &data.headers {
-        request = request.set(header.as_str(), value.as_str());
-    }
 
     let body = match &data.request {
         RequestData::Single(request) => request.inject_texts(inputs),
@@ -441,7 +456,7 @@ where
         if let Some(embedder_stats) = &embedder_stats {
             embedder_stats.total_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
-        let response = request.clone().send_json(&body);
+        let response = request_builder().send_json(&body);
         let result = check_response(response, data.configuration_source).and_then(|response| {
             response_to_embedding(response, data, expected_count, expected_dimension)
         });
@@ -485,7 +500,7 @@ where
     if let Some(embedder_stats) = &embedder_stats {
         embedder_stats.total_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
-    let response = request.send_json(&body);
+    let response = request_builder().send_json(&body);
     let result = check_response(response, data.configuration_source).and_then(|response| {
         response_to_embedding(response, data, expected_count, expected_dimension)
     });
@@ -505,46 +520,55 @@ where
 }
 
 fn check_response(
-    response: Result<ureq::Response, ureq::Error>,
+    response: Result<UreqResponse, http_client::ureq::Error>,
     configuration_source: ConfigurationSource,
-) -> Result<ureq::Response, Retry> {
+) -> Result<UreqResponse, Retry> {
     match response {
-        Ok(response) => Ok(response),
-        Err(ureq::Error::Status(code, response)) => {
-            let error_response: Option<String> = response.into_string().ok();
-            Err(match code {
-                401 => Retry::give_up(EmbedError::rest_unauthorized(
-                    error_response,
-                    configuration_source,
-                )),
-                429 => Retry::rate_limited(EmbedError::rest_too_many_requests(error_response)),
-                400 => Retry::give_up(EmbedError::rest_bad_request(
-                    error_response,
-                    configuration_source,
-                )),
-                500..=599 => {
-                    Retry::retry_later(EmbedError::rest_internal_server_error(code, error_response))
-                }
-                402..=499 => {
-                    Retry::give_up(EmbedError::rest_other_status_code(code, error_response))
-                }
-                _ => Retry::retry_later(EmbedError::rest_other_status_code(code, error_response)),
-            })
+        Ok(mut response) => {
+            let status = response.status();
+            if !status.is_success() {
+                let error_response: Option<String> = response.body_mut().read_to_string().ok();
+                let code = status.as_u16();
+
+                return Err(match code {
+                    401 => Retry::give_up(EmbedError::rest_unauthorized(
+                        error_response,
+                        configuration_source,
+                    )),
+                    429 => Retry::rate_limited(EmbedError::rest_too_many_requests(error_response)),
+                    400 => Retry::give_up(EmbedError::rest_bad_request(
+                        error_response,
+                        configuration_source,
+                    )),
+                    500..=599 => Retry::retry_later(EmbedError::rest_internal_server_error(
+                        code,
+                        error_response,
+                    )),
+                    402..=499 => {
+                        Retry::give_up(EmbedError::rest_other_status_code(code, error_response))
+                    }
+                    _ => {
+                        Retry::retry_later(EmbedError::rest_other_status_code(code, error_response))
+                    }
+                });
+            }
+            Ok(response)
         }
-        Err(ureq::Error::Transport(transport)) => {
-            Err(Retry::retry_later(EmbedError::rest_network(transport)))
-        }
+        Err(err) => Err(Retry::retry_later(EmbedError::rest_network(err))),
     }
 }
 
 fn response_to_embedding(
-    response: ureq::Response,
+    mut response: UreqResponse,
     data: &EmbedderData,
     expected_count: usize,
     expected_dimensions: Option<usize>,
 ) -> Result<Vec<Embedding>, Retry> {
     let response: Value = response
-        .into_json()
+        .body_mut()
+        // when using `with_config`, `read_json` has no limit on response size
+        .with_config()
+        .read_json()
         .map_err(EmbedError::rest_response_deserialization)
         .map_err(Retry::retry_later)?;
 

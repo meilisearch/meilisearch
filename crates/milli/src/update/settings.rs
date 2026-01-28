@@ -493,6 +493,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         progress_callback: &FP,
         should_abort: &FA,
         settings_diff: InnerIndexSettingsDiff,
+        embedder_ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: &Arc<EmbedderStats>,
     ) -> Result<()>
     where
@@ -510,6 +511,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.index,
             self.indexer_config,
             IndexDocumentsMethod::ReplaceDocuments,
+            embedder_ip_policy,
             false,
         )?;
 
@@ -526,6 +528,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             &progress_callback,
             &should_abort,
             embedder_stats,
+            embedder_ip_policy,
         )?;
 
         indexing_builder.execute_raw(output)?;
@@ -1428,6 +1431,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         mut self,
         progress_callback: FP,
         should_abort: FA,
+        ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<()>
     where
@@ -1436,7 +1440,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-        let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+        let old_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
         // never trigger re-indexing
         self.update_displayed()?;
@@ -1470,7 +1475,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         let embedding_config_updates = self.update_embedding_configs()?;
 
-        let mut new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+        let mut new_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
         new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
 
         let primary_key_id = self
@@ -1487,7 +1493,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         );
 
         if inner_settings_diff.any_reindexing_needed() {
-            self.reindex(&progress_callback, &should_abort, inner_settings_diff, &embedder_stats)?;
+            self.reindex(
+                &progress_callback,
+                &should_abort,
+                inner_settings_diff,
+                ip_policy,
+                &embedder_stats,
+            )?;
         }
 
         Ok(())
@@ -1561,6 +1573,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         mut self,
         must_stop_processing: &'indexer MSP,
         progress: &'indexer Progress,
+        ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<Option<ChannelCongestion>>
     where
@@ -1577,6 +1590,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 .legacy_execute(
                     |indexing_step| tracing::debug!(update = ?indexing_step),
                     must_stop_processing,
+                    ip_policy,
                     embedder_stats,
                 )
                 .map(|_| None);
@@ -1622,7 +1636,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
             self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-            let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+            let old_inner_settings =
+                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
             // Update index settings
             let embedding_config_updates = self.update_embedding_configs()?;
@@ -1632,7 +1647,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
             // Note that we don't need to update the searchables here,
             // as it will be done after the settings update.
-            let new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+            let new_inner_settings =
+                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
             let primary_key_id = self
                 .index
@@ -1656,6 +1672,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     &inner_settings_diff,
                     must_stop_processing,
                     progress,
+                    ip_policy,
                     embedder_stats,
                 )
                 .map(Some)
@@ -1668,6 +1685,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.legacy_execute(
                 |indexing_step| tracing::debug!(update = ?indexing_step),
                 must_stop_processing,
+                ip_policy,
                 embedder_stats,
             )
             .map(|_| None)
@@ -2021,6 +2039,7 @@ impl InnerIndexSettings {
     pub fn from_index(
         index: &Index,
         rtxn: &heed::RoTxn<'_>,
+        ip_policy: &http_client::policy::IpPolicy,
         runtime_embedders: Option<RuntimeEmbedders>,
     ) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
@@ -2032,7 +2051,7 @@ impl InnerIndexSettings {
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
         let runtime_embedders = match runtime_embedders {
             Some(embedding_configs) => embedding_configs,
-            None => embedders(index.embedding_configs().embedding_configs(rtxn)?)?,
+            None => embedders(index.embedding_configs().embedding_configs(rtxn)?, ip_policy)?,
         };
         let embedder_category_id = index
             .embedding_configs()
@@ -2125,7 +2144,10 @@ impl InnerIndexSettings {
     }
 }
 
-fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbedders> {
+fn embedders(
+    embedding_configs: Vec<IndexEmbeddingConfig>,
+    ip_policy: &http_client::policy::IpPolicy,
+) -> Result<RuntimeEmbedders> {
     let res: Result<_> = embedding_configs
         .into_iter()
         .map(
@@ -2138,7 +2160,7 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbe
 
                 let embedder =
                     // cache_cap: no cache needed for indexing purposes
-                    Arc::new(Embedder::new(embedder_options.clone(), 0)
+                    Arc::new(Embedder::new(embedder_options.clone(), 0, ip_policy.clone())
                         .map_err(crate::vector::Error::from)
                         .map_err(crate::Error::from)?);
 

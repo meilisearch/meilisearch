@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
+use http_client::policy::IpPolicy;
 use meili_snap::snapshot;
 
 use crate::index::tests::TempIndex;
@@ -570,6 +571,8 @@ fn degraded_search_and_score_details_vector() {
                 distribution: None,
             }),
             0,
+            // NO DANGER: test code
+            IpPolicy::danger_always_allow(),
         )
         .unwrap(),
     );

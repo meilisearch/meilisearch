@@ -1,3 +1,4 @@
+use http_client::policy::IpPolicy;
 use milli::progress::Progress;
 use milli::update::{IndexerConfig, Settings};
 use milli::{Criterion, Index, Search, TermsMatchingStrategy};
@@ -11,7 +12,15 @@ fn set_stop_words(index: &Index, stop_words: &[&str]) {
     let mut builder = Settings::new(&mut wtxn, index, &config);
     let stop_words = stop_words.iter().map(|s| s.to_string()).collect();
     builder.set_stop_words(stop_words);
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
     wtxn.commit().unwrap();
 }
 
