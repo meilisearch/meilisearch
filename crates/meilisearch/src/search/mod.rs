@@ -2411,8 +2411,13 @@ pub(crate) fn parse_filter(
     }
 
     if let Some(ref filter) = filter {
-        if let Some((token, error)) = filter.use_shard_filter().zip(features.check_network("using a shard filter").err()){
-            return Err(ResponseError::from_msg(token.as_external_error(error).to_string(), Code::FeatureNotEnabled))
+        if let Some((token, error)) =
+            filter.use_shard_filter().zip(features.check_network("using a shard filter").err())
+        {
+            return Err(ResponseError::from_msg(
+                token.as_external_error(error).to_string(),
+                Code::FeatureNotEnabled,
+            ));
         }
     }
 

@@ -35,7 +35,6 @@ use crate::{
     Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
 };
 
-
 pub(crate) mod de;
 pub mod document_changes;
 mod document_deletion;

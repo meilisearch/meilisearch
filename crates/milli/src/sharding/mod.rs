@@ -37,10 +37,9 @@ impl DbShardDocids {
         shard: &str,
         universe: Option<&RoaringBitmap>,
     ) -> Result<Option<RoaringBitmap>> {
-
         Ok(if let Some(universe) = universe {
             let db = self.0.remap_data_type::<Bytes>();
-        let Some(docids) = db.get(rtxn, shard)? else { return Ok(None) };
+            let Some(docids) = db.get(rtxn, shard)? else { return Ok(None) };
             Some(CboRoaringBitmapCodec::intersection_with_serialized(docids, universe)?)
         } else {
             self.0.get(rtxn, shard)?
