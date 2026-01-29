@@ -17,7 +17,8 @@ pub fn network_partition<'a>(
         Some(federation_options),
     );
 
-    // Move federation options from the query to the federation struct
+    // Move query parameters that make sense at the federation level
+    // from the `SearchQueryWithIndex` to the `Federation`
     let SearchQueryWithIndex {
         index_uid,
         q: _,
