@@ -17,6 +17,7 @@ pub fn network_partition<'a>(
         Some(federation_options),
     );
 
+    // Move federation options from the query to the federation struct
     let SearchQueryWithIndex {
         index_uid,
         q: _,
@@ -34,7 +35,7 @@ pub fn network_partition<'a>(
         attributes_to_highlight: _,
         show_ranking_score: _,
         show_ranking_score_details: _,
-        show_performance_details: _,
+        show_performance_details,
         use_network: _,
         show_matches_position: _,
         filter: _,
@@ -52,17 +53,31 @@ pub fn network_partition<'a>(
         federation_options: _,
     } = &mut query;
 
+    let Federation {
+        limit: federation_limit,
+        offset: federation_offset,
+        page: federation_page,
+        hits_per_page: federation_hits_per_page,
+        facets_by_index: _,
+        merge_facets: _,
+        show_performance_details: federation_show_performance_details,
+    } = federation;
+
     if let Some(limit) = limit.take() {
-        federation.limit = limit;
+        *federation_limit = limit;
     }
     if let Some(offset) = offset.take() {
-        federation.offset = offset;
+        *federation_offset = offset;
     }
     if let Some(page) = page.take() {
-        federation.page = Some(page);
+        *federation_page = Some(page);
     }
     if let Some(hits_per_page) = hits_per_page.take() {
-        federation.hits_per_page = Some(hits_per_page);
+        *federation_hits_per_page = Some(hits_per_page);
+    }
+
+    if let Some(show_performance_details) = show_performance_details.take() {
+        *federation_show_performance_details = show_performance_details;
     }
 
     'facets: {

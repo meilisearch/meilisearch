@@ -652,7 +652,7 @@ pub struct SearchQueryWithIndex {
     pub show_ranking_score_details: bool,
     /// Adds a detailed performance details field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>, default)]
-    pub show_performance_details: bool,
+    pub show_performance_details: Option<bool>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>, default)]
     pub use_network: Option<bool>,
     /// Return matching terms location
@@ -732,7 +732,7 @@ impl SearchQueryWithIndex {
     }
 
     pub fn has_show_performance_details(&self) -> bool {
-        self.show_performance_details
+        self.show_performance_details.is_some()
     }
 
     pub fn from_index_query_federation(
@@ -790,7 +790,7 @@ impl SearchQueryWithIndex {
             attributes_to_highlight,
             show_ranking_score,
             show_ranking_score_details,
-            show_performance_details,
+            show_performance_details: show_performance_details.then(|| true),
             show_matches_position,
             filter,
             sort,
@@ -861,7 +861,7 @@ impl SearchQueryWithIndex {
                 attributes_to_highlight,
                 show_ranking_score,
                 show_ranking_score_details,
-                show_performance_details,
+                show_performance_details: show_performance_details.unwrap_or(false),
                 show_matches_position,
                 filter,
                 sort,
