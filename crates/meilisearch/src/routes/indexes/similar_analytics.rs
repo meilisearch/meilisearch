@@ -59,6 +59,7 @@ impl<Method: AggregateMethod> SimilarAggregator<Method> {
             retrieve_vectors,
             show_ranking_score,
             show_ranking_score_details,
+            show_performance_details: _,
             filter,
             ranking_score_threshold,
         } = query;
@@ -104,7 +105,13 @@ impl<Method: AggregateMethod> SimilarAggregator<Method> {
     }
 
     pub fn succeed(&mut self, result: &SimilarResult) {
-        let SimilarResult { id: _, hits: _, processing_time_ms, hits_info: _ } = result;
+        let SimilarResult {
+            id: _,
+            hits: _,
+            processing_time_ms,
+            hits_info: _,
+            performance_details: _,
+        } = result;
 
         self.total_succeeded = self.total_succeeded.saturating_add(1);
 

@@ -9,7 +9,7 @@ use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
     InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition, InvalidMultiSearchRemote,
     InvalidMultiSearchWeight, InvalidSearchHitsPerPage, InvalidSearchLimit, InvalidSearchOffset,
-    InvalidSearchPage,
+    InvalidSearchPage, InvalidSearchShowPerformanceDetails,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -105,6 +105,9 @@ pub struct Federation {
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
     #[schema(value_type = Option<MergeFacets>)]
     pub merge_facets: Option<MergeFacets>,
+    /// Whether to include performance details in the response
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
+    pub show_performance_details: bool,
 }
 
 impl Default for Federation {
@@ -116,6 +119,7 @@ impl Default for Federation {
             hits_per_page: Default::default(),
             facets_by_index: Default::default(),
             merge_facets: Default::default(),
+            show_performance_details: Default::default(),
         }
     }
 }
@@ -204,6 +208,10 @@ pub struct FederatedSearchResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Value>)]
+    pub performance_details: Option<IndexMap<String, String>>,
+
     // These fields are only used for analytics purposes
     #[serde(skip)]
     pub degraded: bool,
@@ -227,6 +235,7 @@ impl FederatedSearchResult {
             semantic_hit_count,
             degraded,
             used_negative_operator,
+            performance_details,
         } = self;
         let query_vector =
             query_vectors.and_then(|mut query_vectors| query_vectors.pop_last().map(|(_, v)| v));
@@ -252,6 +261,7 @@ impl FederatedSearchResult {
             semantic_hit_count,
             degraded,
             used_negative_operator,
+            performance_details,
         }
     }
 }
@@ -272,6 +282,7 @@ impl fmt::Debug for FederatedSearchResult {
             remote_errors,
             request_uid,
             metadata,
+            performance_details: _, // not part of the debug output because it's an Option and is always displayed in a dedicated log.
         } = self;
 
         let mut debug = f.debug_struct("SearchResult");

@@ -132,6 +132,9 @@ pub struct SearchQuery {
     /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
+    /// Adds a detailed performance details field
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
+    pub show_performance_details: bool,
     /// Experimental: Whether this query should be performed on the whole network or locally.
     ///
     /// When performing the query on the whole network, this is "as-if" a remote federated search were performed,
@@ -251,6 +254,7 @@ impl From<SearchParameters> for SearchQuery {
             show_matches_position: false,
             show_ranking_score: false,
             show_ranking_score_details: false,
+            show_performance_details: false,
             filter: None,
             facets: None,
             highlight_pre_tag: DEFAULT_HIGHLIGHT_PRE_TAG(),
@@ -330,6 +334,7 @@ impl fmt::Debug for SearchQuery {
             show_matches_position,
             show_ranking_score,
             show_ranking_score_details,
+            show_performance_details,
             filter,
             sort,
             distinct,
@@ -406,6 +411,9 @@ impl fmt::Debug for SearchQuery {
         }
         if *show_ranking_score_details {
             debug.field("self.show_ranking_score_details", show_ranking_score_details);
+        }
+        if *show_performance_details {
+            debug.field("show_performance_details", show_performance_details);
         }
         debug.field("crop_length", &crop_length);
         if let Some(facets) = facets {
@@ -642,6 +650,9 @@ pub struct SearchQueryWithIndex {
     /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+    /// Adds a detailed performance details field
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>, default)]
+    pub show_performance_details: Option<bool>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>, default)]
     pub use_network: Option<bool>,
     /// Return matching terms location
@@ -720,6 +731,10 @@ impl SearchQueryWithIndex {
             && self.use_network == Some(true)
     }
 
+    pub fn has_show_performance_details(&self) -> bool {
+        self.show_performance_details.is_some()
+    }
+
     pub fn from_index_query_federation(
         index_uid: IndexUid,
         query: SearchQuery,
@@ -742,6 +757,7 @@ impl SearchQueryWithIndex {
             show_matches_position,
             show_ranking_score,
             show_ranking_score_details,
+            show_performance_details,
             filter,
             sort,
             distinct,
@@ -774,6 +790,7 @@ impl SearchQueryWithIndex {
             attributes_to_highlight,
             show_ranking_score,
             show_ranking_score_details,
+            show_performance_details: show_performance_details.then_some(true),
             show_matches_position,
             filter,
             sort,
@@ -810,6 +827,7 @@ impl SearchQueryWithIndex {
             attributes_to_highlight,
             show_ranking_score,
             show_ranking_score_details,
+            show_performance_details,
             show_matches_position,
             filter,
             sort,
@@ -843,6 +861,7 @@ impl SearchQueryWithIndex {
                 attributes_to_highlight,
                 show_ranking_score,
                 show_ranking_score_details,
+                show_performance_details: show_performance_details.unwrap_or_default(),
                 show_matches_position,
                 filter,
                 sort,
@@ -898,6 +917,9 @@ pub struct SimilarQuery {
     /// Adds a detailed global ranking score field
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
+    /// Adds a detailed performance details field
+    #[deserr(default, error = DeserrJsonError<InvalidSimilarShowPerformanceDetails>, default)]
+    pub show_performance_details: bool,
     /// Excludes results with low ranking scores
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
     #[schema(value_type = f64)]
@@ -1061,6 +1083,10 @@ pub struct SearchResult {
     /// Metadata about the search query
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<SearchMetadata>,
+    /// Performance details of the search query
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Value>)]
+    pub performance_details: Option<IndexMap<String, String>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_errors: Option<BTreeMap<String, ResponseError>>,
@@ -1093,6 +1119,7 @@ impl fmt::Debug for SearchResult {
             degraded,
             used_negative_operator,
             remote_errors,
+            performance_details: _, // not part of the debug output because it's an Option and is always displayed in a dedicated log.
         } = self;
 
         let mut debug = f.debug_struct("SearchResult");
@@ -1146,6 +1173,10 @@ pub struct SimilarResult {
     /// Pagination information
     #[serde(flatten)]
     pub hits_info: HitsInfo,
+    /// Performance details of the query
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Value>)]
+    pub performance_details: Option<IndexMap<String, String>>,
 }
 
 /// Search result with index identifier for multi-search responses
@@ -1358,7 +1389,7 @@ pub fn prepare_search<'t>(
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
             Ok(sorts) => sorts,
             Err(asc_desc_error) => {
-                return Err(SortError::from(asc_desc_error).into_search_error().into())
+                return Err(SortError::from(asc_desc_error).into_search_error().into());
             }
         };
 
@@ -1442,6 +1473,7 @@ pub fn perform_search(
         show_matches_position,
         show_ranking_score,
         show_ranking_score_details,
+        show_performance_details: _,
         sort,
         facets,
         highlight_pre_tag,
@@ -1516,6 +1548,9 @@ pub fn perform_search(
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
         .unzip();
+
+    let performance_details =
+        query.show_performance_details.then(|| progress.accumulated_durations());
     let result = SearchResult {
         hits: documents,
         hits_info,
@@ -1530,6 +1565,7 @@ pub fn perform_search(
         request_uid: Some(request_uid),
         metadata,
         remote_errors: None,
+        performance_details,
     };
     Ok((result, deadline))
 }
@@ -2004,6 +2040,7 @@ pub fn perform_similar(
         retrieve_vectors: _,
         show_ranking_score,
         show_ranking_score_details,
+        show_performance_details,
         ranking_score_threshold,
     } = query;
 
@@ -2092,11 +2129,14 @@ pub fn perform_similar(
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
     let hits_info = HitsInfo::OffsetLimit { limit, offset, estimated_total_hits: number_of_hits };
 
+    let performance_details = show_performance_details.then(|| progress.accumulated_durations());
+
     let result = SimilarResult {
         hits,
         hits_info,
         id: id.into_inner(),
         processing_time_ms: before_search.elapsed().as_millis(),
+        performance_details,
     };
     Ok(result)
 }
@@ -2439,7 +2479,7 @@ fn parse_filter_array(arr: &'_ [Value]) -> Result<Option<Filter<'_>>, Meilisearc
                             return Err(MeilisearchHttpError::InvalidExpression(
                                 &["String"],
                                 v.clone(),
-                            ))
+                            ));
                         }
                     }
                 }
@@ -2449,7 +2489,7 @@ fn parse_filter_array(arr: &'_ [Value]) -> Result<Option<Filter<'_>>, Meilisearc
                 return Err(MeilisearchHttpError::InvalidExpression(
                     &["String", "[String]"],
                     v.clone(),
-                ))
+                ));
             }
         }
     }

@@ -720,6 +720,16 @@ async fn remote_sharding_auto_search() {
       "remoteErrors": {}
     }
     "###);
+
+    let request = json!(
+    {
+        "q": query,
+        "useNetwork": true,
+        "showPerformanceDetails": true,
+    });
+    let (response, code) = index2.search_post(request).await;
+    snapshot!(code, @"200 OK");
+    assert!(response["performanceDetails"].is_object());
 }
 
 #[actix_rt::test]
