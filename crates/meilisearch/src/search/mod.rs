@@ -861,7 +861,7 @@ impl SearchQueryWithIndex {
                 attributes_to_highlight,
                 show_ranking_score,
                 show_ranking_score_details,
-                show_performance_details: show_performance_details.unwrap_or(false),
+                show_performance_details: show_performance_details.unwrap_or_default(),
                 show_matches_position,
                 filter,
                 sort,
