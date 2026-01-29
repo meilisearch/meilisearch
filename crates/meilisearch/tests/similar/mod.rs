@@ -731,7 +731,7 @@ async fn performance_details() {
             json!({"id": 143, "embedder": "manual", "showPerformanceDetails": true}),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(json_string!(response, { ".performanceDetails" => "[details]" }), @r###"
+                snapshot!(json_string!(response, { ".performanceDetails" => "[details]", ".processingTimeMs" => "[duration]" }), @r###"
                 {
                   "hits": [
                     {
@@ -756,7 +756,7 @@ async fn performance_details() {
                     }
                   ],
                   "id": "143",
-                  "processingTimeMs": 1,
+                  "processingTimeMs": "[duration]",
                   "limit": 20,
                   "offset": 0,
                   "estimatedTotalHits": 4,
