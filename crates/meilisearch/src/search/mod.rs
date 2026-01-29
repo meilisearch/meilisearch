@@ -19,21 +19,21 @@ use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
+use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::{
     Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
-use meilisearch_types::{milli, Document};
+use meilisearch_types::{Document, milli};
 use milli::tokenizer::{Language, TokenizerBuilder};
 use milli::{
-    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, LocalizedAttributesRule,
-    MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    AscDesc, DEFAULT_VALUES_PER_FACET, FieldId, FieldsIdsMap, Filter, FormatOptions, Index,
+    LocalizedAttributesRule, MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 #[cfg(test)]
 mod mod_test;
 use utoipa::ToSchema;
@@ -43,8 +43,8 @@ use crate::error::MeilisearchHttpError;
 
 mod federated;
 pub use federated::{
-    network_partition, perform_federated_search, FederatedSearch, FederatedSearchResult,
-    Federation, FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
+    PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE, network_partition, perform_federated_search,
 };
 
 mod ranking_rules;
@@ -304,11 +304,7 @@ impl std::convert::TryFrom<f64> for RankingScoreThresholdSimilar {
     fn try_from(f: f64) -> Result<Self, Self::Error> {
         // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
         #[allow(clippy::manual_range_contains)]
-        if f > 1.0 || f < 0.0 {
-            Err(InvalidSimilarRankingScoreThreshold)
-        } else {
-            Ok(Self(f))
-        }
+        if f > 1.0 || f < 0.0 { Err(InvalidSimilarRankingScoreThreshold) } else { Ok(Self(f)) }
     }
 }
 
@@ -568,11 +564,7 @@ impl std::convert::TryFrom<f32> for SemanticRatio {
     fn try_from(f: f32) -> Result<Self, Self::Error> {
         // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
         #[allow(clippy::manual_range_contains)]
-        if f > 1.0 || f < 0.0 {
-            Err(InvalidSearchSemanticRatio)
-        } else {
-            Ok(SemanticRatio(f))
-        }
+        if f > 1.0 || f < 0.0 { Err(InvalidSearchSemanticRatio) } else { Ok(SemanticRatio(f)) }
     }
 }
 
@@ -790,7 +782,7 @@ impl SearchQueryWithIndex {
             attributes_to_highlight,
             show_ranking_score,
             show_ranking_score_details,
-            show_performance_details: show_performance_details.then(|| true),
+            show_performance_details: show_performance_details.then_some(true),
             show_matches_position,
             filter,
             sort,
@@ -1389,7 +1381,7 @@ pub fn prepare_search<'t>(
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {
             Ok(sorts) => sorts,
             Err(asc_desc_error) => {
-                return Err(SortError::from(asc_desc_error).into_search_error().into())
+                return Err(SortError::from(asc_desc_error).into_search_error().into());
             }
         };
 
@@ -1689,11 +1681,7 @@ pub enum RetrieveVectors {
 
 impl RetrieveVectors {
     pub fn new(retrieve_vector: bool) -> Self {
-        if retrieve_vector {
-            Self::Retrieve
-        } else {
-            Self::Hide
-        }
+        if retrieve_vector { Self::Retrieve } else { Self::Hide }
     }
 }
 
@@ -1776,11 +1764,7 @@ impl<'a> HitMaker<'a> {
             displayed_ids.unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
         let retrieve_vectors = if let RetrieveVectors::Retrieve = format.retrieve_vectors {
-            if vectors_is_hidden {
-                RetrieveVectors::Hide
-            } else {
-                RetrieveVectors::Retrieve
-            }
+            if vectors_is_hidden { RetrieveVectors::Hide } else { RetrieveVectors::Retrieve }
         } else {
             format.retrieve_vectors
         };
@@ -2479,7 +2463,7 @@ fn parse_filter_array(arr: &'_ [Value]) -> Result<Option<Filter<'_>>, Meilisearc
                             return Err(MeilisearchHttpError::InvalidExpression(
                                 &["String"],
                                 v.clone(),
-                            ))
+                            ));
                         }
                     }
                 }
@@ -2489,7 +2473,7 @@ fn parse_filter_array(arr: &'_ [Value]) -> Result<Option<Filter<'_>>, Meilisearc
                 return Err(MeilisearchHttpError::InvalidExpression(
                     &["String", "[String]"],
                     v.clone(),
-                ))
+                ));
             }
         }
     }

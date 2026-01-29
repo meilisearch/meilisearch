@@ -125,9 +125,9 @@ async fn invalid_federated_search() {
     snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]"}), @r###"
     {
       "message": "Invalid value type at `.federation.showPerformanceDetails`: expected a boolean, but found a string: `\"true\"`",
-      "code": "invalid_multi_search_query_show_performance_details",
+      "code": "invalid_search_show_performance_details",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_show_performance_details"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_show_performance_details"
     }
     "###);
 }
