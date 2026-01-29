@@ -716,7 +716,7 @@ impl FacetedDocidsExtractor {
                 }
             },
             &mut |name| {
-                old_fields_ids_map.id_with_metadata(name).ok_or_else(|| {
+                new_fields_ids_map.id_with_metadata(name).ok_or_else(|| {
                     InternalError::FieldIdMapMissingEntry(FieldIdMapMissingEntry::FieldName {
                         field_name: name.to_string(),
                         process: "extract_document_facets",
