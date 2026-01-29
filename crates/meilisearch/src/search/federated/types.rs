@@ -7,10 +7,9 @@ use indexmap::IndexMap;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
-    InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition,
-    InvalidMultiSearchQueryShowPerformanceDetails, InvalidMultiSearchRemote,
+    InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition, InvalidMultiSearchRemote,
     InvalidMultiSearchWeight, InvalidSearchHitsPerPage, InvalidSearchLimit, InvalidSearchOffset,
-    InvalidSearchPage,
+    InvalidSearchPage, InvalidSearchShowPerformanceDetails,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -107,8 +106,7 @@ pub struct Federation {
     #[schema(value_type = Option<MergeFacets>)]
     pub merge_facets: Option<MergeFacets>,
     /// Whether to include performance details in the response
-    // ====== TODO: should we use InvalidSearchShowPerformanceDetails instead? ======
-    #[deserr(default, error = DeserrJsonError<InvalidMultiSearchQueryShowPerformanceDetails>)]
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
 }
 
