@@ -19,21 +19,21 @@ use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::index::{self, EmbeddingsWithMetadata, SearchParameters};
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
-use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
+use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
     Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
-use meilisearch_types::{Document, milli};
+use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
 use milli::{
-    AscDesc, DEFAULT_VALUES_PER_FACET, FieldId, FieldsIdsMap, Filter, FormatOptions, Index,
-    LocalizedAttributesRule, MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy,
+    AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, LocalizedAttributesRule,
+    MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 #[cfg(test)]
 mod mod_test;
 use utoipa::ToSchema;
@@ -43,8 +43,8 @@ use crate::error::MeilisearchHttpError;
 
 mod federated;
 pub use federated::{
-    FederatedSearch, FederatedSearchResult, Federation, FederationOptions, MergeFacets,
-    PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE, network_partition, perform_federated_search,
+    network_partition, perform_federated_search, FederatedSearch, FederatedSearchResult,
+    Federation, FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
 mod ranking_rules;
@@ -304,7 +304,11 @@ impl std::convert::TryFrom<f64> for RankingScoreThresholdSimilar {
     fn try_from(f: f64) -> Result<Self, Self::Error> {
         // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
         #[allow(clippy::manual_range_contains)]
-        if f > 1.0 || f < 0.0 { Err(InvalidSimilarRankingScoreThreshold) } else { Ok(Self(f)) }
+        if f > 1.0 || f < 0.0 {
+            Err(InvalidSimilarRankingScoreThreshold)
+        } else {
+            Ok(Self(f))
+        }
     }
 }
 
@@ -564,7 +568,11 @@ impl std::convert::TryFrom<f32> for SemanticRatio {
     fn try_from(f: f32) -> Result<Self, Self::Error> {
         // the suggested "fix" is: `!(0.0..=1.0).contains(&f)`` which is allegedly less readable
         #[allow(clippy::manual_range_contains)]
-        if f > 1.0 || f < 0.0 { Err(InvalidSearchSemanticRatio) } else { Ok(SemanticRatio(f)) }
+        if f > 1.0 || f < 0.0 {
+            Err(InvalidSearchSemanticRatio)
+        } else {
+            Ok(SemanticRatio(f))
+        }
     }
 }
 
@@ -1681,7 +1689,11 @@ pub enum RetrieveVectors {
 
 impl RetrieveVectors {
     pub fn new(retrieve_vector: bool) -> Self {
-        if retrieve_vector { Self::Retrieve } else { Self::Hide }
+        if retrieve_vector {
+            Self::Retrieve
+        } else {
+            Self::Hide
+        }
     }
 }
 
@@ -1764,7 +1776,11 @@ impl<'a> HitMaker<'a> {
             displayed_ids.unwrap_or_else(|| fields_ids_map.iter().map(|(id, _)| id).collect());
 
         let retrieve_vectors = if let RetrieveVectors::Retrieve = format.retrieve_vectors {
-            if vectors_is_hidden { RetrieveVectors::Hide } else { RetrieveVectors::Retrieve }
+            if vectors_is_hidden {
+                RetrieveVectors::Hide
+            } else {
+                RetrieveVectors::Retrieve
+            }
         } else {
             format.retrieve_vectors
         };
