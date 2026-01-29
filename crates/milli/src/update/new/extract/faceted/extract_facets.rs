@@ -569,6 +569,7 @@ impl FacetedDocidsExtractor {
         documents: &'indexer DocumentsIndentifiers<'indexer>,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+        sender: &FieldIdDocidFacetSender,
         step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
@@ -581,6 +582,7 @@ impl FacetedDocidsExtractor {
 
         let datastore = ThreadLocal::new();
         let extractor = FacetsSettingsExtractorsData {
+            sender,
             max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
             buckets: rayon::current_num_threads(),
             settings_delta,
@@ -601,6 +603,7 @@ impl FacetedDocidsExtractor {
         document: DocumentIdentifiers<'_>,
         context: &DocumentContext<RefCell<BalancedCaches>>,
         settings_delta: &SD,
+        sender: &FieldIdDocidFacetSender,
     ) -> Result<()>
     where
         SD: SettingsDelta,
@@ -618,6 +621,8 @@ impl FacetedDocidsExtractor {
         let mut add = |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
             // TODO is the field newly faceted: filterable, sortable or anything?
             //      if not, skip it
+
+            // TODO don't forget to send fieldid-docid-facetvalue -> ()
 
             Self::facet_fn_with_options(
                 &context.doc_alloc,
@@ -745,18 +750,20 @@ impl FacetedDocidsExtractor {
 
         // TODO support geojson in the new indexer
 
+        del_add_facet_value.send_data(docid, sender, &context.doc_alloc).unwrap();
         Ok(())
     }
 }
 
-struct FacetsSettingsExtractorsData<'a, SD> {
+struct FacetsSettingsExtractorsData<'a, 'b, SD> {
+    sender: &'a FieldIdDocidFacetSender<'a, 'b>,
     max_memory_by_thread: Option<usize>,
     buckets: usize,
     settings_delta: &'a SD,
 }
 
 impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
-    for FacetsSettingsExtractorsData<'_, SD>
+    for FacetsSettingsExtractorsData<'_, '_, SD>
 {
     type Data = RefCell<BalancedCaches<'extractor>>;
 
@@ -779,6 +786,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                 document,
                 context,
                 self.settings_delta,
+                self.sender,
             )?;
         }
         Ok(())
