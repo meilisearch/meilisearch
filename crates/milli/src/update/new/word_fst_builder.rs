@@ -7,6 +7,8 @@ use tempfile::tempfile;
 
 use super::fst_merger_builder::FstMergerBuilder;
 use crate::index::PrefixSettings;
+use crate::progress::Progress;
+use crate::search::steps::FstBuildingStep;
 use crate::update::del_add::DelAdd;
 use crate::{InternalError, Prefix, Result};
 
@@ -14,14 +16,21 @@ pub struct WordFstBuilder<'a> {
     word_fst_builder: FstMergerBuilder<'a>,
     prefix_fst_builder: Option<PrefixFstBuilder>,
     registered_words: usize,
+    built_words: usize,
+    progress: &'a Progress,
 }
 
 impl<'a> WordFstBuilder<'a> {
-    pub fn new(words_fst: &'a Set<std::borrow::Cow<'a, [u8]>>) -> Result<Self> {
+    pub fn new(
+        words_fst: &'a Set<std::borrow::Cow<'a, [u8]>>,
+        progress: &'a Progress,
+    ) -> Result<Self> {
         Ok(Self {
             word_fst_builder: FstMergerBuilder::new(Some(words_fst))?,
             prefix_fst_builder: None,
             registered_words: 0,
+            built_words: 0,
+            progress,
         })
     }
 
@@ -37,12 +46,17 @@ impl<'a> WordFstBuilder<'a> {
 
         self.word_fst_builder.register(deladd, right, &mut |bytes, deladd, is_modified| {
             if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
+                self.built_words += 1;
                 prefix_fst_builder.insert_word(bytes, deladd, is_modified)
             } else {
                 Ok(())
             }
         })?;
 
+        let _step = self.progress.update_progress_scoped(FstBuildingStep::Building {
+            total: self.registered_words,
+            built: self.built_words,
+        });
         Ok(())
     }
 
