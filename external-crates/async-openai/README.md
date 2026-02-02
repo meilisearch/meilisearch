@@ -77,7 +77,7 @@ use std::error::Error;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // create client, reads OPENAI_API_KEY environment variable for API key.
-    let client = Client::new();
+    let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
     let request = CreateImageRequestArgs::default()
         .prompt("cats on sofa and carpet in living room")
@@ -135,7 +135,7 @@ let response: Value = client
 ```
 
 This can be useful in many scenarios:
-- To use this library with other OpenAI compatible APIs whose types don't exactly match OpenAI. 
+- To use this library with other OpenAI compatible APIs whose types don't exactly match OpenAI.
 - Extend existing types in this crate with new fields with `serde`.
 - To avoid verbose types.
 - To escape deserialization errors.

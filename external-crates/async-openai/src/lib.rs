@@ -38,7 +38,7 @@
 //! use async_openai::Client;
 //! use serde_json::{Value, json};
 //!
-//! let client = Client::new();
+//! let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 //!
 //! let response: Value = client
 //!        .chat()

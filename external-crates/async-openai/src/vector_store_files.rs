@@ -1,14 +1,12 @@
 use serde::Serialize;
 
-use crate::{
-    config::Config,
-    error::OpenAIError,
-    types::{
-        CreateVectorStoreFileRequest, DeleteVectorStoreFileResponse, ListVectorStoreFilesResponse,
-        VectorStoreFileObject,
-    },
-    Client,
+use crate::config::Config;
+use crate::error::OpenAIError;
+use crate::types::{
+    CreateVectorStoreFileRequest, DeleteVectorStoreFileResponse, ListVectorStoreFilesResponse,
+    VectorStoreFileObject,
 };
+use crate::Client;
 
 /// Vector store files represent files inside a vector store.
 ///
@@ -20,10 +18,7 @@ pub struct VectorStoreFiles<'c, C: Config> {
 
 impl<'c, C: Config> VectorStoreFiles<'c, C> {
     pub fn new(client: &'c Client<C>, vector_store_id: &str) -> Self {
-        Self {
-            client,
-            vector_store_id: vector_store_id.into(),
-        }
+        Self { client, vector_store_id: vector_store_id.into() }
     }
 
     /// Create a vector store file by attaching a [File](https://platform.openai.com/docs/api-reference/files) to a [vector store](https://platform.openai.com/docs/api-reference/vector-stores/object).
@@ -32,23 +27,13 @@ impl<'c, C: Config> VectorStoreFiles<'c, C> {
         &self,
         request: CreateVectorStoreFileRequest,
     ) -> Result<VectorStoreFileObject, OpenAIError> {
-        self.client
-            .post(
-                &format!("/vector_stores/{}/files", &self.vector_store_id),
-                request,
-            )
-            .await
+        self.client.post(&format!("/vector_stores/{}/files", &self.vector_store_id), request).await
     }
 
     /// Retrieves a vector store file.
     #[crate::byot(T0 = std::fmt::Display, R = serde::de::DeserializeOwned)]
     pub async fn retrieve(&self, file_id: &str) -> Result<VectorStoreFileObject, OpenAIError> {
-        self.client
-            .get(&format!(
-                "/vector_stores/{}/files/{file_id}",
-                &self.vector_store_id
-            ))
-            .await
+        self.client.get(&format!("/vector_stores/{}/files/{file_id}", &self.vector_store_id)).await
     }
 
     /// Delete a vector store file. This will remove the file from the vector store but the file itself will not be deleted. To delete the file, use the [delete file](https://platform.openai.com/docs/api-reference/files/delete) endpoint.
@@ -58,10 +43,7 @@ impl<'c, C: Config> VectorStoreFiles<'c, C> {
         file_id: &str,
     ) -> Result<DeleteVectorStoreFileResponse, OpenAIError> {
         self.client
-            .delete(&format!(
-                "/vector_stores/{}/files/{file_id}",
-                &self.vector_store_id
-            ))
+            .delete(&format!("/vector_stores/{}/files/{file_id}", &self.vector_store_id))
             .await
     }
 
@@ -72,10 +54,7 @@ impl<'c, C: Config> VectorStoreFiles<'c, C> {
         Q: Serialize + ?Sized,
     {
         self.client
-            .get_with_query(
-                &format!("/vector_stores/{}/files", &self.vector_store_id),
-                &query,
-            )
+            .get_with_query(&format!("/vector_stores/{}/files", &self.vector_store_id), &query)
             .await
     }
 }
@@ -88,7 +67,7 @@ mod tests {
     #[tokio::test]
     async fn vector_store_file_creation_and_deletion(
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         // Create a file
         let file_handle = client
@@ -113,18 +92,12 @@ mod tests {
                 metadata: None,
             })
             .await?;
-        let vector_store_file = client
-            .vector_stores()
-            .files(&vector_store_handle.id)
-            .retrieve(&file_handle.id)
-            .await?;
+        let vector_store_file =
+            client.vector_stores().files(&vector_store_handle.id).retrieve(&file_handle.id).await?;
 
         assert_eq!(vector_store_file.id, file_handle.id);
         // Delete the vector store
-        client
-            .vector_stores()
-            .delete(&vector_store_handle.id)
-            .await?;
+        client.vector_stores().delete(&vector_store_handle.id).await?;
 
         // Delete the file
         client.files().delete(&file_handle.id).await?;
