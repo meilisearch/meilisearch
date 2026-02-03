@@ -2,6 +2,8 @@
 pub mod community_edition;
 #[cfg(feature = "enterprise")]
 pub mod enterprise_edition;
+use std::collections::BTreeSet;
+
 use heed::types::{Bytes, DecodeIgnore, Str};
 use heed::{Database, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
@@ -9,12 +11,19 @@ use roaring::RoaringBitmap;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 #[derive(Debug, Clone)]
-pub struct Shards(pub Vec<Shard>);
+pub struct Shards(Vec<Shard>);
 
 #[derive(Debug, Clone)]
 pub struct Shard {
     pub is_own: bool,
     pub name: String,
+}
+
+impl Shards {
+    /// The shards as a slice of shards sorted alphabetically
+    pub fn as_sorted_slice(&self) -> &[Shard] {
+        &self.0
+    }
 }
 
 /// View over the `shard_docids` DB of an index
@@ -44,6 +53,10 @@ impl DbShardDocids {
         } else {
             self.0.get(rtxn, shard)?
         })
+    }
+
+    pub fn docids(&self, rtxn: &RoTxn<'_>, shard: &str) -> Result<Option<RoaringBitmap>> {
+        Ok(self.0.get(rtxn, shard)?)
     }
 
     /// Updates the docids that belong to a shard.
@@ -120,4 +133,80 @@ impl DbShardDocids {
     pub fn remove_all_shards(&self, wtxn: &mut RwTxn<'_>) -> Result<()> {
         Ok(self.0.clear(wtxn)?)
     }
+
+    /// Add all shards that newly belong to the list of shards, and remove all shards that no longer belong to the list of shards.
+    ///
+    /// - If the shard list is unchanged, returns `None`
+    /// - If the shard list is modified, returns `Some(orphans)`, with `orphans` the docids that no longer belong to any shard and will
+    ///   need to be redistributed.
+    pub fn rebalance_shards<'network>(
+        &self,
+        index: &Index,
+        wtxn: &mut RwTxn<'_>,
+        network_shards: &'network Shards,
+    ) -> Result<ShardBalancingOutcome<'network>> {
+        // we list the documents that were without shard before the rebalancing.
+        // this list should normally be empty, as instances without shards should be empty when added to sharding.
+        // this lets us correct and signal any error.
+        let mut unsharded = index.documents_ids(wtxn)?;
+
+        let db_keys: Result<Vec<_>> = self
+            .0
+            .remap_data_type::<DecodeIgnore>()
+            .iter(wtxn)?
+            .map(|res| {
+                let (k, _) = res?;
+                Ok(k.to_owned())
+            })
+            .collect();
+
+        // documents that lose their current shard because it is being removed.
+        // they will need to be resharded among all other shards.
+        let mut desharded = RoaringBitmap::new();
+        // newly added shards
+        let mut new_shards = BTreeSet::new();
+        let mut existing_shards = BTreeSet::new();
+
+        let db_keys = db_keys?;
+        for eob in
+            itertools::merge_join_by(db_keys, network_shards.as_sorted_slice(), |left, right| {
+                left.cmp(&right.name)
+            })
+        {
+            match eob {
+                itertools::EitherOrBoth::Both(left, _) => {
+                    // unchanged shard, nothing to do
+                    let docids = self.0.get(wtxn, &left)?.unwrap_or_default();
+                    unsharded -= &docids;
+                    existing_shards.insert(left);
+                }
+                itertools::EitherOrBoth::Left(db) => {
+                    let docids = self.0.get(wtxn, &db)?.unwrap_or_default();
+                    unsharded -= &docids;
+                    desharded |= &docids;
+                    self.remove_shard(wtxn, &db)?;
+                }
+                itertools::EitherOrBoth::Right(network) => {
+                    self.add_shard(wtxn, &network.name)?;
+                    new_shards.insert(network.name.as_str());
+                }
+            }
+        }
+
+        // check if we have unsharded documents
+        let unsharded_len = unsharded.len();
+        if unsharded_len != 0 {
+            tracing::warn!("Resharding {unsharded_len} documents that are unexpectedly unsharded");
+        }
+
+        unsharded |= desharded;
+
+        Ok(ShardBalancingOutcome { unsharded, new_shards, existing_shards })
+    }
+}
+
+pub struct ShardBalancingOutcome<'network> {
+    pub unsharded: RoaringBitmap,
+    pub new_shards: BTreeSet<&'network str>,
+    pub existing_shards: BTreeSet<String>,
 }

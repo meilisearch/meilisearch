@@ -17,6 +17,9 @@ mod community_edition;
 #[cfg(feature = "enterprise")]
 mod enterprise_edition;
 
+#[cfg(feature = "enterprise")]
+pub use enterprise_edition::{ExportMode, ExportShard};
+
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(untagged, rename_all = "camelCase")]
 // This type is used in the database, care should be taken when modifying it.
@@ -187,6 +190,8 @@ impl From<Result<TaskId, ResponseError>> for RemoteTask {
 pub struct NetworkTopologyChange {
     state: NetworkTopologyState,
     in_remotes: BTreeMap<String, InRemote>,
+    #[serde(default)] // for backward compatibility with network tasks from previous versions
+    out_remotes: BTreeMap<String, OutRemote>,
     old_network: Network,
     new_network: Network,
     stats: NetworkTopologyStats,
@@ -210,9 +215,26 @@ impl NetworkTopologyChange {
         } else {
             Default::default()
         };
+
+        let out_remotes = if out_name.is_some() {
+            /// FIXME: old network really needed?
+            old_network
+                .remotes
+                .keys()
+                .chain(new_network.remotes.keys())
+                // don't await exports from ourselves
+                .filter(|name| Some(name.as_str()) != in_name)
+                .cloned()
+                .map(|name| (name, OutRemote::new()))
+                .collect()
+        } else {
+            Default::default()
+        };
+
         Self {
             state: NetworkTopologyState::WaitingForOlderTasks,
             in_remotes,
+            out_remotes,
             stats: NetworkTopologyStats { moved_documents: 0 },
             new_network,
             old_network,
@@ -326,6 +348,47 @@ impl NetworkTopologyChange {
                     }
                 )
             }
+            NetworkTopologyState::WaitingForOthersThenDeletingDocuments => {
+                let mut first_ongoing = None;
+                let mut other_ongoing_count = 0;
+                let mut finished_count = 0;
+
+                for (remote_name, in_remote) in &self.out_remotes {
+                    match in_remote.export_state {
+                        ExportState::Ongoing => {
+                            first_ongoing = match first_ongoing {
+                                None => Some(remote_name),
+                                first_ongoing => {
+                                    other_ongoing_count += 1;
+                                    first_ongoing
+                                }
+                            };
+                        }
+                        ExportState::Finished { .. } => {
+                            finished_count += 1;
+                        }
+                    }
+                }
+                if let Some(first_ongoing) = first_ongoing {
+                    format!(
+                        "Waiting for `{first_ongoing}`{other_ongoing}{finished}",
+                        other_ongoing = if other_ongoing_count == 0 {
+                            " to finish importing".into()
+                        } else {
+                            format!(
+                                " and {other_ongoing_count} other remote(s) to finish importing"
+                            )
+                        },
+                        finished = if finished_count == 0 {
+                            "".into()
+                        } else {
+                            format!(", {finished_count} remote(s) finished")
+                        }
+                    )
+                } else {
+                    "Deleting documents in shards that are no longer owned".into()
+                }
+            }
             NetworkTopologyState::Finished => "Finished".into(),
         };
         Details::NetworkTopologyChange { moved_documents: self.stats.moved_documents, message }
@@ -333,10 +396,22 @@ impl NetworkTopologyChange {
 
     pub fn merge(&mut self, other: NetworkTopologyChange) {
         // The topology change has a guarantee of forward progress, so for each field we're going to keep the "most advanced" values.
-        let Self { state, new_network: _, old_network: _, in_remotes, stats } = self;
+        let Self { state, new_network: _, old_network: _, in_remotes, out_remotes, stats } = self;
 
         *state = Ord::max(*state, other.state);
         *stats = Ord::max(*stats, other.stats);
+
+        for (old_value, new_value) in other.out_remotes.into_values().zip(out_remotes.values_mut())
+        {
+            new_value.export_state =
+                match (old_value.export_state, std::mem::take(&mut new_value.export_state)) {
+                    // finished is always newer
+                    (finished @ ExportState::Finished { .. }, _)
+                    | (_, finished @ ExportState::Finished { .. }) => finished,
+
+                    (ExportState::Ongoing, ExportState::Ongoing) => ExportState::Ongoing,
+                }
+        }
 
         for (old_value, new_value) in other.in_remotes.into_values().zip(in_remotes.values_mut()) {
             new_value.import_state = match (old_value.import_state, std::mem::take(&mut new_value.import_state)) {
@@ -373,6 +448,7 @@ impl NetworkTopologyChange {
             NetworkTopologyState::WaitingForOlderTasks => &self.old_network,
             NetworkTopologyState::ExportingDocuments
             | NetworkTopologyState::ImportingDocuments
+            | NetworkTopologyState::WaitingForOthersThenDeletingDocuments
             | NetworkTopologyState::Finished => &self.new_network,
         }
     }
@@ -415,9 +491,16 @@ fn merge_import_index_state(left: ImportIndexState, right: ImportIndexState) -> 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "camelCase")]
 pub enum NetworkTopologyState {
+    /// Process any enqueued task with a network version older than the network change
     WaitingForOlderTasks,
+    /// Rebalance shards if needs be, then export shards to remotes that newly own them
+    /// Shards must be rebalanced when the list of shards **compared with the local one from the instance** changed
     ExportingDocuments,
+    /// Import newly owned shards
     ImportingDocuments,
+    /// Wait for all remotes to be done importing then delete shards that are no longer owned
+    WaitingForOthersThenDeletingDocuments,
+    /// Finished the network change
     Finished,
 }
 
@@ -432,6 +515,18 @@ pub struct NetworkTopologyStats {
 #[serde(rename_all = "camelCase")]
 pub struct InRemote {
     import_state: ImportState,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutRemote {
+    export_state: ExportState,
+}
+
+impl OutRemote {
+    fn new() -> Self {
+        Self { export_state: Default::default() }
+    }
 }
 
 impl InRemote {
@@ -456,6 +551,16 @@ enum ImportState {
     Finished {
         total_indexes: u64,
         total_documents: u64,
+    },
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ExportState {
+    #[default]
+    Ongoing,
+    Finished {
+        successful: bool,
     },
 }
 
@@ -530,6 +635,10 @@ impl<'de> serde::de::Visitor<'de> for TaskKeysVisitor {
 pub enum ReceiveTaskError {
     UnknownRemote(String),
     DuplicateTask(DocumentId),
+}
+
+pub enum ReceiveImportFinishedError {
+    UnknownRemote(String),
 }
 
 pub mod headers {
@@ -800,5 +909,21 @@ pub mod headers {
         let t = t.set_header(name, value);
         let name = name.strip_prefix("X-").unwrap();
         t.set_header(name, value)
+    }
+}
+
+pub enum RemotesImportState {
+    NotFinished,
+    FinishedSuccessfully,
+    FinishedWithFailure,
+}
+
+impl RemotesImportState {
+    pub fn is_finished(&self) -> bool {
+        !matches!(self, Self::NotFinished)
+    }
+
+    pub fn is_finished_successfully(&self) -> bool {
+        matches!(self, Self::FinishedSuccessfully)
     }
 }

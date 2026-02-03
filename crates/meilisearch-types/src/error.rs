@@ -216,6 +216,7 @@ ImmutableIndexCreatedAt                        , InvalidRequest       , BAD_REQU
 ImmutableIndexUpdatedAt                        , InvalidRequest       , BAD_REQUEST;
 ImportTaskAlreadyReceived                      , InvalidRequest       , PRECONDITION_FAILED;
 ImportTaskUnknownRemote                        , InvalidRequest       , PRECONDITION_FAILED;
+ReceiveImportFinishedUnknownRemote             , InvalidRequest       , PRECONDITION_FAILED;
 ImportTaskWithoutNetworkTask                   , InvalidRequest       , SERVICE_UNAVAILABLE;
 IndexAlreadyExists                             , InvalidRequest       , CONFLICT ;
 IndexCreationFailed                            , Internal             , INTERNAL_SERVER_ERROR;

@@ -53,7 +53,7 @@ impl UpgradeIndex for CleanupFidBasedDatabases {
                 index,
                 must_stop_processing,
                 &fids_to_delete,
-                &progress,
+                progress,
             )?;
         }
 

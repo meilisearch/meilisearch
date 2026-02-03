@@ -5,7 +5,7 @@ use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::milli::index::RollbackOutcome;
 use meilisearch_types::milli::DocumentId;
-use meilisearch_types::tasks::network::ReceiveTaskError;
+use meilisearch_types::tasks::network::{ReceiveImportFinishedError, ReceiveTaskError};
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use thiserror::Error;
@@ -200,8 +200,12 @@ pub enum Error {
     NetworkVersionMismatch { network_task: Uuid, import_task: Uuid },
     #[error("The import task emanates from an unknown remote `{0}`")]
     ImportTaskUnknownRemote(String),
+    #[error("The finished import notification emanates from an unknown remote `{0}`")]
+    ReceiveImportFinishedUnknownRemote(String),
     #[error("The import task with key `{0}` was already received")]
     ImportTaskAlreadyReceived(DocumentId),
+    #[error("Invalid remote url `{url}`: {cause}")]
+    InvalidRemoteUrl { url: String, cause: String },
     #[error("{action} requires the Enterprise Edition")]
     RequiresEnterpriseEdition { action: &'static str },
 
@@ -275,6 +279,8 @@ impl Error {
             | Error::IndexSchedulerVersionMismatch { .. }
             | Error::IndexVersionMismatch { .. }
             | Error::RollbackFailed { .. }
+            | Error::ReceiveImportFinishedUnknownRemote(_)
+            | Error::InvalidRemoteUrl { .. }
             | Error::HeedTransaction(_) => false,
             #[cfg(test)]
             Error::PlannedFailure => false,
@@ -330,6 +336,10 @@ impl ErrorCode for Error {
             Error::NetworkVersionMismatch { .. } => Code::NetworkVersionMismatch,
             Error::ImportTaskAlreadyReceived(_) => Code::ImportTaskAlreadyReceived,
             Error::ImportTaskUnknownRemote(_) => Code::ImportTaskUnknownRemote,
+            Error::InvalidRemoteUrl { .. } => Code::InvalidNetworkRemotes,
+            Error::ReceiveImportFinishedUnknownRemote(_) => {
+                Code::ReceiveImportFinishedUnknownRemote
+            }
             Error::RequiresEnterpriseEdition { .. } => Code::RequiresEnterpriseEdition,
             Error::S3Error { status, .. } if status.is_client_error() => {
                 Code::InvalidS3SnapshotRequest
@@ -375,6 +385,16 @@ impl From<ReceiveTaskError> for Error {
         match value {
             ReceiveTaskError::UnknownRemote(unknown) => Error::ImportTaskUnknownRemote(unknown),
             ReceiveTaskError::DuplicateTask(dup) => Error::ImportTaskAlreadyReceived(dup),
+        }
+    }
+}
+
+impl From<ReceiveImportFinishedError> for Error {
+    fn from(value: ReceiveImportFinishedError) -> Self {
+        match value {
+            ReceiveImportFinishedError::UnknownRemote(unknown) => {
+                Error::ReceiveImportFinishedUnknownRemote(unknown)
+            }
         }
     }
 }

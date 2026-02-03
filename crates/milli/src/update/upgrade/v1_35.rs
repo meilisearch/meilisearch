@@ -1,4 +1,3 @@
-use crate::sharding::Shards;
 use crate::update::upgrade::UpgradeParams;
 
 pub struct AddShards {}
@@ -15,14 +14,14 @@ impl super::UpgradeIndex for AddShards {
         UpgradeParams { shards, .. }: UpgradeParams<'_>,
     ) -> crate::Result<bool> {
         /// FIXME: replace `must_upgrade` and module name with actual version
-        let Some(Shards(shards)) = shards
+        let Some(shards) = shards
         else {
             return Ok(false);
         };
 
         // before this upgrade, there is at most one shard owned by the remote.
         // if we find it, we can associate all docids to that shard.
-        let Some(own_shard) = shards.iter().find(|shard| shard.is_own) else {
+        let Some(own_shard) = shards.as_sorted_slice().iter().find(|shard| shard.is_own) else {
             return Ok(false);
         };
 

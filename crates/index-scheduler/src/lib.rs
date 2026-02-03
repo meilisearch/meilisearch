@@ -70,7 +70,7 @@ use meilisearch_types::milli::{self, Index};
 use meilisearch_types::network::Network;
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
-    DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,
+    DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
 };
 use meilisearch_types::tasks::{KindWithContent, Task};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};
@@ -81,6 +81,7 @@ use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
 
@@ -806,7 +807,16 @@ impl IndexScheduler {
         let mut wtxn = self.env.write_txn()?;
 
         if let Some(TaskNetwork::Import { import_from, network_change, metadata }) = &task_network {
-            self.update_network_task(&mut wtxn, import_from, network_change, metadata)?;
+            self.update_network_task(&mut wtxn, network_change, |network_topology_change| {
+                Ok(network_topology_change.receive_remote_task(
+                    &import_from.remote_name,
+                    import_from.index_name.as_deref(),
+                    metadata.task_key,
+                    import_from.document_count,
+                    metadata.index_count,
+                    metadata.total_index_documents,
+                )?)
+            })?;
         }
 
         let task = self.queue.register(
@@ -845,12 +855,9 @@ impl IndexScheduler {
     ) -> Result<(), Error> {
         let mut wtxn = self.env.write_txn()?;
 
-        self.update_network_task(
-            &mut wtxn,
-            &ImportData { remote_name, index_name: None, document_count: 0 },
-            &origin,
-            &ImportMetadata { index_count: 0, task_key: None, total_index_documents: 0 },
-        )?;
+        self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
+            Ok(network_topology_change.receive_remote_task(&remote_name, None, None, 0, 0, 0)?)
+        })?;
 
         wtxn.commit()?;
 
@@ -860,13 +867,35 @@ impl IndexScheduler {
         Ok(())
     }
 
-    fn update_network_task(
+    pub fn network_import_finished_for_remote(
+        &self,
+        remote_name: String,
+        successful: bool,
+        origin: Origin,
+    ) -> Result<(), Error> {
+        let mut wtxn = self.env.write_txn()?;
+        let has_changed =
+            self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
+                Ok(network_topology_change.receive_import_finished(&remote_name, successful)?)
+            })?;
+
+        wtxn.commit()?;
+
+        if has_changed {
+            self.scheduler.wake_up.signal();
+        }
+        Ok(())
+    }
+
+    fn update_network_task<F, O>(
         &self,
         wtxn: &mut heed::RwTxn<'_>,
-        import_from: &ImportData,
         network_change: &Origin,
-        metadata: &ImportMetadata,
-    ) -> Result<(), Error> {
+        update_fn: F,
+    ) -> Result<O, Error>
+    where
+        F: FnOnce(&mut NetworkTopologyChange) -> Result<O, Error>,
+    {
         let mut network_tasks = self
             .queue
             .tasks
@@ -911,16 +940,11 @@ impl IndexScheduler {
             tracing::error!("unexpected network kind for network task while registering task");
             return Err(Error::CorruptedTaskQueue);
         };
-        network_topology_change.receive_remote_task(
-            &import_from.remote_name,
-            import_from.index_name.as_deref(),
-            metadata.task_key,
-            import_from.document_count,
-            metadata.index_count,
-            metadata.total_index_documents,
-        )?;
+
+        let o = update_fn(network_topology_change)?;
+
         self.queue.tasks.update_task(wtxn, &mut network_task)?;
-        Ok(())
+        Ok(o)
     }
 
     /// Register a new task coming from a dump in the scheduler.

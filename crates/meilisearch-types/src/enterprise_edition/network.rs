@@ -10,8 +10,8 @@ use crate::network::Network;
 impl Network {
     pub fn shards(&self) -> Option<Shards> {
         if self.sharding() {
-            Some(Shards::from_remotes_local(
-                self.remotes.keys().map(String::as_str),
+            Some(Shards::from_shards_remotes_local(
+                self.shards.iter().map(|(name, shard)| (name.as_str(), &shard.remotes)),
                 self.local.as_deref(),
             ))
         } else {

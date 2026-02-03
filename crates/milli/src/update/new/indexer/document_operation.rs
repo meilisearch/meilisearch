@@ -584,7 +584,7 @@ fn extract_payload_changes<'pl>(
                 Err(error) => return Err(error),
             };
 
-        let shard = shards.map(|shards| shards.processing_shard(external_document_id)).flatten();
+        let shard = shards.and_then(|shards| shards.processing_shard(external_document_id));
 
         if let Some(shard) = shard {
             if !shard.is_own {
@@ -623,7 +623,7 @@ fn extract_payload_deletions<'pl>(
     let docops: IndexMap<_, _> = external_document_ids
         .iter()
         .filter_map(|id| {
-            let shard = shards.map(|shards| shards.processing_shard(id)).flatten();
+            let shard = shards.and_then(|shards| shards.processing_shard(id));
 
             if let Some(shard) = shard {
                 if !shard.is_own {

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use actix_web::web::{self, Data};
+use actix_web::web::{self, Data, Json};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
@@ -14,7 +14,9 @@ use meilisearch_types::error::deserr_codes::{
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::network::{Network as DbNetwork, Remote as DbRemote, Shard as DbShard};
+use meilisearch_types::network::{
+    route, Network as DbNetwork, Remote as DbRemote, Shard as DbShard,
+};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};
@@ -53,6 +55,10 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         web::resource("")
             .route(web::get().to(get_network))
             .route(web::patch().to(SeqHandler(patch_network))),
+    )
+    .service(
+        web::resource(route::network_change_path().as_str())
+            .route(web::post().to(SeqHandler(post_network_change))),
     );
 }
 
@@ -165,8 +171,7 @@ impl Shard {
         if let Some(remove_remotes) = remove_remotes {
             merged_remotes = &merged_remotes - &remove_remotes;
         }
-        let merged_shard = DbShard { remotes: merged_remotes };
-        merged_shard
+        DbShard { remotes: merged_remotes }
     }
 }
 
@@ -323,6 +328,14 @@ async fn patch_network(
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_network("Using the /network route")?;
     current_edition::patch_network(index_scheduler, new_network, req, analytics).await
+}
+
+async fn post_network_change(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
+    payload: Json<route::NetworkChange>,
+) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_network("Using the /network route")?;
+    current_edition::post_network_change(index_scheduler, payload.into_inner()).await
 }
 
 fn merge_networks(

@@ -849,7 +849,9 @@ impl IndexScheduler {
 
                 Ok(batch)
             }
-            NetworkTopologyState::ExportingDocuments | NetworkTopologyState::Finished => {
+            NetworkTopologyState::ExportingDocuments
+            | NetworkTopologyState::WaitingForOthersThenDeletingDocuments
+            | NetworkTopologyState::Finished => {
                 Ok(Some((Batch::NetworkReady { task }, current_batch)))
             }
         }
