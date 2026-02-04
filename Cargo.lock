@@ -4583,6 +4583,7 @@ dependencies = [
  "indexmap",
  "meilisearch-auth",
  "meilisearch-types",
+ "rayon",
  "serde",
  "serde_json",
  "tempfile",
