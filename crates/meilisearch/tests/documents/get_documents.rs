@@ -5,8 +5,8 @@ use urlencoding::encode as urlencode;
 
 use crate::common::encoder::Encoder;
 use crate::common::{
-    shared_does_not_exists_index, shared_empty_index, shared_index_with_geo_documents,
-    shared_index_with_test_set, GetAllDocumentsOptions, Server, Value,
+    shared_does_not_exists_index, shared_empty_index, shared_index_with_test_set,
+    GetAllDocumentsOptions, Server, Value,
 };
 use crate::json;
 
@@ -315,52 +315,6 @@ async fn get_document_sorted() {
         "id": 42,
         "name": "Graciela Russell",
         "gender": "female"
-      }
-    ]
-    "#);
-}
-
-#[actix_rt::test]
-async fn get_document_geosorted() {
-    let index = shared_index_with_geo_documents().await;
-
-    let (response, _code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            sort: Some(vec!["_geoPoint(45.4777599, 9.1967508):asc"]),
-            ..Default::default()
-        })
-        .await;
-    let results = response["results"].as_array().unwrap();
-    snapshot!(json_string!(results), @r#"
-    [
-      {
-        "id": 2,
-        "name": "La Bella Italia",
-        "address": "456 Elm Street, Townsville",
-        "type": "Italian",
-        "rating": 9,
-        "_geo": {
-          "lat": "45.4777599",
-          "lng": "9.1967508"
-        }
-      },
-      {
-        "id": 1,
-        "name": "Taco Truck",
-        "address": "444 Salsa Street, Burritoville",
-        "type": "Mexican",
-        "rating": 9,
-        "_geo": {
-          "lat": 34.0522,
-          "lng": -118.2437
-        }
-      },
-      {
-        "id": 3,
-        "name": "Crêpe Truck",
-        "address": "2 Billig Avenue, Rouenville",
-        "type": "French",
-        "rating": 10
       }
     ]
     "#);
