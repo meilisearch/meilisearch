@@ -1,10 +1,15 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::DerefMut as _;
+use std::str::FromStr as _;
 
 use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
+use cellulite::zerometry::ZerometryCodec;
+use geo_types::Geometry;
+use geojson::GeoJson;
 use hashbrown::HashMap;
+use heed::BytesEncode as _;
 use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
@@ -14,7 +19,7 @@ use crate::fields_ids_map::metadata::Metadata;
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
-use crate::update::new::channel::FieldIdDocidFacetSender;
+use crate::update::new::channel::{FieldIdDocidFacetSender, GeoJsonSender};
 use crate::update::new::document::{Document as _, DocumentContext};
 use crate::update::new::extract::{extract_geo_coordinates, perm_json_p};
 use crate::update::new::indexer::document_changes::{
@@ -564,12 +569,13 @@ impl FacetedDocidsExtractor {
         Ok(datastore.into_iter().map(RefCell::into_inner).collect())
     }
 
-    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, 'a, 'b, SD, MSP>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        sender: &FieldIdDocidFacetSender,
+        fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+        geojson_sender: &'a GeoJsonSender<'a, 'b>,
         step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
@@ -582,7 +588,8 @@ impl FacetedDocidsExtractor {
 
         let datastore = ThreadLocal::new();
         let extractor = FacetsSettingsExtractorsData {
-            sender,
+            fid_docid_facet_sender,
+            geojson_sender,
             max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
             buckets: rayon::current_num_threads(),
             settings_delta,
@@ -603,7 +610,8 @@ impl FacetedDocidsExtractor {
         document: DocumentIdentifiers<'_>,
         context: &DocumentContext<RefCell<BalancedCaches>>,
         settings_delta: &SD,
-        sender: &FieldIdDocidFacetSender,
+        fid_docid_facet_sender: &FieldIdDocidFacetSender,
+        geojson_sender: &GeoJsonSender<'_, '_>,
     ) -> Result<()>
     where
         SD: SettingsDelta,
@@ -748,23 +756,30 @@ impl FacetedDocidsExtractor {
             }
         }
 
-        if let Some(geojson_fid) = settings_delta.new_geojson_field_id() {
-            if settings_delta.old_geojson_field_id().is_none() {
-                if let Some(geojson_raw_value) = current_document.geojson_field()? {
-                    let geojson_meta = new_fields_ids_map.metadata(geojson_fid).unwrap();
-                    let geojson_value = serde_json::value::to_value(geojson_raw_value).unwrap();
-                    add(geojson_fid, geojson_meta, perm_json_p::Depth::OnBaseKey, &geojson_value)?;
-                }
+        let enabled_filterable_geojson =
+            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geojson())
+                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geojson());
+        let enabled_geojson = settings_delta.old_geojson_field_id().is_none()
+            && settings_delta.new_geojson_field_id().is_some();
+
+        if enabled_filterable_geojson || enabled_geojson {
+            if let Some(geojson) = current_document.geojson_field()? {
+                let geojson = GeoJson::from_str(geojson.get()).map_err(UserError::from)?;
+                let mut geometry = Geometry::try_from(geojson).map_err(UserError::from)?;
+                cellulite::densify_geom(&mut geometry);
+                let buf = ZerometryCodec::bytes_encode(&geometry).unwrap();
+                geojson_sender.insert_geojson(docid, &buf).unwrap();
             }
         }
 
-        del_add_facet_value.send_data(docid, sender, &context.doc_alloc).unwrap();
+        del_add_facet_value.send_data(docid, fid_docid_facet_sender, &context.doc_alloc).unwrap();
         Ok(())
     }
 }
 
 struct FacetsSettingsExtractorsData<'a, 'b, SD> {
-    sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+    fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+    geojson_sender: &'a GeoJsonSender<'a, 'b>,
     max_memory_by_thread: Option<usize>,
     buckets: usize,
     settings_delta: &'a SD,
@@ -794,7 +809,8 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                 document,
                 context,
                 self.settings_delta,
-                self.sender,
+                self.fid_docid_facet_sender,
+                self.geojson_sender,
             )?;
         }
         Ok(())
