@@ -748,7 +748,15 @@ impl FacetedDocidsExtractor {
             }
         }
 
-        // TODO support geojson in the new indexer
+        if let Some(geojson_fid) = settings_delta.new_geojson_field_id() {
+            if settings_delta.old_geojson_field_id().is_none() {
+                if let Some(geojson_raw_value) = current_document.geojson_field()? {
+                    let geojson_meta = new_fields_ids_map.metadata(geojson_fid).unwrap();
+                    let geojson_value = serde_json::value::to_value(geojson_raw_value).unwrap();
+                    add(geojson_fid, geojson_meta, perm_json_p::Depth::OnBaseKey, &geojson_value)?;
+                }
+            }
+        }
 
         del_add_facet_value.send_data(docid, sender, &context.doc_alloc).unwrap();
         Ok(())
