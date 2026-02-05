@@ -10,23 +10,26 @@ If Meilisearch does not offer optimized support for your language, please consid
 
 ## Table of Contents
 
-- [Coding with AI](#coding-with-ai)
+- [Use of generative AI tools](#use-of-generative-ai-tools)
 - [Assumptions](#assumptions)
 - [How to Contribute](#how-to-contribute)
 - [Development Workflow](#development-workflow)
 - [Git Guidelines](#git-guidelines)
 - [Release Process (for internal team only)](#release-process-for-internal-team-only)
 
-## Coding with AI
+## Use of generative AI tools
 
-We accept the use of AI-powered tools (GitHub Copilot, ChatGPT, Claude, Cursor, etc.) for contributions, whether for code, tests, or documentation.
+We require that you transparently disclose any usage of generative AI tooling (GitHub Copilot, ChatGPT, Claude Code, Cursor, etc.) in contributions, if it was used to generate code (including test code) or documentation.
 
-⚠️ However, transparency is required: if you use AI assistance, please mention it in your PR description. This helps maintainers during code review and ensure the quality of contributions.
+We stress that you need to own any contribution you make to Meilisearch even if it was generated.
 
-What we expect:
-- **Disclose AI usage**: A simple note like "Used GitHub Copilot for autocompletion" or "Generated initial test structure with ChatGPT" is sufficient.
-- **Specify the scope**: Indicate which parts of your contribution involved AI assistance.
-- **Review AI-generated content**: Ensure you understand and have verified any AI-generated code before submitting.
+In particular, in generated contributions:
+
+- Please check that any generated claim is true.
+- Please limit the scope of the change in your contribution.
+  - Avoid drive-by contribution not related to the core of your contribution (adding a Changelog.md to Meilisearch, upgrading all dependencies when it is not necessary, introducing a new testing convention alongside your feature).
+  - If your contribution contains architectural changes to the engine, it might not be the best-suited to an external contribution. Please check the implementation strategy beforehand with a maintainer.
+- Please ensure the quality and consistency with the existing codebase of the generated portions of your contribution. For example, we do not check code assertions with `print` statements and favor using `insta` snapshots.
 
 ## Assumptions
 
@@ -43,7 +46,7 @@ What we expect:
 2. Once approved, [fork the Meilisearch repository](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) in your own GitHub account.
 3. [Create a new Git branch](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-and-deleting-branches-within-your-repository)
 4. Review the [Development Workflow](#development-workflow) section that describes the steps to maintain the repository.
-5. Make your changes on your branch. If you use AI tools during your work, remember to disclose it in your PR description (see [Coding with AI](#coding-with-ai)).
+5. Make your changes on your branch. If you use AI tools during your work, remember to disclose it in your PR description (see [Use of generative AI tools](#use-of-generative-ai-tools)).
 6. [Submit the branch as a Pull Request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork) pointing to the `main` branch of the Meilisearch repository. A maintainer should comment and/or review your Pull Request within a few days. Although depending on the circumstances, it may take longer.
 
 ## Development Workflow
