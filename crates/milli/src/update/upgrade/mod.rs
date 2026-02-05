@@ -4,7 +4,7 @@ mod v1_14;
 mod v1_15;
 mod v1_16;
 mod v1_32;
-mod v1_35;
+mod v1_38;
 
 use heed::RwTxn;
 use v1_12::{FixFieldDistribution, RecomputeStats};
@@ -17,7 +17,7 @@ use v1_32::{CleanupFidBasedDatabases, RebuildHannoyGraph};
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use crate::progress::{Progress, VariableNameStep};
 use crate::sharding::Shards;
-use crate::update::upgrade::v1_35::AddShards;
+use crate::update::upgrade::v1_38::AddShards;
 use crate::{Index, InternalError, MustStopProcessing, Result};
 
 #[derive(Clone, Copy)]
