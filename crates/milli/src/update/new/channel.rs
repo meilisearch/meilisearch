@@ -1183,7 +1183,7 @@ impl GeoSender<'_, '_> {
 pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
 
 impl GeoJsonSender<'_, '_> {
-    pub fn send_geojson(&self, docid: DocumentId, mut value: &[u8]) -> crate::Result<()> {
+    pub fn insert_geojson(&self, docid: DocumentId, mut value: &[u8]) -> crate::Result<()> {
         let max_grant = self.0.max_grant;
         let refcell = self.0.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
