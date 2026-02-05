@@ -34,7 +34,7 @@ tokio-util = { version = "0.7.13", features = ["codec", "io-util"] }
 tracing = "0.1.41"
 derive_builder = "0.20.2"
 secrecy = { version = "0.10.3", features = ["serde"] }
-bytes = "1.9.0"
+bytes = "1.11.1"
 eventsource-stream = "0.2.3"
 tokio-tungstenite = { version = "0.26.1", optional = true, default-features = false }
 
