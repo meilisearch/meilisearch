@@ -27,7 +27,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
 sysinfo = "0.37.2"
-time = { version = "0.3.44", features = [
+time = { version = "0.3.47", features = [
     "serde",
     "serde-human-readable",
     "macros",
