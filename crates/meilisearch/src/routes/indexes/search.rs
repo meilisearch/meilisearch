@@ -367,7 +367,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 #[utoipa::path(
     get,
     path = "/{indexUid}/search",
-    tags = ["Indexes", "Search"],
+    tags = ["Search"],
     security(("Bearer" = ["search", "*"])),
     params(
         ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
@@ -576,7 +576,7 @@ pub(crate) async fn search(
 #[utoipa::path(
     post,
     path = "/{indexUid}/search",
-    tags = ["Indexes", "Search"],
+    tags = ["Search"],
     security(("Bearer" = ["search", "*"])),
     params(
         ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
