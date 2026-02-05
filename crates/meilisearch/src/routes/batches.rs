@@ -37,7 +37,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[utoipa::path(
     get,
     path = "/{batchUid}",
-    tag = "Batches",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(
         ("batchUid" = String, Path, example = "8685", description = "The unique batch id", nullable = false),
@@ -131,7 +131,7 @@ pub struct AllBatches {
 #[utoipa::path(
     get,
     path = "",
-    tag = "Batches",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
     responses(

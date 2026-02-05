@@ -17,13 +17,6 @@ use crate::routes::SummarizedTaskView;
 #[derive(OpenApi)]
 #[openapi(
     paths(compact),
-    tags(
-        (
-            name = "Compact an index",
-            description = "The /compact route uses compacts the database to reorganize and make it smaller and more efficient.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/compact"),
-        ),
-    ),
 )]
 pub struct CompactApi;
 
@@ -37,7 +30,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[utoipa::path(
     post,
     path = "{indexUid}/compact",
-    tag = "Compact an index",
+    tag = "Indexes",
     security(("Bearer" = ["search", "*"])),
     params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
     responses(

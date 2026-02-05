@@ -30,7 +30,7 @@ use crate::Opt;
 #[openapi(
     paths(export),
     tags((
-        name = "Export",
+        name = "Export documents to a remote Meilisearch",
         description = "The `/export` route allows you to trigger an export process to a remote Meilisearch instance.",
         external_docs(url = "https://www.meilisearch.com/docs/reference/api/export"),
     )),
@@ -48,7 +48,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[utoipa::path(
     post,
     path = "",
-    tag = "Export",
+    tag = "Documents",
     request_body = Export,
     security(("Bearer" = ["export", "*"])),
     responses(

@@ -40,7 +40,7 @@ crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
 #[utoipa::path(
     post,
     path = "",
-    tag = "Snapshots",
+    tag = "Backups",
     security(("Bearer" = ["snapshots.create", "snapshots.*", "*"])),
     responses(
         (status = 202, description = "Snapshot is being created", body = SummarizedTaskView, content_type = "application/json", example = json!(

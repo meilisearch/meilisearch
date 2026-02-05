@@ -12,6 +12,13 @@ use utoipa::OpenApi;
 /// HTTP methods supported in OpenAPI specifications.
 const HTTP_METHODS: &[&str] = &["get", "post", "put", "patch", "delete"];
 
+/// Order of languages for x-codeSamples output.
+/// Mintlify displays code samples in the order they appear in the JSON,
+/// so we enforce a consistent order here.
+/// Languages not in this list will appear at the end in alphabetical order.
+const CODE_SAMPLES_ORDER: &[&str] =
+    &["cURL", "JS", "PHP", "Python", "Java", "Ruby", "Go", "C#", "Rust", "Dart", "Swift"];
+
 /// Type alias for the mapping from OpenAPI keys to their code samples.
 type CodeSamplesMap = HashMap<String, Vec<CodeSample>>;
 
@@ -435,9 +442,19 @@ fn add_code_samples_to_openapi(
                 routes_with_samples.push(key);
 
                 // Create x-codeSamples array according to Redocly spec
-                // Sort by language name for consistent output
+                // Sort by predefined language order for consistent output
                 let mut sorted_samples = samples.clone();
-                sorted_samples.sort_by(|a, b| a.lang.cmp(&b.lang));
+                sorted_samples.sort_by(|a, b| {
+                    let pos_a = CODE_SAMPLES_ORDER
+                        .iter()
+                        .position(|&l| l == a.lang)
+                        .unwrap_or(CODE_SAMPLES_ORDER.len());
+                    let pos_b = CODE_SAMPLES_ORDER
+                        .iter()
+                        .position(|&l| l == b.lang)
+                        .unwrap_or(CODE_SAMPLES_ORDER.len());
+                    pos_a.cmp(&pos_b).then_with(|| a.lang.cmp(&b.lang))
+                });
 
                 let code_sample_array: Vec<Value> = sorted_samples
                     .iter()

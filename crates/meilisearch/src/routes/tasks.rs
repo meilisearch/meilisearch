@@ -346,7 +346,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 #[utoipa::path(
     post,
     path = "/cancel",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.cancel", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
     responses(
@@ -440,7 +440,7 @@ async fn cancel_tasks(
 #[utoipa::path(
     delete,
     path = "",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.delete", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
     responses(
@@ -548,7 +548,7 @@ pub struct AllTasks {
 #[utoipa::path(
     get,
     path = "",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
     responses(
@@ -615,7 +615,7 @@ async fn get_tasks(
 #[utoipa::path(
     get,
     path = "/{taskUid}",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("taskUid", format = UInt32, example = "0", description = "The task identifier", nullable = false)),
     responses(
@@ -683,7 +683,7 @@ async fn get_task(
 #[utoipa::path(
     get,
     path = "/{taskUid}/documents",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("taskUid", format = UInt32, example = "0", description = "The task identifier", nullable = false)),
     responses(

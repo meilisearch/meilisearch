@@ -62,7 +62,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[utoipa::path(
     get,
     path = "",
-    tag = "Network",
+    tag = "Experimental features",
     security(("Bearer" = ["network.get", "*"])),
     responses(
         (status = OK, description = "Known nodes are returned", body = Network, content_type = "application/json", example = json!(
@@ -210,7 +210,7 @@ impl Aggregate for PatchNetworkAnalytics {
 #[utoipa::path(
     patch,
     path = "",
-    tag = "Network",
+    tag = "Experimental features",
     request_body = Network,
     security(("Bearer" = ["network.update", "*"])),
     responses(

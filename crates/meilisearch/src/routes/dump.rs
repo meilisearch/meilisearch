@@ -46,7 +46,7 @@ crate::empty_analytics!(DumpAnalytics, "Dump Created");
 #[utoipa::path(
     post,
     path = "",
-    tag = "Dumps",
+    tag = "Backups",
     security(("Bearer" = ["dumps.create", "dumps.*", "*"])),
     responses(
         (status = 202, description = "Dump is being created", body = SummarizedTaskView, content_type = "application/json", example = json!(
