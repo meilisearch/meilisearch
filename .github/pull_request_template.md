@@ -5,7 +5,7 @@ Fixes #...
 ## Generative AI tools
 
 - [ ] This PR does not use generative AI tooling
-- [ ] This PR uses generative AI tooling and respect the [related policies](../CONTRIBUTING.md#use-of-generative-ai-tools)
+- [ ] This PR uses generative AI tooling and respect the [related policies](https://github.com/meilisearch/meilisearch/blob/main/CONTRIBUTING.md#use-of-generative-ai-tools)
     - *list of used tools and what they were used for*
 
 ## Requirements
