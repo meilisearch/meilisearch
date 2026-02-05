@@ -14,8 +14,7 @@ impl utoipa::Modify for OpenApiAuth {
                         .scheme(HttpAuthScheme::Bearer)
                         .bearer_format("Uuidv4, string or JWT")
                         .description(Some(
-"An API key is a token that you provide when making API calls. Include the token in a header parameter called `Authorization`.
-Example: `Authorization: Bearer 8fece4405662dd830e4cb265e7e047aab2e79672a760a12712d2a263c9003509`"))
+"An API key is a token that you provide when making API calls.\n\nInclude the API key to the `Authorization` header, for instance:\n`Authorization: Bearer 6436fc5237b0d6e0d64253fbaac21d135012ecf1`.\n\nIf you use a SDK, ensure you instantiate the client with the API key, for instance with JS SDK:\n`const client = new MeiliSearch({ host: 'https://your-domain.com', apiKey: '6436fc5237b0d6e0d64253fbaac21d135012ecf1' })`"))
                         .build(),
                 ),
             );

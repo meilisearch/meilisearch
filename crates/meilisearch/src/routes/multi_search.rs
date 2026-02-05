@@ -56,7 +56,7 @@ pub struct SearchResults {
     post,
     request_body = FederatedSearch,
     path = "",
-    tag = "Multi-search",
+    tag = "Search",
     security(("Bearer" = ["search", "*"])),
     responses(
         (status = OK, description = "Non federated multi-search", body = SearchResults, content_type = "application/json", example = json!(
