@@ -84,7 +84,7 @@ mod tests {
 
         tokio::fs::write(test_file_path, contents).await.unwrap();
 
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         let request = CreateFileRequestArgs::default()
             .file(test_file_path)

@@ -70,7 +70,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_string() {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         let request = CreateEmbeddingRequestArgs::default()
             .model("text-embedding-ada-002")
@@ -85,7 +85,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_string_array() {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         let request = CreateEmbeddingRequestArgs::default()
             .model("text-embedding-ada-002")
@@ -100,7 +100,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_integer_array() {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         let request = CreateEmbeddingRequestArgs::default()
             .model("text-embedding-ada-002")
@@ -115,7 +115,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_array_of_integer_array_matrix() {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         let request = CreateEmbeddingRequestArgs::default()
             .model("text-embedding-ada-002")
@@ -130,7 +130,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_array_of_integer_array() {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         let request = CreateEmbeddingRequestArgs::default()
             .model("text-embedding-ada-002")
@@ -145,7 +145,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_with_reduced_dimensions() {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
         let dimensions = 256u32;
         let request = CreateEmbeddingRequestArgs::default()
             .model("text-embedding-3-small")
@@ -167,7 +167,7 @@ mod tests {
     #[tokio::test]
     #[cfg(not(feature = "byot"))]
     async fn test_cannot_use_base64_encoding_with_normal_create_request() {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         const MODEL: &str = "text-embedding-ada-002";
         const INPUT: &str = "You shall not pass.";
@@ -184,7 +184,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedding_create_base64() {
-        let client = Client::new();
+        let client = Client::new(http_client::policy::IpPolicy::danger_always_allow());
 
         const MODEL: &str = "text-embedding-ada-002";
         const INPUT: &str = "CoLoop will eat the other qual research tools...";
