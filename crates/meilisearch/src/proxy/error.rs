@@ -3,6 +3,11 @@ use meilisearch_types::error::{ErrorCode as _, ResponseError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProxyError {
+    #[error(transparent)]
+    IndexScheduler {
+        #[from]
+        error: Box<index_scheduler::Error>,
+    },
     #[error("{0}")]
     CouldNotSendRequest(ReqwestErrorWithoutUrl),
     #[error("could not authenticate against the remote host\n  - hint: check that the remote instance was registered with a valid API key having the `documents.add` action")]
@@ -36,6 +41,7 @@ impl ProxyError {
             ProxyError::Timeout => Code::RemoteTimeout,
             ProxyError::RemoteError { .. } => Code::RemoteRemoteError,
             ProxyError::CouldNotParseResponse { .. } => Code::RemoteBadResponse,
+            ProxyError::IndexScheduler { error } => error.error_code(),
             ProxyError::Milli { error } => error.error_code(),
         };
         ResponseError::from_msg(message, code)

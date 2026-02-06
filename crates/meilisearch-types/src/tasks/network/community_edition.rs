@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use milli::DocumentId;
 
 use crate::network::Remote;
-use crate::tasks::network::{ImportState, InRemote, NetworkTopologyChange, ReceiveTaskError};
+use crate::tasks::network::{
+    ImportState, InRemote, NetworkTopologyChange, ReceiveImportFinishedError, ReceiveTaskError,
+};
 
 impl NetworkTopologyChange {
     pub fn export_to_process(&self) -> Option<(&BTreeMap<String, Remote>, &str)> {
@@ -24,6 +26,14 @@ impl NetworkTopologyChange {
         _total_index_documents: u64,
     ) -> Result<(), ReceiveTaskError> {
         Ok(())
+    }
+
+    pub fn receive_import_finished(
+        &mut self,
+        _remote_name: &str,
+        _successful: bool,
+    ) -> Result<bool, ReceiveImportFinishedError> {
+        Ok(false)
     }
 
     pub fn process_remote_tasks(
