@@ -342,7 +342,8 @@ async fn get_document_geosorted() {
         "_geo": {
           "lat": "45.4777599",
           "lng": "9.1967508"
-        }
+        },
+        "_geoDistance": 0
       },
       {
         "id": 1,
@@ -353,7 +354,8 @@ async fn get_document_geosorted() {
         "_geo": {
           "lat": 34.0522,
           "lng": -118.2437
-        }
+        },
+        "_geoDistance": 9714063
       },
       {
         "id": 3,
@@ -361,6 +363,151 @@ async fn get_document_geosorted() {
         "address": "2 Billig Avenue, Rouenville",
         "type": "French",
         "rating": 10
+      }
+    ]
+    "#);
+}
+
+#[actix_rt::test]
+async fn get_document_geosorted_with_distance() {
+    let index = shared_index_with_geo_documents().await;
+
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            sort: Some(vec!["_geoPoint(45.4777599, 9.1967508):asc"]),
+            ..Default::default()
+        })
+        .await;
+
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r#"
+    [
+      {
+        "id": 2,
+        "name": "La Bella Italia",
+        "address": "456 Elm Street, Townsville",
+        "type": "Italian",
+        "rating": 9,
+        "_geo": {
+          "lat": "45.4777599",
+          "lng": "9.1967508"
+        },
+        "_geoDistance": 0
+      },
+      {
+        "id": 1,
+        "name": "Taco Truck",
+        "address": "444 Salsa Street, Burritoville",
+        "type": "Mexican",
+        "rating": 9,
+        "_geo": {
+          "lat": 34.0522,
+          "lng": -118.2437
+        },
+        "_geoDistance": 9714063
+      },
+      {
+        "id": 3,
+        "name": "Crêpe Truck",
+        "address": "2 Billig Avenue, Rouenville",
+        "type": "French",
+        "rating": 10
+      }
+    ]
+    "#);
+
+    assert_eq!(results[0]["_geoDistance"], 0);
+    assert!(results[2].get("_geoDistance").is_none());
+}
+
+#[actix_rt::test]
+async fn get_document_geosorted_desc_with_distance() {
+    let index = shared_index_with_geo_documents().await;
+
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            sort: Some(vec!["_geoPoint(45.4777599, 9.1967508):desc"]),
+            ..Default::default()
+        })
+        .await;
+
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r#"
+    [
+      {
+        "id": 1,
+        "name": "Taco Truck",
+        "address": "444 Salsa Street, Burritoville",
+        "type": "Mexican",
+        "rating": 9,
+        "_geo": {
+          "lat": 34.0522,
+          "lng": -118.2437
+        },
+        "_geoDistance": 9714063
+      },
+      {
+        "id": 2,
+        "name": "La Bella Italia",
+        "address": "456 Elm Street, Townsville",
+        "type": "Italian",
+        "rating": 9,
+        "_geo": {
+          "lat": "45.4777599",
+          "lng": "9.1967508"
+        },
+        "_geoDistance": 0
+      },
+      {
+        "id": 3,
+        "name": "Crêpe Truck",
+        "address": "2 Billig Avenue, Rouenville",
+        "type": "French",
+        "rating": 10
+      }
+    ]
+    "#);
+}
+
+#[actix_rt::test]
+async fn get_document_geosorted_with_field_selection() {
+    let index = shared_index_with_geo_documents().await;
+
+    let (response, code) = index
+        .get_all_documents(GetAllDocumentsOptions {
+            sort: Some(vec!["_geoPoint(45.4777599, 9.1967508):asc"]),
+            fields: Some(vec!["id", "name", "_geo", "_geoDistance"]),
+            ..Default::default()
+        })
+        .await;
+
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r#"
+    [
+      {
+        "id": 2,
+        "name": "La Bella Italia",
+        "_geo": {
+          "lat": "45.4777599",
+          "lng": "9.1967508"
+        },
+        "_geoDistance": 0
+      },
+      {
+        "id": 1,
+        "name": "Taco Truck",
+        "_geo": {
+          "lat": 34.0522,
+          "lng": -118.2437
+        },
+        "_geoDistance": 9714063
+      },
+      {
+        "id": 3,
+        "name": "Crêpe Truck"
       }
     ]
     "#);
