@@ -1602,3 +1602,170 @@ async fn get_document_sort_desc_includes_docs_without_field() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn get_document_sort_with_null_values() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_sortable_attributes(json!(["score"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!([
+        { "id": 1, "name": "Doc with null score", "score": null },
+        { "id": 2, "name": "Doc with score 5", "score": 5 },
+        { "id": 3, "name": "Doc with score 10", "score": 10 },
+        { "id": 4, "name": "Doc without score field" }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Test ascending sort - documents with null values should appear at the end
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["score:asc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 2,
+          "name": "Doc with score 5",
+          "score": 5
+        },
+        {
+          "id": 3,
+          "name": "Doc with score 10",
+          "score": 10
+        },
+        {
+          "id": 1,
+          "name": "Doc with null score",
+          "score": null
+        },
+        {
+          "id": 4,
+          "name": "Doc without score field"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "###);
+
+    // Test descending sort
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["score:desc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 3,
+          "name": "Doc with score 10",
+          "score": 10
+        },
+        {
+          "id": 2,
+          "name": "Doc with score 5",
+          "score": 5
+        },
+        {
+          "id": 1,
+          "name": "Doc with null score",
+          "score": null
+        },
+        {
+          "id": 4,
+          "name": "Doc without score field"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn get_document_sort_mixed_null_and_missing() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_sortable_attributes(json!(["rating"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!([
+        { "id": 1, "title": "First", "rating": 1.5 },
+        { "id": 2, "title": "Second", "rating": null },
+        { "id": 3, "title": "Third" },
+        { "id": 4, "title": "Fourth", "rating": 3.2 },
+        { "id": 5, "title": "Fifth", "rating": null },
+        { "id": 6, "title": "Sixth" },
+        { "id": 7, "title": "Seventh", "rating": 0.5 }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["rating:asc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 7,
+          "title": "Seventh",
+          "rating": 0.5
+        },
+        {
+          "id": 1,
+          "title": "First",
+          "rating": 1.5
+        },
+        {
+          "id": 4,
+          "title": "Fourth",
+          "rating": 3.2
+        },
+        {
+          "id": 2,
+          "title": "Second",
+          "rating": null
+        },
+        {
+          "id": 3,
+          "title": "Third"
+        },
+        {
+          "id": 5,
+          "title": "Fifth",
+          "rating": null
+        },
+        {
+          "id": 6,
+          "title": "Sixth"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 7
+    }
+    "###);
+}
