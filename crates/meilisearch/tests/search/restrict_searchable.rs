@@ -847,8 +847,8 @@ async fn search_on_empty_index_with_searchable_attributes() {
     index
         .search(
             json!({
-                "q": "document",
-                "attributesToSearchOn": ["title"]
+                "q": "Man",
+                "attributesToSearchOn": ["name", "title"]
             }),
             |response, code| {
                 snapshot!(code, @"200 OK");
