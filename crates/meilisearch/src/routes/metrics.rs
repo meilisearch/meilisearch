@@ -185,7 +185,7 @@ pub async fn get_metrics(
         // Fetch the finished batches...
         &Query {
             statuses: Some(vec![Status::Succeeded, Status::Failed]),
-            limit: Some(1),
+            limit: 1,
             ..Query::default()
         },
         auth_filters,
@@ -214,7 +214,7 @@ pub async fn get_metrics(
     let task_queue_latency_seconds = index_scheduler
         .get_tasks_from_authorized_indexes(
             &Query {
-                limit: Some(1),
+                limit: 1,
                 reverse: Some(true),
                 statuses: Some(vec![Status::Enqueued, Status::Processing]),
                 ..Query::default()
