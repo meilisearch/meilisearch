@@ -463,50 +463,8 @@ impl WordDocidsExtractors {
         let mut buffer = BumpVec::with_capacity_in(buffer_size, &context.doc_alloc);
         cached_sorter.flush_fid_word_count(&mut buffer)
     }
-}
 
-pub struct WordDocidsSettingsExtractorsData<'a, SD> {
-    tokenizer: DocumentTokenizer<'a>,
-    max_memory_by_thread: Option<usize>,
-    buckets: usize,
-    settings_delta: &'a SD,
-}
-
-impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
-    for WordDocidsSettingsExtractorsData<'_, SD>
-{
-    type Data = RefCell<Option<WordDocidsBalancedCaches<'extractor>>>;
-
-    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
-        Ok(RefCell::new(Some(WordDocidsBalancedCaches::new_in(
-            self.buckets,
-            self.max_memory_by_thread,
-            extractor_alloc,
-        ))))
-    }
-
-    fn process<'doc>(
-        &'doc self,
-        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
-        context: &'doc DocumentContext<Self::Data>,
-    ) -> crate::Result<()> {
-        for document in documents {
-            let document = document?;
-            SettingsChangeWordDocidsExtractors::extract_document_from_settings_change(
-                document,
-                context,
-                &self.tokenizer,
-                self.settings_delta,
-            )?;
-        }
-        Ok(())
-    }
-}
-
-pub struct SettingsChangeWordDocidsExtractors;
-
-impl SettingsChangeWordDocidsExtractors {
-    pub fn run_extraction<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
@@ -750,6 +708,44 @@ impl SettingsChangeWordDocidsExtractors {
             &mut token_fn,
         )?;
 
+        Ok(())
+    }
+}
+
+pub struct WordDocidsSettingsExtractorsData<'a, SD> {
+    tokenizer: DocumentTokenizer<'a>,
+    max_memory_by_thread: Option<usize>,
+    buckets: usize,
+    settings_delta: &'a SD,
+}
+
+impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
+    for WordDocidsSettingsExtractorsData<'_, SD>
+{
+    type Data = RefCell<Option<WordDocidsBalancedCaches<'extractor>>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(Some(WordDocidsBalancedCaches::new_in(
+            self.buckets,
+            self.max_memory_by_thread,
+            extractor_alloc,
+        ))))
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
+        context: &'doc DocumentContext<Self::Data>,
+    ) -> crate::Result<()> {
+        for document in documents {
+            let document = document?;
+            WordDocidsExtractors::extract_document_from_settings_change(
+                document,
+                context,
+                &self.tokenizer,
+                self.settings_delta,
+            )?;
+        }
         Ok(())
     }
 }
