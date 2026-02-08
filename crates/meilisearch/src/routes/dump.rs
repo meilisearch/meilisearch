@@ -38,7 +38,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 crate::empty_analytics!(DumpAnalytics, "Dump Created");
 
-/// Create a dump
+/// Create dump
 ///
 /// Triggers a dump creation process. Once the process is complete, a dump is created in the
 /// [dump directory](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#dump-directory).

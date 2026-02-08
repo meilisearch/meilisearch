@@ -204,7 +204,7 @@ impl Aggregate for PatchNetworkAnalytics {
     }
 }
 
-/// Configure Network
+/// Configure network topology
 ///
 /// Add or remove nodes from network.
 #[utoipa::path(

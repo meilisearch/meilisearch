@@ -24,7 +24,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(compact))));
 }
 
-/// Compact an index
+/// Compact index
 ///
 /// Triggers a compaction process on the specified index. Compaction reorganizes the index database to make it smaller and more efficient.
 #[utoipa::path(

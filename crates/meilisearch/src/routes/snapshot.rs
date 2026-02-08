@@ -34,7 +34,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
 
-/// Create a snapshot
+/// Create snapshot
 ///
 /// Triggers a snapshot creation process. Once the process is complete, a snapshot is created in the snapshot directory. If the snapshot directory does not exist yet, it will be created.
 #[utoipa::path(

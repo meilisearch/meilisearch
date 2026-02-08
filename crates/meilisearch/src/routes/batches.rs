@@ -31,9 +31,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::resource("/{batch_id}").route(web::get().to(SeqHandler(get_batch))));
 }
 
-/// Get one batch
+/// Get batch
 ///
-/// Get a single batch.
+/// Get a single batch by its unique identifier.
+///
+/// The `/batches` route gives information about the progress of batches of [asynchronous operations](/learn/async/asynchronous_operations).
+
 #[utoipa::path(
     get,
     path = "/{batchUid}",
@@ -45,7 +48,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     responses(
         (status = OK, description = "Return the batch", body = BatchView, content_type = "application/json", example = json!(
             {
-                "uid": 1,
+                "uid": 0,
                 "details": {
                     "receivedDocuments": 1,
                     "indexedDocuments": 1
@@ -121,13 +124,11 @@ pub struct AllBatches {
     next: Option<u32>,
 }
 
-/// Get batches
+/// List batches
 ///
-/// List all batches, regardless of index. The batch objects are contained in
-/// the results array. Batches are always returned in descending order of uid.
-/// This means that by default, the most recently created batch objects appear
-/// first. Batch results are paginated and can be filtered with query
-/// parameters.
+/// The `/batches` route gives information about the progress of batches of [asynchronous operations](/learn/async/asynchronous_operations).
+///
+/// Batches are always returned in descending order of uid. This means that by default, the most recently created batch objects appear first. Batch results are paginated and can be filtered with query parameters.
 #[utoipa::path(
     get,
     path = "",
@@ -164,10 +165,10 @@ pub struct AllBatches {
                         "finishedAt": "2024-12-10T15:49:05.105404Z"
                     }
                 ],
-                "total": 3,
-                "limit": 1,
-                "from": 2,
-                "next": 1
+                "total": 1,
+                "limit": 20,
+                "from": 1,
+                "next": null
             }
         )),
         (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(

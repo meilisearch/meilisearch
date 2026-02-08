@@ -361,7 +361,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
     sort_parameters
 }
 
-/// Search an index with GET
+/// Search with GET
 ///
 /// Search for documents matching a specific query in the given index.
 #[utoipa::path(
