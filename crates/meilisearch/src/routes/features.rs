@@ -36,7 +36,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-/// Get all experimental features
+/// List experimental features
 ///
 /// Get a list of all experimental features that can be activated via the
 /// /experimental-features route and whether or not they are currently

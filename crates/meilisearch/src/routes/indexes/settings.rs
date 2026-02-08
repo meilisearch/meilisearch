@@ -670,7 +670,7 @@ async fn register_new_settings(
         )),
     )
 )]
-/// All settings
+/// List settings
 ///
 /// This route allows you to retrieve, configure, or reset all of an index's settings at once.
 pub async fn get_all(

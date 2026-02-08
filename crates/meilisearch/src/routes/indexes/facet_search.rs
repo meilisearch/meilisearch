@@ -200,7 +200,7 @@ impl Aggregate for FacetSearchAggregator {
     }
 }
 
-/// Perform a facet search
+/// Search in facets
 ///
 /// Search for a facet value within a given facet.
 #[utoipa::path(

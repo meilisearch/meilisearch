@@ -430,7 +430,7 @@ pub struct Stats {
     pub indexes: BTreeMap<String, indexes::IndexStats>,
 }
 
-/// Get stats of all indexes.
+/// Get stats of all indexes
 ///
 /// Get stats of all indexes.
 #[utoipa::path(
@@ -588,7 +588,7 @@ enum HealthStatus {
     Available,
 }
 
-/// Get Health
+/// Get health
 ///
 /// The health check endpoint enables you to periodically test the health of
 /// your Meilisearch instance.

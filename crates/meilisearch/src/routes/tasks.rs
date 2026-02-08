@@ -58,15 +58,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct TasksFilterQuery {
-    /// Maximum number of results to return.
+    /// Maximum number of batches to return
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT as u32), error = DeserrQueryParamError<InvalidTaskLimit>)]
     #[param(required = false, value_type = u32, example = 12, default = json!(PAGINATION_DEFAULT_LIMIT))]
     pub limit: Param<u32>,
-    /// Fetch the next set of results from the given uid.
+    /// `uid` of the first batch returned
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskFrom>)]
     #[param(required = false, value_type = Option<u32>, example = 12421)]
     pub from: Option<Param<TaskId>>,
-    /// The order you want to retrieve the objects.
+    /// If `true`, returns results in the reverse order, from oldest to most recent
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskReverse>)]
     #[param(required = false, value_type = Option<bool>, example = true)]
     pub reverse: Option<Param<bool>>,
@@ -542,7 +542,7 @@ pub struct AllTasks {
     pub next: Option<u32>,
 }
 
-/// Get all tasks
+/// List tasks
 ///
 /// Get all [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html)
 #[utoipa::path(
@@ -609,7 +609,7 @@ async fn get_tasks(
     Ok(HttpResponse::Ok().json(tasks))
 }
 
-/// Get a task
+/// Get task
 ///
 /// Get a [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)
 #[utoipa::path(
@@ -677,9 +677,9 @@ async fn get_task(
     }
 }
 
-/// Get a task's documents.
+/// Get task's documents.
 ///
-/// Get a [task's documents file](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+/// Get documents related to a [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
 #[utoipa::path(
     get,
     path = "/{taskUid}/documents",

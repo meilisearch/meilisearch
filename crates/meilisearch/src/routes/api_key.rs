@@ -49,7 +49,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-/// Create an API Key
+/// Create API key
 ///
 /// Create an API Key.
 #[utoipa::path(
@@ -133,9 +133,9 @@ impl ListApiKeys {
     }
 }
 
-/// Get API Keys
+/// List API keys
 ///
-/// List all API Keys
+/// List all API keys
 #[utoipa::path(
     get,
     path = "",
@@ -203,7 +203,7 @@ pub async fn list_api_keys(
     Ok(HttpResponse::Ok().json(page_view))
 }
 
-/// Get an API Key
+/// Get API key
 ///
 /// Get an API key from its `uid` or its `key` field.
 #[utoipa::path(
@@ -267,7 +267,7 @@ pub async fn get_api_key(
     Ok(HttpResponse::Ok().json(res))
 }
 
-/// Update a Key
+/// Update API key
 ///
 /// Update the name and description of an API key. Updates to keys are partial.
 /// This means you should provide only the fields you intend to update, as any
@@ -335,7 +335,7 @@ pub async fn patch_api_key(
     Ok(HttpResponse::Ok().json(res))
 }
 
-/// Delete a key
+/// Delete API key
 ///
 /// Delete the specified API key.
 #[utoipa::path(
