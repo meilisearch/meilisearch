@@ -34,7 +34,7 @@ jobs:
           node-version: '20'
 
       - name: Install OpenAPI tools
-        run: npm install -g @apidevtools/swagger-cli @stoplight/spectral-cli
+        run: npm install -g @apidevtools/swagger-cli @stoplight/spectral-cli mintlify
 
       - name: Check all routes have summaries
         run: cargo run --release -p openapi-generator -- --check-summaries
@@ -52,6 +52,9 @@ jobs:
         run: |
           swagger-cli validate /tmp/meilisearch-openapi.json
           swagger-cli validate /tmp/meilisearch-openapi-mintlify.json
+
+      - name: Check Mintlify OpenAPI validity
+        run: mintlify openapi-check /tmp/meilisearch-openapi-mintlify.json
 
       # Lints the OpenAPI files for best practices (descriptions, examples, naming conventions, etc.)
       # Ruleset is defined in crates/openapi-generator/.spectral.yaml
