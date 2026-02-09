@@ -83,7 +83,7 @@ impl RequestBuilder {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// # use reqwest::Error;
     /// #
     /// # fn run() -> Result<(), Error> {
