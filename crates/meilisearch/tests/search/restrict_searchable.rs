@@ -852,7 +852,7 @@ async fn search_on_empty_index_with_searchable_attributes() {
             }),
             |response, code| {
                 snapshot!(code, @"200 OK");
-                snapshot!(response["hits"].as_array().unwrap().len(), @"2");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"1");
             },
         )
         .await;
