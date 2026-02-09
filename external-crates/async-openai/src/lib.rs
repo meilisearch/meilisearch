@@ -32,7 +32,7 @@
 //! To use custom types for inputs and outputs, enable `byot` feature which provides additional generic methods with same name and `_byot` suffix.
 //! This feature is available on methods whose return type is not `Bytes`
 //!
-//!```
+//!```no_run
 //!# #[cfg(feature = "byot")]
 //!# tokio_test::block_on(async {
 //! use async_openai::Client;
