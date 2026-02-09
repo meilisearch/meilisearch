@@ -502,7 +502,7 @@ pub(crate) async fn search(
         let network = index_scheduler.network();
         let mut federation = Federation::default();
         let queries =
-            network_partition(&mut federation, &query, None, &index_uid, network).collect();
+            network_partition(&mut federation, &query, None, &index_uid, network)?.collect();
         let search_result = perform_federated_search(
             &index_scheduler,
             queries,

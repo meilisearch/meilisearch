@@ -1,15 +1,36 @@
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::network::Network;
 
 use crate::search::{Federation, FederationOptions, SearchQuery, SearchQueryWithIndex};
 
-pub fn network_partition<'a>(
+#[cfg(not(feature = "enterprise"))]
+mod community_edition;
+#[cfg(feature = "enterprise")]
+mod enterprise_edition;
+#[cfg(not(feature = "enterprise"))]
+use community_edition as current_edition;
+#[cfg(feature = "enterprise")]
+use enterprise_edition as current_edition;
+
+pub fn network_partition(
     federation: &mut Federation,
-    query: &'a SearchQuery,
+    query: &SearchQuery,
     federation_options: Option<FederationOptions>,
-    index_uid: &'a IndexUid,
+    index_uid: &IndexUid,
     network: Network,
-) -> impl Iterator<Item = SearchQueryWithIndex> + 'a {
+) -> Result<impl Iterator<Item = SearchQueryWithIndex>, ResponseError> {
+    let query = fixup_query_federation(federation, query, federation_options, index_uid);
+
+    partition(network, query)
+}
+
+fn fixup_query_federation(
+    federation: &mut Federation,
+    query: &SearchQuery,
+    federation_options: Option<FederationOptions>,
+    index_uid: &IndexUid,
+) -> SearchQueryWithIndex {
     let federation_options = federation_options.unwrap_or_default();
     let mut query = SearchQueryWithIndex::from_index_query_federation(
         index_uid.clone(),
@@ -91,9 +112,20 @@ pub fn network_partition<'a>(
         }
     }
 
-    network.remotes.into_keys().map(move |remote| {
-        let mut query = query.clone();
-        query.federation_options.get_or_insert_default().remote = Some(remote);
-        query
+    query
+}
+
+fn partition(
+    network: Network,
+    query: SearchQueryWithIndex,
+) -> Result<impl Iterator<Item = SearchQueryWithIndex>, ResponseError> {
+    Ok(if network.leader.is_some() {
+        either::Left(current_edition::partition_shards(network, query)?)
+    } else {
+        either::Right(network.remotes.into_keys().map(move |remote| {
+            let mut query = query.clone();
+            query.federation_options.get_or_insert_default().remote = Some(remote);
+            query
+        }))
     })
 }

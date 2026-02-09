@@ -29,7 +29,7 @@ use crate::{
 /// The maximum number of filters the filter AST can process.
 const MAX_FILTER_DEPTH: usize = 2000;
 /// magic field name to use filter on shards
-const SHARD_FIELD: &str = "_shard";
+pub const SHARD_FIELD: &str = "_shard";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Filter<'a> {

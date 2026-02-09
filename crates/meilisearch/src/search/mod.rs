@@ -1240,20 +1240,24 @@ pub struct FacetSearchResult {
 
 /// Incorporate search rules in search query
 pub fn add_search_rules(filter: &mut Option<Value>, rules: IndexSearchRules) {
-    *filter = match (filter.take(), rules.filter) {
-        (None, rules_filter) => rules_filter,
-        (filter, None) => filter,
-        (Some(filter), Some(rules_filter)) => {
-            let filter = match filter {
+    *filter = fuse_filters(filter.take(), rules.filter);
+}
+
+pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> {
+    match (left, right) {
+        (None, right) => right,
+        (left, None) => left,
+        (Some(left), Some(right)) => {
+            let left = match left {
                 Value::Array(filter) => filter,
                 filter => vec![filter],
             };
-            let rules_filter = match rules_filter {
+            let right = match right {
                 Value::Array(rules_filter) => rules_filter,
                 rules_filter => vec![rules_filter],
             };
 
-            Some(Value::Array([filter, rules_filter].concat()))
+            Some(Value::Array([left, right].concat()))
         }
     }
 }

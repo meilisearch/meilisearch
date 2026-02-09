@@ -705,7 +705,7 @@ impl PartitionedQueries {
                 federation_options,
                 &index_uid,
                 network.clone(),
-            ))
+            )?)
         } else {
             either::Right(std::iter::once(federated_query))
         };
