@@ -75,6 +75,7 @@ pub mod tasks;
 #[cfg(test)]
 mod tasks_test;
 mod webhooks;
+mod mochi;
 
 #[derive(OpenApi)]
 #[openapi(
@@ -95,6 +96,7 @@ mod webhooks;
         (path = "/export", api = export::ExportApi),
         (path = "/network", api = network::NetworkApi),
         (path = "/webhooks", api = webhooks::WebhooksApi),
+        (path = "/mochi-ze-cat", api = mochi::MochiApi),
     ),
     paths(get_health, get_version, get_stats),
     tags(
@@ -108,7 +110,7 @@ mod webhooks;
         url = "http://localhost:7700",
         description = "Local server",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, mochi::MochiRequest, mochi::MochiResponse))
 )]
 pub struct MeilisearchApi;
 
@@ -130,7 +132,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/network").configure(network::configure))
         .service(web::scope("/export").configure(export::configure))
         .service(web::scope("/chats").configure(chats::configure))
-        .service(web::scope("/webhooks").configure(webhooks::configure));
+        .service(web::scope("/webhooks").configure(webhooks::configure))
+        .service(web::scope("/mochi-ze-cat").configure(mochi::configure));
 
     #[cfg(feature = "swagger")]
     {
