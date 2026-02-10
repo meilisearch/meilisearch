@@ -316,10 +316,6 @@ async fn patch_network_with_origin(
     origin: Origin,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    /// TODO:
-    ///
-    /// 1. make sure no leader => no shards
-    /// 2. since dump removes leader => removes shards
     let merged_network = merged_network.into_inner();
     debug!(parameters = ?merged_network, ?origin, "Patch network");
     let mut remotes = BTreeMap::new();

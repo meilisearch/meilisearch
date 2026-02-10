@@ -156,7 +156,6 @@ impl IndexScheduler {
         let agent =
             http_client::ureq::Agent::new_with_config(config, self.scheduler.ip_policy.clone());
 
-        /// FIXME: check that when removed from network, all shards are cleared
         let scheduler_rtxn = self.env.read_txn()?;
 
         let index_count = self.index_mapper.index_count(&scheduler_rtxn)?;

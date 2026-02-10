@@ -11,7 +11,7 @@ use meilisearch_types::error::deserr_codes::{
     InvalidNetworkLeader, InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf,
     InvalidNetworkShards, InvalidNetworkUrl, InvalidNetworkWriteApiKey,
 };
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::network::{
@@ -338,6 +338,14 @@ async fn post_network_change(
     current_edition::post_network_change(index_scheduler, payload.into_inner()).await
 }
 
+/// Merges existing network from the DB with the incoming network patch.
+///
+/// **If the resulting network has a leader**, then it verifies the following post-conditions
+///
+/// 1. One of the remotes is the leader
+/// 2. There exists at least one shard.
+/// 3. Any shard has at least one remote.
+/// 4. Any remote owning a shard is in the list of remotes.
 fn merge_networks(
     old_network: DbNetwork,
     new_network: Network,
@@ -379,6 +387,33 @@ fn merge_networks(
         }
     }
     let new_version = uuid::Uuid::now_v7();
+
+    let mut merged_shards = match new_shards {
+        Setting::Set(new_shards) => {
+            let mut merged_shards = BTreeMap::new();
+            for either_or_both in old_shards
+                .into_iter()
+                .merge_join_by(new_shards.into_iter(), |left, right| left.0.cmp(&right.0))
+            {
+                match either_or_both {
+                    EitherOrBoth::Both((name, old_shard), (_, Some(new_shard))) => {
+                        merged_shards.insert(name, new_shard.into_db_shard(old_shard.remotes));
+                    }
+                    EitherOrBoth::Both((_, _), (_, None)) | EitherOrBoth::Right((_, None)) => {}
+                    EitherOrBoth::Left((name, shard)) => {
+                        merged_shards.insert(name, shard);
+                    }
+                    EitherOrBoth::Right((name, Some(shard))) => {
+                        merged_shards.insert(name, shard.into_db_shard(Default::default()));
+                    }
+                }
+            }
+            merged_shards
+        }
+        Setting::Reset => BTreeMap::new(),
+        Setting::NotSet => old_shards,
+    };
+
     let merged_remotes = match new_remotes {
         Setting::Set(new_remotes) => {
             let mut merged_remotes = BTreeMap::new();
@@ -434,7 +469,13 @@ fn merge_networks(
                         };
                         merged_remotes.insert(key, merged);
                     }
-                    EitherOrBoth::Both((_, _), (_, None)) | EitherOrBoth::Right((_, None)) => {}
+                    EitherOrBoth::Both((removed_remote, _), (_, None))
+                    | EitherOrBoth::Right((removed_remote, None)) => {
+                        // remove removed remotes from all shards
+                        for (_, shard) in &mut merged_shards {
+                            shard.remotes.remove(&removed_remote);
+                        }
+                    }
                     EitherOrBoth::Left((key, node)) => {
                         merged_remotes.insert(key, node);
                     }
@@ -450,35 +491,39 @@ fn merge_networks(
         Setting::NotSet => old_remotes,
     };
 
-    let merged_shards = match new_shards {
-        Setting::Set(new_shards) => {
-            let mut merged_shards = BTreeMap::new();
-            for either_or_both in old_shards
-                .into_iter()
-                .merge_join_by(new_shards.into_iter(), |left, right| left.0.cmp(&right.0))
-            {
-                match either_or_both {
-                    EitherOrBoth::Both((name, old_shard), (_, Some(new_shard))) => {
-                        merged_shards.insert(name, new_shard.into_db_shard(old_shard.remotes));
-                    }
-                    EitherOrBoth::Both((_, _), (_, None)) | EitherOrBoth::Right((_, None)) => {}
-                    EitherOrBoth::Left((name, shard)) => {
-                        merged_shards.insert(name, shard);
-                    }
-                    EitherOrBoth::Right((name, Some(shard))) => {
-                        merged_shards.insert(name, shard.into_db_shard(Default::default()));
-                    }
+    // enforce (3) by removing any shard without remotes
+    merged_shards.retain(|_, shard| !shard.remotes.is_empty());
+
+    if let Some(merged_leader) = &merged_leader {
+        // (1): the leader is a remote
+        if !merged_remotes.contains_key(merged_leader) {
+            return Err(ResponseError::from_msg(
+                format!("leader `{merged_leader}` is missing from remotes"),
+                Code::InvalidNetworkRemotes,
+            ));
+        }
+        // (2): there exists at least one shard
+        if merged_shards.is_empty() {
+            return Err(ResponseError::from_msg(
+                "there must be at least one shard owned by at least one remote".into(),
+                Code::InvalidNetworkShards,
+            ));
+        }
+        // (3): any shard has at least one remote
+        // enforced above
+        // 4. Any remote owning a shard is in the list of remotes.
+        for (shard_name, shard) in &merged_shards {
+            for remote in &shard.remotes {
+                if !merged_remotes.contains_key(remote) {
+                    return Err(ResponseError::from_msg(
+                        format!("unknown remote `{remote}` in `.{shard_name}.remotes`"),
+                        Code::InvalidNetworkShards,
+                    ));
                 }
             }
-            merged_shards
         }
-        Setting::Reset => BTreeMap::new(),
-        Setting::NotSet => old_shards,
-    };
+    }
 
-    /// TODO:
-    /// 1. remove deleted remotes from all shards
-    /// 2. check that remotes exist in shards
     let merged_network = DbNetwork {
         local: merged_self,
         remotes: merged_remotes,
