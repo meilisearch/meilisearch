@@ -43,7 +43,6 @@ use enterprise_edition as current_edition;
         description = "The `/network` route allows you to describe the topology of a network of Meilisearch instances.
 
 This route is **synchronous**. This means that no task object will be returned, and any change to the network will be made available immediately.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/network"),
     )),
 )]
 pub struct NetworkApi;

@@ -32,7 +32,6 @@ use crate::search_queue::SearchQueue;
         (
             name = "Facet Search",
             description = "The `/facet-search` route allows you to search for facet values. Facet search supports prefix search and typo tolerance. The returned hits are sorted lexicographically in ascending order. You can configure how facets are sorted using the sortFacetValuesBy property of the faceting index settings.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/facet_search"),
         ),
     ),
 )]

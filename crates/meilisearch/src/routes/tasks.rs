@@ -35,7 +35,6 @@ use crate::{aggregate_methods, Opt};
     tags((
         name = "Tasks",
         description = "The tasks route gives information about the progress of the [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html).",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/tasks"),
     )),
 )]
 pub struct TaskApi;

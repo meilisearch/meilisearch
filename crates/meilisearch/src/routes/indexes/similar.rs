@@ -34,7 +34,6 @@ use crate::search::{
             description = "The /similar route uses AI-powered search to return a number of documents similar to a target document.
 
 Meilisearch exposes two routes for retrieving similar documents: POST and GET. In the majority of cases, POST will offer better performance and ease of use.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/similar"),
         ),
     ),
 )]

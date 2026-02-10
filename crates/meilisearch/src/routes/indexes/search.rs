@@ -44,7 +44,6 @@ use crate::search_queue::SearchQueue;
 
 - A POST route: this is the preferred route when using API authentication, as it allows [preflight request](https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request) caching and better performance.
 - A GET route: the usage of this route is discouraged, unless you have good reason to do otherwise (specific caching abilities for example)",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/search"),
         ),
     ),
 )]
