@@ -76,6 +76,7 @@ const MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY: &str =
     "MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY";
 
 const MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: &str = "MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS";
+const MEILI_EXPERIMENTAL_TUNNEL: &str = "MEILI_EXPERIMENTAL_TUNNEL";
 
 // Related to S3 snapshots
 const MEILI_S3_BUCKET_URL: &str = "MEILI_S3_BUCKET_URL";
@@ -514,6 +515,13 @@ pub struct Opt {
     #[serde(default)]
     pub experimental_allowed_ip_networks: Vec<cidr::AnyIpCidr>,
 
+    /// Experimental tunnel feature. When enabled, Meilisearch will connect to
+    /// the burrow tunnel server to expose this instance via a public URL
+    /// at <instance-uid>.meilisearch.link.
+    #[clap(long, env = MEILI_EXPERIMENTAL_TUNNEL)]
+    #[serde(default)]
+    pub experimental_tunnel: bool,
+
     #[serde(flatten)]
     #[clap(flatten)]
     pub indexer_options: IndexerOpts,
@@ -625,6 +633,7 @@ impl Opt {
             experimental_no_snapshot_compaction,
             experimental_personalization_api_key,
             experimental_allowed_ip_networks,
+            experimental_tunnel,
             s3_snapshot_options,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
@@ -745,6 +754,11 @@ impl Opt {
                 experimental_allowed_ip_networks,
             );
         }
+
+        export_to_env_if_not_present(
+            MEILI_EXPERIMENTAL_TUNNEL,
+            experimental_tunnel.to_string(),
+        );
 
         indexer_options.export_to_env();
         if let Some(s3_snapshot_options) = s3_snapshot_options {

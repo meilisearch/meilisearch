@@ -291,6 +291,7 @@ impl Infos {
             config_file_path,
             no_analytics: _,
             experimental_personalization_api_key,
+            experimental_tunnel: _,
             s3_snapshot_options,
         } = options;
 
