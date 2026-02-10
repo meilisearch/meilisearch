@@ -33,7 +33,6 @@ use crate::{LogRouteHandle, LogStderrHandle};
         name = "Logs",
         description = "Everything about retrieving or customizing logs.
 Currently [experimental](https://www.meilisearch.com/docs/learn/experimental/overview).",
-        external_docs(url = "https://www.meilisearch.com/docs/learn/experimental/log_customization"),
     )),
 )]
 pub struct LogsApi;

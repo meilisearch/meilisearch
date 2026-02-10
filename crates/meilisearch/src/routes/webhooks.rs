@@ -37,7 +37,6 @@ use crate::extractors::sequential_extractor::SeqHandler;
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/webhooks"),
     )),
 )]
 pub struct WebhooksApi;

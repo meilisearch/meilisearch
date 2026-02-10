@@ -86,7 +86,6 @@ pub struct DocumentParam {
         (
             name = "Documents",
             description = "Documents are objects composed of fields that can store any type of data. Each field contains an attribute and its associated value. Documents are stored inside [indexes](https://www.meilisearch.com/docs/learn/getting_started/indexes).",
-            external_docs(url = "https://www.meilisearch.com/docs/learn/getting_started/documents"),
         ),
     ),
 )]

@@ -30,7 +30,6 @@ use crate::routes::Pagination;
         description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions.
 You must have the master key or the default admin key to access the keys route. More information about the keys and their rights.
 Accessing any route under `/keys` without having set a master key will result in an error.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/keys"),
     )),
 )]
 pub struct ApiKeyApi;
