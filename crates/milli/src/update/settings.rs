@@ -2616,6 +2616,15 @@ pub trait SettingsDelta {
     fn old_proximity_precision(&self) -> &ProximityPrecision;
     fn new_proximity_precision(&self) -> &ProximityPrecision;
 
+    fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
+    fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+
+    fn old_geojson_field_id(&self) -> Option<FieldId>;
+    fn new_geojson_field_id(&self) -> Option<FieldId>;
+
     fn old_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
@@ -2661,6 +2670,27 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_proximity_precision(&self) -> &ProximityPrecision {
         &self.new.proximity_precision
+    }
+
+    fn old_filterable_rules(&self) -> &[FilterableAttributesRule] {
+        &self.old.filterable_attributes_rules
+    }
+    fn new_filterable_rules(&self) -> &[FilterableAttributesRule] {
+        &self.new.filterable_attributes_rules
+    }
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.old.geo_fields_ids
+    }
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.new.geo_fields_ids
+    }
+
+    fn old_geojson_field_id(&self) -> Option<FieldId> {
+        self.old.geojson_fid
+    }
+    fn new_geojson_field_id(&self) -> Option<FieldId> {
+        self.new.geojson_fid
     }
 
     fn old_embedders(&self) -> &RuntimeEmbedders {
