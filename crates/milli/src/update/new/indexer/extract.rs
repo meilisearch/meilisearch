@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use bumpalo::Bump;
@@ -20,10 +20,9 @@ use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
 use crate::update::new::indexer::WordDelta;
-use crate::update::new::merger::merge_scan_and_send_docids;
-use crate::update::new::merger::EntryStatus;
-use crate::update::new::merger::Operation;
-use crate::update::new::merger::{merge_and_send_cellulite, merge_and_send_rtree};
+use crate::update::new::merger::{
+    merge_and_send_rtree, merge_scan_and_send_docids, EntryStatus, Operation,
+};
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
 use crate::vector::db::{EmbedderInfo, IndexEmbeddingConfig};
@@ -337,37 +336,27 @@ where
     }
 
     'cellulite: {
-        let Some(extractor) =
-            GeoJsonExtractor::new(&rtxn, index, *indexing_context.grenad_parameters)?
+        let Some(extractor) = GeoJsonExtractor::new(&rtxn, index, extractor_sender.geojson())?
         else {
             break 'cellulite;
         };
         let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
 
-        {
-            let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
-            let _entered = span.enter();
+        let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
+        let _entered = span.enter();
 
-            extract(
-                document_changes,
-                &extractor,
-                indexing_context,
-                extractor_allocs,
-                &datastore,
-                IndexingStep::WritingGeoJson,
-            )?;
-        }
-
-        merge_and_send_cellulite(
-            datastore,
-            &rtxn,
-            index,
-            extractor_sender.geojson(),
-            &indexing_context.must_stop_processing,
+        extract(
+            document_changes,
+            &extractor,
+            indexing_context,
+            extractor_allocs,
+            &datastore,
+            IndexingStep::WritingGeoJson,
         )?;
     }
+
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
-    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+    finished_extraction.store(true, Ordering::Relaxed);
 
     Result::Ok((facet_field_ids_delta, word_delta, index_embeddings))
 }
