@@ -100,6 +100,7 @@ jobs:
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
           - "7700:7700"
     steps:
@@ -157,6 +158,7 @@ jobs:
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
           - "7700:7700"
     steps:
@@ -194,6 +196,7 @@ jobs:
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
           - "7700:7700"
     steps:
