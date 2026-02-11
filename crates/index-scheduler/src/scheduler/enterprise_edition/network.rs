@@ -344,7 +344,10 @@ impl IndexScheduler {
         Ok(deleted_documents)
     }
 
-    fn notify_import_finished<'a, I: Iterator<Item = (&'a str, &'a Remote)>>(
+    pub(in crate::scheduler) fn notify_import_finished<
+        'a,
+        I: Iterator<Item = (&'a str, &'a Remote)>,
+    >(
         &self,
         remotes: I,
         in_name: String,

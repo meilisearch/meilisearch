@@ -5,11 +5,11 @@ use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
-use meilisearch_types::milli;
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
+use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::{FieldDistribution, Index};
+use meilisearch_types::milli::{self, CreateOrOpen, FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::error;
@@ -189,6 +189,7 @@ impl IndexMapper {
         mut wtxn: RwTxn,
         name: &str,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
+        shards: Option<Shards>,
     ) -> Result<Index> {
         match self.index(&wtxn, name) {
             Ok(index) => {
@@ -215,7 +216,7 @@ impl IndexMapper {
                         date,
                         self.enable_mdb_writemap,
                         self.index_base_map_size,
-                        true,
+                        CreateOrOpen::Create { shards },
                     )
                     .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                 let index_rtxn = index.read_txn()?;
@@ -440,7 +441,7 @@ impl IndexMapper {
                                     None,
                                     self.enable_mdb_writemap,
                                     self.index_base_map_size,
-                                    false,
+                                    CreateOrOpen::Open,
                                 )
                                 .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                         }

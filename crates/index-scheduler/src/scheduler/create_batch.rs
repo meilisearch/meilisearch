@@ -4,7 +4,7 @@ use std::io::ErrorKind;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::settings::{Settings, Unchecked};
-use meilisearch_types::tasks::network::NetworkTopologyState;
+use meilisearch_types::tasks::network::{NetworkTopologyState, Origin};
 use meilisearch_types::tasks::{BatchStopReason, Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
@@ -849,8 +849,40 @@ impl IndexScheduler {
 
                 Ok(batch)
             }
+            NetworkTopologyState::WaitingForOthers => {
+                let Some(task_network) = &task.network else {
+                    tracing::error!("network topology change task has no network");
+                    return Err(Error::CorruptedTaskQueue);
+                };
+
+                let origin;
+                let origin = match task_network.origin() {
+                    Some(origin) => origin,
+                    None => {
+                        let myself =
+                            network_topology_change.in_name().expect("origin is not the leader");
+                        origin = Origin {
+                            remote_name: myself.to_string(),
+                            task_uid: task.uid,
+                            network_version: task_network.network_version(),
+                        };
+                        &origin
+                    }
+                };
+                if let Some((remotes, in_name)) =
+                    network_topology_change.finished_import_to_notify()
+                {
+                    self.notify_import_finished(remotes, in_name.to_owned(), origin)?;
+                }
+
+                Ok(if network_topology_change.are_others_ready().is_finished() {
+                    Some((Batch::NetworkReady { task }, current_batch))
+                } else {
+                    None
+                })
+            }
             NetworkTopologyState::ExportingDocuments
-            | NetworkTopologyState::WaitingForOthersThenDeletingDocuments
+            | NetworkTopologyState::DeletingDocuments
             | NetworkTopologyState::Finished => {
                 Ok(Some((Batch::NetworkReady { task }, current_batch)))
             }

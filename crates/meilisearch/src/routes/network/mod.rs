@@ -57,8 +57,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::patch().to(SeqHandler(patch_network))),
     )
     .service(
-        web::resource(route::network_change_path().as_str())
-            .route(web::post().to(SeqHandler(post_network_change))),
+        /// FIXME: find way to derive this from the module
+        web::resource("/change").route(web::post().to(SeqHandler(post_network_change))),
     );
 }
 
@@ -472,7 +472,7 @@ fn merge_networks(
                     EitherOrBoth::Both((removed_remote, _), (_, None))
                     | EitherOrBoth::Right((removed_remote, None)) => {
                         // remove removed remotes from all shards
-                        for (_, shard) in &mut merged_shards {
+                        for shard in merged_shards.values_mut() {
                             shard.remotes.remove(&removed_remote);
                         }
                     }

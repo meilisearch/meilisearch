@@ -261,6 +261,7 @@ impl<'a> Filter<'a> {
             if matching_features(attribute, &filterable_attributes_rules)
                 .is_some_and(|(_, features)| features.is_filterable())
                 || attribute == RESERVED_VECTORS_FIELD_NAME
+                || attribute == SHARD_FIELD
             {
                 continue;
             }

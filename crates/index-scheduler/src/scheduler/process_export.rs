@@ -417,7 +417,7 @@ impl IndexScheduler {
             let _ = handle_response(
                 target.remote_name,
                 retry(must_stop_processing, || {
-                    let mut request = agent.patch(url.to_string());
+                    let mut request = agent.post(url.to_string());
                     let body = route::NetworkChange {
                         origin: network_change_origin.clone(),
                         message: route::Message::ExportNoIndexForRemote {

@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use itertools::EitherOrBoth;
 use milli::sharding::Shards;
 use milli::DocumentId;
 use roaring::RoaringBitmap;
@@ -102,17 +103,27 @@ impl NetworkTopologyChange {
             return None;
         }
 
-        Some((
-            self.old_network.remotes.iter().filter_map(|(remote_name, remote)| {
-                // don't notify to ourselves
-                if Some(remote_name.as_str()) == self.out_name() {
-                    return None;
-                }
+        let it = itertools::merge_join_by(
+            self.old_network.remotes.iter(),
+            self.new_network.remotes.iter(),
+            |(left, _), (right, _)| left.cmp(right),
+        )
+        .filter_map(|eob| {
+            let (remote_name, remote) = match eob {
+                EitherOrBoth::Both(_, remote)
+                | EitherOrBoth::Left(remote)
+                | EitherOrBoth::Right(remote) => remote,
+            };
 
-                Some((remote_name.as_str(), remote))
-            }),
-            in_name,
-        ))
+            // don't notify to ourselves
+            if Some(remote_name.as_str()) == self.out_name() {
+                return None;
+            }
+
+            Some((remote_name.as_str(), remote))
+        });
+
+        Some((it, in_name))
     }
 
     pub fn new_shards(&self) -> Option<Shards> {
@@ -133,26 +144,28 @@ impl NetworkTopologyChange {
             NetworkTopologyState::ExportingDocuments => {
                 // processed all exported documents
                 if self.is_import_finished() {
-                    NetworkTopologyState::WaitingForOthersThenDeletingDocuments
+                    NetworkTopologyState::WaitingForOthers
                 } else {
                     NetworkTopologyState::ImportingDocuments
                 }
             }
             NetworkTopologyState::ImportingDocuments => {
                 if self.is_import_finished() {
-                    NetworkTopologyState::WaitingForOthersThenDeletingDocuments
+                    NetworkTopologyState::WaitingForOthers
                 } else {
                     NetworkTopologyState::ImportingDocuments
                 }
             }
-            NetworkTopologyState::WaitingForOthersThenDeletingDocuments => {
+            NetworkTopologyState::WaitingForOthers => {
                 if self.are_others_ready().is_finished() {
-                    NetworkTopologyState::Finished
+                    NetworkTopologyState::DeletingDocuments
                 } else {
-                    NetworkTopologyState::WaitingForOthersThenDeletingDocuments
+                    NetworkTopologyState::WaitingForOthers
                 }
             }
-            NetworkTopologyState::Finished => NetworkTopologyState::Finished,
+            NetworkTopologyState::DeletingDocuments | NetworkTopologyState::Finished => {
+                NetworkTopologyState::Finished
+            }
         };
     }
 
@@ -345,23 +358,26 @@ impl NetworkTopologyChange {
     /// Iterates over the names of shards that still exist but are no longer owned by this remote
     pub fn removed_shard_names(&self) -> impl Iterator<Item = &str> + Clone + '_ {
         let this = self.in_name();
-        self.old_network.shards.iter().filter_map(move |(shard_name, old_shard)| {
+        itertools::merge_join_by(
+            self.old_network.shards.iter(),
+            self.new_network.shards.iter(),
+            |(left, _), (right, _)| left.cmp(right),
+        )
+        .filter_map(move |eob| {
             let this = this?;
-
-            // can't remove a shard that the remote didn't previously own
-            if !old_shard.remotes.contains(this) {
-                return None;
+            match eob {
+                EitherOrBoth::Both((shard_name, old), (_, new)) => {
+                    let was_removed = old.remotes.contains(this) && !new.remotes.contains(this);
+                    was_removed.then_some(shard_name.as_str())
+                }
+                EitherOrBoth::Left(_) => {
+                    // removed shards have already been accounted for
+                    None
+                }
+                EitherOrBoth::Right((shard_name, new)) => {
+                    (!new.remotes.contains(this)).then_some(shard_name.as_str())
+                }
             }
-
-            // entirely removed shards were accounted during rebalancing
-            let new_shard = self.new_network.shards.get(shard_name)?;
-
-            // still owned
-            if new_shard.remotes.contains(this) {
-                return None;
-            }
-
-            Some(shard_name.as_str())
         })
     }
 }

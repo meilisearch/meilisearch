@@ -348,7 +348,7 @@ impl NetworkTopologyChange {
                     }
                 )
             }
-            NetworkTopologyState::WaitingForOthersThenDeletingDocuments => {
+            NetworkTopologyState::WaitingForOthers => {
                 let mut first_ongoing = None;
                 let mut other_ongoing_count = 0;
                 let mut finished_count = 0;
@@ -388,6 +388,9 @@ impl NetworkTopologyChange {
                 } else {
                     "Deleting documents in shards that are no longer owned".into()
                 }
+            }
+            NetworkTopologyState::DeletingDocuments => {
+                "Deleting documents in shards that are no longer owned".into()
             }
             NetworkTopologyState::Finished => "Finished".into(),
         };
@@ -448,7 +451,8 @@ impl NetworkTopologyChange {
             NetworkTopologyState::WaitingForOlderTasks => &self.old_network,
             NetworkTopologyState::ExportingDocuments
             | NetworkTopologyState::ImportingDocuments
-            | NetworkTopologyState::WaitingForOthersThenDeletingDocuments
+            | NetworkTopologyState::WaitingForOthers
+            | NetworkTopologyState::DeletingDocuments
             | NetworkTopologyState::Finished => &self.new_network,
         }
     }
@@ -498,8 +502,10 @@ pub enum NetworkTopologyState {
     ExportingDocuments,
     /// Import newly owned shards
     ImportingDocuments,
-    /// Wait for all remotes to be done importing then delete shards that are no longer owned
-    WaitingForOthersThenDeletingDocuments,
+    /// Wait for all remotes to be done importing
+    WaitingForOthers,
+    // Delete shards that are no longer owned
+    DeletingDocuments,
     /// Finished the network change
     Finished,
 }

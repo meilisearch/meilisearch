@@ -10,7 +10,9 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
+use milli::{
+    AscDesc, CreateOrOpen, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy,
+};
 use rand::Rng;
 use Criterion::*;
 
@@ -276,7 +278,7 @@ fn criteria_ascdesc() {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
     options.map_size(12 * 1024 * 1024); // 10 MB
-    let index = Index::new(options, &path, true).unwrap();
+    let index = Index::new(options, &path, CreateOrOpen::create_without_shards()).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
