@@ -88,7 +88,8 @@ impl IndexScheduler {
         let origin = match task_network.origin() {
             Some(origin) => origin,
             None => {
-                let myself = network_topology_change.in_name().expect("origin is not the leader");
+                let myself =
+                    network_topology_change.name_for_import().expect("origin is not the leader");
                 origin = Origin {
                     remote_name: myself.to_string(),
                     task_uid: task.uid,

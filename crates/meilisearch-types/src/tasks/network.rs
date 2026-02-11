@@ -217,11 +217,9 @@ impl NetworkTopologyChange {
         };
 
         let out_remotes = if out_name.is_some() {
-            /// FIXME: old network really needed?
-            old_network
+            new_network
                 .remotes
                 .keys()
-                .chain(new_network.remotes.keys())
                 // don't await exports from ourselves
                 .filter(|name| Some(name.as_str()) != in_name)
                 .cloned()
@@ -241,12 +239,20 @@ impl NetworkTopologyChange {
         }
     }
 
-    pub fn in_name(&self) -> Option<&str> {
+    /// Name used by the current instance when importing documents.
+    ///
+    /// - Others will trust this name when checking the export state of this remote.
+    /// - `None` for nodes that are no longer part of the network.
+    pub fn name_for_import(&self) -> Option<&str> {
         self.new_network.local.as_deref()
     }
 
-    pub fn out_name(&self) -> Option<&str> {
-        self.old_network.local.as_deref().or_else(|| self.in_name())
+    /// Name used by the current instance when exporting documents.
+    ///
+    /// - Other remotes will trust this name when checking the import state from this remote.
+    /// - Default to `name_for_import` for new nodes (all nodes perform exports).
+    pub fn name_for_export(&self) -> Option<&str> {
+        self.old_network.local.as_deref().or_else(|| self.name_for_import())
     }
 
     pub fn state(&self) -> NetworkTopologyState {

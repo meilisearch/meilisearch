@@ -44,11 +44,11 @@ impl NetworkTopologyChange {
             return None;
         }
 
-        let out_name = self.out_name()?;
+        let out_name = self.name_for_export()?;
         Some((
             self.new_network.remotes.iter().filter_map(move |(remote_name, remote)| {
                 // don't export to ourselves
-                if Some(remote_name.as_str()) == self.in_name() {
+                if Some(remote_name.as_str()) == self.name_for_import() {
                     return None;
                 }
 
@@ -97,7 +97,7 @@ impl NetworkTopologyChange {
     pub fn finished_import_to_notify(
         &self,
     ) -> Option<(impl Iterator<Item = (&str, &Remote)>, &str)> {
-        let in_name = self.in_name()?;
+        let in_name = self.name_for_import()?;
 
         if !self.is_import_finished() {
             return None;
@@ -116,7 +116,7 @@ impl NetworkTopologyChange {
             };
 
             // don't notify to ourselves
-            if Some(remote_name.as_str()) == self.out_name() {
+            if Some(remote_name.as_str()) == self.name_for_export() {
                 return None;
             }
 
@@ -357,7 +357,7 @@ impl NetworkTopologyChange {
 
     /// Iterates over the names of shards that still exist but are no longer owned by this remote
     pub fn removed_shard_names(&self) -> impl Iterator<Item = &str> + Clone + '_ {
-        let this = self.in_name();
+        let this = self.name_for_export();
         itertools::merge_join_by(
             self.old_network.shards.iter(),
             self.new_network.shards.iter(),
