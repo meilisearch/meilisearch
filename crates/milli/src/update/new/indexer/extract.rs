@@ -422,7 +422,7 @@ where
         } = {
             let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
             let _entered = span.enter();
-            SettingsChangeWordDocidsExtractors::run_extraction(
+            WordDocidsExtractors::run_extraction_from_settings(
                 settings_delta,
                 &documents,
                 indexing_context,
@@ -515,7 +515,7 @@ where
             let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
             let _entered = span.enter();
 
-            SettingsChangeWordPairProximityDocidsExtractors::run_extraction(
+            WordPairProximityDocidsExtractor::run_extraction_from_settings(
                 settings_delta,
                 &documents,
                 indexing_context,
@@ -596,7 +596,7 @@ where
     }
 
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
-    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+    finished_extraction.store(true, Ordering::Relaxed);
 
     Result::Ok((index_embeddings, facet_field_ids_delta))
 }
