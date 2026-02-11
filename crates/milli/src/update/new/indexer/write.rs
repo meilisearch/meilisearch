@@ -83,7 +83,7 @@ pub fn write_to_db(
             }
         }
 
-        // Every time the is a message in the channel we search
+        // Every time there is a message in the channel we search
         // for new entries in the BBQueue buffers.
         write_from_bbqueue(
             &mut writer_receiver,

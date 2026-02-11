@@ -563,4 +563,221 @@ impl FacetedDocidsExtractor {
 
         Ok(datastore.into_iter().map(RefCell::into_inner).collect())
     }
+
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, 'a, 'b, SD, MSP>(
+        settings_delta: &SD,
+        documents: &'indexer DocumentsIndentifiers<'indexer>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+        fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+        step: IndexingStep,
+    ) -> Result<Vec<BalancedCaches<'extractor>>>
+    where
+        SD: SettingsDelta + Sync,
+        MSP: Fn() -> bool + Sync,
+    {
+        let span =
+            tracing::trace_span!(target: "indexing::documents::extract", "docids_extraction");
+        let _entered = span.enter();
+
+        let datastore = ThreadLocal::new();
+        let extractor = FacetsSettingsExtractorsData {
+            fid_docid_facet_sender,
+            max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
+            buckets: rayon::current_num_threads(),
+            settings_delta,
+        };
+        settings_change_extract(
+            documents,
+            &extractor,
+            indexing_context,
+            extractor_allocs,
+            &datastore,
+            step,
+        )?;
+
+        Ok(datastore.into_iter().map(RefCell::into_inner).collect())
+    }
+
+    fn extract_document_from_settings_change<SD>(
+        document: DocumentIdentifiers<'_>,
+        context: &DocumentContext<RefCell<BalancedCaches>>,
+        settings_delta: &SD,
+        fid_docid_facet_sender: &FieldIdDocidFacetSender,
+    ) -> Result<()>
+    where
+        SD: SettingsDelta,
+    {
+        let mut cached_sorter = context.data.borrow_mut_or_yield();
+        let mut del_add_facet_value = DelAddFacetValue::new(&context.doc_alloc);
+        let new_filterable_attributes_rules = settings_delta.new_filterable_rules();
+        let old_fields_ids_map = settings_delta.old_fields_ids_map();
+        let docid = document.docid();
+
+        let mut add = |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
+            Self::facet_fn_with_options(
+                &context.doc_alloc,
+                cached_sorter.deref_mut(),
+                BalancedCaches::insert_add_u32,
+                &mut del_add_facet_value,
+                DelAddFacetValue::insert_add,
+                docid,
+                fid,
+                meta,
+                new_filterable_attributes_rules,
+                depth,
+                value,
+            )
+        };
+
+        let current_document = document.current(
+            &context.rtxn,
+            context.index,
+            old_fields_ids_map.as_fields_ids_map(),
+        )?;
+
+        let old_fields_ids_map = settings_delta.old_fields_ids_map();
+        let old_filterable_rules = settings_delta.old_filterable_rules();
+
+        let new_fields_ids_map = settings_delta.new_fields_ids_map();
+        let new_filterable_rules = settings_delta.new_filterable_rules();
+
+        extract_document_facets(
+            current_document,
+            // TODO extract into another function
+            |field_name| {
+                let Some((field_id, metadata)) = old_fields_ids_map.id_with_metadata(field_name)
+                else {
+                    return PatternMatch::NoMatch;
+                };
+
+                let FilterableAttributesFeatures { facet_search: old_facet_search, filter } =
+                    metadata.filterable_attributes_features(old_filterable_rules);
+                let FilterFeatures { equality: old_equality, comparison: old_comparison } = filter;
+                let old_asc_desc = metadata.asc_desc.is_some();
+                let old_sortable = metadata.sortable;
+                let old_distinct = metadata.distinct;
+
+                let new_facet_search;
+                let new_equality;
+                let new_comparison;
+                let new_asc_desc;
+                let new_sortable;
+                let new_distinct;
+                // TODO do not duplicate this logic and put it in a function
+                //      for delete_old_fid_from_facet_databases to use it
+                match new_fields_ids_map.metadata(field_id) {
+                    Some(metadata) => {
+                        let FilterableAttributesFeatures { facet_search, filter } =
+                            metadata.filterable_attributes_features(new_filterable_rules);
+                        let FilterFeatures { equality, comparison } = filter;
+                        new_facet_search = facet_search;
+                        new_equality = equality;
+                        new_comparison = comparison;
+                        new_asc_desc = metadata.asc_desc.is_some();
+                        new_sortable = metadata.sortable;
+                        new_distinct = metadata.distinct;
+                    }
+                    None => {
+                        // This will trigger a clean deletion from everywhere
+                        new_facet_search = false;
+                        new_equality = false;
+                        new_comparison = false;
+                        new_asc_desc = false;
+                        new_sortable = false;
+                        new_distinct = false;
+                    }
+                };
+
+                let is_old_faceted = old_equality
+                    || old_comparison
+                    || old_facet_search
+                    || old_asc_desc
+                    || old_sortable
+                    || old_distinct;
+
+                let is_new_faceted = new_equality
+                    || new_comparison
+                    || new_facet_search
+                    || new_asc_desc
+                    || new_sortable
+                    || new_distinct;
+
+                if !is_old_faceted && is_new_faceted {
+                    PatternMatch::Match
+                } else {
+                    // We force the system to go down the rabbit hole
+                    // and avoid an early break if we return NoMatch
+                    PatternMatch::Parent
+                }
+            },
+            &mut |name| {
+                new_fields_ids_map.id_with_metadata(name).ok_or_else(|| {
+                    InternalError::FieldIdMapMissingEntry(FieldIdMapMissingEntry::FieldName {
+                        field_name: name.to_string(),
+                        process: "extract_document_facets",
+                    })
+                    .into()
+                })
+            },
+            &mut add,
+        )?;
+
+        // TODO do not duplicate the content of the extract_geo_document function
+        if let Some((lat_fid, lng_fid)) = settings_delta.new_geo_fields_ids() {
+            if settings_delta.old_geo_fields_ids().is_none() {
+                if let Some(geo_value) = current_document.geo_field()? {
+                    let external_id = document.external_document_id();
+                    if let Some([lat, lng]) = extract_geo_coordinates(external_id, geo_value)? {
+                        let lat_meta = new_fields_ids_map.metadata(lat_fid).unwrap();
+                        let lng_meta = new_fields_ids_map.metadata(lng_fid).unwrap();
+
+                        add(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
+                        add(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
+                    }
+                }
+            }
+        }
+
+        del_add_facet_value.send_data(docid, fid_docid_facet_sender, &context.doc_alloc).unwrap();
+        Ok(())
+    }
+}
+
+struct FacetsSettingsExtractorsData<'a, 'b, SD> {
+    fid_docid_facet_sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+    max_memory_by_thread: Option<usize>,
+    buckets: usize,
+    settings_delta: &'a SD,
+}
+
+impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
+    for FacetsSettingsExtractorsData<'_, '_, SD>
+{
+    type Data = RefCell<BalancedCaches<'extractor>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(BalancedCaches::new_in(
+            self.buckets,
+            self.max_memory_by_thread,
+            extractor_alloc,
+        )))
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
+        context: &'doc DocumentContext<Self::Data>,
+    ) -> crate::Result<()> {
+        for document in documents {
+            let document = document?;
+            FacetedDocidsExtractor::extract_document_from_settings_change(
+                document,
+                context,
+                self.settings_delta,
+                self.fid_docid_facet_sender,
+            )?;
+        }
+        Ok(())
+    }
 }

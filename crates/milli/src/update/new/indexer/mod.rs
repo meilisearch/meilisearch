@@ -373,7 +373,7 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let index_embeddings = extractor_handle.join().unwrap()?;
+        let (index_embeddings, facet_field_ids_delta) = extractor_handle.join().unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
