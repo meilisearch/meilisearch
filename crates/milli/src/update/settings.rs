@@ -2619,6 +2619,9 @@ pub trait SettingsDelta {
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
 
+    fn old_match_faceted_field(&self, field_name: &str) -> PatternMatch;
+    fn new_match_faceted_field(&self, field_name: &str) -> PatternMatch;
+
     fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
     fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
 
@@ -2677,6 +2680,13 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule] {
         &self.new.filterable_attributes_rules
+    }
+
+    fn old_match_faceted_field(&self, field_name: &str) -> PatternMatch {
+        self.old.match_faceted_field(field_name)
+    }
+    fn new_match_faceted_field(&self, field_name: &str) -> PatternMatch {
+        self.new.match_faceted_field(field_name)
     }
 
     fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
