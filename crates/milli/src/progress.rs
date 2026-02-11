@@ -293,6 +293,7 @@ macro_rules! make_atomic_progress {
 }
 
 make_atomic_progress!(Document alias AtomicDocumentStep => "document");
+make_atomic_progress!(Database alias AtomicDatabaseStep => "database");
 make_atomic_progress!(Payload alias AtomicPayloadStep => "payload");
 
 make_enum_progress! {
