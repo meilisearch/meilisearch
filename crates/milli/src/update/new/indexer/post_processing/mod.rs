@@ -54,7 +54,7 @@ where
             indexing_context.grenad_parameters,
             indexing_context.progress,
         )?;
-    };
+    }
     Ok(())
 }
 
