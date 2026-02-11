@@ -626,6 +626,31 @@ where
             &indexing_context.must_stop_processing,
         )?;
     }
+
+    'cellulite: {
+        let enabled_filterable_geojson =
+            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geojson())
+                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geojson());
+        let enabled_geojson = settings_delta.old_geojson_field_id().is_none()
+            && settings_delta.new_geojson_field_id().is_some();
+
+        if !enabled_filterable_geojson && !enabled_geojson {
+            break 'cellulite;
+        }
+
+        let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
+        let _entered = span.enter();
+
+        GeoJsonExtractor::run_extraction_from_settings(
+            settings_delta,
+            &documents,
+            indexing_context,
+            extractor_allocs,
+            extractor_sender.geojson(),
+            IndexingStep::WritingGeoPoints,
+        )?;
+    }
+
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, Ordering::Relaxed);
 

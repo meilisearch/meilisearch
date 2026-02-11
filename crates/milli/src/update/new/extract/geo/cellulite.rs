@@ -32,6 +32,60 @@ impl<'a, 'b> GeoJsonExtractor<'a, 'b> {
             Ok(None)
         }
     }
+
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+        settings_delta: &SD,
+        documents: &'indexer DocumentsIndentifiers<'indexer>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+        geojson_sender: GeoJsonSender<'_, '_>,
+        step: IndexingStep,
+    ) -> Result<()>
+    where
+        SD: SettingsDelta + Sync,
+        MSP: Fn() -> bool + Sync,
+    {
+        let datastore = ThreadLocal::new();
+        let extractor_data = GeoJsonSettingsExtractor { settings_delta, geojson_sender };
+
+        settings_change_extract(
+            documents,
+            &extractor_data,
+            indexing_context,
+            extractor_allocs,
+            &datastore,
+            step,
+        )
+    }
+
+    fn extract_document_from_settings_change<SD>(
+        document: DocumentIdentifiers<'_>,
+        context: &DocumentContext<()>,
+        settings_delta: &SD,
+        geojson_sender: &GeoJsonSender<'_, '_>,
+    ) -> Result<()>
+    where
+        SD: SettingsDelta,
+    {
+        let old_fields_ids_map = settings_delta.old_fields_ids_map();
+        let docid = document.docid();
+
+        let current_document = document.current(
+            &context.rtxn,
+            context.index,
+            old_fields_ids_map.as_fields_ids_map(),
+        )?;
+
+        if let Some(geojson) = current_document.geojson_field()? {
+            let geojson = GeoJson::from_str(geojson.get()).map_err(UserError::from)?;
+            let mut geometry = Geometry::try_from(geojson).map_err(UserError::from)?;
+            cellulite::densify_geom(&mut geometry);
+            let buf = ZerometryCodec::bytes_encode(&geometry).unwrap();
+            geojson_sender.insert_geojson(docid, &buf).unwrap();
+        }
+
+        Ok(())
+    }
 }
 
 impl<'extractor> Extractor<'extractor> for GeoJsonExtractor<'_, '_> {
@@ -105,6 +159,41 @@ impl<'extractor> Extractor<'extractor> for GeoJsonExtractor<'_, '_> {
             }
         }
 
+        Ok(())
+    }
+}
+
+pub struct GeoJsonSettingsExtractor<'a, 'b, SD> {
+    settings_delta: &'a SD,
+    geojson_sender: GeoJsonSender<'a, 'b>,
+}
+
+impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
+    for GeoJsonSettingsExtractor<'_, '_, SD>
+{
+    type Data = ();
+
+    fn init_data<'doc>(
+        &'doc self,
+        _extractor_alloc: &'extractor Bump,
+    ) -> crate::Result<Self::Data> {
+        Ok(())
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
+        context: &'doc DocumentContext<Self::Data>,
+    ) -> crate::Result<()> {
+        for document in documents {
+            let document = document?;
+            GeoJsonExtractor::extract_document_from_settings_change(
+                document,
+                context,
+                self.settings_delta,
+                &self.geojson_sender,
+            )?;
+        }
         Ok(())
     }
 }
