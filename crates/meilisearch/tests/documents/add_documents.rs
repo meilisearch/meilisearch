@@ -2716,7 +2716,7 @@ async fn add_invalid_geo_and_then_settings() {
         ]
       },
       "error": {
-        "message": "Index `[uuid]`: Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `[uuid]`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `null` and `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"
