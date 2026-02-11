@@ -15,17 +15,26 @@ use crate::filterable_attributes_rules::match_faceted_field;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
-use crate::update::new::document::DocumentContext;
-use crate::update::new::extract::perm_json_p;
+use crate::update::new::document::{Document as _, DocumentContext};
+use crate::update::new::extract::{extract_geo_coordinates, perm_json_p};
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
+};
+use crate::update::new::indexer::settings_change_extract;
+use crate::update::new::indexer::settings_changes::{
+    DocumentsIndentifiers, SettingsChangeExtractor,
 };
 use crate::update::new::ref_cell_ext::RefCellExt as _;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::{FullySend, ThreadLocal};
-use crate::update::new::DocumentChange;
+use crate::update::new::{DocumentChange, DocumentIdentifiers};
+use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
-use crate::{DocumentId, FieldId, FilterableAttributesRule, Result, MAX_FACET_VALUE_LENGTH};
+use crate::{
+    DocumentId, FieldId, FieldIdMapMissingEntry, FilterFeatures, FilterableAttributesFeatures,
+    FilterableAttributesRule, InternalError, PatternMatch, Result, UserError,
+    MAX_FACET_VALUE_LENGTH,
+};
 
 pub struct FacetedExtractorData<'a, 'b> {
     sender: &'a FieldIdDocidFacetSender<'a, 'b>,
@@ -137,11 +146,20 @@ impl FacetedDocidsExtractor {
 
                 extract_document_facets(
                     inner.current(rtxn, index, context.db_fields_ids_map)?,
-                    new_fields_ids_map.deref_mut(),
-                    filterable_attributes,
-                    sortable_fields,
-                    asc_desc_fields,
-                    distinct_field,
+                    |field_name| {
+                        match_faceted_field(
+                            field_name,
+                            filterable_attributes,
+                            sortable_fields,
+                            asc_desc_fields,
+                            distinct_field,
+                        )
+                    },
+                    &mut |name| {
+                        new_fields_ids_map
+                            .id_with_metadata_or_insert(name)
+                            .ok_or(UserError::AttributeLimitReached.into())
+                    },
                     &mut del,
                 )?;
 
@@ -174,21 +192,39 @@ impl FacetedDocidsExtractor {
                 if has_changed_for_facets {
                     extract_document_facets(
                         inner.current(rtxn, index, context.db_fields_ids_map)?,
-                        new_fields_ids_map.deref_mut(),
-                        filterable_attributes,
-                        sortable_fields,
-                        asc_desc_fields,
-                        distinct_field,
+                        |field_name| {
+                            match_faceted_field(
+                                field_name,
+                                filterable_attributes,
+                                sortable_fields,
+                                asc_desc_fields,
+                                distinct_field,
+                            )
+                        },
+                        &mut |name| {
+                            new_fields_ids_map
+                                .id_with_metadata_or_insert(name)
+                                .ok_or(UserError::AttributeLimitReached.into())
+                        },
                         &mut facet_fn!(del),
                     )?;
 
                     extract_document_facets(
                         inner.merged(rtxn, index, context.db_fields_ids_map)?,
-                        new_fields_ids_map.deref_mut(),
-                        filterable_attributes,
-                        sortable_fields,
-                        asc_desc_fields,
-                        distinct_field,
+                        |field_name| {
+                            match_faceted_field(
+                                field_name,
+                                filterable_attributes,
+                                sortable_fields,
+                                asc_desc_fields,
+                                distinct_field,
+                            )
+                        },
+                        &mut |name| {
+                            new_fields_ids_map
+                                .id_with_metadata_or_insert(name)
+                                .ok_or(UserError::AttributeLimitReached.into())
+                        },
                         &mut facet_fn!(add),
                     )?;
                 }
@@ -216,11 +252,20 @@ impl FacetedDocidsExtractor {
 
                 extract_document_facets(
                     inner.inserted(),
-                    new_fields_ids_map.deref_mut(),
-                    filterable_attributes,
-                    sortable_fields,
-                    asc_desc_fields,
-                    distinct_field,
+                    |field_name| {
+                        match_faceted_field(
+                            field_name,
+                            filterable_attributes,
+                            sortable_fields,
+                            asc_desc_fields,
+                            distinct_field,
+                        )
+                    },
+                    &mut |name| {
+                        new_fields_ids_map
+                            .id_with_metadata_or_insert(name)
+                            .ok_or(UserError::AttributeLimitReached.into())
+                    },
                     &mut add,
                 )?;
 
