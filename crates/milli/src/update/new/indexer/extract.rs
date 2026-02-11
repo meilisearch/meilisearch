@@ -595,6 +595,37 @@ where
         }
     }
 
+    'geo: {
+        let enabled_filterable_geo =
+            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geo())
+                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geo());
+        let enabled_geo = settings_delta.old_geo_fields_ids().is_none()
+            && settings_delta.new_geo_fields_ids().is_some();
+
+        if !enabled_filterable_geo && !enabled_geo {
+            break 'geo;
+        }
+
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
+            let _entered = span.enter();
+
+            GeoExtractor::run_extraction_from_settings(
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::WritingGeoPoints,
+            )?
+        };
+
+        merge_and_send_rtree(
+            caches,
+            &rtxn,
+            index,
+            extractor_sender.geo(),
+            &indexing_context.must_stop_processing,
+        )?;
+    }
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, Ordering::Relaxed);
 
