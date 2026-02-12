@@ -15,6 +15,7 @@ use big_s::S;
 use maplit::hashset;
 use meili_snap::insta;
 
+use crate::criterion::AttributeState;
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
 use crate::{score_details, AscDesc, Criterion, Member, SearchResult, TermsMatchingStrategy};
@@ -344,10 +345,18 @@ fn test_redacted() {
         AscDesc::Asc(Member::Field(S("letter"))),
     ]);
 
+    let attribute_state = index
+        .criteria(&txn)
+        .unwrap()
+        .iter()
+        .any(|r| matches!(r, Criterion::AttributeRank | Criterion::AttributePosition))
+        .then_some(AttributeState::Separated)
+        .unwrap_or(AttributeState::Unified);
+
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     let document_scores_json: Vec<_> = document_scores
         .iter()
-        .map(|scores| score_details::ScoreDetails::to_json_map(scores.iter()))
+        .map(|scores| score_details::ScoreDetails::to_json_map(attribute_state, scores.iter()))
         .collect();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2, 4, 5, 22, 23, 13, 1, 3, 12, 21, 11, 20, 6, 7, 8, 9, 10, 14, 15]");
     insta::assert_json_snapshot!(document_scores_json);

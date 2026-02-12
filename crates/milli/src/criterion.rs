@@ -59,6 +59,18 @@ pub enum Criterion {
     Desc(String),
 }
 
+/// How is the attribute ranking rule defined.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum AttributeState {
+    /// The Attribute ranking rule is a mix
+    /// of the rank and position.
+    #[default]
+    Unified,
+    /// The AttributeRank and AttributePosition
+    /// ranking rules are defined separately.
+    Separated,
+}
+
 impl Criterion {
     /// Returns the field name parameter of this criterion.
     pub fn field_name(&self) -> Option<&str> {
