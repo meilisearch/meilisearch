@@ -57,8 +57,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::patch().to(SeqHandler(patch_network))),
     )
     .service(
-        /// FIXME: find way to derive this from the module
-        web::resource("/change").route(web::post().to(SeqHandler(post_network_change))),
+        web::resource(route::NETWORK_PATH_SUFFIX)
+            .route(web::post().to(SeqHandler(post_network_change))),
     );
 }
 
