@@ -4,4 +4,5 @@
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
 mod network;
+#[cfg(unix)]
 mod s3;

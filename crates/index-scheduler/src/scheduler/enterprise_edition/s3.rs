@@ -10,7 +10,6 @@ use meilisearch_types::tasks::{Status, Task};
 use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
-    #[cfg(unix)]
     async fn assume_role_with_web_identity(
         role_arn: &str,
         web_identity_token_file: &std::path::Path,
@@ -74,7 +73,6 @@ impl IndexScheduler {
         Ok(sts_response.response.result.credentials)
     }
 
-    #[cfg(unix)]
     async fn extract_credentials_from_options(
         s3_access_key: Option<String>,
         s3_secret_key: Option<String>,
@@ -95,7 +93,6 @@ impl IndexScheduler {
         }
     }
 
-    #[cfg(unix)]
     pub(in crate::scheduler) async fn process_snapshot_to_s3(
         &self,
         progress: Progress,
@@ -182,7 +179,6 @@ impl IndexScheduler {
     }
 }
 
-#[cfg(unix)]
 #[derive(Debug, Clone, serde::Deserialize)]
 struct StsCredentials {
     #[serde(rename = "AccessKeyId")]
@@ -193,21 +189,18 @@ struct StsCredentials {
     session_token: String,
 }
 
-#[cfg(unix)]
 #[derive(Debug, serde::Deserialize)]
 struct AssumeRoleWithWebIdentityResult {
     #[serde(rename = "Credentials")]
     credentials: StsCredentials,
 }
 
-#[cfg(unix)]
 #[derive(Debug, serde::Deserialize)]
 struct AssumeRoleWithWebIdentityResponse {
     #[serde(rename = "AssumeRoleWithWebIdentityResult")]
     result: AssumeRoleWithWebIdentityResult,
 }
 
-#[cfg(unix)]
 #[derive(Debug, serde::Deserialize)]
 struct StsResponse {
     #[serde(rename = "AssumeRoleWithWebIdentityResponse")]
@@ -215,7 +208,7 @@ struct StsResponse {
 }
 
 /// Streams a tarball of the database content into a pipe.
-#[cfg(unix)]
+
 fn stream_tarball_into_pipe(
     progress: Progress,
     level: u32,
@@ -324,7 +317,6 @@ fn stream_tarball_into_pipe(
     Result::<_, Error>::Ok(())
 }
 
-#[cfg(unix)]
 fn append_file_to_tarball<W, P>(
     tarball: &mut tar::Builder<W>,
     path: P,
@@ -345,7 +337,7 @@ where
 
 /// Streams the content read from the given reader to S3.
 #[allow(clippy::too_many_arguments)]
-#[cfg(unix)]
+
 async fn multipart_stream_to_s3(
     s3_bucket_url: String,
     s3_bucket_region: String,
@@ -538,7 +530,6 @@ async fn multipart_stream_to_s3(
     }
 }
 
-#[cfg(unix)]
 async fn join_and_map_error(
     join_handle: tokio::task::JoinHandle<
         Result<http_client::reqwest::Response, http_client::reqwest::Error>,
@@ -556,7 +547,6 @@ async fn join_and_map_error(
     }
 }
 
-#[cfg(unix)]
 fn extract_and_append_etag<'b>(
     bump: &'b bumpalo::Bump,
     etags: &mut Vec<&'b str>,
