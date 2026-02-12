@@ -185,6 +185,11 @@ impl<'index> DocumentChanges<'index> for UpdateByFunctionChanges<'index> {
     fn len(&self) -> usize {
         self.documents.len()
     }
+
+    fn shard_docids(&self, _shard: &str, _docids: &mut RoaringBitmap) -> bool {
+        // update by function cannot change docids, so cannot change shards
+        false
+    }
 }
 
 fn obkv_to_rhaimap(obkv: &KvReaderFieldId, fields_ids_map: &FieldsIdsMap) -> Result<rhai::Map> {

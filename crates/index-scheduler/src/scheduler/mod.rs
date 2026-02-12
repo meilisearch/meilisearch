@@ -2,10 +2,10 @@ mod autobatcher;
 #[cfg(test)]
 mod autobatcher_test;
 #[cfg(not(feature = "enterprise"))]
-mod community_edition;
+pub mod community_edition;
 mod create_batch;
 #[cfg(feature = "enterprise")]
-mod enterprise_edition;
+pub mod enterprise_edition;
 
 mod process_batch;
 mod process_dump_creation;

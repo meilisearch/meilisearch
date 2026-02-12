@@ -9,7 +9,7 @@ use rand::SeedableRng as _;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 
-use super::UpgradeIndex;
+use super::{UpgradeIndex, UpgradeParams};
 use crate::heed_codec::StrBEU16Codec;
 use crate::progress::Progress;
 use crate::update::new::steps::SettingsIndexerStep;
@@ -23,8 +23,7 @@ impl UpgradeIndex for CleanupFidBasedDatabases {
         &self,
         wtxn: &mut RwTxn,
         index: &Index,
-        must_stop_processing: &MustStopProcessing,
-        progress: Progress,
+        UpgradeParams { progress, must_stop_processing, .. }: UpgradeParams<'_>,
     ) -> Result<bool> {
         make_enum_progress! {
             enum CleanupFidBasedDatabases {
@@ -54,7 +53,7 @@ impl UpgradeIndex for CleanupFidBasedDatabases {
                 index,
                 must_stop_processing,
                 &fids_to_delete,
-                &progress,
+                progress,
             )?;
         }
 
@@ -270,8 +269,7 @@ impl UpgradeIndex for RebuildHannoyGraph {
         &self,
         wtxn: &mut RwTxn,
         index: &Index,
-        must_stop_processing: &MustStopProcessing,
-        progress: Progress,
+        UpgradeParams { must_stop_processing, progress, .. }: UpgradeParams<'_>,
     ) -> Result<bool> {
         let embedders = index.embedding_configs();
         let backend = index.get_vector_store(wtxn)?.unwrap_or_default();

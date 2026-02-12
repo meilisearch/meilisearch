@@ -39,18 +39,10 @@ use crate::{
     Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
 };
 
-#[cfg(not(feature = "enterprise"))]
-pub mod community_edition;
 pub(crate) mod de;
 pub mod document_changes;
 mod document_deletion;
 mod document_operation;
-#[cfg(feature = "enterprise")]
-pub mod enterprise_edition;
-#[cfg(not(feature = "enterprise"))]
-pub use community_edition as current_edition;
-#[cfg(feature = "enterprise")]
-pub use enterprise_edition as current_edition;
 mod extract;
 mod guess_primary_key;
 mod partial_dump;
@@ -224,6 +216,10 @@ where
 
     // required to into_inner the new_fields_ids_map
     drop(fields_ids_map_store);
+
+    let shard_docids = index.shard_docids();
+    shard_docids
+        .update_shards(wtxn, |shard, docids| document_changes.shard_docids(shard, docids))?;
 
     let new_fields_ids_map = new_fields_ids_map.into_inner().unwrap();
     update_index(
