@@ -24,8 +24,16 @@ const SPLIT_SYMBOL: char = '.';
 /// `animau`     doesn't match `animaux`
 /// ```
 fn contained_in(selector: &str, key: &str) -> bool {
-    selector.starts_with(key)
-        && selector[key.len()..].chars().next().map(|c| c == SPLIT_SYMBOL).unwrap_or(true)
+    if selector == key {
+        return true;
+    }
+
+    if !selector.starts_with(key) {
+        return false;
+    }
+
+    let rest = &selector[key.len()..];
+    rest.starts_with(SPLIT_SYMBOL) && rest.len() > SPLIT_SYMBOL.len_utf8()
 }
 
 /// Map the selected leaf values of a json allowing you to update only the fields that were selected.
@@ -284,6 +292,7 @@ mod tests {
         // -- the strange edge cases
         assert!(!contained_in("animaux.chien", "anima"));
         assert!(!contained_in("animaux.chien", "animau"));
+        assert!(!contained_in("animaux.", "animaux"));
         assert!(!contained_in("animaux.chien", "animaux."));
         assert!(!contained_in("animaux.chien", "animaux.c"));
         assert!(!contained_in("animaux.chien", "animaux.ch"));
