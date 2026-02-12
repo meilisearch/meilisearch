@@ -210,6 +210,10 @@ impl CompatV5ToV6 {
     pub fn webhooks(&self) -> Option<&v6::Webhooks> {
         None
     }
+
+    pub fn dynamic_search_rules(&self) -> Result<Option<&v6::DynamicSearchRules>> {
+        Ok(None)
+    }
 }
 
 pub enum CompatIndexV5ToV6 {

@@ -268,6 +268,10 @@ pub(crate) mod test {
     use big_s::S;
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
+    use meilisearch_types::dynamic_search_rules::{
+        Action as RuleActionKind, BoostArgs, Condition, DynamicSearchRule, DynamicSearchRules,
+        Filter, FilterOp, PinArgs, QueryCondition, RuleAction, Selector, TimeCondition,
+    };
     use meilisearch_types::facet_values_sort::FacetValuesSort;
     use meilisearch_types::features::RuntimeTogglableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
@@ -550,6 +554,10 @@ pub(crate) mod test {
         let network = create_test_network();
         dump.create_network(network).unwrap();
 
+        // ========== dynamic search rules
+        let dynamic_search_rules = create_test_dynamic_search_rules();
+        dump.create_dynamic_search_rules(dynamic_search_rules).unwrap();
+
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
         dump.persist_to(&mut file).unwrap();
@@ -560,6 +568,50 @@ pub(crate) mod test {
 
     fn create_test_features() -> RuntimeTogglableFeatures {
         RuntimeTogglableFeatures::default()
+    }
+
+    fn create_test_dynamic_search_rules() -> DynamicSearchRules {
+        let mut rules = DynamicSearchRules::new();
+        rules.insert(
+            "black-friday".to_string(),
+            DynamicSearchRule {
+                version: None,
+                uid: "black-friday".to_string(),
+                description: Some("Black Friday promo".to_string()),
+                priority: Some(1),
+                active: true,
+                conditions: vec![
+                    Condition::Query(QueryCondition { is_empty: false }),
+                    Condition::Time(TimeCondition {
+                        start: Some("2025-11-28T00:00:00Z".to_string()),
+                        end: Some("2025-11-28T23:59:59Z".to_string()),
+                    }),
+                ],
+                actions: vec![
+                    RuleAction {
+                        selector: Selector {
+                            index_uid: Some("products".to_string()),
+                            id: Some("42".to_string()),
+                            filter: None,
+                        },
+                        action: RuleActionKind::Pin(PinArgs { position: 1 }),
+                    },
+                    RuleAction {
+                        selector: Selector {
+                            index_uid: None,
+                            id: None,
+                            filter: Some(Filter {
+                                attribute: "brand".to_string(),
+                                op: FilterOp::Eq,
+                                value: "premium".to_string(),
+                            }),
+                        },
+                        action: RuleActionKind::Boost(BoostArgs { score: 1.5 }),
+                    },
+                ],
+            },
+        );
+        rules
     }
 
     fn create_test_network() -> Network {
@@ -626,5 +678,9 @@ pub(crate) mod test {
         expected.leader = None;
         expected.local = None;
         assert_eq!(&expected, dump.network().unwrap().unwrap());
+
+        // ==== checking the dynamic search rules
+        let expected = create_test_dynamic_search_rules();
+        assert_eq!(&expected, dump.dynamic_search_rules().unwrap().unwrap());
     }
 }

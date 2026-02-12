@@ -26,6 +26,7 @@ pub type ChatCompletionSettings = meilisearch_types::features::ChatCompletionSet
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
 pub type Network = meilisearch_types::network::Network;
 pub type Webhooks = meilisearch_types::webhooks::WebhooksDumpView;
+pub type DynamicSearchRules = meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
@@ -61,6 +62,7 @@ pub struct V6Reader {
     features: Option<RuntimeTogglableFeatures>,
     network: Option<Network>,
     webhooks: Option<Webhooks>,
+    dynamic_search_rules: Option<DynamicSearchRules>,
 }
 
 impl V6Reader {
@@ -127,6 +129,17 @@ impl V6Reader {
             },
         };
 
+        let dynamic_search_rules = match fs::read(dump.path().join("dynamic-search-rules.json")) {
+            Ok(file) => Some(serde_json::from_reader(&*file)?),
+            Err(error) => match error.kind() {
+                ErrorKind::NotFound => {
+                    debug!("`dynamic-search-rules.json` not found in dump");
+                    None
+                }
+                _ => return Err(error.into()),
+            },
+        };
+
         Ok(V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
@@ -137,6 +150,7 @@ impl V6Reader {
             network,
             dump,
             webhooks,
+            dynamic_search_rules,
         })
     }
 
@@ -250,6 +264,10 @@ impl V6Reader {
 
     pub fn webhooks(&self) -> Option<&Webhooks> {
         self.webhooks.as_ref()
+    }
+
+    pub fn dynamic_search_rules(&self) -> Option<&DynamicSearchRules> {
+        self.dynamic_search_rules.as_ref()
     }
 }
 
