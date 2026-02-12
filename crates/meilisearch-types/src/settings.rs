@@ -483,7 +483,7 @@ impl Settings<Checked> {
             pagination,
             embedders,
             search_cutoff_ms,
-            localized_attributes: localized_attributes_rules,
+            localized_attributes,
             facet_search,
             prefix_search,
             chat,
@@ -509,7 +509,7 @@ impl Settings<Checked> {
             pagination,
             embedders,
             search_cutoff_ms,
-            localized_attributes: localized_attributes_rules,
+            localized_attributes,
             facet_search,
             prefix_search,
             vector_store,
@@ -571,7 +571,26 @@ impl Settings<Unchecked> {
     }
 
     pub fn validate(self) -> Result<Self, milli::Error> {
-        self.validate_embedding_settings()
+        self.validate_ranking_rules_settings()?.validate_embedding_settings()
+    }
+
+    fn validate_ranking_rules_settings(self) -> Result<Self, milli::Error> {
+        let Setting::Set(ranking_rules) = self.ranking_rules.as_ref() else { return Ok(self) };
+
+        let mut attribute = false;
+        let mut attribute_rank_or_position = false;
+
+        for rule in ranking_rules {
+            attribute |= matches!(rule, RankingRuleView::Attribute);
+            attribute_rank_or_position |=
+                matches!(rule, RankingRuleView::AttributeRank | RankingRuleView::AttributePosition);
+        }
+
+        if attribute && attribute_rank_or_position {
+            return Err(milli::Error::UserError(milli::UserError::MixedAttributeRankingRulesUsage));
+        }
+
+        Ok(self)
     }
 
     fn validate_embedding_settings(mut self) -> Result<Self, milli::Error> {

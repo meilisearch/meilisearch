@@ -432,6 +432,9 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidChatSettingsDocumentTemplateMaxBytes,
     #[error("{0}")]
     DocumentEmbeddingError(String),
+    #[error("Mixed usage of the Attribute, AttributeRank, and AttributePosition ranking rules. \
+        You must either use the Attribute ranking rule alone or the AttributeRank and AttributePosition ranking rules.")]
+    MixedAttributeRankingRulesUsage,
 }
 
 impl From<crate::vector::Error> for Error {
