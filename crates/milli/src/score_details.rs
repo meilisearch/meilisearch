@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::distance_between_two_points;
+use crate::{criterion::AttributeState, distance_between_two_points};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreDetails {
@@ -157,6 +157,7 @@ impl ScoreDetails {
     /// - If Position is not preceded by Fid
     /// - If Exactness is not preceded by ExactAttribute
     pub fn to_json_map<'a>(
+        attribute_state: AttributeState,
         details: impl Iterator<Item = &'a Self>,
     ) -> serde_json::Map<String, serde_json::Value> {
         let mut order = 0;
@@ -193,34 +194,62 @@ impl ScoreDetails {
                     order += 1;
                 }
                 ScoreDetails::Fid(fid) => {
-                    // copy the rank for future use in Position.
-                    fid_details = Some(*fid);
-                    // For now, fid is a virtual rule always followed by the "position" rule
-                    let fid_details = serde_json::json!({
-                        "order": order,
-                        "attributeRankingOrderScore": fid.local_score(),
-                    });
-                    details_map.insert("attribute".into(), fid_details);
+                    match attribute_state {
+                        AttributeState::Unified => {
+                            // copy the rank for future use in Position.
+                            fid_details = Some(*fid);
+                            // In this case, fid is a virtual rule always followed by the "position" rule
+                            let fid_details = serde_json::json!({
+                                "order": order,
+                                "attributeRankingOrderScore": fid.local_score(),
+                            });
+                            details_map.insert("attribute".into(), fid_details);
+                        }
+                        AttributeState::Separated => {
+                            let fid_details = serde_json::json!({
+                                "order": order,
+                                "score": fid.local_score(),
+                            });
+                            details_map.insert("attributeRank".into(), fid_details);
+                        }
+                    }
+
                     order += 1;
                 }
                 ScoreDetails::Position(position) => {
-                    // For now, position is a virtual rule always preceded by the "fid" rule
-                    let attribute_details = details_map
-                        .get_mut("attribute")
-                        .expect("position not preceded by attribute");
-                    let attribute_details = attribute_details
-                        .as_object_mut()
-                        .expect("attribute details was not an object");
-                    let Some(fid_details) = fid_details else {
-                        unimplemented!("position not preceded by attribute");
-                    };
+                    match attribute_state {
+                        AttributeState::Unified => {
+                            // In this case, position is a virtual rule always preceded by the "fid" rule
+                            let attribute_details = details_map
+                                .get_mut("attribute")
+                                .expect("position not preceded by attribute");
+                            let attribute_details = attribute_details
+                                .as_object_mut()
+                                .expect("attribute details was not an object");
+                            let Some(fid_details) = fid_details else {
+                                unimplemented!("position not preceded by attribute");
+                            };
 
-                    attribute_details
-                        .insert("queryWordDistanceScore".into(), position.local_score().into());
-                    let score = Rank::global_score([fid_details, *position].iter().copied());
-                    attribute_details.insert("score".into(), score.into());
+                            attribute_details.insert(
+                                "queryWordDistanceScore".into(),
+                                position.local_score().into(),
+                            );
+                            let score =
+                                Rank::global_score([fid_details, *position].iter().copied());
+                            attribute_details.insert("score".into(), score.into());
 
-                    // do not update the order since this was already done by fid
+                            // do not update the order since this was already done by fid
+                        }
+                        AttributeState::Separated => {
+                            let attribute_position_details = serde_json::json!({
+                                "order": order,
+                                "score": position.local_score(),
+                            });
+                            details_map
+                                .insert("attributePosition".into(), attribute_position_details);
+                            order += 1;
+                        }
+                    }
                 }
                 ScoreDetails::ExactAttribute(exact_attribute) => {
                     let exactness_details = serde_json::json!({
