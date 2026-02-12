@@ -27,19 +27,31 @@ pub enum CriterionError {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
     /// Sorted by decreasing number of matched query terms.
-    /// Query words at the front of an attribute is considered better than if it was at the back.
+    /// Query words at the front of an attribute is considered
+    /// better than if it was at the back.
     Words,
     /// Sorted by increasing number of typos.
     Typo,
     /// Sorted by increasing distance between matched query terms.
     Proximity,
-    /// Documents with quey words contained in more important
-    /// attributes are considered better.
+    /// Documents with query words contained in more important
+    /// attributes and at a closer-to-the-front position in it
+    /// are considered better.
     Attribute,
-    /// Dynamically sort at query time the documents. None, one or multiple Asc/Desc sortable
-    /// attributes can be used in place of this criterion at query time.
+    /// Documents with query words contained in more important
+    /// attributes only are considered better. Position of the
+    /// query words in an attribute is not considered.
+    AttributeRank,
+    /// Documents with query words that are closer to the front
+    /// of an attribute are considered better. Attribute rank
+    /// is not considered.
+    AttributePosition,
+    /// Dynamically sort at query time the documents. None, one
+    /// or multiple Asc/Desc sortable attributes can be used in
+    /// place of this criterion at query time.
     Sort,
-    /// Sorted by the similarity of the matched words with the query words.
+    /// Sorted by the similarity of the matched words with
+    /// the query words.
     Exactness,
     /// Sorted by the increasing value of the field specified.
     Asc(String),
