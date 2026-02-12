@@ -22,6 +22,7 @@ pub mod index_uid_pattern;
 pub mod keys;
 pub mod locales;
 pub mod network;
+pub mod dynamic_search_rules;
 pub mod settings;
 pub mod star_or;
 pub mod task_view;
