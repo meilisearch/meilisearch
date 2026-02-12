@@ -28,12 +28,10 @@ fn contained_in(selector: &str, key: &str) -> bool {
         return true;
     }
 
-    if !selector.starts_with(key) {
-        return false;
+    match selector.strip_prefix(key) {
+        Some(rest) => rest.starts_with(SPLIT_SYMBOL) && rest.len() > SPLIT_SYMBOL.len_utf8(),
+        None => false,
     }
-
-    let rest = &selector[key.len()..];
-    rest.starts_with(SPLIT_SYMBOL) && rest.len() > SPLIT_SYMBOL.len_utf8()
 }
 
 /// Map the selected leaf values of a json allowing you to update only the fields that were selected.
