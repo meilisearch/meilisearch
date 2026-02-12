@@ -1824,12 +1824,12 @@ impl<'a> HitMaker<'a> {
         // If the index has the AttributeRank or AttributePosition ranking rule,
         // We consider them separated, else we consider them unified as the default
         // state is the Attribute ranking rule alone
-        let attribute_state = index
+        let separated = index
             .criteria(rtxn)?
             .iter()
-            .any(|r| matches!(r, Criterion::AttributeRank | Criterion::AttributePosition))
-            .then_some(AttributeState::Separated)
-            .unwrap_or(AttributeState::Unified);
+            .any(|r| matches!(r, Criterion::AttributeRank | Criterion::AttributePosition));
+        let attribute_state =
+            if separated { AttributeState::Separated } else { AttributeState::Unified };
 
         Ok(Self {
             index,
