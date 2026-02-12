@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
+use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::features::{ChatCompletionSettings, RuntimeTogglableFeatures};
 use meilisearch_types::keys::Key;
 use meilisearch_types::network::Network;
@@ -74,6 +75,13 @@ impl DumpWriter {
 
     pub fn create_network(&self, network: Network) -> Result<()> {
         Ok(std::fs::write(self.dir.path().join("network.json"), serde_json::to_string(&network)?)?)
+    }
+
+    pub fn create_dynamic_search_rules(&self, rules: DynamicSearchRules) -> Result<()> {
+        Ok(std::fs::write(
+            self.dir.path().join("dynamic-search-rules.json"),
+            serde_json::to_string(&rules)?,
+        )?)
     }
 
     pub fn create_webhooks(&self, webhooks: WebhooksDumpView) -> Result<()> {
@@ -359,6 +367,7 @@ pub(crate) mod test {
         │    ├---- update_files/
         │    │    └---- 1.jsonl
         │    └---- queue.jsonl
+        ├---- dynamic-search-rules.json
         ├---- experimental-features.json
         ├---- instance_uid.uuid
         ├---- keys.jsonl

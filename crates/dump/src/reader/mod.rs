@@ -145,6 +145,13 @@ impl DumpReader {
             DumpReader::Compat(compat) => compat.webhooks(),
         }
     }
+
+    pub fn dynamic_search_rules(&self) -> Result<Option<&v6::DynamicSearchRules>> {
+        match self {
+            DumpReader::Current(current) => Ok(current.dynamic_search_rules()),
+            DumpReader::Compat(compat) => compat.dynamic_search_rules(),
+        }
+    }
 }
 
 impl From<V6Reader> for DumpReader {
