@@ -239,132 +239,8 @@ impl WordPairProximityDocidsExtractor {
         }
         Ok(())
     }
-}
 
-fn build_key<'a>(
-    prox: u8,
-    w1: &str,
-    w2: &str,
-    key_buffer: &'a mut bumpalo::collections::Vec<u8>,
-) -> &'a [u8] {
-    key_buffer.clear();
-    key_buffer.push(prox);
-    key_buffer.extend_from_slice(w1.as_bytes());
-    key_buffer.push(0);
-    key_buffer.extend_from_slice(w2.as_bytes());
-    key_buffer.as_slice()
-}
-
-fn word_positions_into_word_pair_proximity(
-    word_positions: &mut VecDeque<(Rc<str>, u16)>,
-    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
-) {
-    let (head_word, head_position) = word_positions.pop_front().unwrap();
-    for (word, position) in word_positions.iter() {
-        let prox = index_proximity(head_position as u32, *position as u32) as u8;
-        if prox > 0 && prox < MAX_DISTANCE as u8 {
-            word_pair_proximity((head_word.clone(), word.clone()), prox);
-        }
-    }
-}
-
-fn drain_word_positions(
-    word_positions: &mut VecDeque<(Rc<str>, u16)>,
-    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
-) {
-    while !word_positions.is_empty() {
-        word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
-    }
-}
-
-fn process_document_tokens<'doc>(
-    document: impl Document<'doc>,
-    document_tokenizer: &DocumentTokenizer,
-    word_positions: &mut VecDeque<(Rc<str>, u16)>,
-    field_id_and_metadata: &mut impl FnMut(&str) -> Result<(FieldId, Metadata)>,
-    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
-) -> Result<()> {
-    let mut field_id = None;
-    let mut token_fn = |_fname: &str, fid: FieldId, pos: u16, word: &str| {
-        if field_id != Some(fid) {
-            field_id = Some(fid);
-            drain_word_positions(word_positions, word_pair_proximity);
-        }
-        // drain the proximity window until the head word is considered close to the word we are inserting.
-        while word_positions
-            .front()
-            .is_some_and(|(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
-        {
-            word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
-        }
-
-        // insert the new word.
-        word_positions.push_back((Rc::from(word), pos));
-        Ok(())
-    };
-
-    let mut should_tokenize = |field_name: &str| {
-        let (field_id, meta) = field_id_and_metadata(field_name)?;
-
-        let pattern_match = if meta.is_searchable() {
-            PatternMatch::Match
-        } else {
-            // TODO: should be a match on the field_name using `match_field_legacy` function,
-            //       but for legacy reasons we iterate over all the fields to fill the field_id_map.
-            PatternMatch::Parent
-        };
-
-        Ok((field_id, pattern_match))
-    };
-
-    document_tokenizer.tokenize_document(document, &mut should_tokenize, &mut token_fn)?;
-
-    drain_word_positions(word_positions, word_pair_proximity);
-    Ok(())
-}
-
-pub struct WordPairProximityDocidsSettingsExtractorsData<'a, SD> {
-    tokenizer: DocumentTokenizer<'a>,
-    max_memory_by_thread: Option<usize>,
-    buckets: usize,
-    settings_delta: &'a SD,
-}
-
-impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
-    for WordPairProximityDocidsSettingsExtractorsData<'_, SD>
-{
-    type Data = RefCell<BalancedCaches<'extractor>>;
-
-    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
-        Ok(RefCell::new(BalancedCaches::new_in(
-            self.buckets,
-            self.max_memory_by_thread,
-            extractor_alloc,
-        )))
-    }
-
-    fn process<'doc>(
-        &'doc self,
-        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
-        context: &'doc DocumentContext<Self::Data>,
-    ) -> crate::Result<()> {
-        for document in documents {
-            let document = document?;
-            SettingsChangeWordPairProximityDocidsExtractors::extract_document_from_settings_change(
-                document,
-                context,
-                &self.tokenizer,
-                self.settings_delta,
-            )?;
-        }
-        Ok(())
-    }
-}
-
-pub struct SettingsChangeWordPairProximityDocidsExtractors;
-
-impl SettingsChangeWordPairProximityDocidsExtractors {
-    pub fn run_extraction<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
@@ -397,7 +273,7 @@ impl SettingsChangeWordPairProximityDocidsExtractors {
             localized_attributes_rules: &localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
-        let extractor_data = WordPairProximityDocidsSettingsExtractorsData {
+        let extractor_data = WordPairProximityDocidsSettingsExtractorData {
             tokenizer: document_tokenizer,
             max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
             buckets: rayon::current_num_threads(),
@@ -544,6 +420,126 @@ impl SettingsChangeWordPairProximityDocidsExtractors {
             cached_sorter.insert_add_u32(key, document.docid())?;
         }
 
+        Ok(())
+    }
+}
+
+fn build_key<'a>(
+    prox: u8,
+    w1: &str,
+    w2: &str,
+    key_buffer: &'a mut bumpalo::collections::Vec<u8>,
+) -> &'a [u8] {
+    key_buffer.clear();
+    key_buffer.push(prox);
+    key_buffer.extend_from_slice(w1.as_bytes());
+    key_buffer.push(0);
+    key_buffer.extend_from_slice(w2.as_bytes());
+    key_buffer.as_slice()
+}
+
+fn word_positions_into_word_pair_proximity(
+    word_positions: &mut VecDeque<(Rc<str>, u16)>,
+    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
+) {
+    let (head_word, head_position) = word_positions.pop_front().unwrap();
+    for (word, position) in word_positions.iter() {
+        let prox = index_proximity(head_position as u32, *position as u32) as u8;
+        if prox > 0 && prox < MAX_DISTANCE as u8 {
+            word_pair_proximity((head_word.clone(), word.clone()), prox);
+        }
+    }
+}
+
+fn drain_word_positions(
+    word_positions: &mut VecDeque<(Rc<str>, u16)>,
+    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
+) {
+    while !word_positions.is_empty() {
+        word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
+    }
+}
+
+fn process_document_tokens<'doc>(
+    document: impl Document<'doc>,
+    document_tokenizer: &DocumentTokenizer,
+    word_positions: &mut VecDeque<(Rc<str>, u16)>,
+    field_id_and_metadata: &mut impl FnMut(&str) -> Result<(FieldId, Metadata)>,
+    word_pair_proximity: &mut impl FnMut((Rc<str>, Rc<str>), u8),
+) -> Result<()> {
+    let mut field_id = None;
+    let mut token_fn = |_fname: &str, fid: FieldId, pos: u16, word: &str| {
+        if field_id != Some(fid) {
+            field_id = Some(fid);
+            drain_word_positions(word_positions, word_pair_proximity);
+        }
+        // drain the proximity window until the head word is considered close to the word we are inserting.
+        while word_positions
+            .front()
+            .is_some_and(|(_w, p)| index_proximity(*p as u32, pos as u32) >= MAX_DISTANCE)
+        {
+            word_positions_into_word_pair_proximity(word_positions, word_pair_proximity);
+        }
+
+        // insert the new word.
+        word_positions.push_back((Rc::from(word), pos));
+        Ok(())
+    };
+
+    let mut should_tokenize = |field_name: &str| {
+        let (field_id, meta) = field_id_and_metadata(field_name)?;
+
+        let pattern_match = if meta.is_searchable() {
+            PatternMatch::Match
+        } else {
+            // TODO: should be a match on the field_name using `match_field_legacy` function,
+            //       but for legacy reasons we iterate over all the fields to fill the field_id_map.
+            PatternMatch::Parent
+        };
+
+        Ok((field_id, pattern_match))
+    };
+
+    document_tokenizer.tokenize_document(document, &mut should_tokenize, &mut token_fn)?;
+
+    drain_word_positions(word_positions, word_pair_proximity);
+    Ok(())
+}
+
+pub struct WordPairProximityDocidsSettingsExtractorData<'a, SD> {
+    tokenizer: DocumentTokenizer<'a>,
+    max_memory_by_thread: Option<usize>,
+    buckets: usize,
+    settings_delta: &'a SD,
+}
+
+impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
+    for WordPairProximityDocidsSettingsExtractorData<'_, SD>
+{
+    type Data = RefCell<BalancedCaches<'extractor>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(BalancedCaches::new_in(
+            self.buckets,
+            self.max_memory_by_thread,
+            extractor_alloc,
+        )))
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
+        context: &'doc DocumentContext<Self::Data>,
+    ) -> crate::Result<()> {
+        for document in documents {
+            let document = document?;
+            WordPairProximityDocidsExtractor::extract_document_from_settings_change(
+                document,
+                context,
+                &self.tokenizer,
+                self.settings_delta,
+            )?;
+        }
         Ok(())
     }
 }
