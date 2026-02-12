@@ -11,7 +11,7 @@ use hashbrown::hash_map::EntryRef;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::heed::RwTxn;
-use meilisearch_types::milli::progress::{EmbedderStats, Progress};
+use meilisearch_types::milli::progress::{EmbedderStats, Progress, VariableNameStep};
 use meilisearch_types::milli::sharding::enterprise_edition::Resharding;
 use meilisearch_types::milli::sharding::{DbShardDocids, ShardBalancingOutcome, Shards};
 use meilisearch_types::milli::update::new::indexer;
@@ -26,7 +26,7 @@ use crate::scheduler::create_batch::Batch;
 use crate::scheduler::process_batch::ProcessBatchInfo;
 use crate::scheduler::process_export::{ExportContext, ExportOptions, TargetInstance};
 use crate::utils::ProcessingBatch;
-use crate::{Error, IndexScheduler, Result};
+use crate::{processing, Error, IndexScheduler, Result};
 
 impl IndexScheduler {
     pub(in crate::scheduler) fn process_network_index_batch(
@@ -42,6 +42,10 @@ impl IndexScheduler {
             tracing::error!("unexpected network kind for network task while processing batch");
             return Err(Error::CorruptedTaskQueue);
         };
+
+        progress.update_progress(processing::network::NetworkTopologyState::from(
+            network_topology_change.state(),
+        ));
 
         let network = network_topology_change.network_for_state();
 
@@ -99,6 +103,10 @@ impl IndexScheduler {
             }
         };
 
+        progress.update_progress(processing::network::NetworkTopologyState::from(
+            network_topology_change.state(),
+        ));
+
         if let (Some((remotes, out_name)), Some(new_shards)) =
             (network_topology_change.export_to_process(), network_topology_change.new_shards())
         {
@@ -116,16 +124,28 @@ impl IndexScheduler {
             self.notify_import_finished(remotes, in_name.to_owned(), origin)?;
         }
 
-        if network_topology_change.are_others_ready().is_finished_successfully() {
+        let remotes_import_state = network_topology_change.remotes_import_state();
+        if remotes_import_state.all_finished_successfully() {
             let moved_documents = self.delete_removed_shards(
                 network_topology_change.removed_shard_names(),
                 &progress,
                 &self.scheduler.must_stop_processing,
             )?;
             network_topology_change.set_moved(moved_documents);
+        } else if network_topology_change.state() == NetworkTopologyState::WaitingForOlderTasks {
+            progress.update_progress(VariableNameStep::<processing::network::ImportRemotes>::new(
+                "Waiting for other remotes to finish importing".to_string(),
+                remotes_import_state.finished() as u32,
+                remotes_import_state.total() as u32,
+            ));
         }
 
         network_topology_change.update_state();
+
+        progress.update_progress(processing::network::NetworkTopologyState::from(
+            network_topology_change.state(),
+        ));
+
         if network_topology_change.state() == NetworkTopologyState::Finished {
             task.status = Status::Succeeded;
         }
@@ -186,6 +206,8 @@ impl IndexScheduler {
             return Ok(());
         }
 
+        let mut index_index = 0;
+
         // shard rebalancing
         //
         // when a shard is removed, its documents must be redistributed among the other shards.
@@ -199,6 +221,15 @@ impl IndexScheduler {
                 let err = |err| Error::from_milli(err, Some(index_uid.to_string()));
 
                 let mut index_wtxn = index.write_txn()?;
+
+                progress.update_progress(
+                    VariableNameStep::<processing::network::ExportIndex>::new(
+                        format!("Exporting documents from index `{index_uid}`"),
+                        index_index,
+                        index_count as u32,
+                    ),
+                );
+                index_index += 1;
 
                 let shard_docids = index.shard_docids();
                 let ShardBalancingOutcome { unsharded, new_shards, existing_shards } = shard_docids
@@ -215,8 +246,6 @@ impl IndexScheduler {
                     existing_shards,
                 )
                 .map_err(err)?;
-
-
 
                 for (remote_name, remote, export_shards) in remotes.clone() {
                     let mut documents_to_move = RoaringBitmap::new();
@@ -244,11 +273,12 @@ impl IndexScheduler {
                         index_uid,
                         payload_size: None,
                         override_settings: false,
-                        export_mode: crate::scheduler::process_export::ExportMode::NetworkBalancing {
-                            index_count,
-                            export_old_remote_name: out_name,
-                            network_change_origin,
-                        },
+                        export_mode:
+                            crate::scheduler::process_export::ExportMode::NetworkBalancing {
+                                index_count,
+                                export_old_remote_name: out_name,
+                                network_change_origin,
+                            },
                     };
                     let ctx = ExportContext {
                         index,
@@ -275,6 +305,12 @@ impl IndexScheduler {
             },
         )?;
 
+        progress.update_progress(VariableNameStep::<processing::network::ExportIndex>::new(
+            "Done exporting documents".to_string(),
+            index_count as u32,
+            index_count as u32,
+        ));
+
         Ok(())
     }
 
@@ -288,6 +324,9 @@ impl IndexScheduler {
         let mut indexer_alloc = Bump::new();
 
         let scheduler_rtxn = self.env.read_txn()?;
+
+        let index_count = self.index_mapper.index_count(&scheduler_rtxn)?;
+        let mut index_index = 0;
 
         self.index_mapper.try_for_each_index::<(), ()>(
             &scheduler_rtxn,
@@ -305,6 +344,15 @@ impl IndexScheduler {
                 let embedders = self.embedders(index_uid.to_string(), embedders)?;
 
                 let shard_docids = index.shard_docids();
+
+                progress.update_progress(VariableNameStep::<
+                    processing::network::DeleteDocumentsFromIndex,
+                >::new(
+                    format!("Deleting removed shards for index `{index_uid}`"),
+                    index_index,
+                    index_count as u32,
+                ));
+                index_index += 1;
 
                 let mut documents_to_delete = RoaringBitmap::new();
                 for shard in removed_shards.clone() {
@@ -341,6 +389,13 @@ impl IndexScheduler {
                 Ok(())
             },
         )?;
+        progress.update_progress(
+            VariableNameStep::<processing::network::DeleteDocumentsFromIndex>::new(
+                "Done deleting removed shards from indexes".to_string(),
+                index_count as u32,
+                index_count as u32,
+            ),
+        );
 
         Ok(deleted_documents)
     }

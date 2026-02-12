@@ -876,7 +876,7 @@ impl IndexScheduler {
                     self.notify_import_finished(remotes, in_name.to_owned(), origin)?;
                 }
 
-                Ok(if network_topology_change.are_others_ready().is_finished() {
+                Ok(if network_topology_change.remotes_import_state().all_finished() {
                     Some((Batch::NetworkReady { task }, current_batch))
                 } else {
                     None

@@ -157,7 +157,7 @@ impl NetworkTopologyChange {
                 }
             }
             NetworkTopologyState::WaitingForOthers => {
-                if self.are_others_ready().is_finished() {
+                if self.remotes_import_state().all_finished() {
                     NetworkTopologyState::DeletingDocuments
                 } else {
                     NetworkTopologyState::WaitingForOthers
@@ -338,21 +338,19 @@ impl NetworkTopologyChange {
         self.in_remotes.values().all(|remote| remote.is_finished())
     }
 
-    pub fn are_others_ready(&self) -> RemotesImportState {
-        let mut failed = false;
+    pub fn remotes_import_state(&self) -> RemotesImportState {
+        let mut import_state =
+            RemotesImportState { total: self.out_remotes.len(), finished: 0, has_error: false };
         for remote in self.out_remotes.values() {
             match remote.export_state {
-                ExportState::Ongoing => return RemotesImportState::NotFinished,
+                ExportState::Ongoing => {}
                 ExportState::Finished { successful } => {
-                    failed |= !successful;
+                    import_state.finished += 1;
+                    import_state.has_error |= !successful;
                 }
             }
         }
-        if failed {
-            RemotesImportState::FinishedWithFailure
-        } else {
-            RemotesImportState::FinishedSuccessfully
-        }
+        import_state
     }
 
     /// Iterates over the names of shards that still exist but are no longer owned by this remote

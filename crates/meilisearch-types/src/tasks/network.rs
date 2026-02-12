@@ -924,18 +924,26 @@ pub mod headers {
     }
 }
 
-pub enum RemotesImportState {
-    NotFinished,
-    FinishedSuccessfully,
-    FinishedWithFailure,
+pub struct RemotesImportState {
+    total: usize,
+    finished: usize,
+    has_error: bool,
 }
 
 impl RemotesImportState {
-    pub fn is_finished(&self) -> bool {
-        !matches!(self, Self::NotFinished)
+    pub fn all_finished(&self) -> bool {
+        self.total == self.finished
     }
 
-    pub fn is_finished_successfully(&self) -> bool {
-        matches!(self, Self::FinishedSuccessfully)
+    pub fn all_finished_successfully(&self) -> bool {
+        self.all_finished() && !self.has_error
+    }
+
+    pub fn total(&self) -> usize {
+        self.total
+    }
+
+    pub fn finished(&self) -> usize {
+        self.finished
     }
 }
