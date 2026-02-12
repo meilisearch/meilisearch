@@ -26,9 +26,11 @@ pub fn partition_shards(
         };
         let mut query = query.clone();
         query.federation_options.get_or_insert_default().remote = Some(remote_for_shard);
-        /// FIXME: handle "strange" shard names
-        let shard_filter =
-            Some(serde_json::Value::String(format!("{SHARD_FIELD} = {shard_name}",)));
+
+        let shard_filter = Some(serde_json::Value::String(format!(
+            "{SHARD_FIELD} = \"{}\"",
+            shard_name.escape_default()
+        )));
 
         query.filter = fuse_filters(query.filter.take(), shard_filter);
         Some(query)
