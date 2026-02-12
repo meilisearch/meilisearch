@@ -22,6 +22,7 @@ content of the scheduler or enqueue new tasks.
 */
 
 mod dump;
+mod dynamic_search_rules;
 pub mod error;
 mod features;
 mod index_mapper;
@@ -31,7 +32,6 @@ mod lru;
 mod processing;
 mod queue;
 mod scheduler;
-mod dynamic_search_rules;
 #[cfg(test)]
 mod test_utils;
 pub mod upgrade;
@@ -56,6 +56,7 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
+use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
@@ -69,7 +70,6 @@ use meilisearch_types::milli::vector::{
 };
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::network::Network;
-use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,
@@ -1086,10 +1086,7 @@ impl IndexScheduler {
         self.features.network()
     }
 
-    pub fn put_search_dynamic_rules(
-        &self,
-        rules: DynamicSearchRules,
-    ) -> Result<()> {
+    pub fn put_search_dynamic_rules(&self, rules: DynamicSearchRules) -> Result<()> {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.dynamic_search_rules.put(wtxn, rules)?;
         Ok(())
