@@ -1081,9 +1081,18 @@ pub enum RankingRuleView {
     Typo,
     /// Sorted by increasing distance between matched query terms.
     Proximity,
-    /// Documents with quey words contained in more important
-    /// attributes are considered better.
+    /// Documents with query words contained in more important
+    /// attributes and at a closer-to-the-front position in it
+    /// are considered better.
     Attribute,
+    /// Documents with query words contained in more important
+    /// attributes only are considered better. Position of the
+    /// query words in an attribute is not considered.
+    AttributeRank,
+    /// Documents with query words that are closer to the front
+    /// of an attribute are considered better. Attribute rank
+    /// is not considered.
+    AttributePosition,
     /// Dynamically sort at query time the documents. None, one or multiple
     /// Asc/Desc sortable attributes can be used in place of this criterion at
     /// query time.
@@ -1095,6 +1104,7 @@ pub enum RankingRuleView {
     /// Sorted by the decreasing value of the field specified.
     Desc(String),
 }
+
 impl Serialize for RankingRuleView {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1103,6 +1113,7 @@ impl Serialize for RankingRuleView {
         serializer.serialize_str(&format!("{}", Criterion::from(self.clone())))
     }
 }
+
 impl<'de> Deserialize<'de> for RankingRuleView {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -1146,6 +1157,8 @@ impl From<Criterion> for RankingRuleView {
             Criterion::Typo => RankingRuleView::Typo,
             Criterion::Proximity => RankingRuleView::Proximity,
             Criterion::Attribute => RankingRuleView::Attribute,
+            Criterion::AttributeRank => RankingRuleView::AttributeRank,
+            Criterion::AttributePosition => RankingRuleView::AttributePosition,
             Criterion::Sort => RankingRuleView::Sort,
             Criterion::Exactness => RankingRuleView::Exactness,
             Criterion::Asc(x) => RankingRuleView::Asc(x),
@@ -1160,6 +1173,8 @@ impl From<RankingRuleView> for Criterion {
             RankingRuleView::Typo => Criterion::Typo,
             RankingRuleView::Proximity => Criterion::Proximity,
             RankingRuleView::Attribute => Criterion::Attribute,
+            RankingRuleView::AttributeRank => Criterion::AttributeRank,
+            RankingRuleView::AttributePosition => Criterion::AttributePosition,
             RankingRuleView::Sort => Criterion::Sort,
             RankingRuleView::Exactness => Criterion::Exactness,
             RankingRuleView::Asc(x) => Criterion::Asc(x),
