@@ -5,6 +5,7 @@ use milli::DocumentId;
 use crate::network::Remote;
 use crate::tasks::network::{
     ImportState, InRemote, NetworkTopologyChange, ReceiveImportFinishedError, ReceiveTaskError,
+    RemotesImportState,
 };
 
 impl NetworkTopologyChange {
@@ -15,6 +16,14 @@ impl NetworkTopologyChange {
     pub fn set_moved(&mut self, _moved_documents: u64) {}
 
     pub fn update_state(&mut self) {}
+
+    pub fn finished_import_to_notify(&self) -> Option<(std::iter::Empty<(&str, &Remote)>, &str)> {
+        None
+    }
+
+    pub fn remotes_import_state(&self) -> RemotesImportState {
+        RemotesImportState { total: 0, finished: 0, has_error: true }
+    }
 
     pub fn receive_remote_task(
         &mut self,

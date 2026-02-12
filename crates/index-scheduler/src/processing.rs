@@ -224,12 +224,15 @@ pub mod network {
         }
     }
 
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
     /// used in VariableNamedStep while ExportingDocuments
     pub enum ExportIndex {}
 
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
     /// used in VariableNamedStep while deleting documents
     pub enum DeleteDocumentsFromIndex {}
 
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
     /// used in VariableNamedStep while waiting for other remotes to finish importing
     pub enum ImportRemotes {}
 }
