@@ -60,7 +60,7 @@ smallvec = "1.15.1"
 smartstring = "1.0.1"
 tempfile = "3.23.0"
 thiserror = "2.0.17"
-time = { version = "0.3.44", features = [
+time = { version = "0.3.47", features = [
     "serde-well-known",
     "formatting",
     "parsing",
