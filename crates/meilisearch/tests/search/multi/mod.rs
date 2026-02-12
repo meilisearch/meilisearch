@@ -2096,7 +2096,7 @@ async fn federation_sort_different_ranking_rules() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2]`, `SHARED_SCORE_DOCUMENTS.rankingRules[0..=3]`: relevancy rule(s) words, typo, proximity, attribute\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare a relevancy rule with a sort rule\n",
+      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2]`, `SHARED_SCORE_DOCUMENTS.rankingRules[0..=3]`: relevancy rule(s) words, typo, proximity, attributeRank\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare a relevancy rule with a sort rule\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"

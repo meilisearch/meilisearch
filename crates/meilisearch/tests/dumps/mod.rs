@@ -2448,8 +2448,9 @@ async fn generate_and_import_dump_containing_vectors() {
         "words",
         "typo",
         "proximity",
-        "attribute",
+        "attributeRank",
         "sort",
+        "attributePosition",
         "exactness"
       ],
       "stopWords": [],
