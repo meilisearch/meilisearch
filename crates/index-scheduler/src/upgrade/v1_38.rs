@@ -77,7 +77,6 @@ impl super::UpgradeIndexScheduler for MigrateNetwork {
             .collect();
 
         let network = Network { local, remotes, leader, version, shards };
-        /// FIXME: replace 1.35 by the actual version this targets
         set_network(env, wtxn, &network)?;
         Ok(())
     }

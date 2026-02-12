@@ -13,9 +13,7 @@ impl super::UpgradeIndex for AddShards {
         index: &crate::Index,
         UpgradeParams { shards, .. }: UpgradeParams<'_>,
     ) -> crate::Result<bool> {
-        /// FIXME: replace `must_upgrade` and module name with actual version
-        let Some(shards) = shards
-        else {
+        let Some(shards) = shards else {
             return Ok(false);
         };
 
