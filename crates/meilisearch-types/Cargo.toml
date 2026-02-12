@@ -37,7 +37,7 @@ tar = "0.4.44"
 tempfile = "3.23.0"
 thiserror = "2.0.17"
 time = { version = "0.3.47", features = [
-    "serde-well-known",
+    "serde",
     "formatting",
     "parsing",
     "macros",
