@@ -110,8 +110,9 @@ pub fn default_criteria() -> Vec<Criterion> {
         Criterion::Words,
         Criterion::Typo,
         Criterion::Proximity,
-        Criterion::Attribute,
+        Criterion::AttributeRank,
         Criterion::Sort,
+        Criterion::AttributePosition,
         Criterion::Exactness,
     ]
 }
