@@ -35,6 +35,7 @@ pub mod documents;
 
 pub mod facet_search;
 mod fields;
+pub use fields::{ListFields, ListFieldsFilter};
 pub mod search;
 mod search_analytics;
 #[cfg(test)]
@@ -53,7 +54,7 @@ mod similar_analytics;
         (path = "/", api = settings::SettingsApi),
         (path = "/", api = compact::CompactApi),
     ),
-    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats),
+    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats, fields::post_index_fields),
     tags(
         (
             name = "Indexes",
