@@ -4,7 +4,7 @@ use std::io::{self, BufReader};
 use heed::{BytesDecode, BytesEncode};
 
 use super::helpers::{
-    create_sorter, sorter_into_reader, GrenadParameters, MergeDeladdCboRoaringBitmaps,
+    create_sorter, sorter_into_reader, GrenadParameters, MergeDeladdDeCboRoaringBitmaps,
 };
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FieldDocIdFacetF64Codec, OrderedF64Codec,
@@ -27,7 +27,7 @@ pub fn extract_facet_number_docids<R: io::Read + io::Seek>(
 
     let mut facet_number_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        MergeDeladdCboRoaringBitmaps,
+        MergeDeladdDeCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,

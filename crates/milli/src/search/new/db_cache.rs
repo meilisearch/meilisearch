@@ -12,9 +12,9 @@ use super::interner::Interned;
 use super::Word;
 use crate::heed_codec::{BytesDecodeOwned, StrBEU16Codec};
 use crate::proximity::ProximityPrecision;
-use crate::update::MergeCboRoaringBitmaps;
+use crate::update::MergeDeCboRoaringBitmaps;
 use crate::{
-    CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, Result, SearchContext, U8StrStrCodec,
+    DeCboRoaringBitmapCodec, DeCboRoaringBitmapLenCodec, Result, SearchContext, U8StrStrCodec,
 };
 
 /// A cache storing pointers to values in the LMDB databases.
@@ -72,11 +72,11 @@ impl<'ctx> DatabaseCache<'ctx> {
 
         match (bitmap_bytes, universe) {
             (bytes, Some(universe)) => {
-                CboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)
+                DeCboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)
                     .map(Some)
                     .map_err(Into::into)
             }
-            (bytes, None) => CboRoaringBitmapCodec::bytes_decode_owned(bytes)
+            (bytes, None) => DeCboRoaringBitmapCodec::bytes_decode_owned(bytes)
                 .map(Some)
                 .map_err(heed::Error::Decoding)
                 .map_err(Into::into),
@@ -105,7 +105,7 @@ impl<'ctx> DatabaseCache<'ctx> {
             None => return Ok(None),
         };
 
-        CboRoaringBitmapLenCodec::bytes_decode_owned(bitmap_bytes)
+        DeCboRoaringBitmapLenCodec::bytes_decode_owned(bitmap_bytes)
             .map(Some)
             .map_err(heed::Error::Decoding)
             .map_err(Into::into)
@@ -157,11 +157,11 @@ impl<'ctx> DatabaseCache<'ctx> {
 
         match (bitmap_bytes, universe) {
             (bytes, Some(universe)) => {
-                CboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)
+                DeCboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)
                     .map(Some)
                     .map_err(Into::into)
             }
-            (bytes, None) => CboRoaringBitmapCodec::bytes_decode_owned(bytes)
+            (bytes, None) => DeCboRoaringBitmapCodec::bytes_decode_owned(bytes)
                 .map(Some)
                 .map_err(heed::Error::Decoding)
                 .map_err(Into::into),
@@ -223,7 +223,7 @@ impl<'ctx> SearchContext<'ctx> {
                     &mut self.db_cache.word_docids,
                     self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    MergeCboRoaringBitmaps,
+                    MergeDeCboRoaringBitmaps,
                 )
             }
             None => DatabaseCache::get_value(
@@ -255,7 +255,7 @@ impl<'ctx> SearchContext<'ctx> {
                     &mut self.db_cache.exact_word_docids,
                     self.index.word_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    MergeCboRoaringBitmaps,
+                    MergeDeCboRoaringBitmaps,
                 )
             }
             None => DatabaseCache::get_value(
@@ -312,7 +312,7 @@ impl<'ctx> SearchContext<'ctx> {
                     &mut self.db_cache.word_prefix_docids,
                     self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    MergeCboRoaringBitmaps,
+                    MergeDeCboRoaringBitmaps,
                 )
             }
             None => DatabaseCache::get_value(
@@ -344,7 +344,7 @@ impl<'ctx> SearchContext<'ctx> {
                     &mut self.db_cache.exact_word_prefix_docids,
                     self.index.word_prefix_fid_docids.remap_data_type::<Bytes>(),
                     universe,
-                    MergeCboRoaringBitmaps,
+                    MergeDeCboRoaringBitmaps,
                 )
             }
             None => DatabaseCache::get_value(
@@ -377,7 +377,7 @@ impl<'ctx> SearchContext<'ctx> {
                 {
                     docids
                         .as_ref()
-                        .map(|d| CboRoaringBitmapCodec::bytes_decode_owned(d))
+                        .map(|d| DeCboRoaringBitmapCodec::bytes_decode_owned(d))
                         .transpose()
                         .map_err(heed::Error::Decoding)?
                 } else {
@@ -395,7 +395,7 @@ impl<'ctx> SearchContext<'ctx> {
                             docids |= word1_docids & word2_docids;
                         }
                     }
-                    let encoded = CboRoaringBitmapCodec::bytes_encode(&docids)
+                    let encoded = DeCboRoaringBitmapCodec::bytes_encode(&docids)
                         .map(Cow::into_owned)
                         .map(Cow::Owned)
                         .map(Some)

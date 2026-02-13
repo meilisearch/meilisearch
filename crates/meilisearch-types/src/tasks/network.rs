@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use base64::Engine as _;
 use itertools::{EitherOrBoth, Itertools as _};
-use milli::{CboRoaringBitmapCodec, DocumentId};
+use milli::{DeCboRoaringBitmapCodec, DocumentId};
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -483,7 +483,8 @@ impl Serialize for TaskKeys {
     {
         let TaskKeys(task_keys) = self;
         let mut bytes = Vec::new();
-        CboRoaringBitmapCodec::serialize_into_vec(task_keys, &mut bytes);
+        // TODO correctly handle this io::Error
+        DeCboRoaringBitmapCodec::serialize_into(task_keys, &mut bytes).unwrap();
         let encoded = base64::prelude::BASE64_STANDARD.encode(&bytes);
         serializer.serialize_str(&encoded)
     }
@@ -520,7 +521,7 @@ impl<'de> serde::de::Visitor<'de> for TaskKeysVisitor {
     where
         E: serde::de::Error,
     {
-        let task_keys = CboRoaringBitmapCodec::deserialize_from(decoded).map_err(|_err| {
+        let task_keys = DeCboRoaringBitmapCodec::deserialize_from(decoded).map_err(|_err| {
             E::invalid_value(serde::de::Unexpected::Bytes(decoded), &"a cbo roaring bitmap")
         })?;
         Ok(TaskKeys(task_keys))
