@@ -34,7 +34,7 @@ jobs:
           node-version: '20'
 
       - name: Install OpenAPI tools
-        run: npm install -g @apidevtools/swagger-cli @stoplight/spectral-cli mintlify
+        run: npm install -g @apidevtools/swagger-cli @stoplight/spectral-cli
 
       - name: Check all routes have summaries
         run: cargo run --release -p openapi-generator -- --check-summaries
@@ -42,23 +42,14 @@ jobs:
       - name: Check for duplicate or malformed paths
         run: cargo run --release -p openapi-generator -- --check-paths
 
-      - name: Generate OpenAPI files
-        run: |
-          cargo run --release -p openapi-generator -- --pretty --debug --output /tmp/meilisearch-openapi.json
-          cargo run --release -p openapi-generator -- --pretty --debug --with-mintlify-code-samples --output /tmp/meilisearch-openapi-mintlify.json
+      - name: Generate OpenAPI file
+        run: cargo run --release -p openapi-generator -- --pretty --output /tmp/meilisearch-openapi.json
 
-      # Validates that the OpenAPI files are syntactically correct and conform to the OpenAPI specification
+      # Validates that the OpenAPI file is syntactically correct and conforms to the OpenAPI specification
       - name: Validate OpenAPI schema
-        run: |
-          swagger-cli validate /tmp/meilisearch-openapi.json
-          swagger-cli validate /tmp/meilisearch-openapi-mintlify.json
+        run: swagger-cli validate /tmp/meilisearch-openapi.json
 
-      - name: Check Mintlify OpenAPI validity
-        run: mintlify openapi-check /tmp/meilisearch-openapi-mintlify.json
-
-      # Lints the OpenAPI files for best practices (descriptions, examples, naming conventions, etc.)
+      # Lints the OpenAPI file for best practices (descriptions, examples, naming conventions, etc.)
       # Ruleset is defined in crates/openapi-generator/.spectral.yaml
       - name: Lint OpenAPI specification
-        run: |
-          spectral lint /tmp/meilisearch-openapi.json --ruleset crates/openapi-generator/.spectral.yaml
-          spectral lint /tmp/meilisearch-openapi-mintlify.json --ruleset crates/openapi-generator/.spectral.yaml
+        run: spectral lint /tmp/meilisearch-openapi.json --ruleset crates/openapi-generator/.spectral.yaml
