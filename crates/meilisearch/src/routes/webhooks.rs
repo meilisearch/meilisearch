@@ -37,7 +37,6 @@ use crate::extractors::sequential_extractor::SeqHandler;
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/webhooks"),
     )),
 )]
 pub struct WebhooksApi;
@@ -310,7 +309,7 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
     Ok(())
 }
 
-/// Get a webhook
+/// Get webhook
 ///
 /// Get a single webhook by its UUID.
 #[utoipa::path(
@@ -348,7 +347,7 @@ async fn get_webhook(
     Ok(HttpResponse::Ok().json(webhook))
 }
 
-/// Create a webhook
+/// Create webhook
 ///
 /// Create a new webhook to receive task notifications.
 #[utoipa::path(
@@ -409,7 +408,7 @@ async fn post_webhook(
     Ok(HttpResponse::Created().json(response))
 }
 
-/// Update a webhook
+/// Update webhook
 ///
 /// Update an existing webhook's URL or headers.
 #[utoipa::path(
@@ -464,7 +463,7 @@ async fn patch_webhook(
     Ok(HttpResponse::Ok().json(response))
 }
 
-/// Delete a webhook
+/// Delete webhook
 ///
 /// Delete an existing webhook by its UUID.
 #[utoipa::path(

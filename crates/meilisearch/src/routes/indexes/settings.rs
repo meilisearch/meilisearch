@@ -46,7 +46,6 @@ macro_rules! make_setting_routes {
                 (
                     name = "Settings",
                     description = "Use the /settings route to customize search settings for a given index. You can either modify all index settings at once using the update settings endpoint, or use a child route to configure a single setting.",
-                    external_docs(url = "https://www.meilisearch.com/docs/reference/api/settings"),
                 ),
             ),
         )]
@@ -670,7 +669,7 @@ async fn register_new_settings(
         )),
     )
 )]
-/// All settings
+/// List settings
 ///
 /// This route allows you to retrieve, configure, or reset all of an index's settings at once.
 pub async fn get_all(

@@ -5065,8 +5065,6 @@ dependencies = [
  "anyhow",
  "clap",
  "meilisearch",
- "regex",
- "reqwest",
  "serde_json",
  "utoipa",
 ]

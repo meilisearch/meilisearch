@@ -33,7 +33,6 @@ use crate::{LogRouteHandle, LogStderrHandle};
         name = "Logs",
         description = "Everything about retrieving or customizing logs.
 Currently [experimental](https://www.meilisearch.com/docs/learn/experimental/overview).",
-        external_docs(url = "https://www.meilisearch.com/docs/learn/experimental/log_customization"),
     )),
 )]
 pub struct LogsApi;
@@ -295,7 +294,7 @@ fn entry_stream(
 #[utoipa::path(
     post,
     path = "/stream",
-    tag = "Logs",
+    tag = "Experimental features",
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     request_body = GetLogs,
     responses(
@@ -364,7 +363,7 @@ pub async fn get_logs(
 #[utoipa::path(
     delete,
     path = "/stream",
-    tag = "Logs",
+    tag = "Experimental features",
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
         (status = NO_CONTENT, description = "Logs are being returned"),
@@ -409,7 +408,7 @@ pub struct UpdateStderrLogs {
 #[utoipa::path(
     post,
     path = "/stderr",
-    tag = "Logs",
+    tag = "Experimental features",
     request_body = UpdateStderrLogs,
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(

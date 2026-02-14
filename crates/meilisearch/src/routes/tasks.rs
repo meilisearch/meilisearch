@@ -35,7 +35,6 @@ use crate::{aggregate_methods, Opt};
     tags((
         name = "Tasks",
         description = "The tasks route gives information about the progress of the [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html).",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/tasks"),
     )),
 )]
 pub struct TaskApi;
@@ -58,15 +57,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct TasksFilterQuery {
-    /// Maximum number of results to return.
+    /// Maximum number of batches to return
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT as u32), error = DeserrQueryParamError<InvalidTaskLimit>)]
     #[param(required = false, value_type = u32, example = 12, default = json!(PAGINATION_DEFAULT_LIMIT))]
     pub limit: Param<u32>,
-    /// Fetch the next set of results from the given uid.
+    /// `uid` of the first batch returned
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskFrom>)]
     #[param(required = false, value_type = Option<u32>, example = 12421)]
     pub from: Option<Param<TaskId>>,
-    /// The order you want to retrieve the objects.
+    /// If `true`, returns results in the reverse order, from oldest to most recent
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskReverse>)]
     #[param(required = false, value_type = Option<bool>, example = true)]
     pub reverse: Option<Param<bool>>,
@@ -346,7 +345,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 #[utoipa::path(
     post,
     path = "/cancel",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.cancel", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
     responses(
@@ -440,7 +439,7 @@ async fn cancel_tasks(
 #[utoipa::path(
     delete,
     path = "",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.delete", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
     responses(
@@ -542,13 +541,13 @@ pub struct AllTasks {
     pub next: Option<u32>,
 }
 
-/// Get all tasks
+/// List tasks
 ///
 /// Get all [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html)
 #[utoipa::path(
     get,
     path = "",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
     responses(
@@ -609,13 +608,13 @@ async fn get_tasks(
     Ok(HttpResponse::Ok().json(tasks))
 }
 
-/// Get a task
+/// Get task
 ///
 /// Get a [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)
 #[utoipa::path(
     get,
     path = "/{taskUid}",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("taskUid", format = UInt32, example = "0", description = "The task identifier", nullable = false)),
     responses(
@@ -677,13 +676,13 @@ async fn get_task(
     }
 }
 
-/// Get a task's documents.
+/// Get task's documents.
 ///
-/// Get a [task's documents file](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+/// Get documents related to a [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
 #[utoipa::path(
     get,
     path = "/{taskUid}/documents",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("taskUid", format = UInt32, example = "0", description = "The task identifier", nullable = false)),
     responses(

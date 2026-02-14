@@ -86,7 +86,6 @@ pub struct DocumentParam {
         (
             name = "Documents",
             description = "Documents are objects composed of fields that can store any type of data. Each field contains an attribute and its associated value. Documents are stored inside [indexes](https://www.meilisearch.com/docs/learn/getting_started/indexes).",
-            external_docs(url = "https://www.meilisearch.com/docs/learn/getting_started/documents"),
         ),
     ),
 )]
@@ -192,7 +191,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
     }
 }
 
-/// Get one document
+/// Get document
 ///
 /// Get one document from its primary key.
 #[utoipa::path(
@@ -306,7 +305,7 @@ impl Aggregate for DocumentsDeletionAggregator {
     }
 }
 
-/// Delete a document
+/// Delete document
 ///
 /// Delete a single document by id.
 #[utoipa::path(
@@ -497,7 +496,7 @@ pub struct BrowseQuery {
     sort: Option<Vec<String>>,
 }
 
-/// Get documents with POST
+/// List documents with POST
 ///
 /// Get a set of documents.
 #[utoipa::path(
@@ -578,7 +577,7 @@ pub async fn documents_by_query_post(
     documents_by_query(&index_scheduler, index_uid, body)
 }
 
-/// Get documents
+/// List documents with GET
 ///
 /// Get documents by batches.
 #[utoipa::path(
@@ -1538,7 +1537,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     }
 }
 
-/// Edit documents by function.
+/// Edit documents by function
 ///
 /// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to
 /// edit one or more documents directly in Meilisearch.

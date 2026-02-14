@@ -37,7 +37,7 @@ use crate::milli::progress::{ProgressStepView, ProgressView};
 use crate::routes::batches::AllBatches;
 use crate::routes::features::RuntimeTogglableFeatures;
 use crate::routes::indexes::documents::{DocumentDeletionByFilter, DocumentEditionByFunction};
-use crate::routes::indexes::IndexView;
+use crate::routes::indexes::{IndexView, ListFields, ListFieldsFilter};
 use crate::routes::multi_search::SearchResults;
 use crate::routes::network::{Network, Remote};
 use crate::routes::swap_indexes::SwapIndexesPayload;
@@ -101,13 +101,14 @@ mod webhooks;
         (name = "Stats", description = "Stats gives extended information and metrics about indexes and the Meilisearch database."),
         (name = "Health", description = "The health check endpoint enables you to periodically test the health of your Meilisearch instance."),
         (name = "Version", description = "Returns the version of the running Meilisearch instance."),
+        (name = "Backups", description = "Meilisearch offers two types of backups: snapshots and dumps. Snapshots are mainly intended as a safeguard, while dumps are useful when migrating Meilisearch."),
     ),
     modifiers(&OpenApiAuth),
     servers((
-        url = "/",
+        url = "http://localhost:7700",
         description = "Local server",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, ListFields, ListFieldsFilter))
 )]
 pub struct MeilisearchApi;
 
@@ -248,7 +249,6 @@ pub struct Pagination {
     pub limit: usize,
 }
 
-/// Paginated response wrapper
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
@@ -430,7 +430,7 @@ pub struct Stats {
     pub indexes: BTreeMap<String, indexes::IndexStats>,
 }
 
-/// Get stats of all indexes.
+/// Get stats of all indexes
 ///
 /// Get stats of all indexes.
 #[utoipa::path(
@@ -588,7 +588,7 @@ enum HealthStatus {
     Available,
 }
 
-/// Get Health
+/// Get health
 ///
 /// The health check endpoint enables you to periodically test the health of
 /// your Meilisearch instance.

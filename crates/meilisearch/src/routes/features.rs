@@ -23,7 +23,6 @@ use crate::extractors::sequential_extractor::SeqHandler;
         description = "The `/experimental-features` route allows you to activate or deactivate some of Meilisearch's experimental features.
 
 This route is **synchronous**. This means that no task object will be returned, and any activated or deactivated features will be made available or unavailable immediately.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/experimental_features"),
     )),
 )]
 pub struct ExperimentalFeaturesApi;
@@ -36,7 +35,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-/// Get all experimental features
+/// List experimental features
 ///
 /// Get a list of all experimental features that can be activated via the
 /// /experimental-features route and whether or not they are currently

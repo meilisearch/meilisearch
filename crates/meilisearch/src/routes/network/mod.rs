@@ -43,7 +43,6 @@ use enterprise_edition as current_edition;
         description = "The `/network` route allows you to describe the topology of a network of Meilisearch instances.
 
 This route is **synchronous**. This means that no task object will be returned, and any change to the network will be made available immediately.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/network"),
     )),
 )]
 pub struct NetworkApi;
@@ -62,7 +61,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[utoipa::path(
     get,
     path = "",
-    tag = "Network",
+    tag = "Experimental features",
     security(("Bearer" = ["network.get", "*"])),
     responses(
         (status = OK, description = "Known nodes are returned", body = Network, content_type = "application/json", example = json!(
@@ -204,13 +203,13 @@ impl Aggregate for PatchNetworkAnalytics {
     }
 }
 
-/// Configure Network
+/// Configure network topology
 ///
 /// Add or remove nodes from network.
 #[utoipa::path(
     patch,
     path = "",
-    tag = "Network",
+    tag = "Experimental features",
     request_body = Network,
     security(("Bearer" = ["network.update", "*"])),
     responses(

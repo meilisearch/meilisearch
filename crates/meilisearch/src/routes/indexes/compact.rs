@@ -17,13 +17,6 @@ use crate::routes::SummarizedTaskView;
 #[derive(OpenApi)]
 #[openapi(
     paths(compact),
-    tags(
-        (
-            name = "Compact an index",
-            description = "The /compact route uses compacts the database to reorganize and make it smaller and more efficient.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/compact"),
-        ),
-    ),
 )]
 pub struct CompactApi;
 
@@ -31,13 +24,13 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(compact))));
 }
 
-/// Compact an index
+/// Compact index
 ///
 /// Triggers a compaction process on the specified index. Compaction reorganizes the index database to make it smaller and more efficient.
 #[utoipa::path(
     post,
     path = "{indexUid}/compact",
-    tag = "Compact an index",
+    tag = "Indexes",
     security(("Bearer" = ["search", "*"])),
     params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
     responses(

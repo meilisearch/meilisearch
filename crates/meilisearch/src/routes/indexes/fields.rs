@@ -24,7 +24,7 @@ use utoipa::ToSchema;
 
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::{Pagination, PAGINATION_DEFAULT_LIMIT};
+use crate::routes::{Pagination, PaginationView, PAGINATION_DEFAULT_LIMIT};
 
 #[derive(Debug, Serialize, Clone, Copy, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -147,10 +147,13 @@ pub struct FieldLocalizedConfig<'a> {
 #[derive(Deserr, Debug, Clone, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct ListFields {
+    /// Number of fields to skip. Defaults to 0.
     #[deserr(default, error = DeserrJsonError<InvalidIndexOffset>)]
     pub offset: usize,
+    /// Maximum number of fields to return. Defaults to 20.
     #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidIndexLimit>)]
     pub limit: usize,
+    /// Optional filter to restrict which fields are returned (e.g. by attribute patterns or by capability: displayed, searchable, sortable, filterable, etc.).
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilter>)]
     pub filter: Option<ListFieldsFilter>,
 }
@@ -210,21 +213,30 @@ impl ListFields {
     }
 }
 
+/// Filter to restrict which index fields are returned.
 #[derive(Deserr, Debug, Clone, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidIndexFieldsFilter>, rename_all = camelCase, deny_unknown_fields)]
+#[schema(description = "Filter fields by attribute name patterns or by capability (displayed, searchable, sortable, etc.). All criteria are ANDed.")]
 pub struct ListFieldsFilter {
+    /// Only include fields whose names match these patterns (e.g. `["title", "desc*"]`).
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterAttributePatterns>)]
     pub attribute_patterns: Option<AttributePatterns>,
+    /// Only include fields that are displayed (true) or not displayed (false) in search results.
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterDisplayed>)]
     pub displayed: Option<bool>,
+    /// Only include fields that are searchable (true) or not searchable (false).
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterSearchable>)]
     pub searchable: Option<bool>,
+    /// Only include fields that are sortable (true) or not sortable (false).
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterSortable>)]
     pub sortable: Option<bool>,
+    /// Only include fields that are used as distinct attribute (true) or not (false).
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterDistinct>)]
     pub distinct: Option<bool>,
+    /// Only include fields that have a custom ranking rule (asc/desc) (true) or not (false).
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterRankingRule>)]
     pub ranking_rule: Option<bool>,
+    /// Only include fields that are filterable (true) or not filterable (false).
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterFilterable>)]
     pub filterable: Option<bool>,
 }
@@ -232,10 +244,51 @@ pub struct ListFieldsFilter {
 #[utoipa::path(
     post,
     path = "/{indexUid}/fields",
-    tag = "Fields",
+    tag = "Indexes",
+    summary = "List index fields",
+    description = "Returns a paginated list of fields in the index with their metadata: whether they are displayed, searchable, sortable, filterable, distinct, have a custom ranking rule (asc/desc), and for filterable fields the sort order for facet values.",
     security(("Bearer" = ["fields.post", "fields.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
-    request_body = ListFields,
+    params((
+        "indexUid" = String,
+        Path,
+        description = "Unique identifier of the index whose fields to list",
+        example = "movies",
+        nullable = false
+    )),
+    request_body(
+        content = ListFields
+    ),
+    responses(
+        (status = 200, body = PaginationView<Field<'static>>, content_type = "application/json", example = json!({
+            "results": [
+                {
+                    "name": "title",
+                    "displayed": { "enabled": true },
+                    "searchable": { "enabled": true },
+                    "sortable": { "enabled": true },
+                    "distinct": { "enabled": false },
+                    "rankingRule": { "enabled": false, "order": null },
+                    "filterable": { "enabled": false, "sortBy": "count", "facetSearch": false, "equality": false, "comparison": false },
+                    "localized": { "locales": [] }
+                },
+                {
+                    "name": "genre",
+                    "displayed": { "enabled": true },
+                    "searchable": { "enabled": false },
+                    "sortable": { "enabled": false },
+                    "distinct": { "enabled": false },
+                    "rankingRule": { "enabled": false, "order": null },
+                    "filterable": { "enabled": true, "sortBy": "alpha", "facetSearch": true, "equality": true, "comparison": false },
+                    "localized": { "locales": [] }
+                }
+            ],
+            "offset": 0,
+            "limit": 20,
+            "total": 2
+        })),
+        (status = 401, description = "Missing or invalid authorization header", body = ResponseError, content_type = "application/json"),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json"),
+    ),
 )]
 pub async fn post_index_fields(
     index_scheduler: GuardedData<ActionPolicy<{ actions::FIELDS_POST }>, Data<IndexScheduler>>,

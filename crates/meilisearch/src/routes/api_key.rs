@@ -30,7 +30,6 @@ use crate::routes::Pagination;
         description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions.
 You must have the master key or the default admin key to access the keys route. More information about the keys and their rights.
 Accessing any route under `/keys` without having set a master key will result in an error.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/keys"),
     )),
 )]
 pub struct ApiKeyApi;
@@ -49,7 +48,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-/// Create an API Key
+/// Create API key
 ///
 /// Create an API Key.
 #[utoipa::path(
@@ -133,9 +132,9 @@ impl ListApiKeys {
     }
 }
 
-/// Get API Keys
+/// List API keys
 ///
-/// List all API Keys
+/// List all API keys
 #[utoipa::path(
     get,
     path = "",
@@ -203,7 +202,7 @@ pub async fn list_api_keys(
     Ok(HttpResponse::Ok().json(page_view))
 }
 
-/// Get an API Key
+/// Get API key
 ///
 /// Get an API key from its `uid` or its `key` field.
 #[utoipa::path(
@@ -267,7 +266,7 @@ pub async fn get_api_key(
     Ok(HttpResponse::Ok().json(res))
 }
 
-/// Update a Key
+/// Update API key
 ///
 /// Update the name and description of an API key. Updates to keys are partial.
 /// This means you should provide only the fields you intend to update, as any
@@ -335,7 +334,7 @@ pub async fn patch_api_key(
     Ok(HttpResponse::Ok().json(res))
 }
 
-/// Delete a key
+/// Delete API key
 ///
 /// Delete the specified API key.
 #[utoipa::path(

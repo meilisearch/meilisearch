@@ -27,14 +27,7 @@ use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
 #[derive(OpenApi)]
-#[openapi(
-    paths(export),
-    tags((
-        name = "Export",
-        description = "The `/export` route allows you to trigger an export process to a remote Meilisearch instance.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/export"),
-    )),
-)]
+#[openapi(paths(export))]
 pub struct ExportApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -48,7 +41,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[utoipa::path(
     post,
     path = "",
-    tag = "Export",
+    tag = "Documents",
     request_body = Export,
     security(("Bearer" = ["export", "*"])),
     responses(

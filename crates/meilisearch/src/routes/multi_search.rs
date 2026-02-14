@@ -32,7 +32,6 @@ use crate::search_queue::SearchQueue;
     tags((
         name = "Multi-search",
         description = "The `/multi-search` route allows you to perform multiple search queries on one or more indexes by bundling them into a single HTTP request. Multi-search is also known as federated search.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/multi_search"),
     )),
 )]
 pub struct MultiSearchApi;
@@ -56,7 +55,7 @@ pub struct SearchResults {
     post,
     request_body = FederatedSearch,
     path = "",
-    tag = "Multi-search",
+    tag = "Search",
     security(("Bearer" = ["search", "*"])),
     responses(
         (status = OK, description = "Non federated multi-search", body = SearchResults, content_type = "application/json", example = json!(
