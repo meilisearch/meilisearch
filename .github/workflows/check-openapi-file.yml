@@ -42,8 +42,9 @@ jobs:
       - name: Check for duplicate or malformed paths
         run: cargo run --release -p openapi-generator -- --check-paths
 
+      # Generate OpenAPI file and check docs (param descriptions, response examples, schema properties)
       - name: Generate OpenAPI file
-        run: cargo run --release -p openapi-generator -- --pretty --output /tmp/meilisearch-openapi.json
+        run: cargo run --release -p openapi-generator -- --pretty --output /tmp/meilisearch-openapi.json --check-docs
 
       # Validates that the OpenAPI file is syntactically correct and conforms to the OpenAPI specification
       - name: Validate OpenAPI schema
