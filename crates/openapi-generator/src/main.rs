@@ -29,6 +29,10 @@ struct Cli {
     /// Check for duplicate routes and path issues (useful for CI)
     #[arg(long)]
     check_paths: bool,
+
+    /// Check that parameters have descriptions, 2xx responses have examples, and schema properties have descriptions (useful for CI)
+    #[arg(long)]
+    check_docs: bool,
 }
 
 fn main() -> Result<()> {
@@ -48,6 +52,11 @@ fn main() -> Result<()> {
     // Check for path issues (duplicates, malformed paths) if requested
     if cli.check_paths {
         check_path_issues(&openapi_value)?;
+    }
+
+    // Check documentation (param descriptions, response examples, schema properties) if requested
+    if cli.check_docs {
+        check_docs(&openapi_value)?;
     }
 
     // Determine output path
@@ -172,6 +181,241 @@ fn check_path_issues(openapi: &Value) -> Result<()> {
         }
         eprintln!();
         anyhow::bail!("{} path issue(s) found", issues.len());
+    }
+}
+
+/// Resolves a `$ref` like `#/components/schemas/Foo` against the OpenAPI root.
+fn resolve_ref<'a>(openapi: &'a Value, r#ref: &str) -> Option<&'a Value> {
+    let r#ref = r#ref.strip_prefix("#/")?;
+    let mut current = openapi;
+    for part in r#ref.split('/') {
+        current = current.get(part)?;
+    }
+    Some(current)
+}
+
+/// Returns the properties object of a schema, resolving `$ref` if needed.
+fn get_schema_properties<'a>(
+    openapi: &'a Value,
+    schema: &'a Value,
+) -> Option<&'a serde_json::Map<String, Value>> {
+    let schema = if let Some(r#ref) = schema.get("$ref").and_then(|r| r.as_str()) {
+        resolve_ref(openapi, r#ref)?
+    } else {
+        schema
+    };
+    schema.get("properties").and_then(|p| p.as_object())
+}
+
+/// Returns true if the schema value has a non-empty description, either directly or inside a oneOf/anyOf branch
+/// (utoipa puts descriptions there for Option-like types like Setting<T>).
+fn property_has_description(prop_obj: &serde_json::Map<String, Value>) -> bool {
+    if let Some(desc) = prop_obj.get("description").and_then(|d| d.as_str()) {
+        if !desc.trim().is_empty() {
+            return true;
+        }
+    }
+    // oneOf/anyOf: description can be on a branch (e.g. { "$ref": "...", "description": "..." })
+    for key in ["oneOf", "anyOf"] {
+        if let Some(arr) = prop_obj.get(key).and_then(|a| a.as_array()) {
+            for branch in arr {
+                if let Some(obj) = branch.as_object() {
+                    if let Some(desc) = obj.get("description").and_then(|d| d.as_str()) {
+                        if !desc.trim().is_empty() {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Checks that all properties of a schema have a non-empty description.
+fn check_schema_properties_have_description(
+    openapi: &Value,
+    schema: &Value,
+    context: &str,
+    errors: &mut Vec<String>,
+) {
+    let Some(properties) = get_schema_properties(openapi, schema) else {
+        return;
+    };
+    for (prop_name, prop_value) in properties {
+        let Some(prop_obj) = prop_value.as_object() else {
+            continue;
+        };
+        if !property_has_description(prop_obj) {
+            errors.push(format!("{}: property \"{}\" is missing a description", context, prop_name));
+        }
+        // One level of $ref for nested objects
+        if let Some(nested_ref) = prop_obj.get("$ref").and_then(|r| r.as_str()) {
+            if let Some(resolved) = resolve_ref(openapi, nested_ref) {
+                if let Some(nested_props) = resolved.get("properties").and_then(|p| p.as_object()) {
+                    for (nested_name, nested_value) in nested_props {
+                        let Some(nested_obj) = nested_value.as_object() else {
+                            continue;
+                        };
+                        if !property_has_description(nested_obj) {
+                            errors.push(format!(
+                                "{}: property \"{}.{}\" is missing a description",
+                                context, prop_name, nested_name
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Checks documentation: parameters have descriptions, 2xx responses have examples, and schema properties have descriptions.
+fn check_docs(openapi: &Value) -> Result<()> {
+    let paths = openapi
+        .get("paths")
+        .and_then(|p| p.as_object())
+        .context("OpenAPI spec missing 'paths' object")?;
+
+    let mut errors: Vec<String> = Vec::new();
+
+    // For each path and method: params documented, response example (and optionally schema properties)
+    for (path, path_item) in paths.iter() {
+        let Some(path_item) = path_item.as_object() else {
+            continue;
+        };
+        for method in HTTP_METHODS {
+            let Some(operation) = path_item.get(*method) else {
+                continue;
+            };
+            check_operation_docs(openapi, path, method, operation, &mut errors);
+        }
+    }
+
+    if errors.is_empty() {
+        println!("OpenAPI documentation check passed.");
+        println!("  - Parameters have descriptions");
+        println!("  - Request/response schema properties have descriptions");
+        println!("  - 2xx responses have examples where applicable");
+        Ok(())
+    } else {
+        errors.sort();
+        eprintln!("OpenAPI documentation check failed:\n");
+        for e in &errors {
+            eprintln!("  - {}", e);
+        }
+        eprintln!("\nFix the above and re-run the check.");
+        anyhow::bail!("{} documentation issue(s) found", errors.len());
+    }
+}
+
+fn check_operation_docs(
+    openapi: &Value,
+    path: &str,
+    method: &str,
+    operation: &Value,
+    errors: &mut Vec<String>,
+) {
+    let op_id_fallback = format!("{} {}", method, path);
+    let op_id = operation
+        .get("operationId")
+        .and_then(|o| o.as_str())
+        .unwrap_or(&op_id_fallback);
+    let prefix = format!("{} {} ({})", method.to_uppercase(), path, op_id);
+
+    // Parameters (path, query, header) must have description
+    let params = operation
+        .get("parameters")
+        .and_then(|p| p.as_array())
+        .map(|a| a.as_slice())
+        .unwrap_or(&[]);
+    for param in params {
+        let name = param.get("name").and_then(|n| n.as_str()).unwrap_or("(unnamed)");
+        let param_in = param.get("in").and_then(|i| i.as_str()).unwrap_or("unknown");
+        let desc = param.get("description").and_then(|d| d.as_str());
+        if !desc.is_some_and(|s| !s.trim().is_empty()) {
+            errors.push(format!("{}: parameter \"{}\" ({}) is missing a description", prefix, name, param_in));
+        }
+    }
+
+    // Request body schema properties must have description
+    if let Some(req_body) = operation.get("requestBody") {
+        if let Some(content) = req_body.get("content") {
+            if let Some(app_json) = content.get("application/json") {
+                if let Some(schema) = app_json.get("schema") {
+                    check_schema_properties_have_description(
+                        openapi,
+                        schema,
+                        &format!("{} request body", prefix),
+                        errors,
+                    );
+                }
+            }
+        }
+    }
+
+    // At least one 2xx response must have an example when the response has a body
+    let responses = operation.get("responses").and_then(|r| r.as_object());
+    let success_codes: Vec<String> = responses
+        .map(|r| r.keys().filter(|k| k.starts_with('2')).cloned().collect())
+        .unwrap_or_default();
+    let mut has_response_example = false;
+    if let Some(resps) = responses {
+        for code in &success_codes {
+            let response = match resps.get(code) {
+                Some(r) => r,
+                None => continue,
+            };
+            let content = match response.get("content").and_then(|c| c.get("application/json")) {
+                Some(c) => c,
+                None => continue,
+            };
+            if content.get("example").is_some() {
+                has_response_example = true;
+                break;
+            }
+            if let Some(examples) = content.get("examples").and_then(|e| e.as_object()) {
+                if !examples.is_empty() {
+                    has_response_example = true;
+                    break;
+                }
+            }
+        }
+    }
+    let has_body = responses.map_or(false, |r| {
+        success_codes.iter().any(|code| {
+            r.get(code)
+                .and_then(|res| res.get("content").and_then(|c| c.get("application/json")))
+                .is_some()
+        })
+    });
+    if has_body && !has_response_example {
+        errors.push(format!(
+            "{}: at least one 2xx response must have an example (response example required)",
+            prefix
+        ));
+    }
+
+    // Response body schema properties must have description
+    if let Some(resps) = responses {
+        for code in &success_codes {
+            let response = match resps.get(code) {
+                Some(r) => r,
+                None => continue,
+            };
+            let content = match response.get("content").and_then(|c| c.get("application/json")) {
+                Some(c) => c,
+                None => continue,
+            };
+            if let Some(schema) = content.get("schema") {
+                check_schema_properties_have_description(
+                    openapi,
+                    schema,
+                    &format!("{} response {}", prefix, code),
+                    errors,
+                );
+            }
+        }
     }
 }
 
