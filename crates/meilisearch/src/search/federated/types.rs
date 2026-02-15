@@ -159,13 +159,14 @@ pub struct FederatedSearch {
     /// different index and have its own parameters. When `federation` is
     /// `null`, results are returned separately for each query. When
     /// `federation` is set, results are merged.
+    #[schema(required = true)]
     pub queries: Vec<SearchQueryWithIndex>,
     /// Configuration for combining results from multiple queries into a
     /// single response. When set, results are merged and ranked together.
     /// When `null`, each query's results are returned separately in an
     /// array.
     #[deserr(default)]
-    #[schema(value_type = Option<Federation>)]
+    #[schema(required = false, value_type = Option<Federation>)]
     pub federation: Option<Federation>,
 }
 

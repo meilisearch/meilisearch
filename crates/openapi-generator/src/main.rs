@@ -1,5 +1,5 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -33,6 +33,10 @@ struct Cli {
     /// Check that parameters have descriptions, 2xx responses have examples, and schema properties have descriptions (useful for CI)
     #[arg(long)]
     check_docs: bool,
+
+    /// Check that query and body parameters have explicit required = true/false in code (no utoipa inference)
+    #[arg(long)]
+    check_params: bool,
 }
 
 fn main() -> Result<()> {
@@ -57,6 +61,11 @@ fn main() -> Result<()> {
     // Check documentation (param descriptions, response examples, schema properties) if requested
     if cli.check_docs {
         check_docs(&openapi_value)?;
+    }
+
+    // Check that query and body parameters have explicit required = true/false in code
+    if cli.check_params {
+        check_params()?;
     }
 
     // Determine output path
@@ -512,6 +521,268 @@ fn normalize_path(path: &str) -> String {
     path.split('/').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("/")
 }
 
+/// Checks that query and body parameters in Rust source have explicit `required = true` or `required = false`.
+///
+/// Scans crates/meilisearch/src for:
+/// - Query: structs with `#[into_params(..., parameter_in = Query, ...)]`: every `#[param(...)]` field must contain `required = true` or `required = false`.
+/// - Body: structs used as `request_body` in path attributes: every field with `#[schema(...)]` must contain `required = true` or `required = false`.
+fn check_params() -> Result<()> {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").context("CARGO_MANIFEST_DIR not set")?;
+    let meilisearch_src =
+        Path::new(&manifest_dir).join("../meilisearch/src").canonicalize()
+            .context("resolve meilisearch/src path (run from workspace root)")?;
+
+    let mut errors: Vec<String> = Vec::new();
+    let mut request_body_types: HashSet<String> = HashSet::new();
+
+    collect_request_body_types(&meilisearch_src, &mut request_body_types)?;
+
+    for entry in walk_rs_files(&meilisearch_src)? {
+        let path = entry.path();
+        let content = std::fs::read_to_string(&path)
+            .with_context(|| format!("read {}", path.display()))?;
+        let rel = path.strip_prefix(&meilisearch_src).unwrap_or(&path);
+        check_query_params_in_file(&content, rel, &mut errors);
+        check_body_schema_in_file(&content, rel, &request_body_types, &mut errors);
+    }
+
+    if errors.is_empty() {
+        println!("All query and body parameters have explicit required = true/false.");
+        Ok(())
+    } else {
+        eprintln!("We do not want utoipa to infer whether a parameter is required or not, as that does not correctly cover our documentation needs. You must define it explicitly with required = true or required = false.\n");
+        eprintln!("The following parameters are missing explicit required = true or required = false:\n");
+        for e in &errors {
+            eprintln!("  - {}", e);
+        }
+        eprintln!("\nFix the above by adding required = true or required = false in the #[param(...)] or #[schema(...)] attribute.");
+        anyhow::bail!("{} parameter(s) missing explicit required", errors.len())
+    }
+}
+
+fn walk_rs_files(dir: &Path) -> Result<Vec<std::fs::DirEntry>> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            out.extend(walk_rs_files(&path)?);
+        } else if path.extension().map_or(false, |e| e == "rs") {
+            out.push(entry);
+        }
+    }
+    Ok(out)
+}
+
+/// Extract the content of an attribute: from `#[attr(` to the matching `)`.
+fn extract_attr_content(s: &str, open_pos: usize) -> Option<&str> {
+    let rest = s.get(open_pos..)?;
+    let start = rest.find('(')? + 1;
+    let mut depth = 1u32;
+    let mut i = start;
+    let bytes = rest.as_bytes();
+    while i < bytes.len() && depth > 0 {
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    if depth != 0 {
+        return None;
+    }
+    rest.get(start..i - 1)
+}
+
+fn has_required_explicit(content: &str) -> bool {
+    let content = content.trim();
+    content.contains("required = true") || content.contains("required = false")
+}
+
+/// For a struct body, find every field (pub or private). For each, the "block above" is
+/// the lines between the previous field and this one. Check that block contains required = true/false.
+fn check_struct_fields_have_required(
+    body: &str,
+    struct_name: &str,
+    kind: &str,
+    rel_path: &Path,
+    errors: &mut Vec<String>,
+) {
+    let lines: Vec<&str> = body.lines().collect();
+    let mut block_above_lines: Vec<&str> = Vec::new();
+
+    for line in &lines {
+        let trimmed = line.trim();
+        let field_name: Option<&str> = if trimmed.starts_with("pub ") {
+            let after_pub = trimmed["pub ".len()..].trim_start();
+            let end = after_pub
+                .find(|c: char| !c.is_alphanumeric() && c != '_')
+                .unwrap_or(after_pub.len());
+            let name = after_pub[..end].trim();
+            if !name.is_empty() && after_pub.get(end..).map_or(true, |s| s.trim_start().starts_with(':')) {
+                Some(name)
+            } else {
+                None
+            }
+        } else if let Some(colon_pos) = trimmed.find(':') {
+            let before_colon = trimmed[..colon_pos].trim();
+            if !before_colon.is_empty()
+                && before_colon.chars().all(|c| c.is_alphanumeric() || c == '_')
+                && !before_colon.eq("pub")
+            {
+                Some(before_colon)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(name) = field_name {
+            let block_above_str = block_above_lines.join("\n");
+            let block_above = block_above_str.trim();
+            if !has_required_explicit(block_above) {
+                errors.push(format!(
+                    "{}: {} struct `{}` has parameter `{}` without required = true/false in the attributes above it",
+                    rel_path.display(),
+                    kind,
+                    struct_name,
+                    name
+                ));
+            }
+            block_above_lines.clear();
+        } else {
+            block_above_lines.push(line);
+        }
+    }
+}
+
+/// Collect type names used as request_body in path attributes (e.g. request_body = CreateApiKey).
+fn collect_request_body_types(dir: &Path, out: &mut HashSet<String>) -> Result<()> {
+    for entry in walk_rs_files(dir)? {
+        let content = std::fs::read_to_string(entry.path())?;
+        for line in content.lines() {
+            let line = line.trim();
+            if let Some(pos) = line.find("request_body") {
+                let after = &line[pos + "request_body".len()..];
+                let after = after.trim_start();
+                let after = after.strip_prefix('=').map(|s| s.trim_start()).unwrap_or("");
+                let name = after
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect::<String>();
+                if !name.is_empty() && name != "serde_json" && name != "Vec" && name != "Value" {
+                    out.insert(name);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Check query param structs: #[into_params(..., parameter_in = Query, ...)] and then every #[param(...)] must have required.
+fn check_query_params_in_file(content: &str, rel_path: &Path, errors: &mut Vec<String>) {
+    let mut i = 0;
+    while let Some(pos) = content[i..].find("#[into_params(") {
+        let abs_pos = i + pos;
+        let attr = match extract_attr_content(content, abs_pos + 2) {
+            Some(a) => a,
+            None => {
+                i = abs_pos + 1;
+                continue;
+            }
+        };
+        if !attr.contains("parameter_in") || !attr.contains("Query") {
+            i = abs_pos + 1;
+            continue;
+        }
+        let into_params_prefix_len = "#[into_params(".len();
+        let after_attr_offset = abs_pos + into_params_prefix_len + attr.len() + 2;
+        let after_attr_slice = content.get(after_attr_offset..).unwrap_or("");
+        let (struct_start, name_offset) = if let Some(p) = after_attr_slice.find("pub struct ") {
+            (after_attr_offset + p, "pub struct ".len())
+        } else if let Some(p) = after_attr_slice.find("struct ") {
+            (after_attr_offset + p, "struct ".len())
+        } else {
+            i = abs_pos + 1;
+            continue;
+        };
+        let name_start = struct_start + name_offset;
+        let name_end = content[name_start..]
+            .find(|c: char| !c.is_alphanumeric() && c != '_')
+            .map(|p| name_start + p)
+            .unwrap_or(content.len());
+        let struct_name = content[name_start..name_end].trim();
+        let brace = content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
+        let body = match extract_brace_content(content, brace) {
+            Some(b) => b,
+            None => {
+                i = abs_pos + 1;
+                continue;
+            }
+        };
+        check_struct_fields_have_required(body, struct_name, "query", rel_path, errors);
+        i = struct_start + 1;
+    }
+}
+
+/// Extract content inside `{ ... }` starting at the opening brace.
+fn extract_brace_content(s: &str, open_brace_pos: usize) -> Option<&str> {
+    let rest = s.get(open_brace_pos..)?;
+    if !rest.starts_with('{') {
+        return None;
+    }
+    let mut depth = 1u32;
+    let mut i = 1;
+    let bytes = rest.as_bytes();
+    while i < bytes.len() && depth > 0 {
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => depth -= 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    if depth != 0 {
+        return None;
+    }
+    rest.get(1..i - 1)
+}
+
+/// Check body structs: for structs in request_body_types, every #[schema(...)] field must have required.
+fn check_body_schema_in_file(
+    content: &str,
+    rel_path: &Path,
+    request_body_types: &HashSet<String>,
+    errors: &mut Vec<String>,
+) {
+    let mut i = 0;
+    while let Some(pos) = content[i..].find("pub struct ") {
+        let struct_start = i + pos + "pub struct ".len();
+        let name_end = content[struct_start..]
+            .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '<')
+            .map(|p| struct_start + p)
+            .unwrap_or(content.len());
+        let name = content[struct_start..name_end].trim();
+        let base_name = name.split('<').next().unwrap_or(name).trim();
+        if !request_body_types.contains(base_name) {
+            i = struct_start + 1;
+            continue;
+        }
+        let brace = content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
+        let body = match extract_brace_content(content, brace) {
+            Some(b) => b,
+            None => {
+                i = struct_start + 1;
+                continue;
+            }
+        };
+        check_struct_fields_have_required(body, base_name, "body", rel_path, errors);
+        i = struct_start + 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -589,4 +860,48 @@ mod tests {
         assert!(err.contains("path issue"));
     }
 
+    #[test]
+    fn test_check_struct_fields_missing_required() {
+        let body = r#"
+    /// Doc
+    #[deserr(default)]
+    pub q: Option<String>,
+    #[param(value_type = usize)]
+    pub limit: usize,
+"#;
+        let mut errors = Vec::new();
+        check_struct_fields_have_required(
+            body,
+            "SearchQuery",
+            "body",
+            Path::new("search/mod.rs"),
+            &mut errors,
+        );
+        assert!(
+            !errors.is_empty(),
+            "expected errors when no required = true/false in block above pub, got: {:?}",
+            errors
+        );
+        assert!(errors[0].contains("parameter `q`"));
+        assert!(errors[1].contains("parameter `limit`"));
+    }
+
+    #[test]
+    fn test_check_struct_fields_with_required() {
+        let body = r#"
+    #[schema(required = false)]
+    pub q: Option<String>,
+    #[param(required = true, value_type = usize)]
+    pub limit: usize,
+"#;
+        let mut errors = Vec::new();
+        check_struct_fields_have_required(
+            body,
+            "SearchQuery",
+            "body",
+            Path::new("search/mod.rs"),
+            &mut errors,
+        );
+        assert!(errors.is_empty(), "expected no errors when required is explicit: {:?}", errors);
+    }
 }

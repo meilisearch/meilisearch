@@ -123,7 +123,7 @@ pub struct Remote {
 #[schema(rename_all = "camelCase")]
 pub struct Network {
     /// Map of remote instance names to their configurations
-    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
+    #[schema(required = false, value_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
         },
@@ -135,17 +135,17 @@ pub struct Network {
     #[serde(default)]
     pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
     /// Name of this instance in the network
-    #[schema(value_type = Option<String>, example = json!("ms-00"), rename = "self")]
+    #[schema(required = false, value_type = Option<String>, example = json!("ms-00"), rename = "self")]
     #[serde(default, rename = "self")]
     #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
     pub local: Setting<String>,
     /// Name of the leader instance in the network
-    #[schema(value_type = Option<String>, example = json!("ms-00"))]
+    #[schema(required = false, value_type = Option<String>, example = json!("ms-00"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkLeader>)]
     pub leader: Setting<String>,
     /// Previous remote configurations (for rollback)
-    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
+    #[schema(required = false, value_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
         },

@@ -124,11 +124,11 @@ impl IndexView {
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListIndexes {
     /// The number of indexes to skip before starting to retrieve anything.
-    #[param(value_type = Option<usize>, default, example = 100)]
+    #[param(required = false, value_type = Option<usize>, default, example = 100)]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
     pub offset: Param<usize>,
     /// The number of indexes to retrieve.
-    #[param(value_type = Option<usize>, default = 20, example = 1)]
+    #[param(required = false, value_type = Option<usize>, default = 20, example = 1)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidIndexLimit>)]
     pub limit: Param<usize>,
 }
@@ -205,11 +205,11 @@ pub async fn list_indexes(
 #[schema(rename_all = "camelCase")]
 pub struct IndexCreateRequest {
     /// Unique identifier for the index
-    #[schema(example = "movies")]
+    #[schema(required = true, example = "movies")]
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     uid: IndexUid,
     /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
-    #[schema(example = "id")]
+    #[schema(required = false, example = "id")]
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
@@ -410,9 +410,11 @@ impl Aggregate for IndexUpdatedAggregate {
 #[schema(rename_all = "camelCase")]
 pub struct UpdateIndexRequest {
     /// New [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
     /// New uid for the index (for renaming)
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidIndexUid>)]
     uid: Option<String>,
 }

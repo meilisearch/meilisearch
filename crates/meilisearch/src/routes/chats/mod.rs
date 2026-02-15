@@ -98,11 +98,11 @@ pub async fn delete_chat(
 pub struct ListChats {
     /// The number of chat workspaces to skip before starting to retrieve
     /// anything
-    #[param(value_type = Option<usize>, default, example = 100)]
+    #[param(required = false, value_type = Option<usize>, default, example = 100)]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
     pub offset: Param<usize>,
     /// The number of chat workspaces to retrieve
-    #[param(value_type = Option<usize>, default = 20, example = 1)]
+    #[param(required = false, value_type = Option<usize>, default = 20, example = 1)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidIndexLimit>)]
     pub limit: Param<usize>,
 }

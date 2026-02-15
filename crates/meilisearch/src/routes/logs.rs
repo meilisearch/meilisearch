@@ -111,20 +111,20 @@ pub struct GetLogs {
     /// Log targets to filter. Format: code_part=log_level (e.g.,
     /// milli=trace,actix_web=off)
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
-    #[schema(value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
+    #[schema(required = false, value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
     target: MyTargets,
 
     /// Output format for log entries. `human` provides readable text output,
     /// `json` provides structured JSON for parsing, and `profile` outputs
     /// Firefox profiler format for performance visualization.
     #[deserr(default, error = DeserrJsonError<BadRequest>)]
-    #[schema(default = LogMode::default)]
+    #[schema(required = false, default = LogMode::default)]
     mode: LogMode,
 
     /// Enable memory profiling (only useful with profile mode, significantly
     /// slows down the engine)
     #[deserr(default = false, error = DeserrJsonError<BadRequest>)]
-    #[schema(default = false)]
+    #[schema(required = false, default = false)]
     profile_memory: bool,
 }
 
@@ -391,7 +391,7 @@ pub struct UpdateStderrLogs {
     /// Log targets to filter. Format: code_part=log_level (e.g.,
     /// milli=trace,actix_web=off)
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
-    #[schema(value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
+    #[schema(required = false, value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
     target: MyTargets,
 }
 

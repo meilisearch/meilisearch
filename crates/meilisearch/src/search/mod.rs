@@ -79,60 +79,73 @@ pub struct Personalize {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SearchQuery {
     /// Query string
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     /// Search using a custom query vector
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
     /// Perform AI-powered search queries with multimodal content
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
     /// Hybrid search configuration combining keyword and semantic search.
     /// Set `semanticRatio` to balance between keyword matching (0.0) and
     /// semantic similarity (1.0). Requires an embedder to be configured.
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
-    #[schema(value_type = Option<HybridQuery>)]
+    #[schema(required = false, value_type = Option<HybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Number of documents to skip
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
-    #[schema(default = DEFAULT_SEARCH_OFFSET)]
+    #[schema(required = false, default = DEFAULT_SEARCH_OFFSET)]
     pub offset: usize,
     /// Maximum number of documents returned
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
-    #[schema(default = DEFAULT_SEARCH_LIMIT)]
+    #[schema(required = false, default = DEFAULT_SEARCH_LIMIT)]
     pub limit: usize,
     /// Request a specific page of results
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
     /// Maximum number of documents returned for a page
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
     /// Attributes to display in the returned documents
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     /// Return document and query vector data
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
     pub retrieve_vectors: bool,
     /// Attributes whose values have to be cropped
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
     /// Maximum length of cropped value in words
     #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
-    #[schema(default = DEFAULT_CROP_LENGTH)]
+    #[schema(required = false, default = DEFAULT_CROP_LENGTH)]
     pub crop_length: usize,
     /// Highlight matching terms contained in an attribute
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
     /// Return matching terms location
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
     /// Display the global ranking score of a document
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
     /// Adds a detailed global ranking score field
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
     /// Adds a detailed performance details field
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
     /// Experimental: Whether this query should be performed on the whole network or locally.
@@ -164,37 +177,44 @@ pub struct SearchQuery {
     ///
     /// - the target index exists with compatible settings on all remotes of the network.
     /// - any document with the same document id between two remotes have the same content and can be deduplicated.
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// Filter queries by an attribute's value
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Sort search results by an attribute's value
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
     /// Restrict search to documents with unique values of specified
     /// attribute
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
     /// Display the count of matches per facet
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
     /// String inserted at the start of a highlighted term
     #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
-    #[schema(default = DEFAULT_HIGHLIGHT_PRE_TAG)]
+    #[schema(required = false, default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     pub highlight_pre_tag: String,
     /// String inserted at the end of a highlighted term
     #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
-    #[schema(default = DEFAULT_HIGHLIGHT_POST_TAG)]
+    #[schema(required = false, default = DEFAULT_HIGHLIGHT_POST_TAG)]
     pub highlight_post_tag: String,
     /// String marking crop boundaries
     #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
-    #[schema(default = DEFAULT_CROP_MARKER)]
+    #[schema(required = false, default = DEFAULT_CROP_MARKER)]
     pub crop_marker: String,
     /// Strategy used to match query terms within documents
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
     /// Restrict search to the specified attributes
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
     /// Minimum ranking score threshold (0.0 to 1.0) that documents must
@@ -202,16 +222,17 @@ pub struct SearchQuery {
     /// threshold are excluded. Useful for filtering out low-relevance
     /// results.
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>)]
-    #[schema(value_type = Option<f64>)]
+    #[schema(required = false, value_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     /// Explicitly specify languages used in a query
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
     /// Enables personalized search results based on user context. When
     /// provided, the search uses AI to tailor results to the user's
     /// profile, preferences, or behavior described in `userContext`.
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
-    #[schema(value_type = Option<Personalize>)]
+    #[schema(required = false, value_type = Option<Personalize>)]
     pub personalize: Option<Personalize>,
 }
 
@@ -891,38 +912,47 @@ impl SearchQueryWithIndex {
 pub struct SimilarQuery {
     /// Document ID to find similar documents for
     #[deserr(error = DeserrJsonError<InvalidSimilarId>)]
-    #[schema(value_type = String)]
+    #[schema(required = true, value_type = String)]
     pub id: serde_json::Value,
     /// Number of documents to skip
+    #[schema(required = false)]
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSimilarOffset>)]
     pub offset: usize,
     /// Maximum number of documents returned
+    #[schema(required = false)]
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSimilarLimit>)]
     pub limit: usize,
     /// Filter queries by an attribute's value
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSimilarFilter>)]
     pub filter: Option<Value>,
     /// Name of the embedder to use for semantic similarity
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidSimilarEmbedder>)]
     pub embedder: String,
     /// Attributes to display in the returned documents
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSimilarAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
     /// Return document vector data
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRetrieveVectors>)]
     pub retrieve_vectors: bool,
     /// Display the global ranking score of a document
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScore>, default)]
     pub show_ranking_score: bool,
     /// Adds a detailed global ranking score field
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowRankingScoreDetails>, default)]
     pub show_ranking_score_details: bool,
     /// Adds a detailed performance details field
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSimilarShowPerformanceDetails>, default)]
     pub show_performance_details: bool,
     /// Excludes results with low ranking scores
     #[deserr(default, error = DeserrJsonError<InvalidSimilarRankingScoreThreshold>, default)]
-    #[schema(value_type = f64)]
+    #[schema(required = false, value_type = f64)]
     pub ranking_score_threshold: Option<RankingScoreThresholdSimilar>,
 }
 

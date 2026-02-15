@@ -123,7 +123,7 @@ pub struct GetDocument {
     /// attributes listed in the `displayedAttributes` setting are returned.
     /// Example: `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
-    #[param(value_type = Option<Vec<String>>)]
+    #[param(required = false, value_type = Option<Vec<String>>)]
     #[schema(value_type = Option<Vec<String>>)]
     fields: OptionStarOrList<String>,
     /// When `true`, includes the vector embeddings in the response for this
@@ -131,7 +131,7 @@ pub struct GetDocument {
     /// data. Note that this can significantly increase response size if the
     /// document has multiple embedders configured. Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
-    #[param(value_type = Option<bool>)]
+    #[param(required = false, value_type = Option<bool>)]
     #[schema(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
 }
@@ -407,41 +407,42 @@ pub struct BrowseQueryGet {
     /// together with `limit` to paginate through large document sets. For
     /// example, to get documents 21-40, set `offset=20` and `limit=20`.
     /// Defaults to `0`.
-    #[param(default, value_type = Option<usize>)]
+    #[param(required = false, default, value_type = Option<usize>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
     offset: Param<usize>,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Defaults to `20`.
-    #[param(default, value_type = Option<usize>)]
+    #[param(required = false, default, value_type = Option<usize>)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
     limit: Param<usize>,
     /// Comma-separated list of document attributes to include in the
     /// response. Use `*` to retrieve all attributes. By default, all
     /// attributes are returned. Example: `title,description,price`.
-    #[param(default, value_type = Option<Vec<String>>)]
+    #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: OptionStarOrList<String>,
     /// When `true`, includes vector embeddings in the response for documents
     /// that have them. This is useful when you need to inspect or export
     /// vector data. Defaults to `false`.
-    #[param(default, value_type = Option<bool>)]
+    #[param(required = false, default, value_type = Option<bool>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: Param<bool>,
     /// Comma-separated list of document IDs to retrieve. Only documents with
     /// matching IDs will be returned. If not specified, all documents
     /// matching other criteria are returned.
-    #[param(default, value_type = Option<Vec<String>>)]
+    #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentIds>)]
     ids: Option<CS<String>>,
     /// Filter expression to select which documents to return. Uses the same
     /// syntax as search filters. Only documents matching the filter will be
     /// included in the response. Example: `genres = action AND rating > 4`.
-    #[param(default, value_type = Option<String>, example = "popularity > 1000")]
+    #[param(required = false, default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
     /// Attribute(s) to sort the documents by. Format: `attribute:asc` or
     /// `attribute:desc`. Multiple sort criteria can be comma-separated.
     /// Example: `price:asc,rating:desc`.
+    #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
     sort: Option<String>,
 }
@@ -457,49 +458,49 @@ pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets. For example, to get
     /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
-    #[schema(default, example = 150)]
+    #[schema(required = false, default, example = 150)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentOffset>)]
     offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
     /// results but may increase response time and memory usage. Defaults to
     /// `20`.
-    #[schema(default = 20, example = 1)]
+    #[schema(required = false, default = 20, example = 1)]
     #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentLimit>)]
     limit: usize,
     /// Array of document attributes to include in the response. If not
     /// specified, all attributes listed in the `displayedAttributes` setting
     /// are returned. Use this to reduce response size by only requesting the
     /// fields you need. Example: `["title", "description", "price"]`.
-    #[schema(example = json!(["title, description"]))]
+    #[schema(required = false, example = json!(["title, description"]))]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFields>)]
     fields: Option<Vec<String>>,
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
     /// export vector data. Note that this can significantly increase response
     /// size. Defaults to `false`.
-    #[schema(default, example = true)]
+    #[schema(required = false, default, example = true)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
     /// matching [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values will be returned. If not specified, all
     /// documents matching other criteria are returned. This is useful for
     /// fetching specific known documents.
-    #[schema(value_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
+    #[schema(required = false, value_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentIds>)]
     ids: Option<Vec<serde_json::Value>>,
     /// Filter expression to select which documents to return. Uses the same
     /// syntax as search filters. Only documents matching the filter will be
     /// included in the response. Example: `"genres = action AND rating > 4"`
     /// or as an array `[["genres = action"], "rating > 4"]`.
-    #[schema(default, value_type = Option<Value>, example = "popularity > 1000")]
+    #[schema(required = false, default, value_type = Option<Value>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
     /// the format `attribute:direction` where direction is either `asc`
     /// (ascending) or `desc` (descending). Example: `["price:asc",
     /// "rating:desc"]` sorts by price ascending, then by rating descending.
-    #[schema(default, value_type = Option<Vec<String>>, example = json!(["title:asc", "rating:desc"]))]
+    #[schema(required = false, default, value_type = Option<Vec<String>>, example = json!(["title:asc", "rating:desc"]))]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentSort>)]
     sort: Option<Vec<String>>,
 }
@@ -760,11 +761,11 @@ pub struct UpdateDocumentsQuery {
     /// The [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) field for uniquely identifying each document.
     /// This parameter is optional and can only be set the first time documents are added to an index.
     /// Subsequent attempts to specify it will be ignored if the primary key has already been set.
-    #[param(example = "id")]
+    #[param(required = false, example = "id")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
     /// Customize the csv delimiter when importing CSV documents.
-    #[param(value_type = char, default = ",", example = ";")]
+    #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
 
@@ -772,7 +773,7 @@ pub struct UpdateDocumentsQuery {
     /// is stored with the task and returned in task responses. Useful for
     /// tracking tasks from external systems or associating tasks with
     /// specific operations in your application.
-    #[param(example = "custom")]
+    #[param(required = false, example = "custom")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
     pub custom_metadata: Option<String>,
 
@@ -780,7 +781,7 @@ pub struct UpdateDocumentsQuery {
     /// new ones. Documents that don't already exist in the index will be
     /// ignored. This is useful for partial updates where you only want to
     /// modify existing records without adding new ones.
-    #[param(example = true)]
+    #[param(required = false, example = true)]
     #[deserr(default, try_from(&String) = from_string_skip_creation -> DeserrQueryParamError<InvalidSkipCreation>, error = DeserrQueryParamError<InvalidSkipCreation>)]
     pub skip_creation: Option<bool>,
 }
@@ -793,7 +794,7 @@ pub struct CustomMetadataQuery {
     /// is stored with the task and returned in task responses. Useful for
     /// tracking tasks from external systems or associating tasks with
     /// specific operations in your application.
-    #[param(example = "custom")]
+    #[param(required = false, example = "custom")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
     pub custom_metadata: Option<String>,
 }
@@ -1415,6 +1416,7 @@ pub async fn delete_documents_batch(
 #[schema(rename_all = "camelCase")]
 pub struct DocumentDeletionByFilter {
     /// Filter expression to match documents for deletion
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
 }
@@ -1538,12 +1540,15 @@ pub async fn delete_documents_by_filter(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentEditionByFunction {
     /// Filter expression to select which documents to edit
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     pub filter: Option<Value>,
     /// Data to make available for the editing function
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,
     /// RHAI function to apply to each document
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
     pub function: String,
 }

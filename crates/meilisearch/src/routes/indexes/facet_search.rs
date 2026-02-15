@@ -49,18 +49,23 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrJsonError, rename_all = camelCase)]
 pub struct FacetSearchQuery {
     /// Query string to search for facet values
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
     /// Name of the facet to search
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidFacetSearchFacetName>, missing_field_error = DeserrJsonError::missing_facet_search_facet_name)]
     pub facet_name: String,
     /// Query string to filter documents before facet search
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     /// Custom query vector for semantic search
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
     /// Multimodal content for AI-powered search
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<Value>,
     /// Hybrid search configuration that combines keyword search with semantic
@@ -68,27 +73,32 @@ pub struct FacetSearchQuery {
     /// matching (0.0) and semantic similarity (1.0). Requires an embedder to
     /// be configured in the index settings.
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
-    #[schema(value_type = Option<HybridQuery>)]
+    #[schema(required = false, value_type = Option<HybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Filter expression to apply before facet search
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Strategy used to match query terms
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
     /// Restrict search to specified attributes
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
     /// Minimum ranking score threshold (0.0 to 1.0) that documents must
     /// achieve to be considered when computing facet counts. Documents with
     /// scores below this threshold are excluded from facet value counts.
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
-    #[schema(value_type = Option<f64>)]
+    #[schema(required = false, value_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     /// Languages to use for query processing
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
     /// Return exhaustive facet count instead of an estimate
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
     pub exhaustive_facet_count: Option<bool>,
 }

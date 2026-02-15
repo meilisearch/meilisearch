@@ -45,6 +45,9 @@ jobs:
       - name: Check OpenAPI documentation (routes, params, response examples, schema properties)
         run: cargo run --release -p openapi-generator -- --check-docs
 
+      - name: Check query and body params have explicit required = true/false
+        run: cargo run --release -p openapi-generator -- --check-params
+
       - name: Generate OpenAPI file
         run: cargo run --release -p openapi-generator -- --pretty --output /tmp/meilisearch-openapi.json
 

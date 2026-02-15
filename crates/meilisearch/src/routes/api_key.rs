@@ -115,11 +115,11 @@ pub async fn create_api_key(
 pub struct ListApiKeys {
     /// Number of keys to skip. Use with `limit` for pagination. Defaults to 0.
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
-    #[param(value_type = usize, default = 0)]
+    #[param(required = false, value_type = usize, default = 0)]
     pub offset: Param<usize>,
     /// Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
-    #[param(value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
+    #[param(required = false, value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
     pub limit: Param<usize>,
 }
 

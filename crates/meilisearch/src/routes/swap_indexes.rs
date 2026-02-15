@@ -33,9 +33,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
     /// Array of the two index names to be swapped
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<IndexUid>,
     /// If true, rename the first index to the second instead of swapping
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSwapRename>)]
     rename: bool,
 }

@@ -113,22 +113,22 @@ async fn export(
 #[schema(rename_all = "camelCase")]
 pub struct Export {
     /// URL of the destination Meilisearch instance
-    #[schema(value_type = Option<String>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
+    #[schema(required = false, value_type = Option<String>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportUrl>)]
     pub url: String,
     /// API key for authenticating with the destination instance
-    #[schema(value_type = Option<String>, example = json!("1234abcd"))]
+    #[schema(required = false, value_type = Option<String>, example = json!("1234abcd"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportApiKey>)]
     pub api_key: Option<String>,
     /// Maximum payload size per request
-    #[schema(value_type = Option<String>, example = json!("24MiB"))]
+    #[schema(required = false, value_type = Option<String>, example = json!("24MiB"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportPayloadSize>)]
     pub payload_size: Option<ByteWithDeserr>,
     /// Index patterns to export with their settings
-    #[schema(value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
+    #[schema(required = false, value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
     #[deserr(default)]
     #[serde(default)]
     pub indexes: Option<BTreeMap<IndexUidPattern, ExportIndexSettings>>,
