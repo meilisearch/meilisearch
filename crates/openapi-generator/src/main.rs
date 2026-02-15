@@ -528,9 +528,10 @@ fn normalize_path(path: &str) -> String {
 /// - Body: structs used as `request_body` in path attributes: every field with `#[schema(...)]` must contain `required = true` or `required = false`.
 fn check_params() -> Result<()> {
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").context("CARGO_MANIFEST_DIR not set")?;
-    let meilisearch_src =
-        Path::new(&manifest_dir).join("../meilisearch/src").canonicalize()
-            .context("resolve meilisearch/src path (run from workspace root)")?;
+    let meilisearch_src = Path::new(&manifest_dir)
+        .join("../meilisearch/src")
+        .canonicalize()
+        .context("resolve meilisearch/src path (run from workspace root)")?;
 
     let mut errors: Vec<String> = Vec::new();
     let mut request_body_types: HashSet<String> = HashSet::new();
@@ -539,8 +540,8 @@ fn check_params() -> Result<()> {
 
     for entry in walk_rs_files(&meilisearch_src)? {
         let path = entry.path();
-        let content = std::fs::read_to_string(&path)
-            .with_context(|| format!("read {}", path.display()))?;
+        let content =
+            std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
         let rel = path.strip_prefix(&meilisearch_src).unwrap_or(&path);
         check_query_params_in_file(&content, rel, &mut errors);
         check_body_schema_in_file(&content, rel, &request_body_types, &mut errors);
@@ -551,7 +552,9 @@ fn check_params() -> Result<()> {
         Ok(())
     } else {
         eprintln!("We do not want utoipa to infer whether a parameter is required or not, as that does not correctly cover our documentation needs. You must define it explicitly with required = true or required = false.\n");
-        eprintln!("The following parameters are missing explicit required = true or required = false:\n");
+        eprintln!(
+            "The following parameters are missing explicit required = true or required = false:\n"
+        );
         for e in &errors {
             eprintln!("  - {}", e);
         }
@@ -567,7 +570,7 @@ fn walk_rs_files(dir: &Path) -> Result<Vec<std::fs::DirEntry>> {
         let path = entry.path();
         if path.is_dir() {
             out.extend(walk_rs_files(&path)?);
-        } else if path.extension().map_or(false, |e| e == "rs") {
+        } else if path.extension().is_some_and(|e| e == "rs") {
             out.push(entry);
         }
     }
@@ -614,13 +617,15 @@ fn check_struct_fields_have_required(
 
     for line in &lines {
         let trimmed = line.trim();
-        let field_name: Option<&str> = if trimmed.starts_with("pub ") {
-            let after_pub = trimmed["pub ".len()..].trim_start();
+        let field_name: Option<&str> = if let Some(after_pub) = trimmed.strip_prefix("pub ") {
+            let after_pub = after_pub.trim_start();
             let end = after_pub
                 .find(|c: char| !c.is_alphanumeric() && c != '_')
                 .unwrap_or(after_pub.len());
             let name = after_pub[..end].trim();
-            if !name.is_empty() && after_pub.get(end..).map_or(true, |s| s.trim_start().starts_with(':')) {
+            if !name.is_empty()
+                && after_pub.get(end..).is_none_or(|s| s.trim_start().starts_with(':'))
+            {
                 Some(name)
             } else {
                 None
@@ -714,7 +719,8 @@ fn check_query_params_in_file(content: &str, rel_path: &Path, errors: &mut Vec<S
             .map(|p| name_start + p)
             .unwrap_or(content.len());
         let struct_name = content[name_start..name_end].trim();
-        let brace = content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
+        let brace =
+            content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
         let body = match extract_brace_content(content, brace) {
             Some(b) => b,
             None => {
@@ -770,7 +776,8 @@ fn check_body_schema_in_file(
             i = struct_start + 1;
             continue;
         }
-        let brace = content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
+        let brace =
+            content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
         let body = match extract_brace_content(content, brace) {
             Some(b) => b,
             None => {
