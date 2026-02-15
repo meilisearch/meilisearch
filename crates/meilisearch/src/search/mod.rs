@@ -148,35 +148,16 @@ pub struct SearchQuery {
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
-    /// Experimental: Whether this query should be performed on the whole network or locally.
+    /// When `true`, runs the query on the whole network (all shards covered, documents
+    /// deduplicated across remotes). When `false` or omitted, the query runs locally.
     ///
-    /// When performing the query on the whole network, this is "as-if" a remote federated search were performed,
-    /// such that all shards are covered, and such that documents are deduplicated across the remotes.
+    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
+    /// It also requires the `network` experimental feature.
     ///
-    /// # Response
+    /// Values: `true` = use the whole network; `false` or omitted = local (default).
     ///
-    /// The response will have the same shape as a federated search response.
-    ///
-    /// # Edition
-    ///
-    /// This feature is available in the Enterprise Edition.
-    ///
-    /// # Experimental
-    ///
-    /// - Setting this parameter to a value different from the default requires the `network` experimental feature.
-    ///
-    /// # Values
-    ///
-    /// - `Some(true)`: Use the whole network for this query.
-    /// - `Some(false)`: Make this query local.
-    /// - `None` (default): Same as `Some(false)`.
-    ///
-    /// # Assumptions when using the network
-    ///
-    /// Network queries assume that the following is true:
-    ///
-    /// - the target index exists with compatible settings on all remotes of the network.
-    /// - any document with the same document id between two remotes have the same content and can be deduplicated.
+    /// When using the network, the index must exist with compatible settings on all remotes;
+    /// documents with the same id are assumed identical for deduplication.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,

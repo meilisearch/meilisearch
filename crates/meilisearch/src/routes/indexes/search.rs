@@ -227,7 +227,16 @@ pub struct SearchQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
     pub personalize_user_context: Option<String>,
-    /// When true, allows the search to use the network (e.g. for semantic or hybrid search).
+    /// When `true`, runs the query on the whole network (all shards covered, documents
+    /// deduplicated across remotes). When `false` or omitted, the query runs locally.
+    ///
+    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
+    /// It also requires the `network` experimental feature.
+    ///
+    /// Values: `true` = use the whole network; `false` or omitted = local (default).
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes;
+    /// documents with the same id are assumed identical for deduplication.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchUseNetwork>)]
     #[param(required = false, value_type = Option<bool>)]
     use_network: Option<Param<bool>>,
