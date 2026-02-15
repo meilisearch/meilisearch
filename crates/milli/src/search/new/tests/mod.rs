@@ -1,4 +1,5 @@
 pub mod attribute_fid;
+pub mod attribute_search_on;
 pub mod attribute_position;
 pub mod cutoff;
 pub mod distinct;
