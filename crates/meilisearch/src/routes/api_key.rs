@@ -58,7 +58,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
     responses(
-        (status = 202, description = "Key has been created.", body = KeyView, content_type = "application/json", example = json!(
+        (status = 201, description = "Key has been created.", body = KeyView, content_type = "application/json", example = json!(
             {
                 "uid": "01b4bc42-eb33-4041-b481-254d00cce834",
                 "key": "d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4",
@@ -113,14 +113,11 @@ pub async fn create_api_key(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListApiKeys {
-    /// Number of API keys to skip in the response. Use together with `limit`
-    /// for pagination through large sets of keys. For example, to get keys
-    /// 21-40, set `offset=20` and `limit=20`. Defaults to `0`.
+    /// Number of keys to skip. Use with `limit` for pagination. Defaults to 0.
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
     #[param(value_type = usize, default = 0)]
     pub offset: Param<usize>,
-    /// Maximum number of API keys to return in a single response. Use together
-    /// with `offset` for pagination. Defaults to `20`.
+    /// Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
     #[param(value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
     pub limit: Param<usize>,
@@ -142,7 +139,7 @@ impl ListApiKeys {
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(ListApiKeys),
     responses(
-        (status = 202, description = "List of keys.", body = PaginationView<KeyView>, content_type = "application/json", example = json!(
+        (status = 200, description = "List of keys.", body = PaginationView<KeyView>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {

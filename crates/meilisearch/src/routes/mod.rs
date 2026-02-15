@@ -208,26 +208,25 @@ pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
-    /// Unique sequential identifier of the task
+    /// Unique sequential identifier of the task.
     #[schema(value_type = u32)]
     pub task_uid: TaskId,
-    /// Unique identifier of the targeted index. Null for global tasks
+    /// Unique identifier of the targeted index. Null for global tasks.
     pub index_uid: Option<String>,
     /// Status of the task. Possible values are enqueued, processing,
-    /// succeeded, failed, and canceled
+    /// succeeded, failed, and canceled.
     pub status: Status,
-    /// Type of operation performed by the task
+    /// Type of operation performed by the task.
     #[serde(rename = "type")]
     pub kind: Kind,
-    /// Date and time when the task was enqueued
+    /// Date and time when the task was enqueued.
     #[serde(
         serialize_with = "time::serde::rfc3339::serialize",
         deserialize_with = "time::serde::rfc3339::deserialize"
     )]
     pub enqueued_at: OffsetDateTime,
-    /// Custom metadata string that was attached to this task when it was
-    /// created. This can be used to associate tasks with external systems or
-    /// add application-specific information.
+    /// Custom metadata attached to this task at creation. Use it to associate
+    /// tasks with external systems or add application-specific information.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_metadata: Option<String>,
 }
@@ -254,13 +253,13 @@ pub struct Pagination {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct PaginationView<T> {
-    /// Array of items for the current page
+    /// Items for the current page.
     pub results: Vec<T>,
-    /// Number of items skipped
+    /// Number of items skipped.
     pub offset: usize,
-    /// Maximum number of items returned
+    /// Maximum number of items returned.
     pub limit: usize,
-    /// Total number of items matching the query
+    /// Total number of items matching the query.
     pub total: usize,
 }
 

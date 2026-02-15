@@ -61,12 +61,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookSettings {
-    /// URL endpoint to call when tasks complete
+    /// URL endpoint to call when tasks complete.
     #[schema(value_type = Option<String>, example = "https://your.site/on-tasks-completed")]
     #[deserr(default, error = DeserrJsonError<InvalidWebhookUrl>)]
     #[serde(default)]
     url: Setting<String>,
-    /// HTTP headers to include in webhook requests
+    /// HTTP headers to include in webhook requests.
     #[schema(value_type = Option<BTreeMap<String, String>>, example = json!({"Authorization":"Bearer a-secret-token"}))]
     #[deserr(default, error = DeserrJsonError<InvalidWebhookHeaders>)]
     #[serde(default)]
@@ -89,16 +89,16 @@ fn deny_immutable_fields_webhook(
     }
 }
 
-/// A webhook with metadata and redacted authorization headers
+/// Webhook object with metadata and redacted authorization headers.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookWithMetadataRedactedAuthorization {
-    /// Unique identifier of the webhook
+    /// Unique identifier of the webhook.
     uuid: Uuid,
-    /// Whether the webhook can be edited
+    /// Whether the webhook can be edited.
     is_editable: bool,
-    /// Webhook settings
+    /// URL and headers. Authorization header values are redacted in the response.
     #[schema(value_type = WebhookSettings)]
     #[serde(flatten)]
     webhook: Webhook,
@@ -111,13 +111,11 @@ impl WebhookWithMetadataRedactedAuthorization {
     }
 }
 
-/// Response containing a list of all registered webhooks
+/// Response containing a list of all registered webhooks.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WebhookResults {
-    /// Array of all webhooks configured in this Meilisearch instance. Each
-    /// webhook includes its UUID, URL, headers (with authorization values
-    /// redacted), and editability status.
+    /// All webhooks configured on the instance. Each entry includes UUID, URL, headers (authorization redacted), and editability.
     results: Vec<WebhookWithMetadataRedactedAuthorization>,
 }
 
@@ -340,7 +338,7 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
         })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook.")
+        ("uuid" = Uuid, Path, description = "Unique identifier of the webhook.")
     )
 )]
 async fn get_webhook(
@@ -438,7 +436,7 @@ async fn post_webhook(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.update", "webhooks.*", "*"])),
     responses(
-        (status = 200, description = "Webhook updated successfully.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook updated successfully. Returns the webhook with metadata and redacted authorization headers.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -466,7 +464,7 @@ async fn post_webhook(
         })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook.")
+        ("uuid" = Uuid, Path, description = "Universally unique identifier of the webhook.")
     )
 )]
 async fn patch_webhook(
@@ -523,7 +521,7 @@ async fn patch_webhook(
         })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook.")
+        ("uuid" = Uuid, Path, description = "Universally unique identifier of the webhook.")
     )
 )]
 async fn delete_webhook(
