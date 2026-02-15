@@ -95,7 +95,6 @@ macro_rules! make_setting_route {
                 summary = concat!("Reset ", $camelcase_attr),
                 description = concat!("Reset an index's ", $camelcase_attr, " to its default value"),
                 params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
-                request_body = $type,
                 responses(
                     (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {

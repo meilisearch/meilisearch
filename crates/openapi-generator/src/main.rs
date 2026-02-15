@@ -341,6 +341,11 @@ fn check_operation_docs(
         .unwrap_or(&op_id_fallback);
     let prefix = format!("{} {} ({})", method.to_uppercase(), path, op_id);
 
+    // DELETE routes must not have a request body
+    if method == "delete" && operation.get("requestBody").is_some() {
+        errors.push(format!("{}: DELETE route must not have a request body", prefix));
+    }
+
     // Parameters (path, query, header) must have description
     let params = operation
         .get("parameters")
