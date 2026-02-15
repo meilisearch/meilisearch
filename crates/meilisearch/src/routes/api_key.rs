@@ -245,6 +245,14 @@ pub async fn list_api_keys(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 404, description = "API key not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
+            }
+        )),
     )
 )]
 pub async fn get_api_key(
@@ -312,6 +320,14 @@ pub async fn get_api_key(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 404, description = "API key not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
+            }
+        )),
     )
 )]
 pub async fn patch_api_key(
@@ -345,6 +361,14 @@ pub async fn patch_api_key(
     params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
     responses(
         (status = NO_CONTENT, description = "The key have been removed"),
+        (status = 404, description = "API key not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
+            }
+        )),
         (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",

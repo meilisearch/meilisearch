@@ -224,6 +224,19 @@ fn response_has_example(response: &Value) -> bool {
     false
 }
 
+/// Returns true if the response has a JSON body (content.application/json present).
+fn response_has_body(response: &Value) -> bool {
+    response.get("content").and_then(|c| c.get("application/json")).is_some()
+}
+
+/// Returns true if the path has at least one parameter whose name contains "uid" (case insensitive).
+/// E.g. `{indexUid}`, `{taskUid}`, `{batchUid}`, `{uuid}`, `{uidOrKey}`.
+fn path_has_uid_parameter(path: &str) -> bool {
+    path.split('/')
+        .filter_map(|segment| segment.strip_prefix('{').and_then(|s| s.strip_suffix('}')))
+        .any(|name| name.to_lowercase().contains("uid"))
+}
+
 /// Returns true if the schema value has a non-empty description, either directly or inside a oneOf/anyOf branch
 /// (utoipa puts descriptions there for Option-like types like Setting<T>).
 fn property_has_description(prop_obj: &serde_json::Map<String, Value>) -> bool {
@@ -314,7 +327,7 @@ fn check_docs(openapi: &Value) -> Result<()> {
         println!("  - Parameters have descriptions");
         println!("  - Request/response schema properties have descriptions");
         println!("  - 2xx responses have examples where applicable");
-        println!("  - 401 and 404 (index routes) responses have examples");
+        println!("  - 401, 404 (routes with *Uid param), and 400 responses have examples");
         Ok(())
     } else {
         errors.sort();
@@ -436,19 +449,31 @@ fn check_operation_docs(
         }
     }
 
-    // 404 response must have an example for routes under indexes/{indexUid} (index not found)
-    if path.contains("indexes/{indexUid}") {
+    // 404 response required for routes with a *Uid (or Uid) path parameter (resource not found)
+    if path_has_uid_parameter(path) {
         if let Some(resps) = responses {
             if let Some(r404) = resps.get("404") {
                 if !response_has_example(r404) {
                     errors.push(format!(
-                        "{}: response 404 must have an example (e.g. index_not_found)",
+                        "{}: response 404 must have an example (e.g. resource not found by uid)",
                         prefix
                     ));
                 }
             } else {
                 errors.push(format!(
-                    "{}: response 404 is required for index routes (e.g. index_not_found)",
+                    "{}: response 404 is required for routes with a uid path parameter (e.g. resource not found)",
+                    prefix
+                ));
+            }
+        }
+    }
+
+    // 400 response must have an example when present (bad request / invalid payload)
+    if let Some(resps) = responses {
+        if let Some(r400) = resps.get("400") {
+            if response_has_body(r400) && !response_has_example(r400) {
+                errors.push(format!(
+                    "{}: response 400 must have an example (e.g. error message and code)",
                     prefix
                 ));
             }
