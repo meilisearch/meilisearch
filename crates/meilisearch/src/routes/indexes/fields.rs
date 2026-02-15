@@ -216,7 +216,9 @@ impl ListFields {
 /// Filter to restrict which index fields are returned.
 #[derive(Deserr, Debug, Clone, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidIndexFieldsFilter>, rename_all = camelCase, deny_unknown_fields)]
-#[schema(description = "Filter fields by attribute name patterns or by capability (displayed, searchable, sortable, etc.). All criteria are ANDed.")]
+#[schema(
+    description = "Filter fields by attribute name patterns or by capability (displayed, searchable, sortable, etc.). All criteria are ANDed."
+)]
 pub struct ListFieldsFilter {
     /// Only include fields whose names match these patterns (e.g. `["title", "desc*"]`).
     #[deserr(default, error = DeserrJsonError<InvalidIndexFieldsFilterAttributePatterns>)]

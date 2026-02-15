@@ -15,9 +15,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::SummarizedTaskView;
 
 #[derive(OpenApi)]
-#[openapi(
-    paths(compact),
-)]
+#[openapi(paths(compact))]
 pub struct CompactApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {

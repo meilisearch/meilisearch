@@ -277,7 +277,8 @@ fn check_schema_properties_have_description(
             continue;
         };
         if !property_has_description(prop_obj) {
-            errors.push(format!("{}: property \"{}\" is missing a description", context, prop_name));
+            errors
+                .push(format!("{}: property \"{}\" is missing a description", context, prop_name));
         }
         // One level of $ref for nested objects
         if let Some(nested_ref) = prop_obj.get("$ref").and_then(|r| r.as_str()) {
@@ -348,10 +349,7 @@ fn check_operation_docs(
     errors: &mut Vec<String>,
 ) {
     let op_id_fallback = format!("{} {}", method, path);
-    let op_id = operation
-        .get("operationId")
-        .and_then(|o| o.as_str())
-        .unwrap_or(&op_id_fallback);
+    let op_id = operation.get("operationId").and_then(|o| o.as_str()).unwrap_or(&op_id_fallback);
     let prefix = format!("{} {} ({})", method.to_uppercase(), path, op_id);
 
     // DELETE routes must not have a request body
@@ -360,17 +358,17 @@ fn check_operation_docs(
     }
 
     // Parameters (path, query, header) must have description
-    let params = operation
-        .get("parameters")
-        .and_then(|p| p.as_array())
-        .map(|a| a.as_slice())
-        .unwrap_or(&[]);
+    let params =
+        operation.get("parameters").and_then(|p| p.as_array()).map(|a| a.as_slice()).unwrap_or(&[]);
     for param in params {
         let name = param.get("name").and_then(|n| n.as_str()).unwrap_or("(unnamed)");
         let param_in = param.get("in").and_then(|i| i.as_str()).unwrap_or("unknown");
         let desc = param.get("description").and_then(|d| d.as_str());
-        if !desc.is_some_and(|s| !s.trim().is_empty()) {
-            errors.push(format!("{}: parameter \"{}\" ({}) is missing a description", prefix, name, param_in));
+        if desc.is_none_or(|s| s.trim().is_empty()) {
+            errors.push(format!(
+                "{}: parameter \"{}\" ({}) is missing a description",
+                prefix, name, param_in
+            ));
         }
     }
 
@@ -418,7 +416,7 @@ fn check_operation_docs(
             }
         }
     }
-    let has_body = responses.map_or(false, |r| {
+    let has_body = responses.is_some_and(|r| {
         success_codes.iter().any(|code| {
             r.get(code)
                 .and_then(|res| res.get("content").and_then(|c| c.get("application/json")))
