@@ -757,10 +757,9 @@ fn documents_by_query(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(parameter_in = Query, rename_all = "camelCase")]
 pub struct UpdateDocumentsQuery {
-    /// The [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the documents. primaryKey is optional. If you want
-    /// to set the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of your index through this route, it only has
-    /// to be done the first time you add documents to the index. After which
-    /// it will be ignored if given.
+    /// The [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) field for uniquely identifying each document.
+    /// This parameter is optional and can only be set the first time documents are added to an index.
+    /// Subsequent attempts to specify it will be ignored if the primary key has already been set.
     #[param(example = "id")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
