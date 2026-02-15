@@ -130,7 +130,7 @@ pub(super) struct WebhookResults {
     tag = "Webhooks",
     security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
-        (status = OK, description = "Webhooks are returned", body = WebhookResults, content_type = "application/json", example = json!({
+        (status = OK, description = "Webhooks are returned.", body = WebhookResults, content_type = "application/json", example = json!({
             "results": [
                 {
                     "uuid": "550e8400-e29b-41d4-a716-446655440000",
@@ -147,7 +147,7 @@ pub(super) struct WebhookResults {
                 }
             ]
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -318,7 +318,7 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
     tag = "Webhooks",
     security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
-        (status = 200, description = "Webhook found", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook found.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -326,13 +326,13 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
             },
             "isEditable": true
         })),
-        (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 404, description = "Webhook not found.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The webhook was not found.",
             "code": "webhook_not_found",
             "type": "invalid_request",
             "link": "https://docs.meilisearch.com/errors#webhook_not_found"
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The Authorization header is missing. It must use the bearer authorization method.",
             "code": "missing_authorization_header",
             "type": "auth",
@@ -340,7 +340,7 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
         })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
+        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook.")
     )
 )]
 async fn get_webhook(
@@ -367,7 +367,7 @@ async fn get_webhook(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.create", "webhooks.*", "*"])),
     responses(
-        (status = 201, description = "Webhook created successfully", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
+        (status = 201, description = "Webhook created successfully.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -375,13 +375,13 @@ async fn get_webhook(
             },
             "isEditable": true
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The Authorization header is missing. It must use the bearer authorization method.",
             "code": "missing_authorization_header",
             "type": "auth",
             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
         })),
-        (status = 400, description = "Bad request", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 400, description = "Bad request.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The webhook URL is invalid. Expected a valid URL.",
             "code": "invalid_webhook_url",
             "type": "invalid_request",
@@ -438,7 +438,7 @@ async fn post_webhook(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.update", "webhooks.*", "*"])),
     responses(
-        (status = 200, description = "Webhook updated successfully", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook updated successfully.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -446,19 +446,19 @@ async fn post_webhook(
             },
             "isEditable": true
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The Authorization header is missing. It must use the bearer authorization method.",
             "code": "missing_authorization_header",
             "type": "auth",
             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
         })),
-        (status = 400, description = "Bad request", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 400, description = "Bad request.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The webhook URL is invalid. Expected a valid URL.",
             "code": "invalid_webhook_url",
             "type": "invalid_request",
             "link": "https://docs.meilisearch.com/errors#invalid_webhook_url"
         })),
-        (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 404, description = "Webhook not found.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The webhook was not found.",
             "code": "webhook_not_found",
             "type": "invalid_request",
@@ -466,7 +466,7 @@ async fn post_webhook(
         })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
+        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook.")
     )
 )]
 async fn patch_webhook(
@@ -508,14 +508,14 @@ async fn patch_webhook(
     tag = "Webhooks",
     security(("Bearer" = ["webhooks.delete", "webhooks.*", "*"])),
     responses(
-        (status = 204, description = "Webhook deleted successfully"),
-        (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 204, description = "Webhook deleted successfully."),
+        (status = 404, description = "Webhook not found.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The webhook was not found.",
             "code": "webhook_not_found",
             "type": "invalid_request",
             "link": "https://docs.meilisearch.com/errors#webhook_not_found"
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!({
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The Authorization header is missing. It must use the bearer authorization method.",
             "code": "missing_authorization_header",
             "type": "auth",
@@ -523,7 +523,7 @@ async fn patch_webhook(
         })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
+        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook.")
     )
 )]
 async fn delete_webhook(

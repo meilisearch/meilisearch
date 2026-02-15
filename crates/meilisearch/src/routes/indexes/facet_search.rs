@@ -207,10 +207,10 @@ impl Aggregate for FacetSearchAggregator {
     path = "{indexUid}/facet-search",
     tag = "Facet Search",
     security(("Bearer" = ["search", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = FacetSearchQuery,
     responses(
-        (status = 200, description = "The documents are returned", body = SearchResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = SearchResult, content_type = "application/json", example = json!(
             {
               "hits": [
                 {
@@ -235,7 +235,7 @@ impl Aggregate for FacetSearchAggregator {
               "query": "american "
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -243,7 +243,7 @@ impl Aggregate for FacetSearchAggregator {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

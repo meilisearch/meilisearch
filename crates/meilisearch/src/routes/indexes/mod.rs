@@ -123,11 +123,11 @@ impl IndexView {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListIndexes {
-    /// The number of indexes to skip before starting to retrieve anything
+    /// The number of indexes to skip before starting to retrieve anything.
     #[param(value_type = Option<usize>, default, example = 100)]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
     pub offset: Param<usize>,
-    /// The number of indexes to retrieve
+    /// The number of indexes to retrieve.
     #[param(value_type = Option<usize>, default = 20, example = 1)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidIndexLimit>)]
     pub limit: Param<usize>,
@@ -149,7 +149,7 @@ impl ListIndexes {
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
     params(ListIndexes),
     responses(
-        (status = 200, description = "Indexes are returned", body = PaginationView<IndexView>, content_type = "application/json", example = json!(
+        (status = 200, description = "Indexes are returned.", body = PaginationView<IndexView>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -164,7 +164,7 @@ impl ListIndexes {
                 "total": 1
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -241,7 +241,7 @@ impl Aggregate for IndexCreatedAggregate {
     security(("Bearer" = ["indexes.create", "indexes.*", "*"])),
     request_body = IndexCreateRequest,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -250,7 +250,7 @@ impl Aggregate for IndexCreatedAggregate {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -339,9 +339,9 @@ fn deny_immutable_fields_index(
     path = "/{indexUid}",
     tag = "Indexes",
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "The index is returned", body = IndexView, content_type = "application/json", example = json!(
+        (status = 200, description = "The index is returned.", body = IndexView, content_type = "application/json", example = json!(
             {
                 "uid": "movies",
                 "primaryKey": "movie_id",
@@ -349,7 +349,7 @@ fn deny_immutable_fields_index(
                 "updatedAt": "2019-11-20T09:40:33.711324Z"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -357,7 +357,7 @@ fn deny_immutable_fields_index(
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -421,10 +421,10 @@ pub struct UpdateIndexRequest {
     path = "/{indexUid}",
     tag = "Indexes",
     security(("Bearer" = ["indexes.update", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = UpdateIndexRequest,
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 0,
                 "indexUid": "movies",
@@ -433,7 +433,7 @@ pub struct UpdateIndexRequest {
                 "enqueuedAt": "2021-01-01T09:39:00.000000Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -441,7 +441,7 @@ pub struct UpdateIndexRequest {
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -518,9 +518,9 @@ pub async fn update_index(
     path = "/{indexUid}",
     tag = "Indexes",
     security(("Bearer" = ["indexes.delete", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 0,
                 "indexUid": "movies",
@@ -529,7 +529,7 @@ pub async fn update_index(
                 "enqueuedAt": "2021-01-01T09:39:00.000000Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -537,7 +537,7 @@ pub async fn update_index(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -628,9 +628,9 @@ impl From<index_scheduler::IndexStats> for IndexStats {
     path = "/{indexUid}/stats",
     tag = "Stats",
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = OK, description = "The stats of the index", body = IndexStats, content_type = "application/json", example = json!(
+        (status = OK, description = "The stats of the index.", body = IndexStats, content_type = "application/json", example = json!(
             {
                 "numberOfDocuments": 10,
                 "rawDocumentDbSize": 10,
@@ -644,7 +644,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
                 }
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -652,7 +652,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

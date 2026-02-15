@@ -8,10 +8,6 @@ use crate::task_view::DetailsView;
 use crate::tasks::serialize_duration;
 
 /// Represents a batch of tasks that were processed together.
-///
-/// Meilisearch groups compatible tasks into batches for efficient processing.
-/// For example, multiple document additions to the same index may be batched
-/// together. Use this view to monitor batch progress and performance.
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]

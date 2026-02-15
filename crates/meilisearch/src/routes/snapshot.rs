@@ -32,7 +32,7 @@ crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
     tag = "Backups",
     security(("Bearer" = ["snapshots.create", "snapshots.*", "*"])),
     responses(
-        (status = 202, description = "Snapshot is being created", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Snapshot is being created.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 0,
                 "indexUid": null,
@@ -41,7 +41,7 @@ crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
                 "enqueuedAt": "2021-01-01T09:39:00.000000Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

@@ -56,11 +56,11 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     tag = "Similar documents",
     security(("Bearer" = ["search", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
         SimilarQueryGet
     ),
     responses(
-        (status = 200, description = "The documents are returned", body = SimilarResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = SimilarResult, content_type = "application/json", example = json!(
             {
               "hits": [
                 {
@@ -85,7 +85,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
               "processingTimeMs": 35
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -93,7 +93,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -139,10 +139,10 @@ pub async fn similar_get(
     path = "{indexUid}/similar",
     tag = "Similar documents",
     security(("Bearer" = ["search", "*"])),
-    params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = SimilarQuery,
     responses(
-        (status = 200, description = "The documents are returned", body = SimilarResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = SimilarResult, content_type = "application/json", example = json!(
             {
               "hits": [
                 {
@@ -167,7 +167,7 @@ pub async fn similar_get(
               "processingTimeMs": 35
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -175,7 +175,7 @@ pub async fn similar_get(
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

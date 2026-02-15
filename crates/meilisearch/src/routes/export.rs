@@ -44,14 +44,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     request_body = Export,
     security(("Bearer" = ["export", "*"])),
     responses(
-        (status = 202, description = "Export successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Export successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 1,
                 "status": "enqueued",
                 "type": "export",
                 "enqueuedAt": "2021-08-11T09:25:53.000000Z"
             })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

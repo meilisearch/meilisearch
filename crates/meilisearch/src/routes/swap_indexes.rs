@@ -73,7 +73,7 @@ impl Aggregate for IndexSwappedAnalytics {
     security(("Bearer" = ["search", "*"])),
     request_body = Vec<SwapIndexesPayload>,
     responses(
-        (status = OK, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = OK, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 3,
                 "indexUid": null,
@@ -82,7 +82,7 @@ impl Aggregate for IndexSwappedAnalytics {
                 "enqueuedAt": "2021-08-12T10:00:00.000000Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

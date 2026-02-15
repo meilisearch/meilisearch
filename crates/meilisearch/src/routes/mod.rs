@@ -107,7 +107,7 @@ mod webhooks;
     modifiers(&OpenApiAuth),
     servers((
         url = "http://localhost:7700",
-        description = "Local server",
+        description = "Local server.",
     )),
     components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, ListFields, ListFieldsFilter))
 )]
@@ -440,7 +440,7 @@ pub struct Stats {
     tag = "Stats",
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
     responses(
-        (status = 200, description = "The stats of the instance", body = Stats, content_type = "application/json", example = json!(
+        (status = 200, description = "The stats of the instance.", body = Stats, content_type = "application/json", example = json!(
             {
                 "databaseSize": 567,
                 "usedDatabaseSize": 456,
@@ -460,7 +460,7 @@ pub struct Stats {
                 }
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -539,14 +539,14 @@ struct VersionResponse {
     tag = "Version",
     security(("Bearer" = ["version", "*"])),
     responses(
-        (status = 200, description = "Instance is healthy", body = VersionResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "Instance is healthy.", body = VersionResponse, content_type = "application/json", example = json!(
             {
                 "commitSha": "b46889b5f0f2f8b91438a08a358ba8f05fc09fc1",
                 "commitDate": "2021-07-08",
                 "pkgVersion": "0.23.0"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -596,19 +596,10 @@ enum HealthStatus {
     get,
     path = "/health",
     tag = "Health",
-    security(("Bearer" = [])),
     responses(
-        (status = 200, description = "Instance is healthy", body = HealthResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "Instance is healthy.", body = HealthResponse, content_type = "application/json", example = json!(
             {
                 "status": "available"
-            }
-        )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
-            {
-                "message": "The Authorization header is missing. It must use the bearer authorization method.",
-                "code": "missing_authorization_header",
-                "type": "auth",
-                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
     )

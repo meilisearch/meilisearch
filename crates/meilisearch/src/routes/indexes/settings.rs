@@ -94,9 +94,9 @@ macro_rules! make_setting_route {
                 operation_id = concat!("delete", $camelcase_attr),
                 summary = concat!("Reset ", $camelcase_attr),
                 description = concat!("Reset an index's ", $camelcase_attr, " to its default value"),
-                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+                params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
-                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
                             "taskUid": 147,
                             "indexUid": "movies",
@@ -105,7 +105,7 @@ macro_rules! make_setting_route {
                             "enqueuedAt": "2024-08-08T17:05:55.791772Z"
                         }
                     )),
-                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
@@ -113,7 +113,7 @@ macro_rules! make_setting_route {
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
                         }
                     )),
-                    (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "Index `movies` not found.",
                             "code": "index_not_found",
@@ -151,10 +151,10 @@ macro_rules! make_setting_route {
                 operation_id = concat!(stringify!($update_verb), $camelcase_attr),
                 summary = concat!("Update ", $camelcase_attr),
                 description = concat!("Update an index's user defined ", $camelcase_attr),
-                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+                params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 request_body = $type,
                 responses(
-                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
                             "taskUid": 147,
                             "indexUid": "movies",
@@ -163,7 +163,7 @@ macro_rules! make_setting_route {
                             "enqueuedAt": "2024-08-08T17:05:55.791772Z"
                         }
                     )),
-                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
@@ -171,7 +171,7 @@ macro_rules! make_setting_route {
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
                         }
                     )),
-                    (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "Index `movies` not found.",
                             "code": "index_not_found",
@@ -226,12 +226,12 @@ macro_rules! make_setting_route {
                 description = concat!("Get an user defined ", $camelcase_attr),
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
                 operation_id = concat!("get", $camelcase_attr),
-                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+                params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
                     (status = 200, description = concat!($camelcase_attr, " is returned"), body = $type, content_type = "application/json", example = json!(
                         <$type>::default()
                     )),
-                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
@@ -239,7 +239,7 @@ macro_rules! make_setting_route {
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
                         }
                     )),
-                    (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "Index `movies` not found.",
                             "code": "index_not_found",
@@ -527,10 +527,10 @@ make_setting_routes!(
     path = "{indexUid}/settings",
     tag = "Settings",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = Settings<Unchecked>,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -539,7 +539,7 @@ make_setting_routes!(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -547,7 +547,7 @@ make_setting_routes!(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -682,12 +682,12 @@ async fn register_new_settings(
     path = "{indexUid}/settings",
     tag = "Settings",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Settings are returned", body = Settings<Unchecked>, content_type = "application/json", example = json!(
+        (status = 200, description = "Settings are returned.", body = Settings<Unchecked>, content_type = "application/json", example = json!(
             Settings::<Unchecked>::default()
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -695,7 +695,7 @@ async fn register_new_settings(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -737,9 +737,9 @@ pub async fn get_all(
     path = "{indexUid}/settings",
     tag = "Settings",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -748,7 +748,7 @@ pub async fn get_all(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -756,7 +756,7 @@ pub async fn get_all(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",

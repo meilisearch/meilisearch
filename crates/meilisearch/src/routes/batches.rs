@@ -20,7 +20,7 @@ use crate::extractors::sequential_extractor::SeqHandler;
     paths(get_batch, get_batches),
     tags((
         name = "Batches",
-        description = "The /batches route gives information about the progress of batches of asynchronous operations.",
+        description = "Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing. For example, multiple document additions to the same index may be batched together. The /batches routes give information about the progress of these batches and let you monitor batch progress and performance.",
     )),
 )]
 pub struct BatchesApi;
@@ -32,18 +32,19 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get batch
 ///
-/// Retrieve a single batch by its unique identifier. The `/batches` route gives information about the progress of batches of [asynchronous operations](/learn/async/asynchronous_operations).
-
+/// Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing.
+///
+/// For example, multiple document additions to the same index may be batched together. Retrieve a single batch by its unique identifier to monitor its progress and performance.
 #[utoipa::path(
     get,
     path = "/{batchUid}",
     tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(
-        ("batchUid" = String, Path, example = "8685", description = "The unique batch id", nullable = false),
+        ("batchUid" = String, Path, example = "8685", description = "The unique batch identifier.", nullable = false),
     ),
     responses(
-        (status = OK, description = "Return the batch", body = BatchView, content_type = "application/json", example = json!(
+        (status = OK, description = "Returns the batch.", body = BatchView, content_type = "application/json", example = json!(
             {
                 "uid": 0,
                 "details": {
@@ -69,7 +70,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "batchStrategy": "batched all enqueued tasks"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -77,7 +78,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Batch not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Batch not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Batch not found.",
                 "code": "batch_not_found",
@@ -131,7 +132,9 @@ pub struct AllBatches {
 
 /// List batches
 ///
-/// The `/batches` route gives information about the progress of batches of [asynchronous operations](/learn/async/asynchronous_operations).
+/// Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing.
+///
+/// For example, multiple document additions to the same index may be batched together. List batches to monitor their progress and performance.
 ///
 /// Batches are always returned in descending order of uid. This means that by default, the most recently created batch objects appear first. Batch results are paginated and can be filtered with query parameters.
 #[utoipa::path(
@@ -141,7 +144,7 @@ pub struct AllBatches {
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
     responses(
-        (status = OK, description = "Return the batches", body = AllBatches, content_type = "application/json", example = json!(
+        (status = OK, description = "Returns the batches.", body = AllBatches, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -176,7 +179,7 @@ pub struct AllBatches {
                 "next": null
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

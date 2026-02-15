@@ -57,7 +57,7 @@ pub struct SearchResults {
     tag = "Search",
     security(("Bearer" = ["search", "*"])),
     responses(
-        (status = OK, description = "Non federated multi-search", body = SearchResults, content_type = "application/json", example = json!(
+        (status = OK, description = "Non federated multi-search.", body = SearchResults, content_type = "application/json", example = json!(
             {
                 "results":[
                     {
@@ -105,7 +105,7 @@ pub struct SearchResults {
                 ]
             }
         )),
-        (status = OK, description = "Federated multi-search", body = FederatedSearchResult, content_type = "application/json", example = json!(
+        (status = OK, description = "Federated multi-search.", body = FederatedSearchResult, content_type = "application/json", example = json!(
             {
                 "hits": [
                     {
@@ -134,7 +134,7 @@ pub struct SearchResults {
                 "semanticHitCount": 0
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

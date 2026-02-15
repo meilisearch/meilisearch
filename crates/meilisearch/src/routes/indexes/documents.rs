@@ -200,12 +200,12 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
     tag = "Documents",
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
-        ("documentId" = String, Path, example = "85087", description = "The document identifier", nullable = false),
+        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("documentId" = String, Path, example = "85087", description = "The document identifier.", nullable = false),
         GetDocument,
    ),
     responses(
-        (status = 200, description = "The document is returned", body = serde_json::Value, content_type = "application/json", example = json!(
+        (status = 200, description = "The document is returned.", body = serde_json::Value, content_type = "application/json", example = json!(
             {
                 "id": 25684,
                 "title": "American Ninja 5",
@@ -214,7 +214,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
                 "release_date": 725846400
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -222,7 +222,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 404, description = "Document not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Document not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
               "message": "Document `a` not found.",
               "code": "document_not_found",
@@ -230,7 +230,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
               "link": "https://docs.meilisearch.com/errors#document_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -314,11 +314,11 @@ impl Aggregate for DocumentsDeletionAggregator {
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
-        ("documentId" = String, Path, example = "853", description = "Document Identifier", nullable = false),
+        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("documentId" = String, Path, example = "853", description = "Document identifier.", nullable = false),
     ),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -327,7 +327,7 @@ impl Aggregate for DocumentsDeletionAggregator {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -335,7 +335,7 @@ impl Aggregate for DocumentsDeletionAggregator {
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -512,10 +512,10 @@ pub struct BrowseQuery {
     path = "{indexUid}/documents/fetch",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = BrowseQuery,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
                 "results":[
                     {
@@ -544,7 +544,7 @@ pub struct BrowseQuery {
                 "total":5
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -552,7 +552,7 @@ pub struct BrowseQuery {
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -602,11 +602,11 @@ pub async fn documents_by_query_post(
     tag = "Documents",
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
         BrowseQueryGet
     ),
     responses(
-        (status = 200, description = "The documents are returned", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -629,7 +629,7 @@ pub async fn documents_by_query_post(
                 "total": 2
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -637,7 +637,7 @@ pub async fn documents_by_query_post(
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -888,13 +888,13 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
     tag = "Documents",
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
     request_body = serde_json::Value,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -903,7 +903,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -911,7 +911,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -1006,13 +1006,13 @@ pub async fn replace_documents(
     tag = "Documents",
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
     request_body = serde_json::Value,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1021,7 +1021,7 @@ pub async fn replace_documents(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -1029,7 +1029,7 @@ pub async fn replace_documents(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -1319,11 +1319,11 @@ async fn copy_body_to_file(
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = Vec<Value>,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1332,7 +1332,7 @@ async fn copy_body_to_file(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -1340,7 +1340,7 @@ async fn copy_body_to_file(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -1436,10 +1436,10 @@ pub struct DocumentDeletionByFilter {
     path = "{indexUid}/documents/delete",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = DocumentDeletionByFilter,
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1448,7 +1448,7 @@ pub struct DocumentDeletionByFilter {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -1456,7 +1456,7 @@ pub struct DocumentDeletionByFilter {
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -1594,11 +1594,11 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     tag = "Documents",
     security(("Bearer" = ["documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = DocumentEditionByFunction,
     responses(
-        (status = 202, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1607,7 +1607,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -1615,7 +1615,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -1730,9 +1730,9 @@ pub async fn edit_documents_by_function(
     path = "{indexUid}/documents",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1741,7 +1741,7 @@ pub async fn edit_documents_by_function(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -1749,7 +1749,7 @@ pub async fn edit_documents_by_function(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",

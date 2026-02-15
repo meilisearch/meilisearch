@@ -370,11 +370,11 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
     tags = ["Search"],
     security(("Bearer" = ["search", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
         SearchQueryGet
     ),
     responses(
-        (status = 200, description = "The documents are returned", body = SearchResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = SearchResult, content_type = "application/json", example = json!(
             {
               "hits": [
                 {
@@ -399,7 +399,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
               "query": "american "
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -407,7 +407,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -579,11 +579,11 @@ pub(crate) async fn search(
     tags = ["Search"],
     security(("Bearer" = ["search", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = SearchQuery,
     responses(
-        (status = 200, description = "The documents are returned", body = SearchResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = SearchResult, content_type = "application/json", example = json!(
             {
               "hits": [
                 {
@@ -608,7 +608,7 @@ pub(crate) async fn search(
               "query": "american "
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -616,7 +616,7 @@ pub(crate) async fn search(
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

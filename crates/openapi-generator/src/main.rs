@@ -328,7 +328,7 @@ fn check_docs(openapi: &Value) -> Result<()> {
         println!("  - Parameters have descriptions");
         println!("  - Request/response schema properties have descriptions");
         println!("  - 2xx responses have examples where applicable");
-        println!("  - 401, 404 (routes with *Uid param), and 400 responses have examples");
+        println!("  - 401 (except GET /health), 404 (routes with *Uid param), and 400 responses have examples");
         Ok(())
     } else {
         errors.sort();
@@ -431,18 +431,21 @@ fn check_operation_docs(
     }
 
     // 401 response must exist and have an example (missing authorization)
-    if let Some(resps) = responses {
-        match resps.get("401") {
-            Some(r401) => {
-                if !response_has_example(r401) {
-                    errors.push(format!(
-                        "{}: response 401 must have an example (e.g. missing_authorization_header)",
-                        prefix
-                    ));
+    // Exception: /health does not require authentication
+    if path != "/health" {
+        if let Some(resps) = responses {
+            match resps.get("401") {
+                Some(r401) => {
+                    if !response_has_example(r401) {
+                        errors.push(format!(
+                            "{}: response 401 must have an example (e.g. missing_authorization_header)",
+                            prefix
+                        ));
+                    }
                 }
-            }
-            None => {
-                errors.push(format!("{}: response 401 is required with an example", prefix));
+                None => {
+                    errors.push(format!("{}: response 401 is required with an example", prefix));
+                }
             }
         }
     }

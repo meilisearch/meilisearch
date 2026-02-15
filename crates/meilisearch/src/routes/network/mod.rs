@@ -64,7 +64,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     tag = "Experimental features",
     security(("Bearer" = ["network.get", "*"])),
     responses(
-        (status = OK, description = "Known nodes are returned", body = Network, content_type = "application/json", example = json!(
+        (status = OK, description = "Known nodes are returned.", body = Network, content_type = "application/json", example = json!(
             {
             "self": "ms-0",
             "remotes": {
@@ -73,7 +73,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
         }
     })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -213,7 +213,7 @@ impl Aggregate for PatchNetworkAnalytics {
     request_body = Network,
     security(("Bearer" = ["network.update", "*"])),
     responses(
-        (status = OK, description = "New network state is returned",  body = Network, content_type = "application/json", example = json!(
+        (status = OK, description = "New network state is returned.",  body = Network, content_type = "application/json", example = json!(
             {
                 "self": "ms-0",
                 "remotes": {
@@ -222,7 +222,7 @@ impl Aggregate for PatchNetworkAnalytics {
                     "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
             }
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
