@@ -596,10 +596,19 @@ enum HealthStatus {
     get,
     path = "/health",
     tag = "Health",
+    security(("Bearer" = [])),
     responses(
         (status = 200, description = "Instance is healthy", body = HealthResponse, content_type = "application/json", example = json!(
             {
                 "status": "available"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
     )

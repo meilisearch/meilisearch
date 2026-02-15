@@ -220,6 +220,7 @@ pub struct SearchQueryGet {
     /// depends on your personalization configuration.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
     pub personalize_user_context: Option<String>,
+    /// When true, allows the search to use the network (e.g. for semantic or hybrid search).
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchUseNetwork>)]
     #[param(value_type = Option<bool>)]
     use_network: Option<Param<bool>>,

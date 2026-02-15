@@ -207,6 +207,23 @@ fn get_schema_properties<'a>(
     schema.get("properties").and_then(|p| p.as_object())
 }
 
+/// Returns true if the response object has an example (content.application/json.example or .examples).
+fn response_has_example(response: &Value) -> bool {
+    let content = match response.get("content").and_then(|c| c.get("application/json")) {
+        Some(c) => c,
+        None => return false,
+    };
+    if content.get("example").is_some() {
+        return true;
+    }
+    if let Some(examples) = content.get("examples").and_then(|e| e.as_object()) {
+        if !examples.is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
 /// Returns true if the schema value has a non-empty description, either directly or inside a oneOf/anyOf branch
 /// (utoipa puts descriptions there for Option-like types like Setting<T>).
 fn property_has_description(prop_obj: &serde_json::Map<String, Value>) -> bool {
@@ -297,6 +314,7 @@ fn check_docs(openapi: &Value) -> Result<()> {
         println!("  - Parameters have descriptions");
         println!("  - Request/response schema properties have descriptions");
         println!("  - 2xx responses have examples where applicable");
+        println!("  - 401 and 404 (index routes) responses have examples");
         Ok(())
     } else {
         errors.sort();
@@ -394,6 +412,42 @@ fn check_operation_docs(
             "{}: at least one 2xx response must have an example (response example required)",
             prefix
         ));
+    }
+
+    // 401 response must exist and have an example (missing authorization)
+    if let Some(resps) = responses {
+        match resps.get("401") {
+            Some(r401) => {
+                if !response_has_example(r401) {
+                    errors.push(format!(
+                        "{}: response 401 must have an example (e.g. missing_authorization_header)",
+                        prefix
+                    ));
+                }
+            }
+            None => {
+                errors.push(format!("{}: response 401 is required with an example", prefix));
+            }
+        }
+    }
+
+    // 404 response must have an example for routes under indexes/{indexUid} (index not found)
+    if path.contains("indexes/{indexUid}") {
+        if let Some(resps) = responses {
+            if let Some(r404) = resps.get("404") {
+                if !response_has_example(r404) {
+                    errors.push(format!(
+                        "{}: response 404 must have an example (e.g. index_not_found)",
+                        prefix
+                    ));
+                }
+            } else {
+                errors.push(format!(
+                    "{}: response 404 is required for index routes (e.g. index_not_found)",
+                    prefix
+                ));
+            }
+        }
     }
 
     // Response body schema properties must have description

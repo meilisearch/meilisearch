@@ -114,6 +114,14 @@ macro_rules! make_setting_route {
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
                         }
                     )),
+                    (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "Index `movies` not found.",
+                            "code": "index_not_found",
+                            "type": "invalid_request",
+                            "link": "https://docs.meilisearch.com/errors#index_not_found"
+                        }
+                    )),
                 )
             )]
             pub async fn delete(
@@ -162,6 +170,14 @@ macro_rules! make_setting_route {
                             "code": "missing_authorization_header",
                             "type": "auth",
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                        }
+                    )),
+                    (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "Index `movies` not found.",
+                            "code": "index_not_found",
+                            "type": "invalid_request",
+                            "link": "https://docs.meilisearch.com/errors#index_not_found"
                         }
                     )),
                 )
@@ -222,6 +238,14 @@ macro_rules! make_setting_route {
                             "code": "missing_authorization_header",
                             "type": "auth",
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                        }
+                    )),
+                    (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "Index `movies` not found.",
+                            "code": "index_not_found",
+                            "type": "invalid_request",
+                            "link": "https://docs.meilisearch.com/errors#index_not_found"
                         }
                     )),
                 )
@@ -524,6 +548,14 @@ make_setting_routes!(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
     )
 )]
 /// Update settings
@@ -667,6 +699,14 @@ async fn register_new_settings(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
     )
 )]
 /// List settings
@@ -718,6 +758,14 @@ pub async fn get_all(
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )

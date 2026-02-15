@@ -286,8 +286,22 @@ pub struct ListFieldsFilter {
             "limit": 20,
             "total": 2
         })),
-        (status = 401, description = "Missing or invalid authorization header", body = ResponseError, content_type = "application/json"),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json"),
+        (status = 401, description = "Missing or invalid authorization header", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
     ),
 )]
 pub async fn post_index_fields(
