@@ -213,8 +213,8 @@ pub struct SummarizedTaskView {
     pub task_uid: TaskId,
     /// Unique identifier of the targeted index. Null for global tasks.
     pub index_uid: Option<String>,
-    /// Status of the task. Possible values are enqueued, processing,
-    /// succeeded, failed, and canceled.
+    /// Status of the task. Possible values are `enqueued`, `processing`,
+    /// `succeeded`, `failed`, and `canceled`.
     pub status: Status,
     /// Type of operation performed by the task.
     #[serde(rename = "type")]
