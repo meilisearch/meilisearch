@@ -224,7 +224,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
         )),
         (status = 404, description = "Document not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
-              "message": "Document `a` not found.",
+              "message": "Document :uid not found.",
               "code": "document_not_found",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#document_not_found"
@@ -318,7 +318,7 @@ impl Aggregate for DocumentsDeletionAggregator {
         ("documentId" = String, Path, example = "853", description = "Document identifier.", nullable = false),
     ),
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -515,7 +515,7 @@ pub struct BrowseQuery {
     params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = BrowseQuery,
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
                 "results":[
                     {
@@ -870,18 +870,13 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 /// document will be overwritten by the new document. Fields previously in the
 /// document not present in the new document are removed.
 ///
-/// For a partial update of the document see Add or update documents route.
-/// > info
-/// > If the provided index does not exist, it will be created.
-/// > info
+/// If the provided index does not exist, it will be created.
+///
+/// For a partial update of the document see [add or update documents route](https://docs.meilisearch.com/reference-reference/add-or-update-documents).
+///
 /// > Use the reserved `_geo` object to add geo coordinates to a document.
 /// > `_geo` is an object made of `lat` and `lng` field.
-/// >
-/// > When the vectorStore feature is enabled you can use the reserved
-/// > `_vectors` field in your documents. It can accept an array of floats,
-/// > multiple arrays of floats in an outer array or an object. This object
-/// > accepts keys corresponding to the different embedders defined your index
-/// > settings.
+
 #[utoipa::path(
     post,
     path = "{indexUid}/documents",
@@ -894,7 +889,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
     ),
     request_body = serde_json::Value,
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -984,22 +979,19 @@ pub async fn replace_documents(
 /// Add or update documents
 ///
 /// Add a list of documents or update them if they already exist.
+///
 /// If you send an already existing document (same id) the old document will
 /// be only partially updated according to the fields of the new document.
 /// Thus, any fields not present in the new document are kept and remained
 /// unchanged.
-/// To completely overwrite a document, see Add or replace documents route.
-/// > info
-/// > If the provided index does not exist, it will be created.
-/// > info
+///
+/// If the provided index does not exist, it will be created.
+///
+/// To completely overwrite a document, see [add or replace documents route](https://docs.meilisearch.com/reference-reference/add-or-replace-documents).
+///
 /// > Use the reserved `_geo` object to add geo coordinates to a document.
 /// > `_geo` is an object made of `lat` and `lng` field.
-/// >
-/// > When the vectorStore feature is enabled you can use the reserved
-/// > `_vectors` field in your documents. It can accept an array of floats,
-/// > multiple arrays of floats in an outer array or an object. This object
-/// > accepts keys corresponding to the different embedders defined your index
-/// > settings.
+
 #[utoipa::path(
     put,
     path = "{indexUid}/documents",
@@ -1012,7 +1004,7 @@ pub async fn replace_documents(
     ),
     request_body = serde_json::Value,
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1323,7 +1315,7 @@ async fn copy_body_to_file(
     ),
     request_body = Vec<Value>,
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1732,7 +1724,7 @@ pub async fn edit_documents_by_function(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,

@@ -373,14 +373,6 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
-        )),
-        (status = 404, description = "The task uid does not exist.", body = ResponseError, content_type = "application/json", example = json!(
-            {
-                "message": "Task :taskUid not found.",
-                "code": "task_not_found",
-                "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors/#task_not_found"
-            }
         ))
     )
 )]
