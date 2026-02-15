@@ -141,7 +141,9 @@ impl ListIndexes {
 
 /// List indexes
 ///
-/// Return all indexes on the instance. Results are paginated using `offset` and `limit` query parameters. Each index is returned with its uid, primary key, and creation/update timestamps.
+/// Return all indexes on the instance.
+///
+/// Results are paginated using `offset` and `limit` query parameters.
 #[utoipa::path(
     get,
     path = "",
@@ -233,7 +235,9 @@ impl Aggregate for IndexCreatedAggregate {
 
 /// Create index
 ///
-/// Create a new index with an optional primary key. If no primary key is provided, Meilisearch will infer one from the first batch of documents.
+/// Create a new index with an optional primary key.
+///
+/// If no primary key is provided, Meilisearch will [infer one](https://www.meilisearch.com/docs/learn/getting_started/primary_key#meilisearch-guesses-your-primary-key) from the first batch of documents.
 #[utoipa::path(
     post,
     path = "",
@@ -241,7 +245,7 @@ impl Aggregate for IndexCreatedAggregate {
     security(("Bearer" = ["indexes.create", "indexes.*", "*"])),
     request_body = IndexCreateRequest,
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -415,7 +419,9 @@ pub struct UpdateIndexRequest {
 
 /// Update index
 ///
-/// Update the primary key or uid of an index. Returns an error if the index does not exist or if it already contains documents (primary key cannot be changed in that case).
+/// Update the primary key or uid of an index.
+///
+/// Returns an error if the index does not exist or if it already contains documents (primary key cannot be changed in that case).
 #[utoipa::path(
     patch,
     path = "/{indexUid}",

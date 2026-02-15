@@ -32,7 +32,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[derive(Deserr, Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    /// Array of the two index UIDs to be swapped
+    /// Array of the two index names to be swapped
     #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<IndexUid>,
     /// If true, rename the first index to the second instead of swapping
@@ -65,7 +65,11 @@ impl Aggregate for IndexSwappedAnalytics {
 
 /// Swap indexes
 ///
-/// Swap the documents, settings, and task history of two or more indexes. Indexes are swapped in pairs; a single request can include multiple pairs. The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa. Enqueued tasks are left unmodified.
+/// Swap the documents, settings, and task history of two or more indexes.
+///
+/// Indexes are swapped in pairs; a single request can include multiple pairs.
+/// The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa.
+/// Enqueued tasks are left unmodified.
 #[utoipa::path(
     post,
     path = "",
@@ -73,7 +77,7 @@ impl Aggregate for IndexSwappedAnalytics {
     security(("Bearer" = ["search", "*"])),
     request_body = Vec<SwapIndexesPayload>,
     responses(
-        (status = OK, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 3,
                 "indexUid": null,

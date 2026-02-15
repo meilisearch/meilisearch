@@ -24,7 +24,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Compact index
 ///
-/// Trigger a compaction process on the specified index. Compaction reorganizes the index database to reclaim space and improve read performance.
+/// Trigger a compaction process on the specified index.
+///
+/// Compaction reorganizes the index database to reclaim space and improve read performance.
 #[utoipa::path(
     post,
     path = "{indexUid}/compact",
@@ -32,12 +34,12 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     security(("Bearer" = ["search", "*"])),
     params(("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
-                "indexUid": null,
+                "indexUid": "movies",
                 "status": "enqueued",
-                "type": "documentDeletion",
+                "type": "indexCompaction",
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
