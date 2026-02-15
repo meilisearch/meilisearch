@@ -180,6 +180,14 @@ impl<'ctx> SearchContext<'ctx> {
                 None if user_defined_searchable.is_none() => continue,
                 // The field is not searchable => User error
                 None => {
+                    // If the field is in the user-defined searchable attributes but not yet
+                    // indexed (e.g., empty index), we should skip rather than error.
+                    if let Some(defined_searchable) = &user_defined_searchable {
+                        if defined_searchable.iter().any(|s| s == field_name) {
+                            continue;
+                        }
+                    }
+
                     let (valid_fields, hidden_fields) = self.index.remove_hidden_fields(
                         self.txn,
                         searchable_fields_weights.iter().map(|(name, _, _)| name),
