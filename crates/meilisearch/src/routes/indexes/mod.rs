@@ -101,7 +101,7 @@ pub struct IndexView {
     /// Latest date of index update, represented in RFC 3339 format
     #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
-    /// Primary key of the index
+    /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
     pub primary_key: Option<String>,
 }
 
@@ -208,7 +208,7 @@ pub struct IndexCreateRequest {
     #[schema(example = "movies")]
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     uid: IndexUid,
-    /// Primary key of the index
+    /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
     #[schema(example = "id")]
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
@@ -235,7 +235,7 @@ impl Aggregate for IndexCreatedAggregate {
 
 /// Create index
 ///
-/// Create a new index with an optional primary key.
+/// Create a new index with an optional [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key).
 ///
 /// If no primary key is provided, Meilisearch will [infer one](https://www.meilisearch.com/docs/learn/getting_started/primary_key#meilisearch-guesses-your-primary-key) from the first batch of documents.
 #[utoipa::path(
@@ -337,7 +337,7 @@ fn deny_immutable_fields_index(
 
 /// Get index
 ///
-/// Retrieve the metadata of a single index: its uid, primary key, and creation/update timestamps.
+/// Retrieve the metadata of a single index: its uid, [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key), and creation/update timestamps.
 #[utoipa::path(
     get,
     path = "/{indexUid}",
@@ -409,7 +409,7 @@ impl Aggregate for IndexUpdatedAggregate {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 #[schema(rename_all = "camelCase")]
 pub struct UpdateIndexRequest {
-    /// New primary key of the index
+    /// New [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
     /// New uid for the index (for renaming)
@@ -419,9 +419,9 @@ pub struct UpdateIndexRequest {
 
 /// Update index
 ///
-/// Update the primary key or uid of an index.
+/// Update the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) or uid of an index.
 ///
-/// Returns an error if the index does not exist or if it already contains documents (primary key cannot be changed in that case).
+/// Returns an error if the index does not exist or if it already contains documents ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) cannot be changed in that case).
 #[utoipa::path(
     patch,
     path = "/{indexUid}",

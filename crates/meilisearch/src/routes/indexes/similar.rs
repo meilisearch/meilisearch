@@ -265,7 +265,7 @@ async fn similar(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(parameter_in = Query)]
 pub struct SimilarQueryGet {
-    /// The unique identifier (primary key value) of the target document.
+    /// The unique identifier ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) value) of the target document.
     /// Meilisearch will find and return documents that are semantically
     /// similar to this document based on their vector embeddings. This is a
     /// required parameter.

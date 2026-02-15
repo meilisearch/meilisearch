@@ -193,7 +193,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
 
 /// Get document
 ///
-/// Retrieve a single document by its primary key value.
+/// Retrieve a single document by its [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) value.
 #[utoipa::path(
     get,
     path = "{indexUid}/documents/{documentId}",
@@ -307,7 +307,7 @@ impl Aggregate for DocumentsDeletionAggregator {
 
 /// Delete document
 ///
-/// Delete a single document by its primary key.
+/// Delete a single document by its [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key).
 #[utoipa::path(
     delete,
     path = "{indexUid}/documents/{documentId}",
@@ -482,7 +482,7 @@ pub struct BrowseQuery {
     #[deserr(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
-    /// matching primary key values will be returned. If not specified, all
+    /// matching [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values will be returned. If not specified, all
     /// documents matching other criteria are returned. This is useful for
     /// fetching specific known documents.
     #[schema(value_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
@@ -757,8 +757,8 @@ fn documents_by_query(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(parameter_in = Query, rename_all = "camelCase")]
 pub struct UpdateDocumentsQuery {
-    /// The primary key of the documents. primaryKey is optional. If you want
-    /// to set the primary key of your index through this route, it only has
+    /// The [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the documents. primaryKey is optional. If you want
+    /// to set the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of your index through this route, it only has
     /// to be done the first time you add documents to the index. After which
     /// it will be ignored if given.
     #[param(example = "id")]
@@ -1304,7 +1304,7 @@ async fn copy_body_to_file(
 
 /// Delete documents by batch
 ///
-/// Delete multiple documents in one request by providing an array of primary key values.
+/// Delete multiple documents in one request by providing an array of [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/delete-batch",

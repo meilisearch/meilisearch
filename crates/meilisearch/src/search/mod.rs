@@ -1045,7 +1045,7 @@ pub struct SearchMetadata {
     pub query_uid: Uuid,
     /// Identifier of the queried index
     pub index_uid: String,
-    /// Primary key of the queried index
+    /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the queried index
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<String>,
     /// Remote server that processed the query

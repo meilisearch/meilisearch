@@ -151,10 +151,10 @@ pub struct DetailsView {
     /// still processing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edited_documents: Option<Option<u64>>,
-    /// The primary key attribute set for the index. For `indexCreation`
-    /// tasks, this is the primary key that was specified. For `indexUpdate`
-    /// tasks, this shows the new primary key if it was changed. The inner
-    /// `null` means no primary key was specified and Meilisearch will infer
+    /// The [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) attribute set for the index. For `indexCreation`
+    /// tasks, this is the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) that was specified. For `indexUpdate`
+    /// tasks, this shows the new [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) if it was changed. The inner
+    /// `null` means no [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) was specified and Meilisearch will infer
     /// it from documents.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<Option<String>>,
