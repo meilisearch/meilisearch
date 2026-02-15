@@ -65,12 +65,7 @@ impl Aggregate for IndexSwappedAnalytics {
 
 /// Swap indexes
 ///
-/// Swap the documents, settings, and task history of two or more indexes.
-/// You can only swap indexes in pairs. However, a single request can swap as
-/// many index pairs as you wish. Swapping indexes is an atomic transaction:
-/// either all indexes are successfully swapped, or none are. Swapping indexA
-/// and indexB will also replace every mention of indexA by indexB and
-/// vice-versa in the task history. enqueued tasks are left unmodified.
+/// Swap the documents, settings, and task history of two or more indexes. Indexes are swapped in pairs; a single request can include multiple pairs. The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa. Enqueued tasks are left unmodified.
 #[utoipa::path(
     post,
     path = "",

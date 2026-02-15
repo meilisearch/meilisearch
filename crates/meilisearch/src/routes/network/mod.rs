@@ -57,7 +57,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get network topology
 ///
-/// Get a list of all Meilisearch instances currently known to this instance.
+/// Return the list of Meilisearch instances currently known to this node (self and remotes).
 #[utoipa::path(
     get,
     path = "",
@@ -205,7 +205,7 @@ impl Aggregate for PatchNetworkAnalytics {
 
 /// Configure network topology
 ///
-/// Add or remove nodes from network.
+/// Add or remove remote nodes from the network. Changes apply to the current instance’s view of the cluster.
 #[utoipa::path(
     patch,
     path = "",

@@ -37,9 +37,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// List experimental features
 ///
-/// Get a list of all experimental features that can be activated via the
-/// /experimental-features route and whether or not they are currently
-/// activated.
+/// Return all experimental features that can be toggled via this API, and whether each one is currently enabled or disabled.
 #[utoipa::path(
     get,
     path = "",
@@ -191,7 +189,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 
 /// Configure experimental features
 ///
-/// Activate or deactivate experimental features.
+/// Enable or disable experimental features at runtime. Only features that are marked as runtime-togglable can be changed.
 #[utoipa::path(
     patch,
     path = "",

@@ -559,10 +559,7 @@ make_setting_routes!(
 )]
 /// Update settings
 ///
-/// Update the settings of an index.
-/// Passing null to an index setting will reset it to its default value.
-/// Updates in the settings route are partial. This means that any parameters not provided in the body will be left unchanged.
-/// If the provided index does not exist, it will be created.
+/// Update the settings of an index. Updates are partial: only the fields you send are changed. Pass `null` for a setting to reset it to its default. If the index does not exist, it will be created.
 pub async fn update_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -710,7 +707,7 @@ async fn register_new_settings(
 )]
 /// List settings
 ///
-/// This route allows you to retrieve, configure, or reset all of an index's settings at once.
+/// Retrieve all settings of an index in a single request. Returns every configurable option and its current or default value.
 pub async fn get_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -771,7 +768,7 @@ pub async fn get_all(
 )]
 /// Reset settings
 ///
-/// Reset all the settings of an index to their default value.
+/// Reset all settings of an index to their default values.
 pub async fn delete_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,

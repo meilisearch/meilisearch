@@ -23,11 +23,9 @@ pub fn configure(config: &mut web::ServiceConfig) {
     config.service(web::resource("").route(web::get().to(get_metrics)));
 }
 
-/// Get prometheus metrics
+/// Get Prometheus metrics
 ///
-/// Retrieve metrics on the engine. See https://www.meilisearch.com/docs/learn/experimental/metrics
-/// Currently, [the feature is experimental](https://www.meilisearch.com/docs/learn/experimental/overview)
-/// which means it must be enabled.
+/// Return metrics for the engine in Prometheus format. This is an [experimental feature](https://www.meilisearch.com/docs/learn/experimental/overview) and must be enabled before use.
 #[utoipa::path(
     get,
     path = "",

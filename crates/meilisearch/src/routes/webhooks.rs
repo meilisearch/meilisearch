@@ -123,7 +123,7 @@ pub(super) struct WebhookResults {
 
 /// List webhooks
 ///
-/// Get the list of all registered webhooks.
+/// Return all webhooks registered on the instance. Each webhook is returned with its URL, optional headers, and UUID (the key value is never returned).
 #[utoipa::path(
     get,
     path = "",
@@ -311,7 +311,7 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
 
 /// Get webhook
 ///
-/// Get a single webhook by its UUID.
+/// Retrieve a single webhook by its UUID.
 #[utoipa::path(
     get,
     path = "/{uuid}",
@@ -359,7 +359,7 @@ async fn get_webhook(
 
 /// Create webhook
 ///
-/// Create a new webhook to receive task notifications.
+/// Register a new webhook to receive task completion notifications. You can optionally set custom headers (e.g. for authentication) and configure the callback URL.
 #[utoipa::path(
     post,
     path = "",
@@ -430,7 +430,7 @@ async fn post_webhook(
 
 /// Update webhook
 ///
-/// Update an existing webhook's URL or headers.
+/// Update the URL or headers of an existing webhook identified by its UUID.
 #[utoipa::path(
     patch,
     path = "/{uuid}",
@@ -501,7 +501,7 @@ async fn patch_webhook(
 
 /// Delete webhook
 ///
-/// Delete an existing webhook by its UUID.
+/// Permanently remove a webhook by its UUID. The webhook will no longer receive task notifications.
 #[utoipa::path(
     delete,
     path = "/{uuid}",

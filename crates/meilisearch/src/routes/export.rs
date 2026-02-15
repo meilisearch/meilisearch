@@ -36,8 +36,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Export to a remote Meilisearch
 ///
-/// Triggers an export process to a remote Meilisearch instance. This allows you to send
-/// documents and settings from the current instance to another Meilisearch server.
+/// Trigger an export that sends documents and settings from this instance to a remote Meilisearch server. Configure the remote URL and optional API key in the request body.
 #[utoipa::path(
     post,
     path = "",

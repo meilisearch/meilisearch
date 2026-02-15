@@ -283,14 +283,9 @@ fn entry_stream(
 
 /// Retrieve logs
 ///
-/// Stream logs over HTTP. The format of the logs depends on the
-/// configuration specified in the payload. The logs are sent as multi-part,
-/// and the stream never stops, so make sure your clients correctly handle
-/// that. To make the server stop sending you logs, you can call the `DELETE
-/// /logs/stream` route.
+/// Stream logs over HTTP. The format of the logs depends on the configuration specified in the payload. The logs are sent as multi-part, and the stream never stops, so ensure your client can handle a long-lived connection. To stop receiving logs, call the `DELETE /logs/stream` route.
 ///
-/// There can only be one listener at a timeand an error will be returned if
-/// you call this route while it's being used by another client.
+/// Only one client can listen at a time. An error is returned if you call this route while it is already in use by another client.
 #[utoipa::path(
     post,
     path = "/stream",
@@ -358,8 +353,7 @@ pub async fn get_logs(
 
 /// Stop retrieving logs
 ///
-/// Call this route to make the engine stops sending logs through the `POST
-/// /logs/stream` route.
+/// Call this route to make the engine stop sending logs to the client that opened the `POST /logs/stream` connection.
 #[utoipa::path(
     delete,
     path = "/stream",
@@ -403,8 +397,7 @@ pub struct UpdateStderrLogs {
 
 /// Update target of the console logs
 ///
-/// This route lets you specify at runtime the level of the console logs
-/// outputted on stderr.
+/// Configure at runtime the level of the console logs written to stderr (e.g. debug, info, warn, error).
 #[utoipa::path(
     post,
     path = "/stderr",

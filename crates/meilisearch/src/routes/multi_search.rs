@@ -49,8 +49,7 @@ pub struct SearchResults {
 
 /// Perform a multi-search
 ///
-/// Bundle multiple search queries in a single API request. Use this endpoint
-/// to search through multiple indexes at once.
+/// Run multiple search queries in a single API request. Each query can target a different index, so you can search across several indexes at once and get one combined response.
 #[utoipa::path(
     post,
     request_body = FederatedSearch,

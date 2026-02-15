@@ -341,7 +341,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 
 /// Cancel tasks
 ///
-/// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)
+/// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
 #[utoipa::path(
     post,
     path = "/cancel",
@@ -435,7 +435,7 @@ async fn cancel_tasks(
 
 /// Delete tasks
 ///
-/// Delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) on filter
+/// Permanently delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) matching the given filters. You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to delete.
 #[utoipa::path(
     delete,
     path = "",
@@ -543,7 +543,9 @@ pub struct AllTasks {
 
 /// List tasks
 ///
-/// Get all [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html)
+/// The `/tasks` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
+///
+/// Tasks are returned in descending order of uid by default, so the most recently created or updated tasks appear first. Results are paginated and can be filtered using query parameters such as `indexUids`, `statuses`, `types`, and date ranges.
 #[utoipa::path(
     get,
     path = "",
@@ -551,7 +553,7 @@ pub struct AllTasks {
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
     responses(
-        (status = 200, description = "Get all tasks", body = AllTasks, content_type = "application/json", example = json!(
+        (status = 200, description = "The list of tasks is returned.", body = AllTasks, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -610,7 +612,7 @@ async fn get_tasks(
 
 /// Get task
 ///
-/// Get a [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)
+/// Retrieve a single [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations) by its uid.
 #[utoipa::path(
     get,
     path = "/{taskUid}",
@@ -676,9 +678,9 @@ async fn get_task(
     }
 }
 
-/// Get task's documents.
+/// Get task's documents
 ///
-/// Get documents related to a [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+/// Retrieve the list of documents that were processed or affected by a given [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). Only available for document-related tasks.
 #[utoipa::path(
     get,
     path = "/{taskUid}/documents",

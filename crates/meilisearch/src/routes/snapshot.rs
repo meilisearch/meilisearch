@@ -25,7 +25,7 @@ crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
 
 /// Create snapshot
 ///
-/// Triggers a snapshot creation process. Once the process is complete, a snapshot is created in the snapshot directory. If the snapshot directory does not exist yet, it will be created.
+/// Trigger a snapshot creation process. When complete, a snapshot file is written to the snapshot directory. The directory is created if it does not exist.
 #[utoipa::path(
     post,
     path = "",

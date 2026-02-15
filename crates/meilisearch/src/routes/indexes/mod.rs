@@ -141,7 +141,7 @@ impl ListIndexes {
 
 /// List indexes
 ///
-/// List all indexes.
+/// Return all indexes on the instance. Results are paginated using `offset` and `limit` query parameters. Each index is returned with its uid, primary key, and creation/update timestamps.
 #[utoipa::path(
     get,
     path = "",
@@ -233,7 +233,7 @@ impl Aggregate for IndexCreatedAggregate {
 
 /// Create index
 ///
-/// Create an index.
+/// Create a new index with an optional primary key. If no primary key is provided, Meilisearch will infer one from the first batch of documents.
 #[utoipa::path(
     post,
     path = "",
@@ -333,7 +333,7 @@ fn deny_immutable_fields_index(
 
 /// Get index
 ///
-/// Get information about an index.
+/// Retrieve the metadata of a single index: its uid, primary key, and creation/update timestamps.
 #[utoipa::path(
     get,
     path = "/{indexUid}",
@@ -415,9 +415,7 @@ pub struct UpdateIndexRequest {
 
 /// Update index
 ///
-/// Update the `primaryKey` of an index.
-/// Return an error if the index doesn't exists yet or if it contains
-/// documents.
+/// Update the primary key or uid of an index. Returns an error if the index does not exist or if it already contains documents (primary key cannot be changed in that case).
 #[utoipa::path(
     patch,
     path = "/{indexUid}",
@@ -514,7 +512,7 @@ pub async fn update_index(
 
 /// Delete index
 ///
-/// Delete an index.
+/// Permanently delete an index and all its documents, settings, and task history.
 #[utoipa::path(
     delete,
     path = "/{indexUid}",
@@ -624,7 +622,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
 
 /// Get stats of index
 ///
-/// Get the stats of an index.
+/// Return statistics for a single index: document count, database size, indexing status, and field distribution.
 #[utoipa::path(
     get,
     path = "/{indexUid}/stats",

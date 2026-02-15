@@ -433,7 +433,7 @@ pub struct Stats {
 
 /// Get stats of all indexes
 ///
-/// Get stats of all indexes.
+/// Return statistics for the Meilisearch instance and for each index. Includes database size, last update time, document counts, and indexing status per index.
 #[utoipa::path(
     get,
     path = "/stats",
@@ -532,7 +532,7 @@ struct VersionResponse {
 
 /// Get version
 ///
-/// Current version of Meilisearch.
+/// Return the current Meilisearch version, including the commit SHA and build date.
 #[utoipa::path(
     get,
     path = "/version",
@@ -591,8 +591,7 @@ enum HealthStatus {
 
 /// Get health
 ///
-/// The health check endpoint enables you to periodically test the health of
-/// your Meilisearch instance.
+/// The health check endpoint enables you to periodically test the health of your Meilisearch instance. Returns a simple status indicating that the server is available.
 #[utoipa::path(
     get,
     path = "/health",

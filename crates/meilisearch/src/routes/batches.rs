@@ -32,9 +32,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get batch
 ///
-/// Get a single batch by its unique identifier.
-///
-/// The `/batches` route gives information about the progress of batches of [asynchronous operations](/learn/async/asynchronous_operations).
+/// Retrieve a single batch by its unique identifier. The `/batches` route gives information about the progress of batches of [asynchronous operations](/learn/async/asynchronous_operations).
 
 #[utoipa::path(
     get,

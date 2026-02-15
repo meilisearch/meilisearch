@@ -201,7 +201,7 @@ impl Aggregate for FacetSearchAggregator {
 
 /// Search in facets
 ///
-/// Search for a facet value within a given facet.
+/// Search for facet values within a given facet. Use this to build autocomplete or refinement UIs for facet filters.
 #[utoipa::path(
     post,
     path = "{indexUid}/facet-search",

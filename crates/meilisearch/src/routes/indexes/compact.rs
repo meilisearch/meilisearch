@@ -26,7 +26,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Compact index
 ///
-/// Triggers a compaction process on the specified index. Compaction reorganizes the index database to make it smaller and more efficient.
+/// Trigger a compaction process on the specified index. Compaction reorganizes the index database to reclaim space and improve read performance.
 #[utoipa::path(
     post,
     path = "{indexUid}/compact",

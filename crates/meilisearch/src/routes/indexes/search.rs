@@ -363,7 +363,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 
 /// Search with GET
 ///
-/// Search for documents matching a specific query in the given index.
+/// Search for documents matching a query in the given index. Query parameters control the search string, filters, pagination, ranking, and returned attributes.
 #[utoipa::path(
     get,
     path = "/{indexUid}/search",
@@ -572,7 +572,7 @@ pub(crate) async fn search(
 
 /// Search with POST
 ///
-/// Search for documents matching a specific query in the given index.
+/// Search for documents matching a query in the given index. The request body allows complex search options (filters, facet distribution, hybrid search, etc.) without URL length limits.
 #[utoipa::path(
     post,
     path = "/{indexUid}/search",

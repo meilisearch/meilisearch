@@ -50,7 +50,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Create API key
 ///
-/// Create an API Key.
+/// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
 #[utoipa::path(
     post,
     path = "",
@@ -134,7 +134,7 @@ impl ListApiKeys {
 
 /// List API keys
 ///
-/// List all API keys
+/// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
 #[utoipa::path(
     get,
     path = "",
@@ -204,7 +204,7 @@ pub async fn list_api_keys(
 
 /// Get API key
 ///
-/// Get an API key from its `uid` or its `key` field.
+/// Retrieve a single API key by its `uid` or by its `key` value.
 #[utoipa::path(
     get,
     path = "/{uidOrKey}",
@@ -276,9 +276,7 @@ pub async fn get_api_key(
 
 /// Update API key
 ///
-/// Update the name and description of an API key. Updates to keys are partial.
-/// This means you should provide only the fields you intend to update, as any
-/// fields not present in the payload will remain unchanged.
+/// Update the name and description of an API key. Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
 #[utoipa::path(
     patch,
     path = "/{uidOrKey}",
@@ -352,7 +350,7 @@ pub async fn patch_api_key(
 
 /// Delete API key
 ///
-/// Delete the specified API key.
+/// Permanently delete the specified API key. The key will no longer be valid for authentication.
 #[utoipa::path(
     delete,
     path = "/{uidOrKey}",

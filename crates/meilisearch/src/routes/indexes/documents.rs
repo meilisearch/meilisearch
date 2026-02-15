@@ -193,7 +193,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
 
 /// Get document
 ///
-/// Get one document from its primary key.
+/// Retrieve a single document by its primary key value.
 #[utoipa::path(
     get,
     path = "{indexUid}/documents/{documentId}",
@@ -307,7 +307,7 @@ impl Aggregate for DocumentsDeletionAggregator {
 
 /// Delete document
 ///
-/// Delete a single document by id.
+/// Delete a single document by its primary key.
 #[utoipa::path(
     delete,
     path = "{indexUid}/documents/{documentId}",
@@ -506,7 +506,7 @@ pub struct BrowseQuery {
 
 /// List documents with POST
 ///
-/// Get a set of documents.
+/// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request body to specify filters, sort order, and which fields to return.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/fetch",
@@ -595,7 +595,7 @@ pub async fn documents_by_query_post(
 
 /// List documents with GET
 ///
-/// Get documents by batches.
+/// Retrieve documents in batches using query parameters for offset, limit, and optional filtering. Suited for browsing or exporting index contents.
 #[utoipa::path(
     get,
     path = "{indexUid}/documents",
@@ -1312,7 +1312,7 @@ async fn copy_body_to_file(
 
 /// Delete documents by batch
 ///
-/// Delete a set of documents based on an array of document ids.
+/// Delete multiple documents in one request by providing an array of primary key values.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/delete-batch",
@@ -1430,7 +1430,7 @@ pub struct DocumentDeletionByFilter {
 
 /// Delete documents by filter
 ///
-/// Delete a set of documents based on a filter.
+/// Delete all documents in the index that match the given filter expression.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/delete",
@@ -1587,8 +1587,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
 
 /// Edit documents by function
 ///
-/// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to
-/// edit one or more documents directly in Meilisearch.
+/// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to edit one or more documents directly in Meilisearch. The function receives each document and returns the modified document.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/edit",
@@ -1725,7 +1724,7 @@ pub async fn edit_documents_by_function(
 
 /// Delete all documents
 ///
-/// Delete all documents in the specified index.
+/// Permanently delete all documents in the specified index. Settings and index metadata are preserved.
 #[utoipa::path(
     delete,
     path = "{indexUid}/documents",

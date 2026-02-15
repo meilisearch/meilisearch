@@ -26,9 +26,7 @@ crate::empty_analytics!(DumpAnalytics, "Dump Created");
 
 /// Create dump
 ///
-/// Triggers a dump creation process. Once the process is complete, a dump is created in the
-/// [dump directory](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#dump-directory).
-/// If the dump directory does not exist yet, it will be created.
+/// Trigger a dump creation process. When complete, a dump file is written to the [dump directory](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#dump-directory). The directory is created if it does not exist.
 #[utoipa::path(
     post,
     path = "",
