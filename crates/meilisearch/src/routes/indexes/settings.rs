@@ -45,7 +45,7 @@ macro_rules! make_setting_routes {
             tags(
                 (
                     name = "Settings",
-                    description = "Use the /settings route to customize search settings for a given index. You can either modify all index settings at once using the update settings endpoint, or use a child route to configure a single setting.",
+                    description = "Configure search and index behavior. Update all settings at once via PATCH /indexes/{indexUid}/settings, or use a sub-route to get, update, or reset a single setting.",
                 ),
             ),
         )]
@@ -93,10 +93,10 @@ macro_rules! make_setting_route {
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 operation_id = concat!("delete", $camelcase_attr),
                 summary = concat!("Reset ", $camelcase_attr),
-                description = concat!("Reset an index's ", $camelcase_attr, " to its default value"),
+                description = concat!("Resets the `", $camelcase_attr, "` setting to its default value."),
                 params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
-                    (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
                             "taskUid": 147,
                             "indexUid": "movies",
@@ -150,11 +150,11 @@ macro_rules! make_setting_route {
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 operation_id = concat!(stringify!($update_verb), $camelcase_attr),
                 summary = concat!("Update ", $camelcase_attr),
-                description = concat!("Update an index's user defined ", $camelcase_attr),
+                description = concat!("Updates the `", $camelcase_attr, "` setting for the index. Send the new value in the request body; send null to reset to default."),
                 params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 request_body = $type,
                 responses(
-                    (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
                             "taskUid": 147,
                             "indexUid": "movies",
@@ -223,12 +223,12 @@ macro_rules! make_setting_route {
                 path = concat!("{indexUid}/settings", $route),
                 tag = "Settings",
                 summary = concat!("Get ", $camelcase_attr),
-                description = concat!("Get an user defined ", $camelcase_attr),
+                description = concat!("Returns the current value of the `", $camelcase_attr, "` setting for the index."),
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
                 operation_id = concat!("get", $camelcase_attr),
                 params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
-                    (status = 200, description = concat!($camelcase_attr, " is returned"), body = $type, content_type = "application/json", example = json!(
+                    (status = 200, description = concat!("Returns the current value of the `", $camelcase_attr, "` setting."), body = $type, content_type = "application/json", example = json!(
                         <$type>::default()
                     )),
                     (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
@@ -526,11 +526,13 @@ make_setting_routes!(
     patch,
     path = "{indexUid}/settings",
     tag = "Settings",
+    summary = "Update all settings",
+    description = "Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created.",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
     params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = Settings<Unchecked>,
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -559,7 +561,11 @@ make_setting_routes!(
 )]
 /// Update settings
 ///
-/// Update the settings of an index. Updates are partial: only the fields you send are changed. Pass `null` for a setting to reset it to its default. If the index does not exist, it will be created.
+/// Update the settings of an index. Updates are partial: only the fields you send are changed.
+///
+/// Passing `null` for a setting will reset it to its default.
+///
+/// If the index does not exist, it will be created.
 pub async fn update_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -681,10 +687,12 @@ async fn register_new_settings(
     get,
     path = "{indexUid}/settings",
     tag = "Settings",
+    summary = "List all settings",
+    description = "Returns all settings of the index. Each setting is returned with its current value or the default if not set.",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
     params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Settings are returned.", body = Settings<Unchecked>, content_type = "application/json", example = json!(
+        (status = 200, description = "Returns all settings with their current or default values.", body = Settings<Unchecked>, content_type = "application/json", example = json!(
             Settings::<Unchecked>::default()
         )),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
@@ -736,10 +744,12 @@ pub async fn get_all(
     delete,
     path = "{indexUid}/settings",
     tag = "Settings",
+    summary = "Reset all settings",
+    description = "Resets all settings of the index to their default values.",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
     params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",

@@ -49,7 +49,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get similar documents with GET
 ///
-/// Retrieve documents similar to a reference document identified by its id. Useful for “more like this” or recommendations.
+/// Retrieve documents similar to a reference document identified by its id.
+///
+/// > Useful for “more like this” or recommendations.
 #[utoipa::path(
     get,
     path = "{indexUid}/similar",
@@ -133,7 +135,9 @@ pub async fn similar_get(
 
 /// Get similar documents with POST
 ///
-/// Retrieve documents similar to a reference document. The request body allows additional options such as filter and limit.
+/// Retrieve documents similar to a reference document identified by its id.
+///
+/// > Useful for “more like this” or recommendations.
 #[utoipa::path(
     post,
     path = "{indexUid}/similar",

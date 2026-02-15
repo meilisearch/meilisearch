@@ -276,7 +276,9 @@ pub async fn get_api_key(
 
 /// Update API key
 ///
-/// Update the name and description of an API key. Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
+/// Update the name and description of an API key.
+///
+/// Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
 #[utoipa::path(
     patch,
     path = "/{uidOrKey}",
