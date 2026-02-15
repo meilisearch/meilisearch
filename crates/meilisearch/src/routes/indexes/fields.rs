@@ -267,7 +267,7 @@ pub struct ListFieldsFilter {
                     "searchable": { "enabled": true },
                     "sortable": { "enabled": true },
                     "distinct": { "enabled": false },
-                    "rankingRule": { "enabled": false, "order": null },
+                    "rankingRule": { "enabled": false, "order": [] },
                     "filterable": { "enabled": false, "sortBy": "count", "facetSearch": false, "equality": false, "comparison": false },
                     "localized": { "locales": [] }
                 },
@@ -277,7 +277,7 @@ pub struct ListFieldsFilter {
                     "searchable": { "enabled": false },
                     "sortable": { "enabled": false },
                     "distinct": { "enabled": false },
-                    "rankingRule": { "enabled": false, "order": null },
+                    "rankingRule": { "enabled": false, "order": [] },
                     "filterable": { "enabled": true, "sortBy": "alpha", "facetSearch": true, "equality": true, "comparison": false },
                     "localized": { "locales": [] }
                 }
