@@ -102,6 +102,7 @@ mod webhooks;
         (name = "Health", description = "The health check endpoint enables you to periodically test the health of your Meilisearch instance."),
         (name = "Version", description = "Returns the version of the running Meilisearch instance."),
         (name = "Backups", description = "Meilisearch offers two types of backups: snapshots and dumps. Snapshots are mainly intended as a safeguard, while dumps are useful when migrating Meilisearch."),
+        (name = "Export", description = "Export documents and settings from this instance to a remote Meilisearch server."),
         (name = "Async task management", description = "Routes for listing and managing batches and tasks (asynchronous operations)."),
     ),
     modifiers(&OpenApiAuth),

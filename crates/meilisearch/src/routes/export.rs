@@ -40,7 +40,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[utoipa::path(
     post,
     path = "",
-    tag = "Documents",
+    tag = "Export",
     request_body = Export,
     security(("Bearer" = ["export", "*"])),
     responses(
