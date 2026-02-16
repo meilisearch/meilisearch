@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Env, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Env, RoTxn, RwTxn, WithoutTls};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 

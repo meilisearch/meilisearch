@@ -1,5 +1,5 @@
 pub mod network {
-    use milli::update::new::indexer::current_edition::sharding::Shards;
+    use milli::sharding::Shards;
 
     use crate::network::Network;
 

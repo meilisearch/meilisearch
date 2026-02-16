@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::{mem, ops, ptr, vec};
 
@@ -21,8 +22,9 @@ use super::document_changes::DocumentChanges;
 use super::guess_primary_key::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
 use crate::progress::{AtomicPayloadStep, Progress};
+use crate::sharding::{Shard, Shards};
 use crate::update::new::document::{DocumentContext, Versions};
-use crate::update::new::indexer::current_edition::sharding::Shards;
+use crate::update::new::extract::DelAddRoaringBitmap;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};

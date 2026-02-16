@@ -7,7 +7,7 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{FacetDistribution, FilterableAttributesRule, Index, Object, OrderBy};
+use milli::{CreateOrOpen, FacetDistribution, FilterableAttributesRule, Index, Object, OrderBy};
 use serde_json::{from_value, json};
 
 #[test]
@@ -16,7 +16,7 @@ fn test_facet_distribution_with_no_facet_values() {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
     options.map_size(10 * 1024 * 1024); // 10 MB
-    let index = Index::new(options, &path, true).unwrap();
+    let index = Index::new(options, &path, CreateOrOpen::create_without_shards()).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();

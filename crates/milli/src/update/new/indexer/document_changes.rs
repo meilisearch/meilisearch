@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use bumpalo::Bump;
 use rayon::iter::IndexedParallelIterator;
+use roaring::RoaringBitmap;
 
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;

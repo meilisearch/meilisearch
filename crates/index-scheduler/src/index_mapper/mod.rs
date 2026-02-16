@@ -5,11 +5,11 @@ use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
-use meilisearch_types::milli;
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
+use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::{FieldDistribution, Index};
+use meilisearch_types::milli::{self, CreateOrOpen, FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::error;

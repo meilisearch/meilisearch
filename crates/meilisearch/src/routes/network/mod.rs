@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use actix_web::web::{self, Data};
+use actix_web::web::{self, Data, Json};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
@@ -9,12 +9,14 @@ use itertools::{EitherOrBoth, Itertools};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
     InvalidNetworkLeader, InvalidNetworkRemotes, InvalidNetworkSearchApiKey, InvalidNetworkSelf,
-    InvalidNetworkUrl, InvalidNetworkWriteApiKey,
+    InvalidNetworkShards, InvalidNetworkUrl, InvalidNetworkWriteApiKey,
 };
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::network::{Network as DbNetwork, Remote as DbRemote};
+use meilisearch_types::network::{
+    route, Network as DbNetwork, Remote as DbRemote, Shard as DbShard,
+};
 use serde::Serialize;
 use tracing::debug;
 use utoipa::{OpenApi, ToSchema};

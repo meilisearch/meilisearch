@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 use milli::DocumentId;
 
 use crate::network::Remote;
-use crate::tasks::network::{ImportState, InRemote, NetworkTopologyChange, ReceiveTaskError};
+use crate::tasks::network::{
+    ImportState, InRemote, NetworkTopologyChange, ReceiveImportFinishedError, ReceiveTaskError,
+    RemotesImportState,
+};
 
 impl NetworkTopologyChange {
     pub fn export_to_process(&self) -> Option<(&BTreeMap<String, Remote>, &str)> {
