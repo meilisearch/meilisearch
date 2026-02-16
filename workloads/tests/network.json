@@ -141,8 +141,9 @@
     },
     {
       "binary": {
-        "source": "build",
+        "source": "release",
         "edition": "community",
+        "version": "1.35.0",
         "extraCliArgs": [
           "--experimental-dumpless-upgrade",
           "--experimental-max-number-of-batched-tasks=0"
@@ -203,7 +204,7 @@
             "canceledBy": null,
             "details": {
               "upgradeFrom": "v1.28.0",
-              "upgradeTo": "[latest]"
+              "upgradeTo": "v1.35.0"
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",
@@ -297,6 +298,114 @@
           }
         ],
         "total": 3
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "edition": "community",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade",
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
+      "route": "network",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "leader": "prod1",
+        "remotes": {
+          "prod1": {
+            "searchApiKey": "foo1",
+            "url": "http://localhost:7701",
+            "writeApiKey": "bar1"
+          },
+          "prod2": {
+            "searchApiKey": "foo2",
+            "url": "http://localhost:7702",
+            "writeApiKey": "bar2"
+          },
+          "prod3": {
+            "searchApiKey": "foo3",
+            "url": "http://localhost:7703",
+            "writeApiKey": "bar3"
+          },
+          "prod4": {
+            "searchApiKey": "foo4",
+            "url": "http://localhost:7704",
+            "writeApiKey": "bar4"
+          },
+          "prod5": {
+            "searchApiKey": "foo5",
+            "url": "http://localhost:7705",
+            "writeApiKey": "bar5"
+          }
+        },
+        "self": "prod1",
+        "shards": {
+          "prod1": {
+            "remotes": [
+              "prod1"
+            ]
+          },
+          "prod2": {
+            "remotes": [
+              "prod2"
+            ]
+          },
+          "prod3": {
+            "remotes": [
+              "prod3"
+            ]
+          },
+          "prod4": {
+            "remotes": [
+              "prod4"
+            ]
+          },
+          "prod5": {
+            "remotes": [
+              "prod5"
+            ]
+          }
+        },
+        "version": "00000000-0000-0000-0000-000000000000"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "tasks?limit=1",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "from": 3,
+        "limit": 1,
+        "next": 2,
+        "results": [
+          {
+            "batchUid": null,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.35.0",
+              "upgradeTo": "[latest]"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": null,
+            "indexUid": null,
+            "startedAt": null,
+            "status": "enqueued",
+            "type": "upgradeDatabase",
+            "uid": 3
+          }
+        ],
+        "total": 4
       },
       "synchronous": "WaitForResponse"
     }
