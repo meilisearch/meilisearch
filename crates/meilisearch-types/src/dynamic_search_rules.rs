@@ -106,13 +106,13 @@ mod tests {
     use std::fmt::Debug;
     use time::format_description::well_known::Rfc3339;
 
-    fn round_trip<T>(content: Value, expected: T)
+    fn round_trip<T>(expected: &T)
     where
         T: Serialize + DeserializeOwned + PartialEq + Debug,
     {
-        let deserialized: T = serde_json::from_value(content.clone()).unwrap();
-        assert_eq!(deserialized, expected);
-        assert_eq!(content, serde_json::to_value(deserialized).unwrap());
+        let serialized: Value = serde_json::to_value(expected).unwrap();
+        let deserialized: T = serde_json::from_value(serialized).unwrap();
+        assert_eq!(&deserialized, expected);
     }
 
     fn parse_offset_date_time(s: &str) -> OffsetDateTime {
@@ -121,48 +121,6 @@ mod tests {
 
     #[test]
     fn full_rule_round_trip() {
-        let json = json!({
-            "uid": "black-friday-2025",
-            "description": "Black Friday 2025 Merchandising rules",
-            "priority": 1,
-            "active": true,
-            "conditions": [
-                {
-                    "scope": "query",
-                    "settings": { "isEmpty": true }
-                },
-                {
-                    "scope": "time",
-                    "settings": {
-                        "start": "2025-11-28T00:00:00Z",
-                        "end": "2025-11-28T23:59:59Z"
-                    }
-                }
-            ],
-            "actions": [
-                {
-                    "selector": { "indexUid": "products", "id": "123" },
-                    "action": { "name": "pin", "args": { "position": 3 } }
-                },
-                {
-                    "selector": {
-                        "filter": { "attribute": "brand", "op": "eq", "value": "premium" }
-                    },
-                    "action": { "name": "boost", "args": { "score": 1.5 } }
-                },
-                {
-                    "selector": {
-                        "filter": { "attribute": "category", "op": "eq", "value": "clearance" }
-                    },
-                    "action": { "name": "bury", "args": { "score": 0.5 } }
-                },
-                {
-                    "selector": { "id": "456" },
-                    "action": { "name": "hide", "args": {} }
-                }
-            ]
-        });
-
         let expected = DynamicSearchRule {
             uid: "black-friday-2025".to_string(),
             description: Some("Black Friday 2025 Merchandising rules".to_string()),
@@ -219,22 +177,12 @@ mod tests {
             ],
         };
 
-        round_trip(json, expected);
+        round_trip(&expected);
+        insta::assert_json_snapshot!(expected);
     }
 
     #[test]
     fn minimal_rule_round_trip() {
-        let json = json!({
-            "uid": "simple-rule",
-            "active": false,
-            "actions": [
-                {
-                    "selector": { "id": "42" },
-                    "action": { "name": "pin", "args": { "position": 1 } }
-                }
-            ]
-        });
-
         let expected = DynamicSearchRule {
             uid: "simple-rule".to_string(),
             description: None,
@@ -247,56 +195,55 @@ mod tests {
             }],
         };
 
-        let deserialized: DynamicSearchRule = serde_json::from_value(json).unwrap();
-        assert_eq!(deserialized, expected);
+        round_trip(&expected);
+        insta::assert_json_snapshot!(expected);
     }
 
     #[test]
     fn all_actions_round_trip() {
-        round_trip(
-            json!({"name": "pin", "args": {"position": 5}}),
-            Action::Pin(PinArgs { position: 5 }),
-        );
-        round_trip(
-            json!({"name": "boost", "args": {"score": 2.0}}),
-            Action::Boost(BoostArgs { score: 2.0 }),
-        );
-        round_trip(
-            json!({"name": "bury", "args": {"score": 0.3}}),
-            Action::Bury(BuryArgs { score: 0.3 }),
-        );
-        round_trip(json!({"name": "hide", "args": {}}), Action::Hide(HideArgs {}));
+        let action = Action::Pin(PinArgs { position: 5 });
+        round_trip(&action);
+        insta::assert_json_snapshot!("pin", action);
+
+        let action = Action::Boost(BoostArgs { score: 2.0 });
+        round_trip(&action);
+        insta::assert_json_snapshot!("boost", action);
+
+        let action = Action::Bury(BuryArgs { score: 0.3 });
+        round_trip(&action);
+        insta::assert_json_snapshot!("bury", action);
+
+        let action = Action::Hide(HideArgs {});
+        round_trip(&action);
+        insta::assert_json_snapshot!("hide", action);
     }
 
     #[test]
     fn all_conditions_round_trip() {
-        round_trip(
-            json!({"scope": "query", "settings": {"isEmpty": false}}),
-            Condition::Query(QueryCondition { is_empty: false }),
-        );
-        round_trip(
-            json!({"scope": "time", "settings": {"start": "2025-01-01T00:00:00Z", "end": "2025-12-31T23:59:59Z"}}),
-            Condition::Time(TimeCondition {
-                start: Some(parse_offset_date_time("2025-01-01T00:00:00Z")),
-                end: Some(parse_offset_date_time("2025-12-31T23:59:59Z")),
-            }),
-        );
-        // time with only start
-        round_trip(
-            json!({"scope": "time", "settings": {"start": "2025-06-01T00:00:00Z"}}),
-            Condition::Time(TimeCondition {
-                start: Some(parse_offset_date_time("2025-06-01T00:00:00Z")),
-                end: None,
-            }),
-        );
-        // time with only end
-        round_trip(
-            json!({"scope": "time", "settings": {"end": "2025-08-31T23:59:59Z"}}),
-            Condition::Time(TimeCondition {
-                start: None,
-                end: Some(parse_offset_date_time("2025-08-31T23:59:59Z")),
-            }),
-        );
+        let condition = Condition::Query(QueryCondition { is_empty: true });
+        round_trip(&condition);
+        insta::assert_json_snapshot!("query", condition);
+
+        let condition = Condition::Time(TimeCondition {
+            start: Some(parse_offset_date_time("2025-01-01T00:00:00Z")),
+            end: Some(parse_offset_date_time("2025-12-31T23:59:59Z")),
+        });
+        round_trip(&condition);
+        insta::assert_json_snapshot!("time_both", condition);
+
+        let condition = Condition::Time(TimeCondition {
+            start: Some(parse_offset_date_time("2025-01-01T00:00:00Z")),
+            end: None,
+        });
+        round_trip(&condition);
+        insta::assert_json_snapshot!("time_start", condition);
+
+        let condition = Condition::Time(TimeCondition {
+            start: None,
+            end: Some(parse_offset_date_time("2025-12-31T23:59:59Z")),
+        });
+        round_trip(&condition);
+        insta::assert_json_snapshot!("time_end", condition);
     }
 
     #[test]

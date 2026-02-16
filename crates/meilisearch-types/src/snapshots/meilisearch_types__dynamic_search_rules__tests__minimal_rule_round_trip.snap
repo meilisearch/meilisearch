@@ -1,0 +1,22 @@
+---
+source: crates/meilisearch-types/src/dynamic_search_rules.rs
+expression: expected
+---
+{
+  "uid": "simple-rule",
+  "active": false,
+  "conditions": [],
+  "actions": [
+    {
+      "selector": {
+        "id": "42"
+      },
+      "action": {
+        "name": "pin",
+        "args": {
+          "position": 1
+        }
+      }
+    }
+  ]
+}
