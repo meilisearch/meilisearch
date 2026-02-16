@@ -237,12 +237,21 @@ where
             let this = this.clone();
             let task_uid = task.uid;
             let method = method.clone();
-            let path_and_query = req.uri().path_and_query().map(|paq| paq.as_str()).unwrap_or("/");
+            let path_and_query = req
+                .uri()
+                .path_and_query()
+                .cloned()
+                .unwrap_or_else(|| PathAndQuery::from_static("/"));
 
             in_flight_remote_queries.insert(
                 node_name,
                 tokio::spawn({
-                    let url = format!("{}{}", node.url, path_and_query);
+                    let url = route::url_from_base_and_route(&node.url, path_and_query.clone())
+                        .map_err(|err| index_scheduler::Error::InvalidRemoteUrl {
+                            url: node.url.clone(),
+                            cause: err.to_string(),
+                        })?
+                        .to_string();
 
                     let content_type = content_type.map(|b| b.to_owned());
 
@@ -322,7 +331,7 @@ where
 }
 
 pub async fn send_request<T, F, U>(
-    path_and_query: &str,
+    path_and_query: PathAndQuery,
     method: http_client::reqwest::Method,
     content_type: Option<String>,
     body: Body<T, F>,
@@ -351,7 +360,14 @@ where
         .build_with_policies(ip_policy, Default::default())
         .unwrap();
 
-    let url = format!("{}{}", remote.url, path_and_query);
+    let url = route::url_from_base_and_route(&remote.url, path_and_query).map_err(|err| {
+        Box::new(index_scheduler::Error::InvalidRemoteUrl {
+            url: remote.url.clone(),
+            cause: err.to_string(),
+        })
+    })?;
+
+    let url = url.to_string();
 
     // send payload to remote
     tracing::trace!(remote_name, "sending request to remote");
