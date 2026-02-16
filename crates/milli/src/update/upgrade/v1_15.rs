@@ -13,11 +13,10 @@ impl UpgradeIndex for RecomputeWordFst {
         &self,
         wtxn: &mut RwTxn,
         index: &Index,
-        _must_stop_processing: &MustStopProcessing,
-        progress: Progress,
+        UpgradeParams { progress, .. }: UpgradeParams<'_>,
     ) -> Result<bool> {
         // Recompute the word FST from the word docids database.
-        recompute_word_fst_from_word_docids_database(index, wtxn, &progress)?;
+        recompute_word_fst_from_word_docids_database(index, wtxn, progress)?;
 
         Ok(false)
     }
