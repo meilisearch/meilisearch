@@ -87,4 +87,10 @@ where
     fn len(&self) -> usize {
         self.iter.len()
     }
+
+    fn shard_docids(&self, _shard: &str, _docids: &mut roaring::RoaringBitmap) -> bool {
+        // at the time the dump import, all shards are dropped, so nothing to do
+        // see <crates/dump/src/reader/v6/mod.rs>
+        false
+    }
 }
