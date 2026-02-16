@@ -36,9 +36,17 @@ pub struct QueryCondition {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeCondition {
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "time::serde::rfc3339::option")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::rfc3339::option"
+    )]
     pub start: Option<OffsetDateTime>,
-    #[serde(default, skip_serializing_if = "Option::is_none", with = "time::serde::rfc3339::option")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::rfc3339::option"
+    )]
     pub end: Option<OffsetDateTime>,
 }
 
@@ -92,11 +100,11 @@ pub struct HideArgs {}
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use serde::de::DeserializeOwned;
     use serde_json::{json, Value};
     use std::fmt::Debug;
     use time::format_description::well_known::Rfc3339;
-    use super::*;
 
     fn round_trip<T>(content: Value, expected: T)
     where
