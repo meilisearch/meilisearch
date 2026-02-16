@@ -272,6 +272,13 @@ pub struct SimilarQueryGet {
     #[deserr(error = DeserrQueryParamError<InvalidSimilarId>)]
     #[param(required = true, value_type = String)]
     id: Param<String>,
+    /// The name of the embedder to use for finding similar documents. This
+    /// must match one of the embedders configured in your index settings. The
+    /// embedder determines how document similarity is calculated based on
+    /// vector embeddings.
+    #[param(required = true)]
+    #[deserr(error = DeserrQueryParamError<InvalidSimilarEmbedder>)]
+    pub embedder: String,
     /// Number of similar documents to skip in the response. Use together with
     /// `limit` for pagination through large result sets. For example, to get
     /// similar documents 21-40, set `offset=20` and `limit=20`. Defaults to
@@ -332,13 +339,6 @@ pub struct SimilarQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRankingScoreThreshold>, default)]
     #[param(required = false, value_type = Option<f32>)]
     pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
-    /// The name of the embedder to use for finding similar documents. This
-    /// must match one of the embedders configured in your index settings. The
-    /// embedder determines how document similarity is calculated based on
-    /// vector embeddings.
-    #[param(required = true)]
-    #[deserr(error = DeserrQueryParamError<InvalidSimilarEmbedder>)]
-    pub embedder: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]
