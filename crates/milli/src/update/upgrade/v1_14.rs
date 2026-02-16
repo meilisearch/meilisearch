@@ -11,8 +11,7 @@ impl UpgradeIndex for UpgradeArroyVersion {
         &self,
         wtxn: &mut RwTxn,
         index: &Index,
-        _must_stop_processing: &MustStopProcessing,
-        progress: Progress,
+        UpgradeParams { progress, .. }: UpgradeParams<'_>,
     ) -> Result<bool> {
         make_enum_progress! {
             enum VectorStore {
