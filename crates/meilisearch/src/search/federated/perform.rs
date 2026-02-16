@@ -690,6 +690,8 @@ impl PartitionedQueries {
             features.check_network("passing `.useNetwork` in a federated search query")?;
         }
 
+        let mut partition = None;
+
         let (index_uid, query, federation_options);
         let queries = if federated_query
             .use_network
@@ -697,15 +699,15 @@ impl PartitionedQueries {
             .take()
             .unwrap_or_default()
         {
+            let partition = partition.get_or_insert_with(|| super::Partition::new(network.clone()));
             (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
-            either::Left(super::network_partition(
+            either::Left(partition.to_query_partition(
                 federation,
                 &query,
                 federation_options,
                 &index_uid,
-                network.clone(),
-            ))
+            )?)
         } else {
             either::Right(std::iter::once(federated_query))
         };

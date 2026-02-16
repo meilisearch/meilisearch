@@ -26,8 +26,8 @@ use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, network_partition, perform_federated_search, perform_search, Federation,
-    HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
+    add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
+    MatchingStrategy, Partition, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
     SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
     DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
     DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
@@ -519,8 +519,9 @@ pub(crate) async fn search(
     {
         let network = index_scheduler.network();
         let mut federation = Federation::default();
-        let queries =
-            network_partition(&mut federation, &query, None, &index_uid, network).collect();
+        let queries = Partition::new(network)
+            .into_query_partition(&mut federation, &query, None, &index_uid)?
+            .collect();
         let search_result = perform_federated_search(
             &index_scheduler,
             queries,
