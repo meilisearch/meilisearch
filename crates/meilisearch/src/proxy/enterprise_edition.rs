@@ -488,7 +488,7 @@ async fn try_proxy(
         };
         request
     });
-    let RequestWrapper(request) = RequestWrapper(request)
+    let ReqwestRequestWrapper(request) = ReqwestRequestWrapper(request)
         .set_origin_task_uid(task_uid)
         .set_origin_network_version(network_version)
         .set_origin_remote(this);
@@ -507,13 +507,6 @@ async fn try_proxy(
     };
 
     handle_response(response).await
-}
-
-struct RequestWrapper(RequestBuilder);
-impl meilisearch_types::tasks::network::headers::SetHeader for RequestWrapper {
-    fn set_header(self, name: &str, value: &str) -> Self {
-        Self(self.0.prepare(|request| request.header(name, value)))
-    }
 }
 
 async fn parse_error(
