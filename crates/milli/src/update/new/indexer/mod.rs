@@ -217,6 +217,10 @@ where
     // required to into_inner the new_fields_ids_map
     drop(fields_ids_map_store);
 
+    let shard_docids = index.shard_docids();
+    shard_docids
+        .update_shards(wtxn, |shard, docids| document_changes.shard_docids(shard, docids))?;
+
     let new_fields_ids_map = new_fields_ids_map.into_inner().unwrap();
     update_index(
         index,
