@@ -52,3 +52,13 @@ pub async fn patch_network(
 
     Ok(HttpResponse::Ok().json(merged_network))
 }
+
+pub async fn post_network_change(
+    _index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
+    _payload: route::NetworkChange,
+) -> Result<HttpResponse, ResponseError> {
+    Err(ResponseError::from_msg(
+        "Meilisearch Enterprise Edition is required to call this route".into(),
+        Code::RequiresEnterpriseEdition,
+    ))
+}
