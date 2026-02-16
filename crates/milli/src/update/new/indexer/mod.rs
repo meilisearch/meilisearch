@@ -39,18 +39,10 @@ use crate::{
     Error, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, Result, ThreadPoolNoAbort,
 };
 
-#[cfg(not(feature = "enterprise"))]
-pub mod community_edition;
 pub(crate) mod de;
 pub mod document_changes;
 mod document_deletion;
 mod document_operation;
-#[cfg(feature = "enterprise")]
-pub mod enterprise_edition;
-#[cfg(not(feature = "enterprise"))]
-pub use community_edition as current_edition;
-#[cfg(feature = "enterprise")]
-pub use enterprise_edition as current_edition;
 mod extract;
 mod guess_primary_key;
 mod partial_dump;
