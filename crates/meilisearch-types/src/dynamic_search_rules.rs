@@ -1,15 +1,13 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 
 pub type DynamicSearchRules = BTreeMap<String, DynamicSearchRule>;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DynamicSearchRule {
-    /// data format version to support upcasting if the format evolves over time.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub version: Option<String>,
     pub uid: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -38,10 +36,10 @@ pub struct QueryCondition {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeCondition {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub start: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub end: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "time::serde::rfc3339::option")]
+    pub start: Option<OffsetDateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "time::serde::rfc3339::option")]
+    pub end: Option<OffsetDateTime>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -59,26 +57,7 @@ pub struct Selector {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub filter: Option<Filter>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct Filter {
-    pub attribute: String,
-    pub op: FilterOp,
-    pub value: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum FilterOp {
-    Eq,
-    Neq,
-    Gt,
-    Lt,
-    Gte,
-    Lte,
+    pub filter: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -116,7 +95,7 @@ mod tests {
     use serde::de::DeserializeOwned;
     use serde_json::{json, Value};
     use std::fmt::Debug;
-
+    use time::format_description::well_known::Rfc3339;
     use super::*;
 
     fn round_trip<T>(content: Value, expected: T)
@@ -128,10 +107,13 @@ mod tests {
         assert_eq!(content, serde_json::to_value(deserialized).unwrap());
     }
 
+    fn parse_offset_date_time(s: &str) -> OffsetDateTime {
+        OffsetDateTime::parse(s, &Rfc3339).unwrap()
+    }
+
     #[test]
     fn full_rule_round_trip() {
         let json = json!({
-            "version": "1",
             "uid": "black-friday-2025",
             "description": "Black Friday 2025 Merchandising rules",
             "priority": 1,
@@ -174,7 +156,6 @@ mod tests {
         });
 
         let expected = DynamicSearchRule {
-            version: Some("1".to_string()),
             uid: "black-friday-2025".to_string(),
             description: Some("Black Friday 2025 Merchandising rules".to_string()),
             priority: Some(1),
@@ -182,8 +163,8 @@ mod tests {
             conditions: vec![
                 Condition::Query(QueryCondition { is_empty: true }),
                 Condition::Time(TimeCondition {
-                    start: Some("2025-11-28T00:00:00Z".to_string()),
-                    end: Some("2025-11-28T23:59:59Z".to_string()),
+                    start: Some(parse_offset_date_time("2025-11-28T00:00:00Z")),
+                    end: Some(parse_offset_date_time("2025-11-28T23:59:59Z")),
                 }),
             ],
             actions: vec![
@@ -199,11 +180,11 @@ mod tests {
                     selector: Selector {
                         index_uid: None,
                         id: None,
-                        filter: Some(Filter {
-                            attribute: "brand".to_string(),
-                            op: FilterOp::Eq,
-                            value: "premium".to_string(),
-                        }),
+                        filter: Some(json!({
+                            "attribute": "brand",
+                            "op": "eq",
+                            "value": "premium",
+                        })),
                     },
                     action: Action::Boost(BoostArgs { score: 1.5 }),
                 },
@@ -211,11 +192,11 @@ mod tests {
                     selector: Selector {
                         index_uid: None,
                         id: None,
-                        filter: Some(Filter {
-                            attribute: "category".to_string(),
-                            op: FilterOp::Eq,
-                            value: "clearance".to_string(),
-                        }),
+                        filter: Some(json!({
+                            "attribute": "category",
+                            "op": "eq",
+                            "value": "clearance",
+                        })),
                     },
                     action: Action::Bury(BuryArgs { score: 0.5 }),
                 },
@@ -247,7 +228,6 @@ mod tests {
         });
 
         let expected = DynamicSearchRule {
-            version: None,
             uid: "simple-rule".to_string(),
             description: None,
             priority: None,
@@ -261,22 +241,6 @@ mod tests {
 
         let deserialized: DynamicSearchRule = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized, expected);
-    }
-
-    #[test]
-    fn all_filter_ops_round_trip() {
-        let cases = vec![
-            ("eq", FilterOp::Eq),
-            ("neq", FilterOp::Neq),
-            ("gt", FilterOp::Gt),
-            ("lt", FilterOp::Lt),
-            ("gte", FilterOp::Gte),
-            ("lte", FilterOp::Lte),
-        ];
-
-        for (json_str, expected_op) in cases {
-            round_trip(json!(json_str), expected_op);
-        }
     }
 
     #[test]
@@ -305,15 +269,15 @@ mod tests {
         round_trip(
             json!({"scope": "time", "settings": {"start": "2025-01-01T00:00:00Z", "end": "2025-12-31T23:59:59Z"}}),
             Condition::Time(TimeCondition {
-                start: Some("2025-01-01T00:00:00Z".to_string()),
-                end: Some("2025-12-31T23:59:59Z".to_string()),
+                start: Some(parse_offset_date_time("2025-01-01T00:00:00Z")),
+                end: Some(parse_offset_date_time("2025-12-31T23:59:59Z")),
             }),
         );
         // time with only start
         round_trip(
             json!({"scope": "time", "settings": {"start": "2025-06-01T00:00:00Z"}}),
             Condition::Time(TimeCondition {
-                start: Some("2025-06-01T00:00:00Z".to_string()),
+                start: Some(parse_offset_date_time("2025-06-01T00:00:00Z")),
                 end: None,
             }),
         );
@@ -322,7 +286,7 @@ mod tests {
             json!({"scope": "time", "settings": {"end": "2025-08-31T23:59:59Z"}}),
             Condition::Time(TimeCondition {
                 start: None,
-                end: Some("2025-08-31T23:59:59Z".to_string()),
+                end: Some(parse_offset_date_time("2025-08-31T23:59:59Z")),
             }),
         );
     }
@@ -340,7 +304,6 @@ mod tests {
         });
 
         let rule: DynamicSearchRule = serde_json::from_value(json).unwrap();
-        assert_eq!(rule.version, None);
         assert_eq!(rule.description, None);
         assert_eq!(rule.priority, None);
         assert!(!rule.active);
@@ -350,7 +313,6 @@ mod tests {
     #[test]
     fn skip_serializing_none_fields() {
         let rule = DynamicSearchRule {
-            version: None,
             uid: "no-optionals".to_string(),
             description: None,
             priority: None,
