@@ -104,7 +104,14 @@ impl ReopenableIndex {
                 return Ok(());
             }
             map.unavailable.remove(&self.uuid);
-            map.create(&self.uuid, path, None, self.enable_mdb_writemap, self.map_size, false)?;
+            map.create(
+                &self.uuid,
+                path,
+                None,
+                self.enable_mdb_writemap,
+                self.map_size,
+                CreateOrOpen::Open,
+            )?;
         }
         Ok(())
     }
@@ -173,12 +180,13 @@ impl IndexMap {
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         enable_mdb_writemap: bool,
         map_size: usize,
-        creation: bool,
+        create_or_open: CreateOrOpen,
     ) -> Result<Index> {
         if !matches!(self.get_unavailable(uuid), Missing) {
             panic!("Attempt to open an index that was unavailable");
         }
-        let index = create_or_open_index(path, date, enable_mdb_writemap, map_size, creation)?;
+        let index =
+            create_or_open_index(path, date, enable_mdb_writemap, map_size, create_or_open)?;
         match self.available.insert(*uuid, index.clone()) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
@@ -302,7 +310,7 @@ fn create_or_open_index(
     date: Option<(OffsetDateTime, OffsetDateTime)>,
     enable_mdb_writemap: bool,
     map_size: usize,
-    creation: bool,
+    create_or_open: CreateOrOpen,
 ) -> Result<Index> {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
@@ -324,9 +332,9 @@ fn create_or_open_index(
     }
 
     if let Some((created, updated)) = date {
-        Ok(Index::new_with_creation_dates(options, path, created, updated, creation)?)
+        Ok(Index::new_with_creation_dates(options, path, created, updated, create_or_open)?)
     } else {
-        Ok(Index::new(options, path, creation)?)
+        Ok(Index::new(options, path, create_or_open)?)
     }
 }
 
