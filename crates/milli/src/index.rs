@@ -117,11 +117,12 @@ pub mod db_name {
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
+    pub const SHARD_DOCIDS: &str = "shard-docids";
     pub const VECTOR_STORE: &str = "vector-arroy";
-    pub const CELLULITE: &str = "cellulite";
+    pub const CELLULITE: &str = "cellulite"; // used as a prefix, counted as `Cellulite::nb_dbs`
     pub const DOCUMENTS: &str = "documents";
 }
-const NUMBER_OF_DBS: u32 = 25 + Cellulite::nb_dbs();
+const NUMBER_OF_DBS: u32 = 26 + Cellulite::nb_dbs();
 
 #[derive(Clone)]
 pub struct Index {
@@ -187,6 +188,9 @@ pub struct Index {
     /// Vector store based on hannoy™.
     pub vector_store: hannoy::Database<Unspecified>,
 
+    /// Maps a shard name to the docids belonging to this shard
+    pub shard_docids: Database<Str, CboRoaringBitmapCodec>,
+
     /// Geo store based on cellulite™.
     pub cellulite: Cellulite,
 
@@ -246,6 +250,11 @@ impl Index {
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
         let vector_store = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
+
+        // sharding
+        let shard_docids = env.create_database(&mut wtxn, Some(SHARD_DOCIDS))?;
+
+        // geo
         let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn, CELLULITE)?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
@@ -1872,6 +1881,11 @@ impl Index {
         Ok(stats)
     }
 
+    /// A view of the list of docids per shard.
+    pub fn shard_docids(&self) -> DbShardDocids {
+        DbShardDocids::from_index(self)
+    }
+
     /// Check if the word is indexed in the index.
     ///
     /// This function checks if the word is indexed in the index by looking at the word_docids and exact_word_docids.
@@ -1912,6 +1926,7 @@ impl Index {
             field_id_docid_facet_strings,
             vector_store,
             embedder_category_id,
+            shard_docids,
             cellulite,
             documents,
         } = self;
@@ -1984,6 +1999,7 @@ impl Index {
         );
         sizes.insert("vector_store", vector_store.stat(rtxn).map(compute_size)?);
         sizes.insert("embedder_category_id", embedder_category_id.stat(rtxn).map(compute_size)?);
+        sizes.insert("shard_docids", shard_docids.stat(rtxn).map(compute_size)?);
         sizes.insert("documents", documents.stat(rtxn).map(compute_size)?);
 
         // Cellulite
