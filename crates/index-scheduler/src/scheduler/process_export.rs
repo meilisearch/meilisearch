@@ -404,36 +404,32 @@ impl IndexScheduler {
         agent: &http_client::ureq::Agent,
         must_stop_processing: &MustStopProcessing,
     ) -> Result<(), Error> {
+        use meilisearch_types::network::route;
+
         let bearer = target.api_key.map(|api_key| format!("Bearer {api_key}"));
-        let url = format!("{base_url}/network", base_url = target.base_url,);
+        let url = route::url_from_base_and_route(target.base_url, route::network_change_path())
+            .map_err(|error| Error::InvalidRemoteUrl {
+                url: target.base_url.to_owned(),
+                cause: error.to_string(),
+            })?;
 
         {
             let _ = handle_response(
                 target.remote_name,
                 retry(must_stop_processing, || {
-                    let request = agent.patch(&url);
-                    let mut request = set_network_ureq_headers(
-                        request,
-                        &ImportData {
-                            remote_name: export_old_remote_name.to_string(),
-                            index_name: None,
-                            document_count: 0,
+                    let mut request = agent.post(url.to_string());
+                    let body = route::NetworkChange {
+                        origin: network_change_origin.clone(),
+                        message: route::Message::ExportNoIndexForRemote {
+                            remote: export_old_remote_name.to_string(),
                         },
-                        network_change_origin,
-                        &ImportMetadata {
-                            index_count: 0,
-                            task_key: None,
-                            total_index_documents: 0,
-                        },
-                    );
+                    };
+
                     request = request.header("Content-Type", "application/json");
                     if let Some(bearer) = &bearer {
                         request = request.header("Authorization", bearer);
                     }
-                    request.send_json(
-                        // empty payload that will be disregarded
-                        serde_json::Value::Object(Default::default()),
-                    )
+                    request.send_json(body)
                 }),
             )?;
         }
@@ -448,7 +444,7 @@ fn set_network_ureq_headers<P>(
     origin: &Origin,
     metadata: &ImportMetadata,
 ) -> http_client::ureq::RequestBuilder<P> {
-    let request = RequestWrapper(request);
+    let request = UreqRequestWrapper(request);
 
     let ImportMetadata { index_count, task_key, total_index_documents } = metadata;
     let Origin { remote_name: origin_remote, task_uid, network_version } = origin;
@@ -468,20 +464,13 @@ fn set_network_ureq_headers<P>(
     } else {
         request
     };
-    let RequestWrapper(request) = if let Some(task_key) = task_key {
+    let UreqRequestWrapper(request) = if let Some(task_key) = task_key {
         request.set_import_task_key(*task_key)
     } else {
         request
     };
 
     request
-}
-
-struct RequestWrapper<P>(http_client::ureq::RequestBuilder<P>);
-impl<P> headers::SetHeader for RequestWrapper<P> {
-    fn set_header(self, name: &str, value: &str) -> Self {
-        Self(self.0.header(name, value))
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
