@@ -198,13 +198,24 @@ pub struct Index {
     pub(crate) documents: Database<BEU32, ObkvCodec>,
 }
 
+pub enum CreateOrOpen {
+    Open,
+    Create { shards: Option<Shards> },
+}
+
+impl CreateOrOpen {
+    pub fn create_without_shards() -> Self {
+        CreateOrOpen::Create { shards: None }
+    }
+}
+
 impl Index {
     pub fn new_with_creation_dates<P: AsRef<Path>>(
         mut options: heed::EnvOpenOptions<WithoutTls>,
         path: P,
         created_at: time::OffsetDateTime,
         updated_at: time::OffsetDateTime,
-        creation: bool,
+        create_or_open: CreateOrOpen,
     ) -> Result<Index> {
         use db_name::*;
 
@@ -284,18 +295,30 @@ impl Index {
             field_id_docid_facet_strings,
             vector_store,
             embedder_category_id,
+            shard_docids,
             cellulite,
             documents,
         };
-        if this.get_version(&wtxn)?.is_none() && creation {
-            this.put_version(
-                &mut wtxn,
-                (constants::VERSION_MAJOR, constants::VERSION_MINOR, constants::VERSION_PATCH),
-            )?;
-            // The database before v1.29 defaulted to using arroy, so we
-            // need to set it explicitly because the new default is hannoy.
-            this.put_vector_store(&mut wtxn, VectorStoreBackend::Hannoy)?;
+
+        if let CreateOrOpen::Create { shards } = create_or_open {
+            if this.get_version(&wtxn)?.is_none() {
+                this.put_version(
+                    &mut wtxn,
+                    (constants::VERSION_MAJOR, constants::VERSION_MINOR, constants::VERSION_PATCH),
+                )?;
+                // The database before v1.29 defaulted to using arroy, so we
+                // need to set it explicitly because the new default is hannoy.
+                this.put_vector_store(&mut wtxn, VectorStoreBackend::Hannoy)?;
+            }
+
+            if let Some(shards) = shards {
+                let shard_docids = this.shard_docids();
+                for shard in shards.as_sorted_slice() {
+                    shard_docids.add_shard(&mut wtxn, &shard.name)?;
+                }
+            }
         }
+
         wtxn.commit()?;
 
         Index::set_creation_dates(&this.env, this.main, created_at, updated_at)?;
@@ -306,10 +329,10 @@ impl Index {
     pub fn new<P: AsRef<Path>>(
         options: heed::EnvOpenOptions<WithoutTls>,
         path: P,
-        creation: bool,
+        create_or_open: CreateOrOpen,
     ) -> Result<Index> {
         let now = time::OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(options, path, now, now, creation)
+        Self::new_with_creation_dates(options, path, now, now, create_or_open)
     }
 
     /// Attempts to rollback the index at `path` to the version specified by `requested_version`.

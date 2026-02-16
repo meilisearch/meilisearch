@@ -936,9 +936,10 @@ impl IndexScheduler {
         &self,
         name: &str,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
+        shards: Option<Shards>,
     ) -> Result<Index> {
         let wtxn = self.env.write_txn()?;
-        let index = self.index_mapper.create_index(wtxn, name, date)?;
+        let index = self.index_mapper.create_index(wtxn, name, date, shards)?;
         Ok(index)
     }
 
