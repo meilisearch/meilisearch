@@ -61,6 +61,7 @@ use meilisearch_types::features::{
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
 use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
+use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::json_template::JsonTemplate;
 use meilisearch_types::milli::vector::{
@@ -70,7 +71,7 @@ use meilisearch_types::milli::{self, Index};
 use meilisearch_types::network::Network;
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
-    DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,
+    DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
 };
 use meilisearch_types::tasks::{KindWithContent, Task};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};
@@ -81,6 +82,7 @@ use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
 

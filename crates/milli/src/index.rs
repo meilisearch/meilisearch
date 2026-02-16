@@ -31,6 +31,7 @@ use crate::order_by_map::OrderByMap;
 use crate::progress::Progress;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
+use crate::sharding::{DbShardDocids, Shards};
 use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
 use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};

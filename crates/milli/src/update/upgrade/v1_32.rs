@@ -9,7 +9,7 @@ use rand::SeedableRng as _;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
 
-use super::UpgradeIndex;
+use super::{UpgradeIndex, UpgradeParams};
 use crate::heed_codec::StrBEU16Codec;
 use crate::progress::Progress;
 use crate::update::new::steps::SettingsIndexerStep;

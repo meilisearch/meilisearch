@@ -3,9 +3,10 @@ use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
+use meilisearch_types::network::route;
 use tracing::debug;
 
 use super::{merge_networks, Network, PatchNetworkAnalytics};

@@ -18,7 +18,7 @@ use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOr
 use meilisearch_types::milli::{self, obkv_to_json, Filter, InternalError};
 use meilisearch_types::settings::{self, SecretPolicy};
 use meilisearch_types::tasks::network::headers::SetHeader as _;
-use meilisearch_types::tasks::network::{headers, ImportData, ImportMetadata, Origin};
+use meilisearch_types::tasks::network::{ImportData, ImportMetadata, Origin};
 use meilisearch_types::tasks::{DetailsExportIndexSettings, ExportIndexSettings};
 use roaring::RoaringBitmap;
 use serde::Deserialize;
@@ -26,6 +26,7 @@ use serde_json::json;
 
 use super::MustStopProcessing;
 use crate::processing::AtomicDocumentStep;
+use crate::utils::UreqRequestWrapper;
 use crate::{Error, IndexScheduler, Result};
 
 type Response = http_client::ureq::http::Response<http_client::ureq::Body>;

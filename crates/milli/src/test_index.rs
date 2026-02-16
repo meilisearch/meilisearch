@@ -21,7 +21,10 @@ use crate::update::{
 };
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
-use crate::{db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult};
+use crate::{
+    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index, Search,
+    SearchResult,
+};
 
 pub(crate) struct TempIndex {
     pub inner: Index,
@@ -46,7 +49,8 @@ impl TempIndex {
         let mut options = options.read_txn_without_tls();
         options.map_size(size);
         let _tempdir = TempDir::new_in(".").unwrap();
-        let inner = Index::new(options, _tempdir.path(), true).unwrap();
+        let inner =
+            Index::new(options, _tempdir.path(), CreateOrOpen::create_without_shards()).unwrap();
         let indexer_config = IndexerConfig::default();
         let index_documents_config = IndexDocumentsConfig::default();
         let progress = Progress::default();

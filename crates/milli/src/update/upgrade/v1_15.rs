@@ -2,10 +2,9 @@ use heed::RwTxn;
 use roaring::RoaringBitmap;
 use serde::Deserialize;
 
-use super::UpgradeIndex;
-use crate::progress::Progress;
+use super::{UpgradeIndex, UpgradeParams};
 use crate::update::new::indexer::recompute_word_fst_from_word_docids_database;
-use crate::{Index, MustStopProcessing, Result};
+use crate::{Index, Result};
 
 pub(super) struct RecomputeWordFst();
 

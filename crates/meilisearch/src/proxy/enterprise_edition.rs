@@ -5,13 +5,14 @@
 
 use std::collections::BTreeMap;
 
+use actix_http::uri::PathAndQuery;
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::HttpRequest;
 use bytes::Bytes;
-use http_client::reqwest::{ClientBuilder, RequestBuilder, StatusCode};
-use index_scheduler::IndexScheduler;
+use http_client::reqwest::{ClientBuilder, StatusCode};
+use index_scheduler::{IndexScheduler, ReqwestRequestWrapper};
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::network::Remote;
+use meilisearch_types::network::{route, Remote};
 use meilisearch_types::tasks::network::headers::{GetHeader, SetHeader};
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,

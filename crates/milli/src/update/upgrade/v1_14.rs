@@ -1,9 +1,8 @@
 use arroy::distances::Cosine;
 use heed::RwTxn;
 
-use super::UpgradeIndex;
-use crate::progress::Progress;
-use crate::{make_enum_progress, Index, MustStopProcessing, Result};
+use super::{UpgradeIndex, UpgradeParams};
+use crate::{make_enum_progress, Index, Result};
 
 pub(super) struct UpgradeArroyVersion();
 

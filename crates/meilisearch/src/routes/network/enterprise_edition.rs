@@ -3,8 +3,9 @@
 // Use of this source code is governed by the Business Source License 1.1,
 // as found in the LICENSE-EE file or at <https://mariadb.com/bsl11>
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
+use actix_http::uri::PathAndQuery;
 use actix_web::web::Data;
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -17,12 +18,14 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::network::{Network as DbNetwork, Remote as DbRemote};
+use meilisearch_types::network::{
+    route, Network as DbNetwork, Remote as DbRemote, Shard as DbShard,
+};
 use meilisearch_types::tasks::network::{headers, NetworkTopologyChange, Origin, TaskNetwork};
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
 
-use super::{merge_networks, Network, PatchNetworkAnalytics, Remote};
+use super::{merge_networks, Network, PatchNetworkAnalytics, Remote, Shard};
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
