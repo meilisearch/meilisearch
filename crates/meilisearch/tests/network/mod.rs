@@ -46,7 +46,7 @@ async fn errors_on_param() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `selfie`: expected one of `remotes`, `self`, `leader`, `previousRemotes`",
+      "message": "Unknown field `selfie`: expected one of `remotes`, `shards`, `previousShards`, `self`, `leader`, `previousRemotes`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -196,6 +196,7 @@ async fn errors_on_param() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -270,6 +271,7 @@ async fn auth() {
     {
       "self": "master",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -282,6 +284,7 @@ async fn auth() {
     {
       "self": "master",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -296,6 +299,7 @@ async fn auth() {
     {
       "self": "master",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -315,6 +319,7 @@ async fn auth() {
     {
       "self": "api_key",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -395,6 +400,7 @@ async fn get_and_set_network() {
     {
       "self": null,
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "00000000-0000-0000-0000-000000000000"
     }
@@ -407,6 +413,7 @@ async fn get_and_set_network() {
     {
       "self": "myself",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -441,6 +448,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -471,6 +479,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -507,6 +516,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -535,6 +545,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -559,6 +570,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -583,6 +595,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -607,6 +620,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -631,6 +645,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -655,6 +670,7 @@ async fn get_and_set_network() {
           "writeApiKey": null
         }
       },
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -672,6 +688,7 @@ async fn get_and_set_network() {
     {
       "self": "thy",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
