@@ -6,6 +6,8 @@
 use std::time::Duration;
 
 use bumpalo::Bump;
+#[cfg(unix)]
+use meilisearch_types::heed::Env;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
@@ -545,9 +547,8 @@ fn stream_tarball_into_pipe(
 
     // 2. Snapshot the index scheduler LMDB env
     progress.update_progress(SnapshotCreationProgress::SnapshotTheIndexScheduler);
-    let tasks_env_file = index_scheduler.env.try_clone_inner_file()?;
     let path = Path::new("tasks").join("data.mdb");
-    append_file_to_tarball(&mut tarball, path, tasks_env_file)?;
+    append_env_to_tarball(&mut tarball, path, index_scheduler.env.clone())?;
 
     // 2.3 Create a read transaction on the index-scheduler
     let rtxn = index_scheduler.env.read_txn()?;
@@ -606,18 +607,16 @@ fn stream_tarball_into_pipe(
         ));
         let path = indexes_dir.join(uuid.to_string()).join("data.mdb");
         let index = index_scheduler.index_mapper.index(&rtxn, &name)?;
-        let index_file = index.try_clone_inner_file()?;
         tracing::trace!("Appending index file for {name} in {}", path.display());
-        append_file_to_tarball(&mut tarball, path, index_file)?;
+        append_index_to_tarball(&mut tarball, path, &index)?;
     }
 
     drop(rtxn);
 
     // 4. Snapshot the auth LMDB env
     progress.update_progress(SnapshotCreationProgress::SnapshotTheApiKeys);
-    let auth_env_file = index_scheduler.scheduler.auth_env.try_clone_inner_file()?;
     let path = Path::new("auth").join("data.mdb");
-    append_file_to_tarball(&mut tarball, path, auth_env_file)?;
+    append_env_to_tarball(&mut tarball, path, index_scheduler.scheduler.auth_env.clone())?;
 
     let mut gzencoder = tarball.into_inner()?;
     gzencoder.flush()?;
@@ -629,10 +628,10 @@ fn stream_tarball_into_pipe(
 }
 
 #[cfg(unix)]
-fn append_file_to_tarball<W, P>(
+fn append_index_to_tarball<W, P>(
     tarball: &mut tar::Builder<W>,
     path: P,
-    mut auth_env_file: std::fs::File,
+    index: &meilisearch_types::milli::Index,
 ) -> Result<(), Error>
 where
     W: std::io::Write,
@@ -640,10 +639,65 @@ where
 {
     use std::io::{Seek as _, SeekFrom};
 
+    // lock the environment for writing to avoid concurrent writing to the file.
+    //
+    // previous versions of this code would not do this, and DB corruptions would happen when
+    // tasks were enqueued concurrently to the index scheduler copy.
+    let wtxn = index.write_txn()?;
+    let mut env_file = index.try_clone_inner_file()?;
+    let cursor = env_file.stream_position()?;
+
     // Note: A previous snapshot operation may have left the cursor
     //       at the end of the file so we need to seek to the start.
-    auth_env_file.seek(SeekFrom::Start(0))?;
-    tarball.append_file(path, &mut auth_env_file)?;
+    env_file.seek(SeekFrom::Start(0))?;
+
+    tarball.append_file(path, &mut env_file)?;
+
+    // restore previous seek position
+    env_file.seek(SeekFrom::Start(cursor))?;
+
+    // release lock on env
+    wtxn.abort();
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn append_env_to_tarball<W, P, T: 'static>(
+    tarball: &mut tar::Builder<W>,
+    path: P,
+    env: Env<T>,
+) -> Result<(), Error>
+where
+    W: std::io::Write,
+    P: AsRef<std::path::Path>,
+{
+    use std::os::fd::AsRawFd;
+
+    let (reader, writer) = std::io::pipe()?;
+
+    let handle = std::thread::Builder::new()
+        .name("lmdb-copy".into())
+        .spawn(move || -> Result<(), Error> {
+            // SAFETY: we pass the write end of a pipe
+            unsafe {
+                env.copy_to_fd(
+                    writer.as_raw_fd(),
+                    meilisearch_types::heed::CompactionOption::Disabled,
+                )?
+            };
+            Ok(())
+        })
+        .unwrap();
+
+    let stats = path.as_ref().metadata()?;
+    let mut header = tar::Header::new_gnu();
+    header.set_metadata_in_mode(&stats, tar::HeaderMode::Complete);
+
+    tarball.append_data(&mut header, path, reader)?;
+
+    handle.join().unwrap()?;
+
     Ok(())
 }
 
