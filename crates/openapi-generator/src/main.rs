@@ -1,14 +1,18 @@
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use meilisearch::routes::MeilisearchApi;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use utoipa::OpenApi;
 
 /// HTTP methods supported in OpenAPI specifications.
 const HTTP_METHODS: &[&str] = &["get", "post", "put", "patch", "delete"];
+
+/// Alias for OpenAPI path item or operation object (map of string keys to JSON values).
+type JsonObject = Map<String, Value>;
 
 #[derive(Parser)]
 #[command(name = "openapi-generator")]
@@ -78,105 +82,99 @@ fn main() -> Result<()> {
         serde_json::to_string(&openapi_value)?
     };
 
-    // Write to file
-    std::fs::write(&output_path, json)?;
+    std::fs::write(&output_path, &json)
+        .with_context(|| format!("write OpenAPI spec to {}", output_path.display()))?;
 
     println!("OpenAPI specification written to: {}", output_path.display());
 
     Ok(())
 }
 
+/// Returns the top-level `paths` object from the OpenAPI spec.
+fn get_paths_object(openapi: &Value) -> Result<&JsonObject> {
+    openapi.get("paths").and_then(Value::as_object).context("OpenAPI spec missing 'paths' object")
+}
+
 /// Checks that all routes have a summary field.
 ///
 /// Returns an error if any route is missing a summary.
 fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
-    let paths = openapi
-        .get("paths")
-        .and_then(|p| p.as_object())
-        .context("OpenAPI spec missing 'paths' object")?;
+    let paths = get_paths_object(openapi)?;
 
-    let mut missing_summaries: Vec<String> = Vec::new();
-
-    for (path, path_item) in paths.iter() {
-        let Some(path_item) = path_item.as_object() else {
-            continue;
-        };
-
-        for method in HTTP_METHODS {
-            let Some(operation) = path_item.get(*method) else {
-                continue;
-            };
-
-            let has_summary =
-                operation.get("summary").and_then(|s| s.as_str()).is_some_and(|s| !s.is_empty());
-
-            if !has_summary {
-                missing_summaries.push(format!("{} {}", method.to_uppercase(), path));
-            }
-        }
-    }
+    let mut missing_summaries: Vec<String> = paths
+        .iter()
+        .flat_map(|(path, path_item)| {
+            path_item.as_object().map(|path_item| {
+                HTTP_METHODS.iter().filter_map(move |method| {
+                    let op = path_item.get(*method)?;
+                    let has_summary =
+                        op.get("summary").and_then(Value::as_str).is_some_and(|s| !s.is_empty());
+                    if has_summary {
+                        None
+                    } else {
+                        Some(format!("{} {}", method.to_uppercase(), path))
+                    }
+                })
+            })
+        })
+        .flatten()
+        .collect();
+    missing_summaries.sort_unstable();
+    missing_summaries.dedup();
 
     if missing_summaries.is_empty() {
         println!("All routes have summaries.");
-        Ok(())
-    } else {
-        missing_summaries.sort();
-        eprintln!("The following routes are missing a summary:");
-        for route in &missing_summaries {
-            eprintln!("  - {}", route);
-        }
-        eprintln!("\nTo fix this, add a doc-comment (///) above the route handler function.");
-        eprintln!("The first line becomes the summary, subsequent lines become the description.");
-        eprintln!("\nExample:");
-        eprintln!("  /// List webhooks");
-        eprintln!("  ///");
-        eprintln!("  /// Get the list of all registered webhooks.");
-        eprintln!("  #[utoipa::path(...)]");
-        eprintln!("  async fn get_webhooks(...) {{ ... }}");
-        anyhow::bail!("{} route(s) missing summary", missing_summaries.len());
+        return Ok(());
     }
+
+    eprintln!("The following routes are missing a summary:");
+    for route in &missing_summaries {
+        eprintln!("  - {}", route);
+    }
+    eprintln!("\nTo fix this, add a doc-comment (///) above the route handler function.");
+    eprintln!("The first line becomes the summary, subsequent lines become the description.");
+    eprintln!("\nExample:");
+    eprintln!("  /// List webhooks");
+    eprintln!("  ///");
+    eprintln!("  /// Get the list of all registered webhooks.");
+    eprintln!("  #[utoipa::path(...)]");
+    eprintln!("  async fn get_webhooks(...) {{ ... }}");
+    anyhow::bail!("{} route(s) missing summary", missing_summaries.len());
 }
 
 /// Checks for path issues in the OpenAPI specification.
 ///
-/// This function validates that:
+/// Validates that:
 /// 1. All paths start with `/`
 /// 2. No paths contain double slashes `//`
 /// 3. No duplicate paths exist (after normalizing slashes)
-///
-/// Returns an error if any issues are found.
 fn check_path_issues(openapi: &Value) -> Result<()> {
-    let paths = openapi
-        .get("paths")
-        .and_then(|p| p.as_object())
-        .context("OpenAPI spec missing 'paths' object")?;
+    let paths = get_paths_object(openapi)?;
 
     let mut issues: Vec<String> = Vec::new();
     let mut normalized_paths: HashMap<String, String> = HashMap::new();
 
     for path in paths.keys() {
-        // Check 1: Path must start with /
         if !path.starts_with('/') {
             issues.push(format!("Path does not start with '/': {}", path));
         }
-
-        // Check 2: Path must not contain //
         if path.contains("//") {
             issues.push(format!("Path contains double slashes '//': {}", path));
         }
 
-        // Check 3: Check for duplicates after normalization
-        // Normalize by: removing leading/trailing slashes, collapsing multiple slashes
         let normalized = normalize_path(path);
-        if let Some(existing) = normalized_paths.get(&normalized) {
-            if existing != path {
+        match normalized_paths.entry(normalized) {
+            Entry::Occupied(entry) if entry.get() != path => {
                 issues.push(format!(
                     "Duplicate routes detected (same path after normalization):\n    - {}\n    - {}",
-                    existing, path
+                    entry.get(),
+                    path
                 ));
             }
-        } else {
-            normalized_paths.insert(normalized, path.clone());
+            Entry::Vacant(entry) => {
+                entry.insert(path.clone());
+            }
+            _ => {}
         }
     }
 
@@ -204,33 +202,28 @@ fn resolve_ref<'a>(openapi: &'a Value, r#ref: &str) -> Option<&'a Value> {
 }
 
 /// Returns the properties object of a schema, resolving `$ref` if needed.
-fn get_schema_properties<'a>(
-    openapi: &'a Value,
-    schema: &'a Value,
-) -> Option<&'a serde_json::Map<String, Value>> {
-    let schema = if let Some(r#ref) = schema.get("$ref").and_then(|r| r.as_str()) {
-        resolve_ref(openapi, r#ref)?
-    } else {
-        schema
-    };
-    schema.get("properties").and_then(|p| p.as_object())
+fn get_schema_properties<'a>(openapi: &'a Value, schema: &'a Value) -> Option<&'a JsonObject> {
+    let schema = schema
+        .get("$ref")
+        .and_then(Value::as_str)
+        .and_then(|r#ref| resolve_ref(openapi, r#ref))
+        .unwrap_or(schema);
+    schema.get("properties").and_then(Value::as_object)
 }
 
 /// Returns true if the response object has an example (content.application/json.example or .examples).
 fn response_has_example(response: &Value) -> bool {
-    let content = match response.get("content").and_then(|c| c.get("application/json")) {
-        Some(c) => c,
-        None => return false,
-    };
-    if content.get("example").is_some() {
-        return true;
-    }
-    if let Some(examples) = content.get("examples").and_then(|e| e.as_object()) {
-        if !examples.is_empty() {
-            return true;
-        }
-    }
-    false
+    response
+        .get("content")
+        .and_then(|c| c.get("application/json"))
+        .map(|content| {
+            content.get("example").is_some()
+                || content
+                    .get("examples")
+                    .and_then(Value::as_object)
+                    .is_some_and(|ex| !ex.is_empty())
+        })
+        .unwrap_or(false)
 }
 
 /// Returns true if the response has a JSON body (content.application/json present).
@@ -248,27 +241,17 @@ fn path_has_uid_parameter(path: &str) -> bool {
 
 /// Returns true if the schema value has a non-empty description, either directly or inside a oneOf/anyOf branch
 /// (utoipa puts descriptions there for Option-like types like Setting<T>).
-fn property_has_description(prop_obj: &serde_json::Map<String, Value>) -> bool {
-    if let Some(desc) = prop_obj.get("description").and_then(|d| d.as_str()) {
-        if !desc.trim().is_empty() {
-            return true;
-        }
-    }
-    // oneOf/anyOf: description can be on a branch (e.g. { "$ref": "...", "description": "..." })
-    for key in ["oneOf", "anyOf"] {
-        if let Some(arr) = prop_obj.get(key).and_then(|a| a.as_array()) {
-            for branch in arr {
-                if let Some(obj) = branch.as_object() {
-                    if let Some(desc) = obj.get("description").and_then(|d| d.as_str()) {
-                        if !desc.trim().is_empty() {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    false
+fn property_has_description(prop_obj: &JsonObject) -> bool {
+    prop_obj.get("description").and_then(Value::as_str).is_some_and(|d| !d.trim().is_empty())
+        || ["oneOf", "anyOf"].iter().any(|&key| {
+            prop_obj.get(key).and_then(Value::as_array).is_some_and(|arr| {
+                arr.iter().filter_map(Value::as_object).any(|obj| {
+                    obj.get("description")
+                        .and_then(Value::as_str)
+                        .is_some_and(|d| !d.trim().is_empty())
+                })
+            })
+        })
 }
 
 /// Checks that all properties of a schema have a non-empty description.
@@ -292,7 +275,7 @@ fn check_schema_properties_have_description(
         // One level of $ref for nested objects
         if let Some(nested_ref) = prop_obj.get("$ref").and_then(|r| r.as_str()) {
             if let Some(resolved) = resolve_ref(openapi, nested_ref) {
-                if let Some(nested_props) = resolved.get("properties").and_then(|p| p.as_object()) {
+                if let Some(nested_props) = resolved.get("properties").and_then(Value::as_object) {
                     for (nested_name, nested_value) in nested_props {
                         let Some(nested_obj) = nested_value.as_object() else {
                             continue;
@@ -312,22 +295,13 @@ fn check_schema_properties_have_description(
 
 /// Checks documentation: parameters have descriptions, 2xx responses have examples, and schema properties have descriptions.
 fn check_docs(openapi: &Value) -> Result<()> {
-    let paths = openapi
-        .get("paths")
-        .and_then(|p| p.as_object())
-        .context("OpenAPI spec missing 'paths' object")?;
-
+    let paths = get_paths_object(openapi)?;
     let mut errors: Vec<String> = Vec::new();
 
-    // For each path and method: params documented, response example (and optionally schema properties)
     for (path, path_item) in paths.iter() {
-        let Some(path_item) = path_item.as_object() else {
-            continue;
-        };
+        let Some(path_item) = path_item.as_object() else { continue };
         for method in HTTP_METHODS {
-            let Some(operation) = path_item.get(*method) else {
-                continue;
-            };
+            let Some(operation) = path_item.get(*method) else { continue };
             check_operation_docs(openapi, path, method, operation, &mut errors);
         }
     }
@@ -350,6 +324,192 @@ fn check_docs(openapi: &Value) -> Result<()> {
     }
 }
 
+fn operation_prefix(operation: &Value, method: &str, path: &str) -> String {
+    let op_id = operation
+        .get("operationId")
+        .and_then(Value::as_str)
+        .map(String::from)
+        .unwrap_or_else(|| format!("{} {}", method, path));
+    format!("{} {} ({})", method.to_uppercase(), path, op_id)
+}
+
+fn check_delete_no_body(method: &str, operation: &Value, prefix: &str, errors: &mut Vec<String>) {
+    if method == "delete" && operation.get("requestBody").is_some() {
+        errors.push(format!("{}: DELETE route must not have a request body", prefix));
+    }
+}
+
+fn check_parameters_descriptions(operation: &Value, prefix: &str, errors: &mut Vec<String>) {
+    let params =
+        operation.get("parameters").and_then(Value::as_array).map(|a| a.as_slice()).unwrap_or(&[]);
+    for param in params {
+        let name = param.get("name").and_then(Value::as_str).unwrap_or("(unnamed)");
+        let param_in = param.get("in").and_then(Value::as_str).unwrap_or("unknown");
+        if param.get("description").and_then(Value::as_str).is_none_or(|s| s.trim().is_empty()) {
+            errors.push(format!(
+                "{}: parameter \"{}\" ({}) is missing a description",
+                prefix, name, param_in
+            ));
+        }
+    }
+}
+
+fn check_request_body_schema(
+    openapi: &Value,
+    operation: &Value,
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    if let Some(schema) = operation
+        .get("requestBody")
+        .and_then(|b| b.get("content"))
+        .and_then(|c| c.get("application/json"))
+        .and_then(|j| j.get("schema"))
+    {
+        check_schema_properties_have_description(
+            openapi,
+            schema,
+            &format!("{} request body", prefix),
+            errors,
+        );
+    }
+}
+
+fn success_codes_from_responses(responses: Option<&JsonObject>) -> Vec<String> {
+    responses
+        .map(|r| r.keys().filter(|k| k.starts_with('2')).cloned().collect())
+        .unwrap_or_default()
+}
+
+fn has_2xx_response_example(responses: Option<&JsonObject>, success_codes: &[String]) -> bool {
+    let Some(resps) = responses else { return false };
+    success_codes.iter().any(|code| {
+        resps
+            .get(code)
+            .and_then(|r| r.get("content").and_then(|c| c.get("application/json")))
+            .is_some_and(|content| {
+                content.get("example").is_some()
+                    || content
+                        .get("examples")
+                        .and_then(Value::as_object)
+                        .is_some_and(|ex| !ex.is_empty())
+            })
+    })
+}
+
+fn success_responses_have_body(responses: Option<&JsonObject>, success_codes: &[String]) -> bool {
+    responses.is_some_and(|r| {
+        success_codes.iter().any(|code| {
+            r.get(code)
+                .and_then(|res| res.get("content").and_then(|c| c.get("application/json")))
+                .is_some()
+        })
+    })
+}
+
+fn check_2xx_has_example(
+    responses: Option<&JsonObject>,
+    success_codes: &[String],
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    let has_body = success_responses_have_body(responses, success_codes);
+    let has_example = has_2xx_response_example(responses, success_codes);
+    if has_body && !has_example {
+        errors.push(format!(
+            "{}: at least one 2xx response must have an example (response example required)",
+            prefix
+        ));
+    }
+}
+
+fn check_401_response(
+    path: &str,
+    responses: Option<&JsonObject>,
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    if path == "/health" {
+        return;
+    }
+    let Some(resps) = responses else { return };
+    match resps.get("401") {
+        Some(r401) if !response_has_example(r401) => {
+            errors.push(format!(
+                "{}: response 401 must have an example (e.g. missing_authorization_header)",
+                prefix
+            ));
+        }
+        None => {
+            errors.push(format!("{}: response 401 is required with an example", prefix));
+        }
+        _ => {}
+    }
+}
+
+fn check_404_response(
+    path: &str,
+    responses: Option<&JsonObject>,
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    if !path_has_uid_parameter(path) {
+        return;
+    }
+    let Some(resps) = responses else { return };
+    match resps.get("404") {
+        Some(r404) if !response_has_example(r404) => {
+            errors.push(format!(
+                "{}: response 404 must have an example (e.g. resource not found by uid)",
+                prefix
+            ));
+        }
+        None => {
+            errors.push(format!(
+                "{}: response 404 is required for routes with a uid path parameter (e.g. resource not found)",
+                prefix
+            ));
+        }
+        _ => {}
+    }
+}
+
+fn check_400_response(responses: Option<&JsonObject>, prefix: &str, errors: &mut Vec<String>) {
+    let Some(r400) = responses.and_then(|r| r.get("400")) else { return };
+    if response_has_body(r400) && !response_has_example(r400) {
+        errors.push(format!(
+            "{}: response 400 must have an example (e.g. error message and code)",
+            prefix
+        ));
+    }
+}
+
+fn check_response_schemas(
+    openapi: &Value,
+    responses: Option<&JsonObject>,
+    success_codes: &[String],
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    let Some(resps) = responses else { return };
+    for code in success_codes {
+        let Some(schema) = resps
+            .get(code)
+            .and_then(|r| r.get("content"))
+            .and_then(|c| c.get("application/json"))
+            .and_then(|j| j.get("schema"))
+        else {
+            continue;
+        };
+        check_schema_properties_have_description(
+            openapi,
+            schema,
+            &format!("{} response {}", prefix, code),
+            errors,
+        );
+    }
+}
+
 fn check_operation_docs(
     openapi: &Value,
     path: &str,
@@ -357,160 +517,18 @@ fn check_operation_docs(
     operation: &Value,
     errors: &mut Vec<String>,
 ) {
-    let op_id_fallback = format!("{} {}", method, path);
-    let op_id = operation.get("operationId").and_then(|o| o.as_str()).unwrap_or(&op_id_fallback);
-    let prefix = format!("{} {} ({})", method.to_uppercase(), path, op_id);
+    let prefix = operation_prefix(operation, method, path);
+    let responses = operation.get("responses").and_then(Value::as_object);
+    let success_codes = success_codes_from_responses(responses);
 
-    // DELETE routes must not have a request body
-    if method == "delete" && operation.get("requestBody").is_some() {
-        errors.push(format!("{}: DELETE route must not have a request body", prefix));
-    }
-
-    // Parameters (path, query, header) must have description
-    let params =
-        operation.get("parameters").and_then(|p| p.as_array()).map(|a| a.as_slice()).unwrap_or(&[]);
-    for param in params {
-        let name = param.get("name").and_then(|n| n.as_str()).unwrap_or("(unnamed)");
-        let param_in = param.get("in").and_then(|i| i.as_str()).unwrap_or("unknown");
-        let desc = param.get("description").and_then(|d| d.as_str());
-        if desc.is_none_or(|s| s.trim().is_empty()) {
-            errors.push(format!(
-                "{}: parameter \"{}\" ({}) is missing a description",
-                prefix, name, param_in
-            ));
-        }
-    }
-
-    // Request body schema properties must have description
-    if let Some(req_body) = operation.get("requestBody") {
-        if let Some(content) = req_body.get("content") {
-            if let Some(app_json) = content.get("application/json") {
-                if let Some(schema) = app_json.get("schema") {
-                    check_schema_properties_have_description(
-                        openapi,
-                        schema,
-                        &format!("{} request body", prefix),
-                        errors,
-                    );
-                }
-            }
-        }
-    }
-
-    // At least one 2xx response must have an example when the response has a body
-    let responses = operation.get("responses").and_then(|r| r.as_object());
-    let success_codes: Vec<String> = responses
-        .map(|r| r.keys().filter(|k| k.starts_with('2')).cloned().collect())
-        .unwrap_or_default();
-    let mut has_response_example = false;
-    if let Some(resps) = responses {
-        for code in &success_codes {
-            let response = match resps.get(code) {
-                Some(r) => r,
-                None => continue,
-            };
-            let content = match response.get("content").and_then(|c| c.get("application/json")) {
-                Some(c) => c,
-                None => continue,
-            };
-            if content.get("example").is_some() {
-                has_response_example = true;
-                break;
-            }
-            if let Some(examples) = content.get("examples").and_then(|e| e.as_object()) {
-                if !examples.is_empty() {
-                    has_response_example = true;
-                    break;
-                }
-            }
-        }
-    }
-    let has_body = responses.is_some_and(|r| {
-        success_codes.iter().any(|code| {
-            r.get(code)
-                .and_then(|res| res.get("content").and_then(|c| c.get("application/json")))
-                .is_some()
-        })
-    });
-    if has_body && !has_response_example {
-        errors.push(format!(
-            "{}: at least one 2xx response must have an example (response example required)",
-            prefix
-        ));
-    }
-
-    // 401 response must exist and have an example (missing authorization)
-    // Exception: /health does not require authentication
-    if path != "/health" {
-        if let Some(resps) = responses {
-            match resps.get("401") {
-                Some(r401) => {
-                    if !response_has_example(r401) {
-                        errors.push(format!(
-                            "{}: response 401 must have an example (e.g. missing_authorization_header)",
-                            prefix
-                        ));
-                    }
-                }
-                None => {
-                    errors.push(format!("{}: response 401 is required with an example", prefix));
-                }
-            }
-        }
-    }
-
-    // 404 response required for routes with a *Uid (or Uid) path parameter (resource not found)
-    if path_has_uid_parameter(path) {
-        if let Some(resps) = responses {
-            if let Some(r404) = resps.get("404") {
-                if !response_has_example(r404) {
-                    errors.push(format!(
-                        "{}: response 404 must have an example (e.g. resource not found by uid)",
-                        prefix
-                    ));
-                }
-            } else {
-                errors.push(format!(
-                    "{}: response 404 is required for routes with a uid path parameter (e.g. resource not found)",
-                    prefix
-                ));
-            }
-        }
-    }
-
-    // 400 response must have an example when present (bad request / invalid payload)
-    if let Some(resps) = responses {
-        if let Some(r400) = resps.get("400") {
-            if response_has_body(r400) && !response_has_example(r400) {
-                errors.push(format!(
-                    "{}: response 400 must have an example (e.g. error message and code)",
-                    prefix
-                ));
-            }
-        }
-    }
-
-    // Response body schema properties must have description
-    if let Some(resps) = responses {
-        for code in &success_codes {
-            let response = match resps.get(code) {
-                Some(r) => r,
-                None => continue,
-            };
-            let content = match response.get("content").and_then(|c| c.get("application/json")) {
-                Some(c) => c,
-                None => continue,
-            };
-            if let Some(schema) = content.get("schema") {
-                check_schema_properties_have_description(
-                    openapi,
-                    schema,
-                    &format!("{} response {}", prefix, code),
-                    errors,
-                );
-            }
-        }
-    }
+    check_delete_no_body(method, operation, &prefix, errors);
+    check_parameters_descriptions(operation, &prefix, errors);
+    check_request_body_schema(openapi, operation, &prefix, errors);
+    check_2xx_has_example(responses, &success_codes, &prefix, errors);
+    check_401_response(path, responses, &prefix, errors);
+    check_404_response(path, responses, &prefix, errors);
+    check_400_response(responses, &prefix, errors);
+    check_response_schemas(openapi, responses, &success_codes, &prefix, errors);
 }
 
 /// Normalizes a path for duplicate detection.
