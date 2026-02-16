@@ -849,7 +849,42 @@ impl IndexScheduler {
 
                 Ok(batch)
             }
-            NetworkTopologyState::ExportingDocuments | NetworkTopologyState::Finished => {
+            NetworkTopologyState::WaitingForOthers => {
+                let Some(task_network) = &task.network else {
+                    tracing::error!("network topology change task has no network");
+                    return Err(Error::CorruptedTaskQueue);
+                };
+
+                let origin;
+                let origin = match task_network.origin() {
+                    Some(origin) => origin,
+                    None => {
+                        let myself = network_topology_change
+                            .name_for_import()
+                            .expect("origin is not the leader");
+                        origin = Origin {
+                            remote_name: myself.to_string(),
+                            task_uid: task.uid,
+                            network_version: task_network.network_version(),
+                        };
+                        &origin
+                    }
+                };
+                if let Some((remotes, in_name)) =
+                    network_topology_change.finished_import_to_notify()
+                {
+                    self.notify_import_finished(remotes, in_name.to_owned(), origin)?;
+                }
+
+                Ok(if network_topology_change.remotes_import_state().all_finished() {
+                    Some((Batch::NetworkReady { task }, current_batch))
+                } else {
+                    None
+                })
+            }
+            NetworkTopologyState::ExportingDocuments
+            | NetworkTopologyState::DeletingDocuments
+            | NetworkTopologyState::Finished => {
                 Ok(Some((Batch::NetworkReady { task }, current_batch)))
             }
         }
