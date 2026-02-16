@@ -381,7 +381,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 ///
 /// Search for documents matching a query in the given index.
 ///
-/// > Equivalent to the [search with POST route](https://www.meilisearch.com/docs/api-reference/search/search-with-post) in the Meilisearch API.
+/// > Equivalent to the [search with POST route](/reference/api/search/search-with-post) in the Meilisearch API.
 #[utoipa::path(
     get,
     path = "/{indexUid}/search",
@@ -592,7 +592,7 @@ pub(crate) async fn search(
 ///
 /// Search for documents matching a query in the given index.
 ///
-/// > Equivalent to the [search with GET route](https://www.meilisearch.com/docs/api-reference/search/search-with-get) in the Meilisearch API.
+/// > Equivalent to the [search with GET route](/reference/api/search/search-with-get) in the Meilisearch API.
 #[utoipa::path(
     post,
     path = "/{indexUid}/search",
