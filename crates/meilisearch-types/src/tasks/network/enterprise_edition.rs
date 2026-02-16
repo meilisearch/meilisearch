@@ -5,15 +5,17 @@
 
 use std::collections::BTreeMap;
 
-use milli::update::new::indexer::current_edition::sharding::Shards;
+use itertools::EitherOrBoth;
+use milli::sharding::Shards;
 use milli::DocumentId;
 use roaring::RoaringBitmap;
 
 use super::TaskKeys;
 use crate::network::Remote;
 use crate::tasks::network::{
-    ImportIndexState, ImportState, InRemote, NetworkTopologyChange, NetworkTopologyState,
-    ReceiveTaskError,
+    ExportState, ImportIndexState, ImportState, InRemote, NetworkTopologyChange,
+    NetworkTopologyState, OutRemote, ReceiveImportFinishedError, ReceiveTaskError,
+    RemotesImportState,
 };
 
 impl NetworkTopologyChange {

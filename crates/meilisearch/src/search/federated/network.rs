@@ -1,3 +1,4 @@
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::network::Network;
 

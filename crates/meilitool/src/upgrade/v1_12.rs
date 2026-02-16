@@ -13,7 +13,7 @@ use meilisearch_types::milli::documents::DocumentsBatchReader;
 use meilisearch_types::milli::heed::types::{SerdeJson, Str};
 use meilisearch_types::milli::heed::{Database, EnvOpenOptions, RoTxn, RwTxn};
 use meilisearch_types::milli::progress::Step;
-use meilisearch_types::milli::{FieldDistribution, Index};
+use meilisearch_types::milli::{CreateOrOpen, FieldDistribution, Index};
 use serde::Serialize;
 use serde_json::value::RawValue;
 use tempfile::NamedTempFile;
@@ -178,7 +178,7 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
             let index = meilisearch_types::milli::Index::new(
                 EnvOpenOptions::new().read_txn_without_tls(),
                 &index_path,
-                false,
+                CreateOrOpen::Open,
             )
             .with_context(|| format!("while opening index {uid} at '{}'", index_path.display()))?;
 

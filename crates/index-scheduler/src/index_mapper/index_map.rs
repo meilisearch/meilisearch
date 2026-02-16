@@ -5,7 +5,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
-use meilisearch_types::milli::{Index, Result};
+use meilisearch_types::milli::{CreateOrOpen, Index, Result};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -365,7 +365,7 @@ mod tests {
         for i in 0..(5 + 1) {
             let index_name = format!("index-{i}");
             let wtxn = env.write_txn().unwrap();
-            mapper.create_index(wtxn, &index_name, None).unwrap();
+            mapper.create_index(wtxn, &index_name, None, None).unwrap();
             let txn = env.read_txn().unwrap();
             uuids.push(mapper.index_mapping.get(&txn, &index_name).unwrap().unwrap());
         }
@@ -374,7 +374,7 @@ mod tests {
 
         // get back the evicted index
         let wtxn = env.write_txn().unwrap();
-        mapper.create_index(wtxn, "index-0", None).unwrap();
+        mapper.create_index(wtxn, "index-0", None, None).unwrap();
 
         // Least recently used is now index-1
         check_first_unavailable(&mapper, uuids[1], true);
@@ -383,17 +383,17 @@ mod tests {
     #[test]
     fn resize_index() {
         let (mapper, env, _handle) = IndexMapper::test();
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
         assert_index_size(index, mapper.index_base_map_size);
 
         mapper.resize_index(&env.read_txn().unwrap(), "index").unwrap();
 
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
         assert_index_size(index, mapper.index_base_map_size + mapper.index_growth_amount);
 
         mapper.resize_index(&env.read_txn().unwrap(), "index").unwrap();
 
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
         assert_index_size(index, mapper.index_base_map_size + mapper.index_growth_amount * 2);
     }
 

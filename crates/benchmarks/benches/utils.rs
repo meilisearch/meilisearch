@@ -16,7 +16,7 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
+use milli::{CreateOrOpen, Criterion, Filter, Index, Object, TermsMatchingStrategy};
 use serde_json::Value;
 
 pub struct Conf<'a> {
@@ -80,7 +80,8 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut options = options.read_txn_without_tls();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(100);
-    let index = Index::new(options, conf.database_name, true).unwrap();
+    let index =
+        Index::new(options, conf.database_name, CreateOrOpen::create_without_shards()).unwrap();
 
     let config = IndexerConfig::default();
     let mut wtxn = index.write_txn().unwrap();

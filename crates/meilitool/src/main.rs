@@ -19,7 +19,7 @@ use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use meilisearch_types::milli::{obkv_to_json, BEU32};
+use meilisearch_types::milli::{obkv_to_json, CreateOrOpen, BEU32};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::versioning::{get_version, parse_version};
 use meilisearch_types::Index;
@@ -394,10 +394,14 @@ fn export_a_dump(
     for result in index_mapping.iter(&rtxn)? {
         let (uid, uuid) = result?;
         let index_path = db_path.join("indexes").join(uuid.to_string());
-        let index = Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
-            .with_context(|| {
-                format!("While trying to open the index at path {:?}", index_path.display())
-            })?;
+        let index = Index::new(
+            EnvOpenOptions::new().read_txn_without_tls(),
+            &index_path,
+            CreateOrOpen::Open,
+        )
+        .with_context(|| {
+            format!("While trying to open the index at path {:?}", index_path.display())
+        })?;
 
         let rtxn = index.read_txn()?;
         let metadata = IndexMetadata {
@@ -467,10 +471,14 @@ fn compact_index(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
         }
 
         let index_path = db_path.join("indexes").join(uuid.to_string());
-        let index = Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
-            .with_context(|| {
-                format!("While trying to open the index at path {:?}", index_path.display())
-            })?;
+        let index = Index::new(
+            EnvOpenOptions::new().read_txn_without_tls(),
+            &index_path,
+            CreateOrOpen::Open,
+        )
+        .with_context(|| {
+            format!("While trying to open the index at path {:?}", index_path.display())
+        })?;
 
         eprintln!("Awaiting for a mutable transaction...");
         let _wtxn = index.write_txn().context("While awaiting for a write transaction")?;
@@ -539,11 +547,14 @@ fn export_documents(
         let (uid, uuid) = result?;
         if uid == index_name {
             let index_path = db_path.join("indexes").join(uuid.to_string());
-            let index =
-                Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
-                    .with_context(|| {
-                        format!("While trying to open the index at path {:?}", index_path.display())
-                    })?;
+            let index = Index::new(
+                EnvOpenOptions::new().read_txn_without_tls(),
+                &index_path,
+                CreateOrOpen::Open,
+            )
+            .with_context(|| {
+                format!("While trying to open the index at path {:?}", index_path.display())
+            })?;
 
             let rtxn = index.read_txn()?;
             let fields_ids_map = index.fields_ids_map(&rtxn)?;
@@ -649,11 +660,14 @@ fn hair_dryer(
         let (uid, uuid) = result?;
         if index_names.iter().any(|i| i == uid) {
             let index_path = db_path.join("indexes").join(uuid.to_string());
-            let index =
-                Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
-                    .with_context(|| {
-                        format!("While trying to open the index at path {:?}", index_path.display())
-                    })?;
+            let index = Index::new(
+                EnvOpenOptions::new().read_txn_without_tls(),
+                &index_path,
+                CreateOrOpen::Open,
+            )
+            .with_context(|| {
+                format!("While trying to open the index at path {:?}", index_path.display())
+            })?;
 
             eprintln!("Trying to get a read transaction on the {uid} index...");
 

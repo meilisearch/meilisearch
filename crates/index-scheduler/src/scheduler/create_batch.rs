@@ -4,7 +4,7 @@ use std::io::ErrorKind;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::settings::{Settings, Unchecked};
-use meilisearch_types::tasks::network::NetworkTopologyState;
+use meilisearch_types::tasks::network::{NetworkTopologyState, Origin};
 use meilisearch_types::tasks::{BatchStopReason, Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;

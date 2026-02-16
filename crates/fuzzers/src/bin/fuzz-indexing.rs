@@ -15,7 +15,7 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy};
 use milli::vector::RuntimeEmbedders;
-use milli::Index;
+use milli::{CreateOrOpen, Index};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -65,7 +65,8 @@ fn main() {
                 Some(path) => TempDir::new_in(path).unwrap(),
                 None => TempDir::new().unwrap(),
             };
-            let index = Index::new(options, tempdir.path(), true).unwrap();
+            let index =
+                Index::new(options, tempdir.path(), CreateOrOpen::create_without_shards()).unwrap();
             let indexer_config = IndexerConfig::default();
 
             std::thread::scope(|s| {

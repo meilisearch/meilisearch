@@ -1,4 +1,6 @@
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::network::Remote;
+use meilisearch_types::tasks::network::Origin;
 use meilisearch_types::tasks::Task;
 
 use super::create_batch::Batch;

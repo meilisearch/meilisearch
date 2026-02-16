@@ -13,7 +13,7 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{FilterableAttributesRule, Index};
+use milli::{CreateOrOpen, FilterableAttributesRule, Index};
 use rand::seq::SliceRandom;
 use rand_chacha::rand_core::SeedableRng;
 use roaring::RoaringBitmap;
@@ -44,7 +44,7 @@ fn setup_index() -> Index {
     let mut options = options.read_txn_without_tls();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(100);
-    Index::new(options, path, true).unwrap()
+    Index::new(options, path, CreateOrOpen::create_without_shards()).unwrap()
 }
 
 fn setup_settings<'t>(
