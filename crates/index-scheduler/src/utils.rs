@@ -746,3 +746,17 @@ pub fn dichotomic_search(start_point: usize, mut is_good: impl FnMut(usize) -> b
         }
     }
 }
+
+pub struct ReqwestRequestWrapper(pub http_client::reqwest::RequestBuilder);
+impl meilisearch_types::tasks::network::headers::SetHeader for ReqwestRequestWrapper {
+    fn set_header(self, name: &str, value: &str) -> Self {
+        Self(self.0.prepare(|request| request.header(name, value)))
+    }
+}
+
+pub struct UreqRequestWrapper<P>(pub http_client::ureq::RequestBuilder<P>);
+impl<P> meilisearch_types::tasks::network::headers::SetHeader for UreqRequestWrapper<P> {
+    fn set_header(self, name: &str, value: &str) -> Self {
+        Self(self.0.header(name, value))
+    }
+}
