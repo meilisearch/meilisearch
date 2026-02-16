@@ -17,6 +17,14 @@ impl NetworkTopologyChange {
 
     pub fn update_state(&mut self) {}
 
+    pub fn finished_import_to_notify(&self) -> Option<(std::iter::Empty<(&str, &Remote)>, &str)> {
+        None
+    }
+
+    pub fn remotes_import_state(&self) -> RemotesImportState {
+        RemotesImportState { total: 0, finished: 0, has_error: true }
+    }
+
     pub fn receive_remote_task(
         &mut self,
         _remote_name: &str,
@@ -27,6 +35,14 @@ impl NetworkTopologyChange {
         _total_index_documents: u64,
     ) -> Result<(), ReceiveTaskError> {
         Ok(())
+    }
+
+    pub fn receive_import_finished(
+        &mut self,
+        _remote_name: &str,
+        _successful: bool,
+    ) -> Result<bool, ReceiveImportFinishedError> {
+        Ok(false)
     }
 
     pub fn process_remote_tasks(
