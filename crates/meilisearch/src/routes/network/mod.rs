@@ -118,6 +118,58 @@ pub struct Remote {
     pub write_api_key: Setting<String>,
 }
 
+/// Configuration for a named shard of the
+#[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
+#[deserr(error = DeserrJsonError<InvalidNetworkShards>, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub struct Shard {
+    /// List of remotes that own this shard.
+    ///
+    /// - The remotes must be part of the network's configuration
+    /// - Setting this to a non-`null` value will replace all existing remotes for this shard.
+    /// - `addRemotes` and `removeRemotes` are applied after `remotes` if multiple options are present.
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
+    #[serde(default)]
+    pub remotes: Option<BTreeSet<String>>,
+    /// Remotes to add to the list of owners of this shard.
+    ///
+    /// - The remotes must be part of the network's configuration
+    /// - Setting this to non-`null` will append the listed remotes to the list of owners of this shard.
+    /// - `remotes` is applied before `addRemotes`
+    /// - `removeRemotes` is applied after `addRemotes`
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
+    #[serde(default)]
+    pub add_remotes: Option<BTreeSet<String>>,
+    /// Remotes to remove from the list of owners of this shard.
+    ///
+    /// - The remotes may or may not be part of the network's configuration
+    /// - Setting this to non-`null` will remove the listed remotes from the list of owners of this shard.
+    /// - `remotes` and `addRemotes` are applied before `removeRemotes`
+    /// - Remotes removed from the configuration are automatically removed from all shards and it is not necessary
+    ///   to explicitly pass them as `removeRemotes`.
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
+    #[serde(default)]
+    pub remove_remotes: Option<BTreeSet<String>>,
+}
+
+impl Shard {
+    fn into_db_shard(self, old_remotes: BTreeSet<String>) -> DbShard {
+        let Shard { remotes: new_remotes, add_remotes, remove_remotes } = self;
+        let mut merged_remotes = match new_remotes {
+            Some(remotes) => remotes,
+            None => old_remotes,
+        };
+        if let Some(add_remotes) = add_remotes {
+            merged_remotes = &merged_remotes | &add_remotes;
+        }
+        if let Some(remove_remotes) = remove_remotes {
+            merged_remotes = &merged_remotes - &remove_remotes;
+        }
+        DbShard { remotes: merged_remotes }
+    }
+}
+
 /// Network topology configuration for distributed Meilisearch
 #[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
@@ -125,6 +177,10 @@ pub struct Remote {
 #[schema(rename_all = "camelCase")]
 pub struct Network {
     /// Map of remote instance names to their configurations
+    ///
+    /// - Pass `null` as a value for a remote to remove it from the configuration.
+    /// - Removing a remote will also remove it from all shards.
+    /// - Remotes that don't appear in this list will be unmodified by the network call.
     #[schema(required = false, value_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
@@ -136,6 +192,29 @@ pub struct Network {
     #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     #[serde(default)]
     pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
+    /// Map of shard names to their configurations.
+    ///
+    /// - Pass `null` as a value for a shard to remove it from the configuration.
+    /// - Shards that don't appear in this list will be unmodified by the network call.
+    #[schema(value_type = Option<BTreeMap<String, Shard>>, example = json!({
+        "shard-00": {
+            "remotes": ["ms-00", "ms-01"]
+        }
+    }))]
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkShards>)]
+    #[serde(default)]
+    pub shards: Setting<BTreeMap<String, Option<Shard>>>,
+    /// Previous shard configurations
+    ///
+    /// This field should not be passed by end-users. It is used in internal communications between Meilisearch instances
+    #[schema(value_type = Option<BTreeMap<String, Shard>>, example = json!({
+        "shard-00": {
+            "remotes": ["ms-00", "ms-01"]
+        }
+    }))]
+    #[deserr(default, error = DeserrJsonError<InvalidNetworkShards>)]
+    #[serde(default)]
+    pub previous_shards: Setting<BTreeMap<String, Option<Shard>>>,
     /// Name of this instance in the network
     #[schema(required = false, value_type = Option<String>, example = json!("ms-00"), rename = "self")]
     #[serde(default, rename = "self")]
@@ -146,7 +225,9 @@ pub struct Network {
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkLeader>)]
     pub leader: Setting<String>,
-    /// Previous remote configurations (for rollback)
+    /// Previous remote configurations
+    ///
+    /// This field should not be passed by end-users. It is used in internal communications between Meilisearch instances
     #[schema(required = false, value_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
@@ -244,19 +325,51 @@ async fn patch_network(
     current_edition::patch_network(index_scheduler, new_network, req, analytics).await
 }
 
+async fn post_network_change(
+    index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
+    payload: Json<route::NetworkChange>,
+) -> Result<HttpResponse, ResponseError> {
+    index_scheduler.features().check_network("Using the /network route")?;
+    current_edition::post_network_change(index_scheduler, payload.into_inner()).await
+}
+
+/// Merges existing network from the DB with the incoming network patch.
+///
+/// **If the resulting network has a leader**, then it verifies the following post-conditions
+///
+/// 1. One of the remotes is the leader
+/// 2. There exists at least one shard.
+/// 3. Any shard has at least one remote.
+/// 4. Any remote owning a shard is in the list of remotes.
 fn merge_networks(
     old_network: DbNetwork,
     new_network: Network,
 ) -> Result<DbNetwork, ResponseError> {
-    let merged_self = match new_network.local {
+    let DbNetwork {
+        local: old_local,
+        remotes: old_remotes,
+        shards: old_shards,
+        leader: old_leader,
+        version: _,
+    } = old_network;
+    let Network {
+        remotes: new_remotes,
+        shards: new_shards,
+        local: new_local,
+        leader: new_leader,
+        previous_remotes: _,
+        previous_shards: _,
+    } = new_network;
+
+    let merged_self = match new_local {
         Setting::Set(new_self) => Some(new_self),
         Setting::Reset => None,
-        Setting::NotSet => old_network.local,
+        Setting::NotSet => old_local,
     };
-    let merged_leader = match new_network.leader {
+    let merged_leader = match new_leader {
         Setting::Set(new_leader) => Some(new_leader),
         Setting::Reset => None,
-        Setting::NotSet => old_network.leader,
+        Setting::NotSet => old_leader,
     };
     match (merged_leader.as_deref(), merged_self.as_deref()) {
         // 1. Always allowed if there is no leader
@@ -269,11 +382,37 @@ fn merge_networks(
         }
     }
     let new_version = uuid::Uuid::now_v7();
-    let merged_remotes = match new_network.remotes {
+
+    let mut merged_shards = match new_shards {
+        Setting::Set(new_shards) => {
+            let mut merged_shards = BTreeMap::new();
+            for either_or_both in old_shards
+                .into_iter()
+                .merge_join_by(new_shards.into_iter(), |left, right| left.0.cmp(&right.0))
+            {
+                match either_or_both {
+                    EitherOrBoth::Both((name, old_shard), (_, Some(new_shard))) => {
+                        merged_shards.insert(name, new_shard.into_db_shard(old_shard.remotes));
+                    }
+                    EitherOrBoth::Both((_, _), (_, None)) | EitherOrBoth::Right((_, None)) => {}
+                    EitherOrBoth::Left((name, shard)) => {
+                        merged_shards.insert(name, shard);
+                    }
+                    EitherOrBoth::Right((name, Some(shard))) => {
+                        merged_shards.insert(name, shard.into_db_shard(Default::default()));
+                    }
+                }
+            }
+            merged_shards
+        }
+        Setting::Reset => BTreeMap::new(),
+        Setting::NotSet => old_shards,
+    };
+
+    let merged_remotes = match new_remotes {
         Setting::Set(new_remotes) => {
             let mut merged_remotes = BTreeMap::new();
-            for either_or_both in old_network
-                .remotes
+            for either_or_both in old_remotes
                 .into_iter()
                 .merge_join_by(new_remotes.into_iter(), |left, right| left.0.cmp(&right.0))
             {
@@ -325,7 +464,13 @@ fn merge_networks(
                         };
                         merged_remotes.insert(key, merged);
                     }
-                    EitherOrBoth::Both((_, _), (_, None)) | EitherOrBoth::Right((_, None)) => {}
+                    EitherOrBoth::Both((removed_remote, _), (_, None))
+                    | EitherOrBoth::Right((removed_remote, None)) => {
+                        // remove removed remotes from all shards
+                        for shard in merged_shards.values_mut() {
+                            shard.remotes.remove(&removed_remote);
+                        }
+                    }
                     EitherOrBoth::Left((key, node)) => {
                         merged_remotes.insert(key, node);
                     }
@@ -338,13 +483,48 @@ fn merge_networks(
             merged_remotes
         }
         Setting::Reset => BTreeMap::new(),
-        Setting::NotSet => old_network.remotes,
+        Setting::NotSet => old_remotes,
     };
+
+    // enforce (3) by removing any shard without remotes
+    merged_shards.retain(|_, shard| !shard.remotes.is_empty());
+
+    if let Some(merged_leader) = &merged_leader {
+        // (1): the leader is a remote
+        if !merged_remotes.contains_key(merged_leader) {
+            return Err(ResponseError::from_msg(
+                format!("leader `{merged_leader}` is missing from remotes"),
+                Code::InvalidNetworkRemotes,
+            ));
+        }
+        // (2): there exists at least one shard
+        if merged_shards.is_empty() {
+            return Err(ResponseError::from_msg(
+                "there must be at least one shard owned by at least one remote".into(),
+                Code::InvalidNetworkShards,
+            ));
+        }
+        // (3): any shard has at least one remote
+        // enforced above
+        // 4. Any remote owning a shard is in the list of remotes.
+        for (shard_name, shard) in &merged_shards {
+            for remote in &shard.remotes {
+                if !merged_remotes.contains_key(remote) {
+                    return Err(ResponseError::from_msg(
+                        format!("unknown remote `{remote}` in `.{shard_name}.remotes`"),
+                        Code::InvalidNetworkShards,
+                    ));
+                }
+            }
+        }
+    }
+
     let merged_network = DbNetwork {
         local: merged_self,
         remotes: merged_remotes,
         leader: merged_leader,
         version: new_version,
+        shards: merged_shards,
     };
     Ok(merged_network)
 }

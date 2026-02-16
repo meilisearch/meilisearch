@@ -11,6 +11,8 @@ pub struct Network {
     #[serde(default)]
     pub remotes: BTreeMap<String, Remote>,
     #[serde(default)]
+    pub shards: BTreeMap<String, Shard>,
+    #[serde(default)]
     pub leader: Option<String>,
     #[serde(default)]
     pub version: Uuid,
@@ -24,4 +26,10 @@ pub struct Remote {
     pub search_api_key: Option<String>,
     #[serde(default)]
     pub write_api_key: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct Shard {
+    pub remotes: BTreeSet<String>,
 }
