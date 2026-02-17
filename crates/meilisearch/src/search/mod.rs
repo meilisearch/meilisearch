@@ -22,7 +22,8 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch, SearchForFacetValues, SearchStep,
+    AttributeState, Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch,
+    SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
@@ -1712,6 +1713,7 @@ struct HitMaker<'a> {
     sort: Option<Vec<String>>,
     show_matches_position: bool,
     locales: Option<Vec<Language>>,
+    attribute_state: AttributeState,
 }
 
 impl<'a> HitMaker<'a> {
@@ -1819,6 +1821,8 @@ impl<'a> HitMaker<'a> {
             &displayed_ids,
         );
 
+        let attribute_state = AttributeState::from_criteria(index.criteria(rtxn)?);
+
         Ok(Self {
             index,
             rtxn,
@@ -1834,6 +1838,7 @@ impl<'a> HitMaker<'a> {
             show_matches_position: format.show_matches_position,
             sort: format.sort,
             locales: format.locales,
+            attribute_state,
         })
     }
 
@@ -1911,8 +1916,9 @@ impl<'a> HitMaker<'a> {
 
         let ranking_score =
             self.show_ranking_score.then(|| ScoreDetails::global_score(score.iter()));
-        let ranking_score_details =
-            self.show_ranking_score_details.then(|| ScoreDetails::to_json_map(score.iter()));
+        let ranking_score_details = self
+            .show_ranking_score_details
+            .then(|| ScoreDetails::to_json_map(self.attribute_state, score.iter()));
 
         let hit = SearchHit {
             document,

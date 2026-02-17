@@ -27,24 +27,61 @@ pub enum CriterionError {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
     /// Sorted by decreasing number of matched query terms.
-    /// Query words at the front of an attribute is considered better than if it was at the back.
     Words,
     /// Sorted by increasing number of typos.
     Typo,
     /// Sorted by increasing distance between matched query terms.
     Proximity,
-    /// Documents with quey words contained in more important
-    /// attributes are considered better.
+    /// Documents with query words contained in more important
+    /// attributes and at a closer-to-the-front position in it
+    /// are considered better.
     Attribute,
-    /// Dynamically sort at query time the documents. None, one or multiple Asc/Desc sortable
-    /// attributes can be used in place of this criterion at query time.
+    /// Documents with query words contained in more important
+    /// attributes are considered better. Position of the
+    /// query words in an attribute is not considered.
+    AttributeRank,
+    /// Documents with query words that are closer to the front
+    /// of an attribute are considered better. Attribute rank
+    /// is not considered.
+    AttributePosition,
+    /// Dynamically sort at query time the documents. None, one
+    /// or multiple Asc/Desc sortable attributes can be used in
+    /// place of this criterion at query time.
     Sort,
-    /// Sorted by the similarity of the matched words with the query words.
+    /// Sorted by the similarity of the matched words with
+    /// the query words.
     Exactness,
     /// Sorted by the increasing value of the field specified.
     Asc(String),
     /// Sorted by the decreasing value of the field specified.
     Desc(String),
+}
+
+/// How is the attribute ranking rule defined.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum AttributeState {
+    /// The Attribute ranking rule is a mix
+    /// of the rank and position.
+    #[default]
+    Unified,
+    /// The AttributeRank and AttributePosition
+    /// ranking rules are defined separately.
+    Separated,
+}
+
+impl AttributeState {
+    /// If the index has the AttributeRank or AttributePosition ranking rule,
+    /// We consider them separated, else we consider them unified as the default
+    /// state is the Attribute ranking rule alone.
+    pub fn from_criteria(criterion: impl IntoIterator<Item = Criterion>) -> AttributeState {
+        use Criterion::{AttributePosition, AttributeRank};
+
+        if criterion.into_iter().any(|r| matches!(r, AttributeRank | AttributePosition)) {
+            AttributeState::Separated
+        } else {
+            AttributeState::Unified
+        }
+    }
 }
 
 impl Criterion {
@@ -66,6 +103,8 @@ impl FromStr for Criterion {
             "typo" => Ok(Criterion::Typo),
             "proximity" => Ok(Criterion::Proximity),
             "attribute" => Ok(Criterion::Attribute),
+            "attributeRank" => Ok(Criterion::AttributeRank),
+            "attributePosition" => Ok(Criterion::AttributePosition),
             "sort" => Ok(Criterion::Sort),
             "exactness" => Ok(Criterion::Exactness),
             text => match AscDesc::from_str(text)? {
@@ -99,6 +138,8 @@ impl fmt::Display for Criterion {
             Typo => f.write_str("typo"),
             Proximity => f.write_str("proximity"),
             Attribute => f.write_str("attribute"),
+            AttributeRank => f.write_str("attributeRank"),
+            AttributePosition => f.write_str("attributePosition"),
             Sort => f.write_str("sort"),
             Exactness => f.write_str("exactness"),
             Asc(attr) => write!(f, "{}:asc", attr),
@@ -121,6 +162,9 @@ mod tests {
             ("words", Criterion::Words),
             ("typo", Criterion::Typo),
             ("proximity", Criterion::Proximity),
+            ("attribute", Criterion::Attribute),
+            ("attributeRank", Criterion::AttributeRank),
+            ("attributePosition", Criterion::AttributePosition),
             ("attribute", Criterion::Attribute),
             ("sort", Criterion::Sort),
             ("exactness", Criterion::Exactness),

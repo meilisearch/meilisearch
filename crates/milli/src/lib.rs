@@ -60,7 +60,7 @@ pub use {arroy, cellulite, charabia as tokenizer, hannoy, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::attribute_patterns::{AttributePatterns, PatternMatch};
-pub use self::criterion::{default_criteria, Criterion, CriterionError};
+pub use self::criterion::{default_criteria, AttributeState, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };

@@ -406,3 +406,47 @@ async fn settings_bad_search_cutoff_ms() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn settings_mixed_attribute_ranking_rules() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // Test different invalid combinations of ranking rules
+    let invalid_ranking_rules = [
+        json!(["words", "attribute", "attributeRank"]),
+        json!(["attribute", "attributePosition"]),
+        json!(["attribute", "attributeRank", "attributePosition"]),
+        json!(["typo", "attribute", "attributePosition", "exactness"]),
+    ];
+
+    for ranking_rules in invalid_ranking_rules {
+        let (response, code) = index
+            .update_settings(json!({
+                "rankingRules": ranking_rules
+            }))
+            .await;
+        snapshot!(code, @"400 Bad Request");
+        snapshot!(json_string!(response), @r###"
+        {
+          "message": "Mixed usage of the attribute, attributeRank, and attributePosition ranking rules. You must either use the attribute ranking rule alone or the attributeRank and attributePosition ranking rules.",
+          "code": "invalid_settings_ranking_rules",
+          "type": "invalid_request",
+          "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
+        }
+        "###);
+    }
+
+    // Test using the dedicated ranking rules endpoint
+    let (response, code) =
+        index.update_settings_ranking_rules(json!(["attribute", "attributeRank"])).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Mixed usage of the attribute, attributeRank, and attributePosition ranking rules. You must either use the attribute ranking rule alone or the attributeRank and attributePosition ranking rules.",
+      "code": "invalid_settings_ranking_rules",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
+    }
+    "###);
+}
