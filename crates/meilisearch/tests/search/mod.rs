@@ -808,14 +808,16 @@ async fn test_score_details() {
                         "order": 2,
                         "score": 0.75
                       },
-                      "attribute": {
+                      "attributeRank": {
                         "order": 3,
-                        "attributeRankingOrderScore": 1.0,
-                        "queryWordDistanceScore": 0.8095238095238095,
+                        "score": 1.0
+                      },
+                      "attributePosition": {
+                        "order": 4,
                         "score": 0.8095238095238095
                       },
                       "exactness": {
-                        "order": 4,
+                        "order": 5,
                         "matchType": "noExactMatch",
                         "matchingWords": 2,
                         "maxMatchingWords": 2,
@@ -2249,6 +2251,7 @@ async fn ranking_score_bug_with_sort() {
     // Configure sortable attributes
     let (task, code) = index
         .update_settings(json!({
+            "rankingRules": ["typo", "words", "proximity", "attribute", "sort", "exactness"],
             "sortableAttributes": ["created"]
         }))
         .await;
