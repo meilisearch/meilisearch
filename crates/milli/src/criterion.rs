@@ -69,6 +69,21 @@ pub enum AttributeState {
     Separated,
 }
 
+impl AttributeState {
+    /// If the index has the AttributeRank or AttributePosition ranking rule,
+    /// We consider them separated, else we consider them unified as the default
+    /// state is the Attribute ranking rule alone.
+    pub fn from_criteria(criterion: impl IntoIterator<Item = Criterion>) -> AttributeState {
+        use Criterion::{AttributePosition, AttributeRank};
+
+        if criterion.into_iter().any(|r| matches!(r, AttributeRank | AttributePosition)) {
+            AttributeState::Separated
+        } else {
+            AttributeState::Unified
+        }
+    }
+}
+
 impl Criterion {
     /// Returns the field name parameter of this criterion.
     pub fn field_name(&self) -> Option<&str> {

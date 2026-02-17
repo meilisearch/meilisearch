@@ -345,13 +345,7 @@ fn test_redacted() {
         AscDesc::Asc(Member::Field(S("letter"))),
     ]);
 
-    let separated = index
-        .criteria(&txn)
-        .unwrap()
-        .iter()
-        .any(|r| matches!(r, Criterion::AttributeRank | Criterion::AttributePosition));
-    let attribute_state =
-        if separated { AttributeState::Separated } else { AttributeState::Unified };
+    let attribute_state = AttributeState::from_criteria(index.criteria(&txn).unwrap());
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     let document_scores_json: Vec<_> = document_scores

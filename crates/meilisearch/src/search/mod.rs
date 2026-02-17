@@ -22,7 +22,7 @@ use meilisearch_types::milli::score_details::{ScoreDetails, ScoringStrategy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::vector::Embedder;
 use meilisearch_types::milli::{
-    AttributeState, Criterion, Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch,
+    AttributeState, Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch,
     SearchForFacetValues, SearchStep,
 };
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -1821,15 +1821,7 @@ impl<'a> HitMaker<'a> {
             &displayed_ids,
         );
 
-        // If the index has the AttributeRank or AttributePosition ranking rule,
-        // We consider them separated, else we consider them unified as the default
-        // state is the Attribute ranking rule alone
-        let separated = index
-            .criteria(rtxn)?
-            .iter()
-            .any(|r| matches!(r, Criterion::AttributeRank | Criterion::AttributePosition));
-        let attribute_state =
-            if separated { AttributeState::Separated } else { AttributeState::Unified };
+        let attribute_state = AttributeState::from_criteria(index.criteria(rtxn)?);
 
         Ok(Self {
             index,
