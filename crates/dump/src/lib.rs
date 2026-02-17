@@ -270,7 +270,7 @@ pub(crate) mod test {
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::dynamic_search_rules::{
         Action as RuleActionKind, BoostArgs, Condition, DynamicSearchRule, DynamicSearchRules,
-        Filter, FilterOp, PinArgs, QueryCondition, RuleAction, Selector, TimeCondition,
+        PinArgs, QueryCondition, RuleAction, Selector, TimeCondition,
     };
     use meilisearch_types::facet_values_sort::FacetValuesSort;
     use meilisearch_types::features::RuntimeTogglableFeatures;
@@ -575,7 +575,6 @@ pub(crate) mod test {
         rules.insert(
             "black-friday".to_string(),
             DynamicSearchRule {
-                version: None,
                 uid: "black-friday".to_string(),
                 description: Some("Black Friday promo".to_string()),
                 priority: Some(1),
@@ -583,8 +582,8 @@ pub(crate) mod test {
                 conditions: vec![
                     Condition::Query(QueryCondition { is_empty: false }),
                     Condition::Time(TimeCondition {
-                        start: Some("2025-11-28T00:00:00Z".to_string()),
-                        end: Some("2025-11-28T23:59:59Z".to_string()),
+                        start: Some(datetime!(2025-11-28 00:00:00 UTC)),
+                        end: Some(datetime!(2025-11-28 23:59:59 UTC)),
                     }),
                 ],
                 actions: vec![
@@ -600,11 +599,11 @@ pub(crate) mod test {
                         selector: Selector {
                             index_uid: None,
                             id: None,
-                            filter: Some(Filter {
-                                attribute: "brand".to_string(),
-                                op: FilterOp::Eq,
-                                value: "premium".to_string(),
-                            }),
+                            filter: Some(json!({
+                                "attribute": "brand",
+                                "op": "eq",
+                                "value": "premium",
+                            })),
                         },
                         action: RuleActionKind::Boost(BoostArgs { score: 1.5 }),
                     },

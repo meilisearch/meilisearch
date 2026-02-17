@@ -104,7 +104,7 @@ mod tests {
     use serde::de::DeserializeOwned;
     use serde_json::{json, Value};
     use std::fmt::Debug;
-    use time::format_description::well_known::Rfc3339;
+    use time::macros::datetime;
 
     fn round_trip<T>(expected: &T)
     where
@@ -113,10 +113,6 @@ mod tests {
         let serialized: Value = serde_json::to_value(expected).unwrap();
         let deserialized: T = serde_json::from_value(serialized).unwrap();
         assert_eq!(&deserialized, expected);
-    }
-
-    fn parse_offset_date_time(s: &str) -> OffsetDateTime {
-        OffsetDateTime::parse(s, &Rfc3339).unwrap()
     }
 
     #[test]
@@ -129,8 +125,8 @@ mod tests {
             conditions: vec![
                 Condition::Query(QueryCondition { is_empty: true }),
                 Condition::Time(TimeCondition {
-                    start: Some(parse_offset_date_time("2025-11-28T00:00:00Z")),
-                    end: Some(parse_offset_date_time("2025-11-28T23:59:59Z")),
+                    start: Some(datetime!(2025-11-28 0:00:00 UTC)),
+                    end: Some(datetime!(2025-11-28 23:59:59 UTC)),
                 }),
             ],
             actions: vec![
@@ -225,14 +221,14 @@ mod tests {
         insta::assert_json_snapshot!("query", condition);
 
         let condition = Condition::Time(TimeCondition {
-            start: Some(parse_offset_date_time("2025-01-01T00:00:00Z")),
-            end: Some(parse_offset_date_time("2025-12-31T23:59:59Z")),
+            start: Some(datetime!(2025-01-01 0:00:00 UTC)),
+            end: Some(datetime!(2025-12-31 23:59:59 UTC)),
         });
         round_trip(&condition);
         insta::assert_json_snapshot!("time_both", condition);
 
         let condition = Condition::Time(TimeCondition {
-            start: Some(parse_offset_date_time("2025-01-01T00:00:00Z")),
+            start: Some(datetime!(2025-01-01 0:00:00 UTC)),
             end: None,
         });
         round_trip(&condition);
@@ -240,7 +236,7 @@ mod tests {
 
         let condition = Condition::Time(TimeCondition {
             start: None,
-            end: Some(parse_offset_date_time("2025-12-31T23:59:59Z")),
+            end: Some(datetime!(2025-12-31 23:59:59 UTC)),
         });
         round_trip(&condition);
         insta::assert_json_snapshot!("time_end", condition);
