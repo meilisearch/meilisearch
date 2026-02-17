@@ -4,7 +4,5 @@ expression: action
 ---
 {
   "name": "bury",
-  "args": {
-    "score": 0.3
-  }
+  "score": 0.3
 }

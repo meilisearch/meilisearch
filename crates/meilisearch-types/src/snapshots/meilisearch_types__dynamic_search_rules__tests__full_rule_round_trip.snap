@@ -26,9 +26,7 @@ expression: expected
       },
       "action": {
         "name": "pin",
-        "args": {
-          "position": 3
-        }
+        "position": 3
       }
     },
     {
@@ -41,9 +39,7 @@ expression: expected
       },
       "action": {
         "name": "boost",
-        "args": {
-          "score": 1.5
-        }
+        "score": 1.5
       }
     },
     {
@@ -56,9 +52,7 @@ expression: expected
       },
       "action": {
         "name": "bury",
-        "args": {
-          "score": 0.5
-        }
+        "score": 0.5
       }
     },
     {
@@ -66,8 +60,7 @@ expression: expected
         "id": "456"
       },
       "action": {
-        "name": "hide",
-        "args": {}
+        "name": "hide"
       }
     }
   ]

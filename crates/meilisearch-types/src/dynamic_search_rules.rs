@@ -69,7 +69,7 @@ pub struct Selector {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(tag = "name", content = "args", rename_all = "camelCase")]
+#[serde(tag = "name", rename_all = "camelCase")]
 pub enum Action {
     Pin(PinArgs),
     Boost(BoostArgs),

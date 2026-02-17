@@ -3,6 +3,5 @@ source: crates/meilisearch-types/src/dynamic_search_rules.rs
 expression: action
 ---
 {
-  "name": "hide",
-  "args": {}
+  "name": "hide"
 }
