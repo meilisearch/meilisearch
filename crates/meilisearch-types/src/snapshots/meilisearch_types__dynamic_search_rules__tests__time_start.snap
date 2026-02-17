@@ -4,7 +4,5 @@ expression: condition
 ---
 {
   "scope": "time",
-  "settings": {
-    "start": "2025-01-01T00:00:00Z"
-  }
+  "start": "2025-01-01T00:00:00Z"
 }

@@ -21,7 +21,7 @@ pub struct DynamicSearchRule {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-#[serde(tag = "scope", content = "settings", rename_all = "camelCase")]
+#[serde(tag = "scope", rename_all = "camelCase")]
 pub enum Condition {
     Query(QueryCondition),
     Time(TimeCondition),

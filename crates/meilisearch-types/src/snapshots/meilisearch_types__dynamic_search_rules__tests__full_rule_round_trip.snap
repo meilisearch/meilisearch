@@ -10,16 +10,12 @@ expression: expected
   "conditions": [
     {
       "scope": "query",
-      "settings": {
-        "isEmpty": true
-      }
+      "isEmpty": true
     },
     {
       "scope": "time",
-      "settings": {
-        "start": "2025-11-28T00:00:00Z",
-        "end": "2025-11-28T23:59:59Z"
-      }
+      "start": "2025-11-28T00:00:00Z",
+      "end": "2025-11-28T23:59:59Z"
     }
   ],
   "actions": [
