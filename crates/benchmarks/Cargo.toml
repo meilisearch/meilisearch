@@ -11,31 +11,28 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-anyhow = "1.0.100"
-bumpalo = "3.19.0"
-csv = "1.4.0"
-http-client = { path = "../http-client" }
-memmap2 = "0.9.9"
-milli = { path = "../milli" }
-mimalloc = { version = "0.1.48", default-features = false }
-serde_json = { version = "1.0.145", features = ["preserve_order"] }
-tempfile = "3.23.0"
+anyhow = { workspace = true, features = ["backtrace"] } #unified
+bumpalo = { workspace = true } #unified
+csv = { workspace = true } #unified
+http-client = { workspace = true } #unified
+memmap2 = { workspace = true } #unified
+milli = { workspace = true } #unified
+mimalloc = { workspace = true } #unified
+serde_json = { workspace = true, features = ["raw_value"] } #unified
+tempfile = { workspace = true } #unified
 
 [dev-dependencies]
-criterion = { version = "0.7.0", features = ["html_reports"] }
-rand = "0.8.5"
+criterion = { workspace = true } #unified
+rand = { workspace = true, features = ["small_rng"] } #unified
 rand_chacha = "0.3.1"
-roaring = "0.10.12"
+roaring = { workspace = true, features = ["serde"] } #unified
 
 [build-dependencies]
-anyhow = "1.0.100"
-bytes = "1.11.1"
-convert_case = "0.9.0"
-flate2 = "1.1.5"
-reqwest = { version = "0.12.24", features = [
-    "blocking",
-    "rustls-tls",
-], default-features = false }
+anyhow = { workspace = true, features = ["backtrace"] } #unified
+bytes = { workspace = true } #unified
+convert_case = { workspace = true } #unified
+flate2 = { workspace = true } #unified
+reqwest = { workspace = true, features = ["json", "multipart", "rustls-tls-native-roots", "stream"] } #unified
 
 [features]
 default = ["milli/all-tokenizations"]

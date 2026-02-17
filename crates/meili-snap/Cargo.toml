@@ -11,9 +11,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-# fixed version due to format breakages in v1.40
-insta = { version = "=1.39.0", features = ["json", "redactions"] }
-md5 = "0.8.0"
-once_cell = "1.21"
+insta = { workspace = true } #unified
+md5 = { workspace = true } #unified
+once_cell = { workspace = true } #unified
 regex-lite = "0.1.8"
-uuid = { version = "1.18.1", features = ["v4"] }
+uuid = { workspace = true, features = ["serde", "v7"] } #unified

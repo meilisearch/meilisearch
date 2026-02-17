@@ -11,17 +11,17 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-base64 = "0.22.1"
+base64 = { workspace = true } #unified
 enum-iterator = "2.3.0"
-hex = "0.4.3"
+hex = { workspace = true } #unified
 hmac = "0.12.1"
-maplit = "1.0.2"
-meilisearch-types = { path = "../meilisearch-types" }
-rand = "0.8.5"
-roaring = { version = "0.10.12", features = ["serde"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.145", features = ["preserve_order"] }
-sha2 = "0.10.9"
+maplit = { workspace = true } #unified
+meilisearch-types = { workspace = true } #unified
+rand = { workspace = true, features = ["small_rng"] } #unified
+roaring = { workspace = true } #unified
+serde = { workspace = true, features = ["rc"] } #unified
+serde_json = { workspace = true, features = ["raw_value"] } #unified
+sha2 = { workspace = true } #unified
 thiserror = "2.0.17"
-time = { version = "0.3.47", features = ["serde-well-known", "formatting", "parsing", "macros"] }
-uuid = { version = "1.18.1", features = ["serde", "v4"] }
+time = { workspace = true, features = ["serde", "serde-human-readable"] } #unified
+uuid = { workspace = true, features = ["v7"] } #unified

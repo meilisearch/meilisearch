@@ -12,23 +12,23 @@ readme.workspace = true
 license.workspace = true
 
 [dependencies]
-big_s = "1.0.2"
+big_s = { workspace = true } #unified
 bimap = { version = "0.6.3", features = ["serde"] }
-bincode = "1.3.3"
-bstr = "1.12.1"
+bincode = { workspace = true } #unified
+bstr = { workspace = true } #unified
 bytemuck = { version = "1.24.0", features = ["extern_crate_alloc"] }
 byteorder = "1.5.0"
 charabia = { version = "0.9.9", default-features = false }
 cellulite = "0.3.1-nested-rtxns-2"
 concat-arrays = "0.1.2"
-convert_case = "0.9.0"
+convert_case = { workspace = true } #unified
 crossbeam-channel = "0.5.15"
 # for compatibility with the ureq of hf-hub
 danger-ureq = { package = "ureq", version = "2.12.1", features = ["json"] }
-deserr = "0.6.4"
-either = { version = "1.15.0", features = ["serde"] }
-flatten-serde-json = { path = "../flatten-serde-json" }
-fst = "0.4.7"
+deserr = { workspace = true, features = ["actix-web"] } #unified
+either = { workspace = true } #unified
+flatten-serde-json = { workspace = true } #unified
+fst = { workspace = true } #unified
 fxhash = "0.2.1"
 geojson = "0.24.2"
 geoutils = "0.5.1"
@@ -40,40 +40,31 @@ heed = { version = "0.22.1-nested-rtxns-6", default-features = false, features =
     "serde-json",
     "serde-bincode",
 ] }
-http-client = { path = "../http-client" }
-indexmap = { version = "2.12.0", features = ["serde", "rayon"] }
-json-depth-checker = { path = "../json-depth-checker" }
-levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
+http-client = { workspace = true } #unified
+indexmap = { workspace = true } #unified
+json-depth-checker = { workspace = true } #unified
+levenshtein_automata = { workspace = true } #unified
 memchr = "2.7.6"
-memmap2 = "0.9.9"
-obkv = "0.3.0"
-once_cell = "1.21.3"
+memmap2 = { workspace = true } #unified
+obkv = { workspace = true } #unified
+once_cell = { workspace = true } #unified
 ordered-float = "5.1.0"
-rayon = "1.11.0"
-roaring = { version = "0.10.12", features = ["serde"] }
+rayon = { workspace = true } #unified
+roaring = { workspace = true } #unified
 rstar = { version = "0.12.2", features = ["serde"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.145", features = ["preserve_order", "raw_value"] }
+serde = { workspace = true, features = ["rc"] } #unified
+serde_json = { workspace = true } #unified
 slice-group-by = "0.3.1"
 smallstr = { version = "0.3.1", features = ["serde"] }
 smallvec = "1.15.1"
 smartstring = "1.0.1"
-tempfile = "3.23.0"
+tempfile = { workspace = true } #unified
 thiserror = "2.0.17"
-time = { version = "0.3.47", features = [
-    "serde-well-known",
-    "formatting",
-    "parsing",
-    "macros",
-] }
-uuid = { version = "1.18.1", features = ["v4"] }
-
-filter-parser = { path = "../filter-parser" }
-
-# documents words self-join
-itertools = "0.14.0"
-
-csv = "1.4.0"
+time = { workspace = true, features = ["serde", "serde-human-readable"] } #unified
+uuid = { workspace = true, features = ["serde", "v7"] } #unified
+filter-parser = { workspace = true } #unified
+itertools = { workspace = true } #unified
+csv = { workspace = true } #unified
 candle-core = { version = "0.9.1" }
 candle-transformers = { version = "0.9.1" }
 candle-nn = { version = "0.9.1" }
@@ -95,11 +86,11 @@ rhai = { version = "1.23.6", features = [
 ] }
 arroy = "0.6.4-nested-rtxns"
 hannoy = { version = "0.1.5-nested-rtxns", features = ["arroy"] }
-rand = "0.8.5"
-tracing = "0.1.41"
-url = "2.5.7"
-hashbrown = "0.15.5"
-bumpalo = "3.19.0"
+rand = { workspace = true, features = ["small_rng"] } #unified
+tracing = { workspace = true } #unified
+url = { workspace = true, features = ["serde"] } #unified
+hashbrown = { workspace = true } #unified
+bumpalo = { workspace = true } #unified
 bumparaw-collections = "0.1.4"
 steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.9"
@@ -107,14 +98,7 @@ rustc-hash = "2.1.1"
 enum-iterator = "2.3.0"
 bbqueue = { git = "https://github.com/meilisearch/bbqueue" }
 flume = { version = "0.11.1", default-features = false }
-utoipa = { version = "5.4.0", features = [
-    "macros",
-    "non_strict_integers",
-    "preserve_order",
-    "uuid",
-    "time",
-    "openapi_extensions",
-] }
+utoipa = { workspace = true, features = ["actix_extras"] } #unified
 lru = "0.16.3"
 twox-hash = { version = "2.1.2", default-features = false, features = [
     "std",
@@ -125,13 +109,12 @@ geo-types = "=0.7.17" # fixed version: see <https://github.com/meilisearch/meili
 zerometry = "0.3.0"
 
 [dev-dependencies]
-mimalloc = { version = "0.1.48", default-features = false }
-# fixed version due to format breakages in v1.40
-insta = "=1.39.0"
-maplit = "1.0.2"
-md5 = "0.8.0"
-meili-snap = { path = "../meili-snap" }
-rand = { version = "0.8.5", features = ["small_rng"] }
+mimalloc = { workspace = true } #unified
+insta = { workspace = true, features = ["json", "redactions"] } #unified
+maplit = { workspace = true } #unified
+md5 = { workspace = true } #unified
+meili-snap = { workspace = true } #unified
+rand = { workspace = true } #unified
 
 [features]
 all-tokenizations = ["charabia/default"]

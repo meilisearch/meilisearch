@@ -12,11 +12,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-nom = "7.1.3"
+nom = { workspace = true } #unified
 nom_locate = "4.2.0"
 unescaper = "0.1.6"
-levenshtein_automata = { version = "0.2.1", features = ["fst_automaton"] }
+levenshtein_automata = { workspace = true } #unified
 
 [dev-dependencies]
-# fixed version due to format breakages in v1.40
-insta = "=1.39.0"
+insta = { workspace = true, features = ["json", "redactions"] } #unified
