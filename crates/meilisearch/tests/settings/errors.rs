@@ -429,7 +429,7 @@ async fn settings_mixed_attribute_ranking_rules() {
         snapshot!(code, @"400 Bad Request");
         snapshot!(json_string!(response), @r###"
         {
-          "message": "Mixed usage of the Attribute, AttributeRank, and AttributePosition ranking rules. You must either use the Attribute ranking rule alone or the AttributeRank and AttributePosition ranking rules.",
+          "message": "Mixed usage of the attribute, attributeRank, and attributePosition ranking rules. You must either use the attribute ranking rule alone or the attributeRank and attributePosition ranking rules.",
           "code": "invalid_settings_ranking_rules",
           "type": "invalid_request",
           "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
@@ -443,7 +443,7 @@ async fn settings_mixed_attribute_ranking_rules() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Mixed usage of the Attribute, AttributeRank, and AttributePosition ranking rules. You must either use the Attribute ranking rule alone or the AttributeRank and AttributePosition ranking rules.",
+      "message": "Mixed usage of the attribute, attributeRank, and attributePosition ranking rules. You must either use the attribute ranking rule alone or the attributeRank and attributePosition ranking rules.",
       "code": "invalid_settings_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_settings_ranking_rules"
