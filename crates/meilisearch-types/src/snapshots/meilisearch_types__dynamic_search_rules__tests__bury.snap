@@ -3,6 +3,6 @@ source: crates/meilisearch-types/src/dynamic_search_rules.rs
 expression: action
 ---
 {
-  "name": "bury",
+  "type": "bury",
   "score": 0.3
 }

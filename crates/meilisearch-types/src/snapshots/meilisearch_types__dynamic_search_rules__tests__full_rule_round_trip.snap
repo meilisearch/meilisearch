@@ -25,7 +25,7 @@ expression: expected
         "id": "123"
       },
       "action": {
-        "name": "pin",
+        "type": "pin",
         "position": 3
       }
     },
@@ -38,7 +38,7 @@ expression: expected
         }
       },
       "action": {
-        "name": "boost",
+        "type": "boost",
         "score": 1.5
       }
     },
@@ -51,7 +51,7 @@ expression: expected
         }
       },
       "action": {
-        "name": "bury",
+        "type": "bury",
         "score": 0.5
       }
     },
@@ -60,7 +60,7 @@ expression: expected
         "id": "456"
       },
       "action": {
-        "name": "hide"
+        "type": "hide"
       }
     }
   ]

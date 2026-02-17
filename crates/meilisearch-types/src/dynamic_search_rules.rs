@@ -69,7 +69,7 @@ pub struct Selector {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-#[serde(tag = "name", rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum Action {
     Pin(PinArgs),
     Boost(BoostArgs),
@@ -249,7 +249,7 @@ mod tests {
             "actions": [
                 {
                     "selector": {},
-                    "action": { "name": "hide", "args": {} }
+                    "action": { "type": "hide" }
                 }
             ]
         });

@@ -3,6 +3,6 @@ source: crates/meilisearch-types/src/dynamic_search_rules.rs
 expression: action
 ---
 {
-  "name": "pin",
+  "type": "pin",
   "position": 5
 }

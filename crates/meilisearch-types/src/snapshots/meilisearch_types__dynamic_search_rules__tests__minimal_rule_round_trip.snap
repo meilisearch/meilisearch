@@ -12,7 +12,7 @@ expression: expected
         "id": "42"
       },
       "action": {
-        "name": "pin",
+        "type": "pin",
         "position": 1
       }
     }
