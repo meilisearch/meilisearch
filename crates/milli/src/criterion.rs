@@ -27,8 +27,6 @@ pub enum CriterionError {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Criterion {
     /// Sorted by decreasing number of matched query terms.
-    /// Query words at the front of an attribute is considered
-    /// better than if it was at the back.
     Words,
     /// Sorted by increasing number of typos.
     Typo,
@@ -39,7 +37,7 @@ pub enum Criterion {
     /// are considered better.
     Attribute,
     /// Documents with query words contained in more important
-    /// attributes only are considered better. Position of the
+    /// attributes are considered better. Position of the
     /// query words in an attribute is not considered.
     AttributeRank,
     /// Documents with query words that are closer to the front

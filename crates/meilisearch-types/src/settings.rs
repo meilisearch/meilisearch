@@ -1093,8 +1093,6 @@ pub fn settings(
 #[deserr(try_from(&String) = FromStr::from_str -> CriterionError)]
 pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
-    /// Query words at the front of an attribute is considered better than if
-    /// it was at the back.
     Words,
     /// Sorted by increasing number of typos.
     Typo,
@@ -1105,7 +1103,7 @@ pub enum RankingRuleView {
     /// are considered better.
     Attribute,
     /// Documents with query words contained in more important
-    /// attributes only are considered better. Position of the
+    /// attributes are considered better. Position of the
     /// query words in an attribute is not considered.
     AttributeRank,
     /// Documents with query words that are closer to the front
