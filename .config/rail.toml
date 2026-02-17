@@ -1,0 +1,47 @@
+# cargo-rail configuration for meilisearch fork
+# Docs: https://github.com/loadingalias/cargo-rail
+
+# Targets
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]
+
+[unify]
+include_paths = true
+include_renamed = false
+
+pin_transitives = false  # enable for hakari/workspace-hack users
+transitive_host = "root"  # only used if pin_transitives = true
+
+strict_version_compat = true
+exact_pin_handling = "preserve"
+major_version_conflict = "warn"  # warn = skip, bump = force highest
+
+msrv = false
+msrv_source = "workspace"  # deps | workspace | max
+enforce_msrv_inheritance = false  # Ensure members inherit workspace rust-version
+
+detect_unused = true
+remove_unused = true  # requires detect_unused = true
+
+prune_dead_features = true
+preserve_features = []  # glob patterns to keep from pruning
+detect_undeclared_features = true
+fix_undeclared_features = true  # requires detect_undeclared_features = true
+skip_undeclared_patterns = [
+  "default",
+  "std",
+  "alloc",
+  "*_backend",
+  "*_impl",
+]
+
+exclude = []  # excluding one workspace member excludes its whole member cohort
+include = []  # workspace-member cohorts are auto-included
+max_backups = 3
+sort_dependencies = false  # false to preserve existing order
+
+
+[release]
+
+[change-detection]
+
+[run]

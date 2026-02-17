@@ -8,17 +8,17 @@ edition = "2021"
 [dependencies]
 color-spantrace = "0.3.0"
 fxprof-processed-profile = "0.7.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.145"
-tracing = "0.1.41"
+serde = { workspace = true, features = ["rc"] } #unified
+serde_json = { workspace = true, features = ["preserve_order", "raw_value"] } #unified
+tracing = { workspace = true } #unified
 tracing-error = "0.2.1"
-tracing-subscriber = "0.3.20"
+tracing-subscriber = { version = "0.3.20", features = ["json"] }
 byte-unit = { version = "5.1.6", default-features = false, features = [
     "std",
     "byte",
     "serde",
 ] }
-tokio = { version = "1.48.0", features = ["sync"] }
+tokio = { workspace = true, features = ["fs", "full", "macros", "net", "process", "rt", "rt-multi-thread", "signal", "time"] } #unified
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 libproc = "0.14.11"

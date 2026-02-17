@@ -11,53 +11,40 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-actix-web = { version = "4.12.0", default-features = false }
-anyhow = "1.0.100"
-base64 = "0.22.1"
-bumpalo = "3.19.0"
+actix-web = { version = "4.12.0", default-features = false, features = ["compress-brotli", "compress-gzip", "cookies", "macros", "rustls-0_23"] }
+anyhow = { workspace = true, features = ["backtrace"] } #unified
+base64 = { workspace = true } #unified
+bumpalo = { workspace = true } #unified
 bumparaw-collections = "0.1.4"
-byte-unit = { version = "5.1.6", features = ["serde"] }
-convert_case = "0.9.0"
-csv = "1.4.0"
-deserr = { version = "0.6.4", features = ["actix-web"] }
-either = { version = "1.15.0", features = ["serde"] }
+byte-unit = { version = "5.1.6", features = ["byte", "serde"] }
+convert_case = { workspace = true } #unified
+csv = { workspace = true } #unified
+deserr = { workspace = true } #unified
+either = { workspace = true } #unified
 enum-iterator = "2.3.0"
-file-store = { path = "../file-store" }
-flate2 = "1.1.5"
-fst = "0.4.7"
-itertools = "0.14.0"
-memmap2 = "0.9.9"
-milli = { path = "../milli" }
-roaring = { version = "0.10.12", features = ["serde"] }
+file-store = { workspace = true } #unified
+flate2 = { workspace = true } #unified
+fst = { workspace = true } #unified
+itertools = { workspace = true } #unified
+memmap2 = { workspace = true } #unified
+milli = { workspace = true } #unified
+roaring = { workspace = true } #unified
 rustc-hash = "2.1.1"
-serde = { version = "1.0.228", features = ["derive"] }
+serde = { workspace = true, features = ["rc"] } #unified
 serde-cs = "0.2.4"
-serde_json = { version = "1.0.145", features = ["preserve_order"] }
-tar = "0.4.44"
-tempfile = "3.23.0"
+serde_json = { workspace = true, features = ["raw_value"] } #unified
+tar = { workspace = true } #unified
+tempfile = { workspace = true } #unified
 thiserror = "2.0.17"
-time = { version = "0.3.47", features = [
-    "serde-well-known",
-    "formatting",
-    "parsing",
-    "macros",
-] }
-tokio = "1.48"
-urlencoding = "2.1.3"
-utoipa = { version = "5.4.0", features = [
-    "macros",
-    "non_strict_integers",
-    "preserve_order",
-    "uuid",
-    "time",
-    "openapi_extensions",
-] }
-uuid = { version = "1.18.1", features = ["serde", "v4"] }
+time = { workspace = true, features = ["serde", "serde-human-readable"] } #unified
+tokio = { workspace = true, features = ["fs", "full", "macros", "net", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] } #unified
+urlencoding = { workspace = true } #unified
+utoipa = { workspace = true, features = ["actix_extras"] } #unified
+uuid = { workspace = true, features = ["v7"] } #unified
 
 [dev-dependencies]
-# fixed version due to format breakages in v1.40
-insta = "=1.39.0"
-meili-snap = { path = "../meili-snap" }
+insta = { workspace = true, features = ["json", "redactions"] } #unified
+meili-snap = { workspace = true } #unified
 
 [features]
 # all specialized tokenizations

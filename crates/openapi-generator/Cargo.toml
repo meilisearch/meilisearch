@@ -5,12 +5,10 @@ edition = "2021"
 publish = false
 
 [dependencies]
-meilisearch = { path = "../meilisearch", default-features = false }
-serde_json = "1.0"
-clap = { version = "4.5.52", features = ["derive"] }
-anyhow = "1.0.100"
-utoipa = "5.4.0"
-reqwest = { version = "0.12", features = [
-    "blocking",
-], default-features = false }
-regex = "1.10"
+meilisearch = { workspace = true } #unified
+serde_json = { workspace = true, features = ["preserve_order", "raw_value"] } #unified
+clap = { workspace = true, features = ["env"] } #unified
+anyhow = { workspace = true, features = ["backtrace"] } #unified
+utoipa = { workspace = true, features = ["actix_extras", "macros", "non_strict_integers", "openapi_extensions", "preserve_order", "time", "uuid"] } #unified
+reqwest = { workspace = true, features = ["json", "multipart", "rustls-tls", "rustls-tls-native-roots", "stream"] } #unified
+regex = { workspace = true } #unified

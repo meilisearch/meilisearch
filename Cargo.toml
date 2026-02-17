@@ -37,6 +37,78 @@ readme = "README.md"
 edition = "2021"
 license = "MIT"
 
+[workspace.dependencies]
+dump = { path = "crates/dump", version = "^1.35.1" } #unified
+levenshtein_automata = { version = "^0.2.1", features = ["fst_automaton"] } #unified
+sha2 = "^0.10.9" #unified
+roaring = { version = "^0.10.12", features = ["serde"] } #unified
+big_s = "^1.0.2" #unified
+urlencoding = "^2.1.3" #unified
+csv = "^1.4.0" #unified
+rand = { version = "^0.8.5", features = ["small_rng"] } #unified
+tokio = { version = "^1.48.0", features = ["fs", "full", "macros", "net", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] } #unified
+maplit = "^1.0.2" #unified
+either = { version = "^1.15.0", features = ["serde"] } #unified
+nom = "^7.1.3" #unified
+secrecy = { version = "^0.10.3", features = ["serde"] } #unified
+once_cell = "^1.21.3" #unified
+url = { version = "^2.5.7", features = ["serde"] } #unified
+flatten-serde-json = { path = "crates/flatten-serde-json", version = "^1.35.1" } #unified
+rayon = "^1.11.0" #unified
+utoipa = { version = "^5.4.0", features = ["actix_extras", "macros", "non_strict_integers", "openapi_extensions", "preserve_order", "time", "uuid"] } #unified
+bstr = "^1.12.1" #unified
+file-store = { path = "crates/file-store", version = "^1.35.1" } #unified
+reqwest = { version = "^0.12.24", features = ["blocking", "json", "multipart", "rustls-tls", "rustls-tls-native-roots", "stream"] } #unified
+uuid = { version = "^1.19.0", features = ["serde", "v4", "v7"] } #unified
+insta = { version = "=1.39.0", features = ["json", "redactions"] } #unified
+meilisearch-auth = { path = "crates/meilisearch-auth", version = "^1.35.1" } #unified
+convert_case = "^0.9.0" #unified
+criterion = { version = "^0.7.0", features = ["html_reports"] } #unified
+regex = "^1.12.2" #unified
+md5 = "^0.8.0" #unified
+deserr = { version = "^0.6.4", features = ["actix-web"] } #unified
+base64 = "^0.22.1" #unified
+milli = { path = "crates/milli", version = "^1.35.1" } #unified
+json-depth-checker = { path = "crates/json-depth-checker", version = "^1.35.1" } #unified
+backoff = { version = "^0.4.0", features = ["tokio"] } #unified
+meilisearch = { path = "crates/meilisearch", version = "^1.35.1" } #unified
+itertools = "^0.14.0" #unified
+reqwest-eventsource = { path = "external-crates/reqwest-eventsource", version = "^0.6.0" } #unified
+bumpalo = "^3.19.0" #unified
+serde = { version = "^1.0.228", features = ["derive"] } #unified
+mimalloc = "^0.1.48" #unified
+hex = "^0.4.3" #unified
+build-info = { path = "crates/build-info", version = "^1.35.1" } #unified
+futures = "^0.3.31" #unified
+mime = "^0.3.17" #unified
+anyhow = { version = "^1.0.100", features = ["backtrace"] } #unified
+index-scheduler = { path = "crates/index-scheduler", version = "^1.35.1" } #unified
+obkv = "^0.3.0" #unified
+permissive-json-pointer = { path = "crates/permissive-json-pointer", version = "^1.35.1" } #unified
+tempfile = "^3.23.0" #unified
+cidr = { version = "^0.3.2", features = ["serde"] } #unified
+tar = "^0.4.44" #unified
+meilisearch-types = { path = "crates/meilisearch-types", version = "^1.35.1" } #unified
+indexmap = { version = "^2.12.1", features = ["rayon", "serde"] } #unified
+async-openai-macros = { path = "external-crates/async-openai-macros", version = "^0.1.0" } #unified
+tracing-trace = { path = "crates/tracing-trace", version = "^0.1.0" } #unified
+fst = "^0.4.7" #unified
+time = { version = "^0.3.47", features = ["alloc", "formatting", "macros", "parsing", "serde", "serde-human-readable", "serde-well-known"] } #unified
+sysinfo = "^0.37.2" #unified
+clap = { version = "^4.5.53", features = ["derive"] } #unified
+bincode = "^1.3.3" #unified
+hashbrown = "^0.15.5" #unified
+http-client = { path = "crates/http-client", version = "^1.35.1" } #unified
+tracing = "^0.1.43" #unified
+derive_builder = "^0.20.2" #unified
+async-openai = { path = "external-crates/async-openai", version = "^0.28.1" } #unified
+memmap2 = "^0.9.9" #unified
+meili-snap = { path = "crates/meili-snap", version = "^1.35.1" } #unified
+filter-parser = { path = "crates/filter-parser", version = "^1.35.1" } #unified
+flate2 = "^1.1.5" #unified
+bytes = "^1.11.1" #unified
+serde_json = { version = "^1.0.145", features = ["preserve_order", "raw_value"] } #unified
+
 [profile.release]
 codegen-units = 1
 
