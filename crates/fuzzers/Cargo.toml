@@ -12,12 +12,12 @@ license.workspace = true
 
 [dependencies]
 arbitrary = { version = "1.4.2", features = ["derive"] }
-bumpalo = "3.19.0"
-clap = { version = "4.5.52", features = ["derive"] }
-either = "1.15.0"
+bumpalo = { workspace = true } #unified
+clap = { workspace = true, features = ["env"] } #unified
+either = { workspace = true, features = ["serde"] } #unified
 fastrand = "2.3.0"
-http-client = { path = "../http-client" }
-milli = { path = "../milli" }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.145", features = ["preserve_order"] }
-tempfile = "3.23.0"
+http-client = { workspace = true } #unified
+milli = { workspace = true } #unified
+serde = { workspace = true, features = ["rc"] } #unified
+serde_json = { workspace = true, features = ["raw_value"] } #unified
+tempfile = { workspace = true } #unified

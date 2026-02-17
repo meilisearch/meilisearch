@@ -18,29 +18,29 @@ realtime = ["dep:tokio-tungstenite"]
 byot = []
 
 [dependencies]
-async-openai-macros = { path = "../async-openai-macros", version = "0.1.0" }
-backoff = { version = "0.4.0", features = ["tokio"] }
-base64 = "0.22.1"
-futures = "0.3.31"
-rand = "0.8.5"
-http-client = { path = "../../crates/http-client" }
-reqwest-eventsource = { version = "0.6.0", path = "../reqwest-eventsource" }
-serde = { version = "1.0.217", features = ["derive", "rc"] }
-serde_json = "1.0.135"
+async-openai-macros = { workspace = true } #unified
+backoff = { workspace = true, features = ["futures"] } #unified
+base64 = { workspace = true } #unified
+futures = { workspace = true } #unified
+rand = { workspace = true, features = ["small_rng"] } #unified
+http-client = { workspace = true } #unified
+reqwest-eventsource = { workspace = true } #unified
+serde = { workspace = true, features = ["rc"] } #unified
+serde_json = { workspace = true, features = ["preserve_order", "raw_value"] } #unified
 thiserror = "2.0.11"
-tokio = { version = "1.43.0", features = ["fs", "macros"] }
+tokio = { workspace = true, features = ["full", "net", "process", "rt", "rt-multi-thread", "signal", "sync", "time"] } #unified
 tokio-stream = "0.1.17"
 tokio-util = { version = "0.7.13", features = ["codec", "io-util"] }
-tracing = "0.1.41"
-derive_builder = "0.20.2"
-secrecy = { version = "0.10.3", features = ["serde"] }
-bytes = "1.11.1"
+tracing = { workspace = true } #unified
+derive_builder = { workspace = true } #unified
+secrecy = { workspace = true } #unified
+bytes = { workspace = true } #unified
 eventsource-stream = "0.2.3"
 tokio-tungstenite = { version = "0.26.1", optional = true, default-features = false }
 
 [dev-dependencies]
 tokio-test = "0.4.4"
-serde_json = "1.0"
+serde_json = { workspace = true, features = ["preserve_order", "raw_value"] } #unified
 
 [package.metadata.docs.rs]
 all-features = true

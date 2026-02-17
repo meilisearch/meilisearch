@@ -20,18 +20,18 @@ categories = [
 
 [dependencies]
 eventsource-stream = "0.2.3"
-http-client = { path = "../../crates/http-client" }
+http-client = { workspace = true } #unified
 futures-core = "0.3.5"
 futures-util = "0.3.31"
 pin-project-lite = "0.2.8"
-nom = "7.1.0"
-mime = "0.3.16"
+nom = { workspace = true } #unified
+mime = { workspace = true } #unified
 futures-timer = "3.0.2"
 thiserror = "1.0.30"
 
 [dev-dependencies]
-futures = "0.3.5"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+futures = { workspace = true } #unified
+tokio = { workspace = true, features = ["fs", "full", "net", "process", "rt", "signal", "sync", "time"] } #unified
 futures-retry = "0.6"
 pin-utils = "0.1"
 rocket = "0.5.0"
