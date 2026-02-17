@@ -178,8 +178,15 @@ impl<'ctx> SearchContext<'ctx> {
                 Some((_name, fid, weight)) => (*fid, *weight),
                 // The field is not searchable but the user didn't define any searchable attributes
                 None if user_defined_searchable.is_none() => continue,
-                // The field is not searchable => User error
+                // The field is not searchable
                 None => {
+                    // field exists in user settings
+                    if let Some(defined_searchable) = &user_defined_searchable {
+                        if defined_searchable.iter().any(|s| s == field_name) {
+                            continue;
+                        }
+                    }
+                    // field does not exist in user settings => user error
                     let (valid_fields, hidden_fields) = self.index.remove_hidden_fields(
                         self.txn,
                         searchable_fields_weights.iter().map(|(name, _, _)| name),
