@@ -561,6 +561,10 @@ fn import_dump(
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
 
+    if let Some(rules) = dump_reader.dynamic_search_rules()?.cloned() {
+        index_scheduler.put_search_dynamic_rules(rules)?;
+    }
+
     // 5.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;
     let base_config = index_scheduler.indexer_config();
