@@ -29,7 +29,7 @@ impl Display for Binary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.source)?;
         if !self.extra_cli_args.is_empty() {
-            write!(f, "with arguments: {:?}", self.extra_cli_args)?;
+            write!(f, ", with arguments: {:?}", self.extra_cli_args)?;
         }
         Ok(())
     }
