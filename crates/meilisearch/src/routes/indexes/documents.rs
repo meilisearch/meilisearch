@@ -1584,6 +1584,8 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
 /// Edit documents by function
 ///
 /// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to edit one or more documents directly in Meilisearch. The function receives each document and returns the modified document.
+///
+/// This feature is experimental and must be enabled through the experimental route.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/edit",
