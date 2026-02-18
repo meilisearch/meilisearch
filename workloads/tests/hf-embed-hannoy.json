@@ -42,17 +42,9 @@
       "method": "PATCH",
       "body": {
         "inline": {
-          "filterableAttributes": [
-            "genres",
-            "release_date"
-          ],
-          "searchableAttributes": [
-            "title",
-            "overview"
-          ],
-          "sortableAttributes": [
-            "release_date"
-          ],
+          "filterableAttributes": ["genres", "release_date"],
+          "searchableAttributes": ["title", "overview"],
+          "sortableAttributes": ["release_date"],
           "vectorStore": "experimental"
         }
       },
@@ -109,9 +101,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -179,9 +169,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -254,9 +242,7 @@
       "binary": {
         "source": "build",
         "edition": "community",
-        "extraCliArgs": [
-          "--experimental-dumpless-upgrade"
-        ]
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
       }
     },
     {
@@ -282,9 +268,7 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": [
-            "id"
-          ],
+          "attributesToRetrieve": ["id"],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -413,17 +397,9 @@
             "batchUid": 0,
             "canceledBy": null,
             "details": {
-              "filterableAttributes": [
-                "genres",
-                "release_date"
-              ],
-              "searchableAttributes": [
-                "title",
-                "overview"
-              ],
-              "sortableAttributes": [
-                "release_date"
-              ],
+              "filterableAttributes": ["genres", "release_date"],
+              "searchableAttributes": ["title", "overview"],
+              "sortableAttributes": ["release_date"],
               "vectorStore": "experimental"
             },
             "duration": "[duration]",
