@@ -21,7 +21,8 @@
         "inline": {
           "filterableAttributes": ["genres", "release_date"],
           "searchableAttributes": ["title", "overview"],
-          "sortableAttributes": ["release_date"]
+          "sortableAttributes": ["release_date"],
+          "searchCutoffMs": 200000000
         }
       },
       "expectedStatus": 202,
@@ -244,7 +245,8 @@
             "default": {
               "source": "huggingFace"
             }
-          }
+          },
+          "searchCutoffMs": 200000000
         }
       },
       "expectedStatus": 202,
@@ -555,6 +557,7 @@
                 }
               },
               "filterableAttributes": ["genres", "release_date"],
+              "searchCutoffMs": 200000000,
               "searchableAttributes": ["title", "overview"],
               "sortableAttributes": ["release_date"]
             },
@@ -627,6 +630,7 @@
             "canceledBy": null,
             "details": {
               "filterableAttributes": ["genres", "release_date"],
+              "searchCutoffMs": 200000000,
               "searchableAttributes": ["title", "overview"],
               "sortableAttributes": ["release_date"]
             },
