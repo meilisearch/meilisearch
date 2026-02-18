@@ -26,7 +26,7 @@ pub type ChatCompletionSettings = meilisearch_types::features::ChatCompletionSet
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
 pub type Network = meilisearch_types::network::Network;
 pub type Webhooks = meilisearch_types::webhooks::WebhooksDumpView;
-pub type DynamicSearchRules = meilisearch_types::dynamic_search_rules::DynamicSearchRules;
+pub type DynamicSearchRule = meilisearch_types::dynamic_search_rules::DynamicSearchRule;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
@@ -62,7 +62,6 @@ pub struct V6Reader {
     features: Option<RuntimeTogglableFeatures>,
     network: Option<Network>,
     webhooks: Option<Webhooks>,
-    dynamic_search_rules: Option<DynamicSearchRules>,
 }
 
 impl V6Reader {
@@ -129,17 +128,6 @@ impl V6Reader {
             },
         };
 
-        let dynamic_search_rules = match fs::read(dump.path().join("dynamic-search-rules.json")) {
-            Ok(file) => Some(serde_json::from_reader(&*file)?),
-            Err(error) => match error.kind() {
-                ErrorKind::NotFound => {
-                    debug!("`dynamic-search-rules.json` not found in dump");
-                    None
-                }
-                _ => return Err(error.into()),
-            },
-        };
-
         Ok(V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
@@ -150,7 +138,6 @@ impl V6Reader {
             network,
             dump,
             webhooks,
-            dynamic_search_rules,
         })
     }
 
@@ -266,8 +253,32 @@ impl V6Reader {
         self.webhooks.as_ref()
     }
 
-    pub fn dynamic_search_rules(&self) -> Option<&DynamicSearchRules> {
-        self.dynamic_search_rules.as_ref()
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, DynamicSearchRule)>> + '_>> {
+        let entries = match fs::read_dir(self.dump.path().join("dynamic-search-rules")) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Box::new(std::iter::empty())),
+            Err(e) => return Err(e.into()),
+        };
+        Ok(Box::new(
+            entries
+                .map(|entry| -> Result<Option<_>> {
+                    let entry = entry?;
+                    let file_name = entry.file_name();
+                    let path = Path::new(&file_name);
+                    if entry.file_type()?.is_file() && path.extension() == Some(OsStr::new("json"))
+                    {
+                        let uid = path.file_stem().unwrap().to_str().unwrap().to_string();
+                        let file = File::open(entry.path())?;
+                        let rule = serde_json::from_reader(file)?;
+                        Ok(Some((uid, rule)))
+                    } else {
+                        Ok(None)
+                    }
+                })
+                .filter_map(|entry| entry.transpose()),
+        ))
     }
 }
 

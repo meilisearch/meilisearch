@@ -146,10 +146,12 @@ impl DumpReader {
         }
     }
 
-    pub fn dynamic_search_rules(&self) -> Result<Option<&v6::DynamicSearchRules>> {
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, v6::DynamicSearchRule)>> + '_>> {
         match self {
-            DumpReader::Current(current) => Ok(current.dynamic_search_rules()),
-            DumpReader::Compat(compat) => compat.dynamic_search_rules(),
+            DumpReader::Current(current) => current.dynamic_search_rules(),
+            DumpReader::Compat(_compat) => Ok(Box::new(std::iter::empty())),
         }
     }
 }

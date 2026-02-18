@@ -555,8 +555,10 @@ pub(crate) mod test {
         dump.create_network(network).unwrap();
 
         // ========== dynamic search rules
-        let dynamic_search_rules = create_test_dynamic_search_rules();
-        dump.create_dynamic_search_rules(dynamic_search_rules).unwrap();
+        let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules().unwrap();
+        for (uid, rule) in &create_test_dynamic_search_rules() {
+            dump_dynamic_search_rules.push_rule(uid, rule).unwrap();
+        }
 
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
@@ -680,6 +682,8 @@ pub(crate) mod test {
 
         // ==== checking the dynamic search rules
         let expected = create_test_dynamic_search_rules();
-        assert_eq!(&expected, dump.dynamic_search_rules().unwrap().unwrap());
+        let actual: DynamicSearchRules =
+            dump.dynamic_search_rules().unwrap().map(|r| r.unwrap()).collect();
+        assert_eq!(expected, actual);
     }
 }

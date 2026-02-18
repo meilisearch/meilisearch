@@ -211,8 +211,10 @@ impl CompatV5ToV6 {
         None
     }
 
-    pub fn dynamic_search_rules(&self) -> Result<Option<&v6::DynamicSearchRules>> {
-        Ok(None)
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, v6::DynamicSearchRule)>> + '_>> {
+        Ok(Box::new(std::iter::empty()))
     }
 }
 
