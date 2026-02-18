@@ -43,7 +43,6 @@ use enterprise_edition as current_edition;
         description = "The `/network` route allows you to describe the topology of a network of Meilisearch instances.
 
 This route is **synchronous**. This means that no task object will be returned, and any change to the network will be made available immediately.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/network"),
     )),
 )]
 pub struct NetworkApi;
@@ -58,14 +57,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get network topology
 ///
-/// Get a list of all Meilisearch instances currently known to this instance.
+/// Return the list of Meilisearch instances currently known to this node (self and remotes).
 #[utoipa::path(
     get,
     path = "",
-    tag = "Network",
+    tag = "Experimental features",
     security(("Bearer" = ["network.get", "*"])),
     responses(
-        (status = OK, description = "Known nodes are returned", body = Network, content_type = "application/json", example = json!(
+        (status = OK, description = "Known nodes are returned.", body = Network, content_type = "application/json", example = json!(
             {
             "self": "ms-0",
             "remotes": {
@@ -74,7 +73,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
         }
     })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -124,7 +123,7 @@ pub struct Remote {
 #[schema(rename_all = "camelCase")]
 pub struct Network {
     /// Map of remote instance names to their configurations
-    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
+    #[schema(required = false, value_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
         },
@@ -136,17 +135,17 @@ pub struct Network {
     #[serde(default)]
     pub remotes: Setting<BTreeMap<String, Option<Remote>>>,
     /// Name of this instance in the network
-    #[schema(value_type = Option<String>, example = json!("ms-00"), rename = "self")]
+    #[schema(required = false, value_type = Option<String>, example = json!("ms-00"), rename = "self")]
     #[serde(default, rename = "self")]
     #[deserr(default, rename = "self", error = DeserrJsonError<InvalidNetworkSelf>)]
     pub local: Setting<String>,
     /// Name of the leader instance in the network
-    #[schema(value_type = Option<String>, example = json!("ms-00"))]
+    #[schema(required = false, value_type = Option<String>, example = json!("ms-00"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidNetworkLeader>)]
     pub leader: Setting<String>,
     /// Previous remote configurations (for rollback)
-    #[schema(value_type = Option<BTreeMap<String, Remote>>, example = json!({
+    #[schema(required = false, value_type = Option<BTreeMap<String, Remote>>, example = json!({
         "ms-00": {
             "url": "http://localhost:7700"
         },
@@ -204,17 +203,17 @@ impl Aggregate for PatchNetworkAnalytics {
     }
 }
 
-/// Configure Network
+/// Configure network topology
 ///
-/// Add or remove nodes from network.
+/// Add or remove remote nodes from the network. Changes apply to the current instance’s view of the cluster.
 #[utoipa::path(
     patch,
     path = "",
-    tag = "Network",
+    tag = "Experimental features",
     request_body = Network,
     security(("Bearer" = ["network.update", "*"])),
     responses(
-        (status = OK, description = "New network state is returned",  body = Network, content_type = "application/json", example = json!(
+        (status = OK, description = "New network state is returned.",  body = Network, content_type = "application/json", example = json!(
             {
                 "self": "ms-0",
                 "remotes": {
@@ -223,7 +222,7 @@ impl Aggregate for PatchNetworkAnalytics {
                     "ms-2": Remote { url: Setting::Set("http://localhost:7702".into()), search_api_key: Setting::Set("bar".into()), write_api_key: Setting::Set("foo".into()) },
             }
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

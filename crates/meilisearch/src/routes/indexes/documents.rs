@@ -86,7 +86,6 @@ pub struct DocumentParam {
         (
             name = "Documents",
             description = "Documents are objects composed of fields that can store any type of data. Each field contains an attribute and its associated value. Documents are stored inside [indexes](https://www.meilisearch.com/docs/learn/getting_started/indexes).",
-            external_docs(url = "https://www.meilisearch.com/docs/learn/getting_started/documents"),
         ),
     ),
 )]
@@ -124,7 +123,7 @@ pub struct GetDocument {
     /// attributes listed in the `displayedAttributes` setting are returned.
     /// Example: `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
-    #[param(value_type = Option<Vec<String>>)]
+    #[param(required = false, value_type = Option<Vec<String>>)]
     #[schema(value_type = Option<Vec<String>>)]
     fields: OptionStarOrList<String>,
     /// When `true`, includes the vector embeddings in the response for this
@@ -132,7 +131,7 @@ pub struct GetDocument {
     /// data. Note that this can significantly increase response size if the
     /// document has multiple embedders configured. Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
-    #[param(value_type = Option<bool>)]
+    #[param(required = false, value_type = Option<bool>)]
     #[schema(value_type = Option<bool>)]
     retrieve_vectors: Param<bool>,
 }
@@ -192,21 +191,21 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
     }
 }
 
-/// Get one document
+/// Get document
 ///
-/// Get one document from its primary key.
+/// Retrieve a single document by its [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) value.
 #[utoipa::path(
     get,
     path = "{indexUid}/documents/{documentId}",
     tag = "Documents",
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
-        ("documentId" = String, Path, example = "85087", description = "The document identifier", nullable = false),
+        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("documentId" = String, Path, example = "85087", description = "The document identifier.", nullable = false),
         GetDocument,
    ),
     responses(
-        (status = 200, description = "The document is returned", body = serde_json::Value, content_type = "application/json", example = json!(
+        (status = 200, description = "The document is returned.", body = serde_json::Value, content_type = "application/json", example = json!(
             {
                 "id": 25684,
                 "title": "American Ninja 5",
@@ -215,7 +214,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
                 "release_date": 725846400
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -223,15 +222,15 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 404, description = "Document not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Document not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
-              "message": "Document `a` not found.",
+              "message": "Document :uid not found.",
               "code": "document_not_found",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#document_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -306,20 +305,20 @@ impl Aggregate for DocumentsDeletionAggregator {
     }
 }
 
-/// Delete a document
+/// Delete document
 ///
-/// Delete a single document by id.
+/// Delete a single document by its [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key).
 #[utoipa::path(
     delete,
     path = "{indexUid}/documents/{documentId}",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
-        ("documentId" = String, Path, example = "853", description = "Document Identifier", nullable = false),
+        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("documentId" = String, Path, example = "853", description = "Document identifier.", nullable = false),
     ),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -328,12 +327,20 @@ impl Aggregate for DocumentsDeletionAggregator {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -400,41 +407,42 @@ pub struct BrowseQueryGet {
     /// together with `limit` to paginate through large document sets. For
     /// example, to get documents 21-40, set `offset=20` and `limit=20`.
     /// Defaults to `0`.
-    #[param(default, value_type = Option<usize>)]
+    #[param(required = false, default, value_type = Option<usize>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentOffset>)]
     offset: Param<usize>,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Defaults to `20`.
-    #[param(default, value_type = Option<usize>)]
+    #[param(required = false, default, value_type = Option<usize>)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidDocumentLimit>)]
     limit: Param<usize>,
     /// Comma-separated list of document attributes to include in the
     /// response. Use `*` to retrieve all attributes. By default, all
     /// attributes are returned. Example: `title,description,price`.
-    #[param(default, value_type = Option<Vec<String>>)]
+    #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFields>)]
     fields: OptionStarOrList<String>,
     /// When `true`, includes vector embeddings in the response for documents
     /// that have them. This is useful when you need to inspect or export
     /// vector data. Defaults to `false`.
-    #[param(default, value_type = Option<bool>)]
+    #[param(required = false, default, value_type = Option<bool>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: Param<bool>,
     /// Comma-separated list of document IDs to retrieve. Only documents with
     /// matching IDs will be returned. If not specified, all documents
     /// matching other criteria are returned.
-    #[param(default, value_type = Option<Vec<String>>)]
+    #[param(required = false, default, value_type = Option<Vec<String>>)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentIds>)]
     ids: Option<CS<String>>,
     /// Filter expression to select which documents to return. Uses the same
     /// syntax as search filters. Only documents matching the filter will be
     /// included in the response. Example: `genres = action AND rating > 4`.
-    #[param(default, value_type = Option<String>, example = "popularity > 1000")]
+    #[param(required = false, default, value_type = Option<String>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentFilter>)]
     filter: Option<String>,
     /// Attribute(s) to sort the documents by. Format: `attribute:asc` or
     /// `attribute:desc`. Multiple sort criteria can be comma-separated.
     /// Example: `price:asc,rating:desc`.
+    #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidDocumentSort>)]
     sort: Option<String>,
 }
@@ -450,65 +458,65 @@ pub struct BrowseQuery {
     /// Number of documents to skip in the response. Use together with `limit`
     /// for pagination through large document sets. For example, to get
     /// documents 151-170, set `offset=150` and `limit=20`. Defaults to `0`.
-    #[schema(default, example = 150)]
+    #[schema(required = false, default, example = 150)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentOffset>)]
     offset: usize,
     /// Maximum number of documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
     /// results but may increase response time and memory usage. Defaults to
     /// `20`.
-    #[schema(default = 20, example = 1)]
+    #[schema(required = false, default = 20, example = 1)]
     #[deserr(default = PAGINATION_DEFAULT_LIMIT, error = DeserrJsonError<InvalidDocumentLimit>)]
     limit: usize,
     /// Array of document attributes to include in the response. If not
     /// specified, all attributes listed in the `displayedAttributes` setting
     /// are returned. Use this to reduce response size by only requesting the
     /// fields you need. Example: `["title", "description", "price"]`.
-    #[schema(example = json!(["title, description"]))]
+    #[schema(required = false, example = json!(["title, description"]))]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFields>)]
     fields: Option<Vec<String>>,
     /// When `true`, includes the vector embeddings in the response for
     /// documents that have them. This is useful when you need to inspect or
     /// export vector data. Note that this can significantly increase response
     /// size. Defaults to `false`.
-    #[schema(default, example = true)]
+    #[schema(required = false, default, example = true)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentRetrieveVectors>)]
     retrieve_vectors: bool,
     /// Array of specific document IDs to retrieve. Only documents with
-    /// matching primary key values will be returned. If not specified, all
+    /// matching [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values will be returned. If not specified, all
     /// documents matching other criteria are returned. This is useful for
     /// fetching specific known documents.
-    #[schema(value_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
+    #[schema(required = false, value_type = Option<Vec<String>>, example = json!(["cody", "finn", "brandy", "gambit"]))]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentIds>)]
     ids: Option<Vec<serde_json::Value>>,
     /// Filter expression to select which documents to return. Uses the same
     /// syntax as search filters. Only documents matching the filter will be
     /// included in the response. Example: `"genres = action AND rating > 4"`
     /// or as an array `[["genres = action"], "rating > 4"]`.
-    #[schema(default, value_type = Option<Value>, example = "popularity > 1000")]
+    #[schema(required = false, default, value_type = Option<Value>, example = "popularity > 1000")]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     filter: Option<Value>,
     /// Array of attributes to sort the documents by. Each entry should be in
     /// the format `attribute:direction` where direction is either `asc`
     /// (ascending) or `desc` (descending). Example: `["price:asc",
     /// "rating:desc"]` sorts by price ascending, then by rating descending.
-    #[schema(default, value_type = Option<Vec<String>>, example = json!(["title:asc", "rating:desc"]))]
+    #[schema(required = false, default, value_type = Option<Vec<String>>, example = json!(["title:asc", "rating:desc"]))]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentSort>)]
     sort: Option<Vec<String>>,
 }
 
-/// Get documents with POST
+/// List documents with POST
 ///
-/// Get a set of documents.
+/// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request body to specify filters, sort order, and which fields to return.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/fetch",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = BrowseQuery,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
                 "results":[
                     {
@@ -537,12 +545,20 @@ pub struct BrowseQuery {
                 "total":5
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -578,20 +594,20 @@ pub async fn documents_by_query_post(
     documents_by_query(&index_scheduler, index_uid, body)
 }
 
-/// Get documents
+/// List documents with GET
 ///
-/// Get documents by batches.
+/// Retrieve documents in batches using query parameters for offset, limit, and optional filtering. Suited for browsing or exporting index contents.
 #[utoipa::path(
     get,
     path = "{indexUid}/documents",
     tag = "Documents",
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
         BrowseQueryGet
     ),
     responses(
-        (status = 200, description = "The documents are returned", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -614,7 +630,7 @@ pub async fn documents_by_query_post(
                 "total": 2
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -622,7 +638,7 @@ pub async fn documents_by_query_post(
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -742,15 +758,14 @@ fn documents_by_query(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(parameter_in = Query, rename_all = "camelCase")]
 pub struct UpdateDocumentsQuery {
-    /// The primary key of the documents. primaryKey is optional. If you want
-    /// to set the primary key of your index through this route, it only has
-    /// to be done the first time you add documents to the index. After which
-    /// it will be ignored if given.
-    #[param(example = "id")]
+    /// The [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) field for uniquely identifying each document.
+    /// This parameter is optional and can only be set the first time documents are added to an index.
+    /// Subsequent attempts to specify it will be ignored if the primary key has already been set.
+    #[param(required = false, example = "id")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexPrimaryKey>)]
     pub primary_key: Option<String>,
     /// Customize the csv delimiter when importing CSV documents.
-    #[param(value_type = char, default = ",", example = ";")]
+    #[param(required = false, value_type = char, default = ",", example = ";")]
     #[deserr(default, try_from(char) = from_char_csv_delimiter -> DeserrQueryParamError<InvalidDocumentCsvDelimiter>, error = DeserrQueryParamError<InvalidDocumentCsvDelimiter>)]
     pub csv_delimiter: Option<u8>,
 
@@ -758,7 +773,7 @@ pub struct UpdateDocumentsQuery {
     /// is stored with the task and returned in task responses. Useful for
     /// tracking tasks from external systems or associating tasks with
     /// specific operations in your application.
-    #[param(example = "custom")]
+    #[param(required = false, example = "custom")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
     pub custom_metadata: Option<String>,
 
@@ -766,7 +781,7 @@ pub struct UpdateDocumentsQuery {
     /// new ones. Documents that don't already exist in the index will be
     /// ignored. This is useful for partial updates where you only want to
     /// modify existing records without adding new ones.
-    #[param(example = true)]
+    #[param(required = false, example = true)]
     #[deserr(default, try_from(&String) = from_string_skip_creation -> DeserrQueryParamError<InvalidSkipCreation>, error = DeserrQueryParamError<InvalidSkipCreation>)]
     pub skip_creation: Option<bool>,
 }
@@ -779,7 +794,7 @@ pub struct CustomMetadataQuery {
     /// is stored with the task and returned in task responses. Useful for
     /// tracking tasks from external systems or associating tasks with
     /// specific operations in your application.
-    #[param(example = "custom")]
+    #[param(required = false, example = "custom")]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexCustomMetadata>)]
     pub custom_metadata: Option<String>,
 }
@@ -855,31 +870,26 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 /// document will be overwritten by the new document. Fields previously in the
 /// document not present in the new document are removed.
 ///
-/// For a partial update of the document see Add or update documents route.
-/// > info
-/// > If the provided index does not exist, it will be created.
-/// > info
+/// If the provided index does not exist, it will be created.
+///
+/// For a partial update of the document see [add or update documents route](/reference/api/documents/add-or-update-documents).
+///
 /// > Use the reserved `_geo` object to add geo coordinates to a document.
 /// > `_geo` is an object made of `lat` and `lng` field.
-/// >
-/// > When the vectorStore feature is enabled you can use the reserved
-/// > `_vectors` field in your documents. It can accept an array of floats,
-/// > multiple arrays of floats in an outer array or an object. This object
-/// > accepts keys corresponding to the different embedders defined your index
-/// > settings.
+
 #[utoipa::path(
     post,
     path = "{indexUid}/documents",
     tag = "Documents",
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
     request_body = serde_json::Value,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -888,12 +898,20 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -961,35 +979,32 @@ pub async fn replace_documents(
 /// Add or update documents
 ///
 /// Add a list of documents or update them if they already exist.
+///
 /// If you send an already existing document (same id) the old document will
 /// be only partially updated according to the fields of the new document.
 /// Thus, any fields not present in the new document are kept and remained
 /// unchanged.
-/// To completely overwrite a document, see Add or replace documents route.
-/// > info
-/// > If the provided index does not exist, it will be created.
-/// > info
+///
+/// If the provided index does not exist, it will be created.
+///
+/// To completely overwrite a document, see [add or replace documents route](/reference/api/documents/add-or-replace-documents).
+///
 /// > Use the reserved `_geo` object to add geo coordinates to a document.
 /// > `_geo` is an object made of `lat` and `lng` field.
-/// >
-/// > When the vectorStore feature is enabled you can use the reserved
-/// > `_vectors` field in your documents. It can accept an array of floats,
-/// > multiple arrays of floats in an outer array or an object. This object
-/// > accepts keys corresponding to the different embedders defined your index
-/// > settings.
+
 #[utoipa::path(
     put,
     path = "{indexUid}/documents",
     tag = "Documents",
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
     request_body = serde_json::Value,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -998,12 +1013,20 @@ pub async fn replace_documents(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -1281,18 +1304,18 @@ async fn copy_body_to_file(
 
 /// Delete documents by batch
 ///
-/// Delete a set of documents based on an array of document ids.
+/// Delete multiple documents in one request by providing an array of [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/delete-batch",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = Vec<Value>,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1301,12 +1324,20 @@ async fn copy_body_to_file(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -1385,22 +1416,23 @@ pub async fn delete_documents_batch(
 #[schema(rename_all = "camelCase")]
 pub struct DocumentDeletionByFilter {
     /// Filter expression to match documents for deletion
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidDocumentFilter>, missing_field_error = DeserrJsonError::missing_document_filter)]
     filter: Value,
 }
 
 /// Delete documents by filter
 ///
-/// Delete a set of documents based on a filter.
+/// Delete all documents in the index that match the given filter expression.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/delete",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = DocumentDeletionByFilter,
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1409,12 +1441,20 @@ pub struct DocumentDeletionByFilter {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -1500,12 +1540,15 @@ pub async fn delete_documents_by_filter(
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct DocumentEditionByFunction {
     /// Filter expression to select which documents to edit
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentFilter>)]
     pub filter: Option<Value>,
     /// Data to make available for the editing function
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidDocumentEditionContext>)]
     pub context: Option<Value>,
     /// RHAI function to apply to each document
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidDocumentEditionFunctionFilter>, missing_field_error = DeserrJsonError::missing_document_edition_function)]
     pub function: String,
 }
@@ -1538,21 +1581,22 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
     }
 }
 
-/// Edit documents by function.
+/// Edit documents by function
 ///
-/// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to
-/// edit one or more documents directly in Meilisearch.
+/// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to edit one or more documents directly in Meilisearch. The function receives each document and returns the modified document.
+///
+/// This feature is experimental and must be enabled through the experimental route.
 #[utoipa::path(
     post,
     path = "{indexUid}/documents/edit",
     tag = "Documents",
     security(("Bearer" = ["documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = DocumentEditionByFunction,
     responses(
-        (status = 202, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1561,12 +1605,20 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -1670,15 +1722,15 @@ pub async fn edit_documents_by_function(
 
 /// Delete all documents
 ///
-/// Delete all documents in the specified index.
+/// Permanently delete all documents in the specified index. Settings and index metadata are preserved.
 #[utoipa::path(
     delete,
     path = "{indexUid}/documents",
     tag = "Documents",
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -1687,12 +1739,20 @@ pub async fn edit_documents_by_function(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )

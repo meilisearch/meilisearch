@@ -15,47 +15,48 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::SummarizedTaskView;
 
 #[derive(OpenApi)]
-#[openapi(
-    paths(compact),
-    tags(
-        (
-            name = "Compact an index",
-            description = "The /compact route uses compacts the database to reorganize and make it smaller and more efficient.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/compact"),
-        ),
-    ),
-)]
+#[openapi(paths(compact))]
 pub struct CompactApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(SeqHandler(compact))));
 }
 
-/// Compact an index
+/// Compact index
 ///
-/// Triggers a compaction process on the specified index. Compaction reorganizes the index database to make it smaller and more efficient.
+/// Trigger a compaction process on the specified index.
+///
+/// Compaction reorganizes the index database to reclaim space and improve read performance.
 #[utoipa::path(
     post,
     path = "{indexUid}/compact",
-    tag = "Compact an index",
+    tag = "Indexes",
     security(("Bearer" = ["search", "*"])),
-    params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
-                "indexUid": null,
+                "indexUid": "movies",
                 "status": "enqueued",
-                "type": "documentDeletion",
+                "type": "indexCompaction",
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )

@@ -35,6 +35,7 @@ pub mod documents;
 
 pub mod facet_search;
 mod fields;
+pub use fields::{ListFields, ListFieldsFilter};
 pub mod search;
 mod search_analytics;
 #[cfg(test)]
@@ -53,12 +54,11 @@ mod similar_analytics;
         (path = "/", api = settings::SettingsApi),
         (path = "/", api = compact::CompactApi),
     ),
-    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats),
+    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats, fields::post_index_fields),
     tags(
         (
             name = "Indexes",
             description = "An index is an entity that gathers a set of [documents](https://www.meilisearch.com/docs/learn/getting_started/documents) with its own [settings](https://www.meilisearch.com/docs/reference/api/settings). Learn more about indexes.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/indexes"),
         ),
     ),
 )]
@@ -101,7 +101,7 @@ pub struct IndexView {
     /// Latest date of index update, represented in RFC 3339 format
     #[serde(with = "time::serde::rfc3339")]
     pub updated_at: OffsetDateTime,
-    /// Primary key of the index
+    /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
     pub primary_key: Option<String>,
 }
 
@@ -123,12 +123,12 @@ impl IndexView {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListIndexes {
-    /// The number of indexes to skip before starting to retrieve anything
-    #[param(value_type = Option<usize>, default, example = 100)]
+    /// The number of indexes to skip before starting to retrieve anything.
+    #[param(required = false, value_type = Option<usize>, default, example = 100)]
     #[deserr(default, error = DeserrQueryParamError<InvalidIndexOffset>)]
     pub offset: Param<usize>,
-    /// The number of indexes to retrieve
-    #[param(value_type = Option<usize>, default = 20, example = 1)]
+    /// The number of indexes to retrieve.
+    #[param(required = false, value_type = Option<usize>, default = 20, example = 1)]
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidIndexLimit>)]
     pub limit: Param<usize>,
 }
@@ -141,7 +141,9 @@ impl ListIndexes {
 
 /// List indexes
 ///
-/// List all indexes.
+/// Return all indexes on the instance.
+///
+/// Results are paginated using `offset` and `limit` query parameters.
 #[utoipa::path(
     get,
     path = "",
@@ -149,7 +151,7 @@ impl ListIndexes {
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
     params(ListIndexes),
     responses(
-        (status = 200, description = "Indexes are returned", body = PaginationView<IndexView>, content_type = "application/json", example = json!(
+        (status = 200, description = "Indexes are returned.", body = PaginationView<IndexView>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -164,7 +166,7 @@ impl ListIndexes {
                 "total": 1
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -203,11 +205,11 @@ pub async fn list_indexes(
 #[schema(rename_all = "camelCase")]
 pub struct IndexCreateRequest {
     /// Unique identifier for the index
-    #[schema(example = "movies")]
+    #[schema(required = true, example = "movies")]
     #[deserr(error = DeserrJsonError<InvalidIndexUid>, missing_field_error = DeserrJsonError::missing_index_uid)]
     uid: IndexUid,
-    /// Primary key of the index
-    #[schema(example = "id")]
+    /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
+    #[schema(required = false, example = "id")]
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
 }
@@ -233,7 +235,9 @@ impl Aggregate for IndexCreatedAggregate {
 
 /// Create index
 ///
-/// Create an index.
+/// Create a new index with an optional [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key).
+///
+/// If no primary key is provided, Meilisearch will [infer one](https://www.meilisearch.com/docs/learn/getting_started/primary_key#meilisearch-guesses-your-primary-key) from the first batch of documents.
 #[utoipa::path(
     post,
     path = "",
@@ -241,7 +245,7 @@ impl Aggregate for IndexCreatedAggregate {
     security(("Bearer" = ["indexes.create", "indexes.*", "*"])),
     request_body = IndexCreateRequest,
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -250,7 +254,7 @@ impl Aggregate for IndexCreatedAggregate {
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -333,15 +337,15 @@ fn deny_immutable_fields_index(
 
 /// Get index
 ///
-/// Get information about an index.
+/// Retrieve the metadata of a single index: its uid, [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key), and creation/update timestamps.
 #[utoipa::path(
     get,
     path = "/{indexUid}",
     tag = "Indexes",
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "The index is returned", body = IndexView, content_type = "application/json", example = json!(
+        (status = 200, description = "The index is returned.", body = IndexView, content_type = "application/json", example = json!(
             {
                 "uid": "movies",
                 "primaryKey": "movie_id",
@@ -349,7 +353,7 @@ fn deny_immutable_fields_index(
                 "updatedAt": "2019-11-20T09:40:33.711324Z"
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -357,7 +361,7 @@ fn deny_immutable_fields_index(
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -405,28 +409,30 @@ impl Aggregate for IndexUpdatedAggregate {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 #[schema(rename_all = "camelCase")]
 pub struct UpdateIndexRequest {
-    /// New primary key of the index
+    /// New [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidIndexPrimaryKey>)]
     primary_key: Option<String>,
     /// New uid for the index (for renaming)
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidIndexUid>)]
     uid: Option<String>,
 }
 
 /// Update index
 ///
-/// Update the `primaryKey` of an index.
-/// Return an error if the index doesn't exists yet or if it contains
-/// documents.
+/// Update the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) or uid of an index.
+///
+/// Returns an error if the index does not exist or if it already contains documents ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) cannot be changed in that case).
 #[utoipa::path(
     patch,
     path = "/{indexUid}",
     tag = "Indexes",
     security(("Bearer" = ["indexes.update", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = UpdateIndexRequest,
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 0,
                 "indexUid": "movies",
@@ -435,12 +441,20 @@ pub struct UpdateIndexRequest {
                 "enqueuedAt": "2021-01-01T09:39:00.000000Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -506,15 +520,15 @@ pub async fn update_index(
 
 /// Delete index
 ///
-/// Delete an index.
+/// Permanently delete an index and all its documents, settings, and task history.
 #[utoipa::path(
     delete,
     path = "/{indexUid}",
     tag = "Indexes",
     security(("Bearer" = ["indexes.delete", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = ACCEPTED, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 0,
                 "indexUid": "movies",
@@ -523,12 +537,20 @@ pub async fn update_index(
                 "enqueuedAt": "2021-01-01T09:39:00.000000Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
     )
@@ -608,15 +630,15 @@ impl From<index_scheduler::IndexStats> for IndexStats {
 
 /// Get stats of index
 ///
-/// Get the stats of an index.
+/// Return statistics for a single index: document count, database size, indexing status, and field distribution.
 #[utoipa::path(
     get,
     path = "/{indexUid}/stats",
     tag = "Stats",
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = OK, description = "The stats of the index", body = IndexStats, content_type = "application/json", example = json!(
+        (status = OK, description = "The stats of the index.", body = IndexStats, content_type = "application/json", example = json!(
             {
                 "numberOfDocuments": 10,
                 "rawDocumentDbSize": 10,
@@ -630,7 +652,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
                 }
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -638,7 +660,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

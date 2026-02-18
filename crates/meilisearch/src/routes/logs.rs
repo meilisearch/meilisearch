@@ -33,7 +33,6 @@ use crate::{LogRouteHandle, LogStderrHandle};
         name = "Logs",
         description = "Everything about retrieving or customizing logs.
 Currently [experimental](https://www.meilisearch.com/docs/learn/experimental/overview).",
-        external_docs(url = "https://www.meilisearch.com/docs/learn/experimental/log_customization"),
     )),
 )]
 pub struct LogsApi;
@@ -112,20 +111,20 @@ pub struct GetLogs {
     /// Log targets to filter. Format: code_part=log_level (e.g.,
     /// milli=trace,actix_web=off)
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
-    #[schema(value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
+    #[schema(required = false, value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
     target: MyTargets,
 
     /// Output format for log entries. `human` provides readable text output,
     /// `json` provides structured JSON for parsing, and `profile` outputs
     /// Firefox profiler format for performance visualization.
     #[deserr(default, error = DeserrJsonError<BadRequest>)]
-    #[schema(default = LogMode::default)]
+    #[schema(required = false, default = LogMode::default)]
     mode: LogMode,
 
     /// Enable memory profiling (only useful with profile mode, significantly
     /// slows down the engine)
     #[deserr(default = false, error = DeserrJsonError<BadRequest>)]
-    #[schema(default = false)]
+    #[schema(required = false, default = false)]
     profile_memory: bool,
 }
 
@@ -284,22 +283,17 @@ fn entry_stream(
 
 /// Retrieve logs
 ///
-/// Stream logs over HTTP. The format of the logs depends on the
-/// configuration specified in the payload. The logs are sent as multi-part,
-/// and the stream never stops, so make sure your clients correctly handle
-/// that. To make the server stop sending you logs, you can call the `DELETE
-/// /logs/stream` route.
+/// Stream logs over HTTP. The format of the logs depends on the configuration specified in the payload. The logs are sent as multi-part, and the stream never stops, so ensure your client can handle a long-lived connection. To stop receiving logs, call the `DELETE /logs/stream` route.
 ///
-/// There can only be one listener at a timeand an error will be returned if
-/// you call this route while it's being used by another client.
+/// Only one client can listen at a time. An error is returned if you call this route while it is already in use by another client.
 #[utoipa::path(
     post,
     path = "/stream",
-    tag = "Logs",
+    tag = "Experimental features",
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     request_body = GetLogs,
     responses(
-        (status = OK, description = "Logs are being returned", body = String, content_type = "application/json", example = json!(
+        (status = OK, description = "Logs are being returned.", body = String, content_type = "application/json", example = json!(
             r#"
 2024-10-08T13:35:02.643750Z  WARN HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=400 error=Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625}: tracing_actix_web::middleware: Error encountered while processing the incoming HTTP request: ResponseError { code: 400, message: "Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625", error_code: "feature_not_enabled", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#feature_not_enabled" }
 2024-10-08T13:35:02.644191Z  INFO HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=400 error=Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625}: meilisearch: close time.busy=1.66ms time.idle=658µs
@@ -307,7 +301,7 @@ fn entry_stream(
 2024-10-08T13:35:23.094987Z  INFO HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=200}: meilisearch: close time.busy=2.12ms time.idle=595µs
 "#
         )),
-        (status = 400, description = "The route is already being used", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 400, description = "The route is already being used.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The `/logs/stream` route is currently in use by someone else.",
                 "code": "bad_request",
@@ -315,7 +309,7 @@ fn entry_stream(
                 "link": "https://docs.meilisearch.com/errors#bad_request"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -359,16 +353,15 @@ pub async fn get_logs(
 
 /// Stop retrieving logs
 ///
-/// Call this route to make the engine stops sending logs through the `POST
-/// /logs/stream` route.
+/// Call this route to make the engine stop sending logs to the client that opened the `POST /logs/stream` connection.
 #[utoipa::path(
     delete,
     path = "/stream",
-    tag = "Logs",
+    tag = "Experimental features",
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
-        (status = NO_CONTENT, description = "Logs are being returned"),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = NO_CONTENT, description = "Logs are being returned."),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -398,23 +391,22 @@ pub struct UpdateStderrLogs {
     /// Log targets to filter. Format: code_part=log_level (e.g.,
     /// milli=trace,actix_web=off)
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
-    #[schema(value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
+    #[schema(required = false, value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
     target: MyTargets,
 }
 
 /// Update target of the console logs
 ///
-/// This route lets you specify at runtime the level of the console logs
-/// outputted on stderr.
+/// Configure at runtime the level of the console logs written to stderr (e.g. debug, info, warn, error).
 #[utoipa::path(
     post,
     path = "/stderr",
-    tag = "Logs",
+    tag = "Experimental features",
     request_body = UpdateStderrLogs,
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
-        (status = NO_CONTENT, description = "The console logs have been updated"),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = NO_CONTENT, description = "The console logs have been updated."),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

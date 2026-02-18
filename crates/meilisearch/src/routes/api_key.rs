@@ -30,7 +30,6 @@ use crate::routes::Pagination;
         description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions.
 You must have the master key or the default admin key to access the keys route. More information about the keys and their rights.
 Accessing any route under `/keys` without having set a master key will result in an error.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/keys"),
     )),
 )]
 pub struct ApiKeyApi;
@@ -49,9 +48,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-/// Create an API Key
+/// Create API key
 ///
-/// Create an API Key.
+/// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
 #[utoipa::path(
     post,
     path = "",
@@ -59,7 +58,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
     responses(
-        (status = 202, description = "Key has been created", body = KeyView, content_type = "application/json", example = json!(
+        (status = 201, description = "Key has been created.", body = KeyView, content_type = "application/json", example = json!(
             {
                 "uid": "01b4bc42-eb33-4041-b481-254d00cce834",
                 "key": "d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4",
@@ -76,7 +75,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "updatedAt": "2021-11-12T10:00:00Z"
             }
         )),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -84,7 +83,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -114,16 +113,13 @@ pub async fn create_api_key(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListApiKeys {
-    /// Number of API keys to skip in the response. Use together with `limit`
-    /// for pagination through large sets of keys. For example, to get keys
-    /// 21-40, set `offset=20` and `limit=20`. Defaults to `0`.
+    /// Number of keys to skip. Use with `limit` for pagination. Defaults to 0.
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
-    #[param(value_type = usize, default = 0)]
+    #[param(required = false, value_type = usize, default = 0)]
     pub offset: Param<usize>,
-    /// Maximum number of API keys to return in a single response. Use together
-    /// with `offset` for pagination. Defaults to `20`.
+    /// Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
-    #[param(value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
+    #[param(required = false, value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
     pub limit: Param<usize>,
 }
 
@@ -133,9 +129,9 @@ impl ListApiKeys {
     }
 }
 
-/// Get API Keys
+/// List API keys
 ///
-/// List all API Keys
+/// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
 #[utoipa::path(
     get,
     path = "",
@@ -143,7 +139,7 @@ impl ListApiKeys {
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(ListApiKeys),
     responses(
-        (status = 202, description = "List of keys", body = PaginationView<KeyView>, content_type = "application/json", example = json!(
+        (status = 200, description = "List of keys.", body = PaginationView<KeyView>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -167,7 +163,7 @@ impl ListApiKeys {
                 "total": 1
             }
         )),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -175,7 +171,7 @@ impl ListApiKeys {
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -203,17 +199,17 @@ pub async fn list_api_keys(
     Ok(HttpResponse::Ok().json(page_view))
 }
 
-/// Get an API Key
+/// Get API key
 ///
-/// Get an API key from its `uid` or its `key` field.
+/// Retrieve a single API key by its `uid` or by its `key` value.
 #[utoipa::path(
     get,
     path = "/{uidOrKey}",
     tag = "Keys",
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
+    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     responses(
-        (status = 200, description = "The key is returned", body = KeyView, content_type = "application/json", example = json!(
+        (status = 200, description = "The key is returned.", body = KeyView, content_type = "application/json", example = json!(
             {
                 "uid": "01b4bc42-eb33-4041-b481-254d00cce834",
                 "key": "d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4",
@@ -230,7 +226,7 @@ pub async fn list_api_keys(
                 "updatedAt": "2021-11-12T10:00:00Z"
             }
         )),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -238,12 +234,20 @@ pub async fn list_api_keys(
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "API key not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
             }
         )),
     )
@@ -267,20 +271,20 @@ pub async fn get_api_key(
     Ok(HttpResponse::Ok().json(res))
 }
 
-/// Update a Key
+/// Update API key
 ///
-/// Update the name and description of an API key. Updates to keys are partial.
-/// This means you should provide only the fields you intend to update, as any
-/// fields not present in the payload will remain unchanged.
+/// Update the name and description of an API key.
+///
+/// Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
 #[utoipa::path(
     patch,
     path = "/{uidOrKey}",
     tag = "Keys",
     security(("Bearer" = ["keys.update", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
+    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     request_body = PatchApiKey,
     responses(
-        (status = 200, description = "The key have been updated", body = KeyView, content_type = "application/json", example = json!(
+        (status = 200, description = "The key has been updated.", body = KeyView, content_type = "application/json", example = json!(
             {
                 "uid": "01b4bc42-eb33-4041-b481-254d00cce834",
                 "key": "d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4",
@@ -297,7 +301,7 @@ pub async fn get_api_key(
                 "updatedAt": "2021-11-12T10:00:00Z"
             }
         )),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -305,12 +309,20 @@ pub async fn get_api_key(
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "API key not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
             }
         )),
     )
@@ -335,18 +347,26 @@ pub async fn patch_api_key(
     Ok(HttpResponse::Ok().json(res))
 }
 
-/// Delete a key
+/// Delete API key
 ///
-/// Delete the specified API key.
+/// Permanently delete the specified API key. The key will no longer be valid for authentication.
 #[utoipa::path(
     delete,
     path = "/{uidOrKey}",
     tag = "Keys",
     security(("Bearer" = ["keys.delete", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
+    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     responses(
-        (status = NO_CONTENT, description = "The key have been removed"),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = NO_CONTENT, description = "The key has been removed."),
+        (status = 404, description = "API key not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
+            }
+        )),
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -354,7 +374,7 @@ pub async fn patch_api_key(
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

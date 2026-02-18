@@ -1,41 +1,18 @@
-use std::borrow::Cow;
 use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use meilisearch::routes::MeilisearchApi;
-use serde_json::{json, Value};
+use serde_json::{Map, Value};
 use utoipa::OpenApi;
 
 /// HTTP methods supported in OpenAPI specifications.
 const HTTP_METHODS: &[&str] = &["get", "post", "put", "patch", "delete"];
 
-/// Type alias for the mapping from OpenAPI keys to their code samples.
-type CodeSamplesMap = HashMap<String, Vec<CodeSample>>;
-
-/// Type alias for the mapping from OpenAPI keys to sample IDs.
-type KeyMapping = HashMap<String, String>;
-
-/// Language used in the documentation repository (contains the key mapping)
-const DOCS_LANG: &str = "cURL";
-
-/// Mapping of repository URLs to language names.
-/// The "cURL" entry is special: it contains the key mapping used to resolve sample IDs for all SDKs.
-const CODE_SAMPLES: &[(&str, &str)] = &[
-    ("https://raw.githubusercontent.com/meilisearch/documentation/refs/heads/main/.code-samples.meilisearch.yaml", "cURL"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-dotnet/refs/heads/main/.code-samples.meilisearch.yaml", "C#"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-dart/refs/heads/main/.code-samples.meilisearch.yaml", "Dart"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-go/refs/heads/main/.code-samples.meilisearch.yaml", "Go"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-java/refs/heads/main/.code-samples.meilisearch.yaml", "Java"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-js/refs/heads/main/.code-samples.meilisearch.yaml", "JS"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-php/refs/heads/main/.code-samples.meilisearch.yaml", "PHP"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-python/refs/heads/main/.code-samples.meilisearch.yaml", "Python"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-ruby/refs/heads/main/.code-samples.meilisearch.yaml", "Ruby"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-rust/refs/heads/main/.code-samples.meilisearch.yaml", "Rust"),
-    ("https://raw.githubusercontent.com/meilisearch/meilisearch-swift/refs/heads/main/.code-samples.meilisearch.yaml", "Swift"),
-];
+/// Alias for OpenAPI path item or operation object (map of string keys to JSON values).
+type JsonObject = Map<String, Value>;
 
 #[derive(Parser)]
 #[command(name = "openapi-generator")]
@@ -49,14 +26,6 @@ struct Cli {
     #[arg(short, long)]
     pretty: bool,
 
-    /// Include Mintlify code samples from SDK repositories
-    #[arg(long)]
-    with_mintlify_code_samples: bool,
-
-    /// Debug mode: display the mapping table and code samples
-    #[arg(long)]
-    debug: bool,
-
     /// Check that all routes have a summary (useful for CI)
     #[arg(long)]
     check_summaries: bool,
@@ -64,6 +33,14 @@ struct Cli {
     /// Check for duplicate routes and path issues (useful for CI)
     #[arg(long)]
     check_paths: bool,
+
+    /// Check that parameters have descriptions, 2xx responses have examples, and schema properties have descriptions (useful for CI)
+    #[arg(long)]
+    check_docs: bool,
+
+    /// Check that query and body parameters have explicit required = true/false in code (no utoipa inference)
+    #[arg(long)]
+    check_params: bool,
 }
 
 fn main() -> Result<()> {
@@ -73,16 +50,7 @@ fn main() -> Result<()> {
     let openapi = MeilisearchApi::openapi();
 
     // Convert to serde_json::Value for modification
-    let mut openapi_value: Value = serde_json::to_value(&openapi)?;
-
-    // Fetch and add code samples if enabled
-    if cli.with_mintlify_code_samples {
-        let code_samples = fetch_all_code_samples(cli.debug)?;
-        add_code_samples_to_openapi(&mut openapi_value, &code_samples, cli.debug)?;
-    }
-
-    // Clean up null descriptions in tags
-    clean_null_descriptions(&mut openapi_value);
+    let openapi_value: Value = serde_json::to_value(&openapi)?;
 
     // Check that all routes have summaries if requested
     if cli.check_summaries {
@@ -92,6 +60,16 @@ fn main() -> Result<()> {
     // Check for path issues (duplicates, malformed paths) if requested
     if cli.check_paths {
         check_path_issues(&openapi_value)?;
+    }
+
+    // Check documentation (param descriptions, response examples, schema properties) if requested
+    if cli.check_docs {
+        check_docs(&openapi_value)?;
+    }
+
+    // Check that query and body parameters have explicit required = true/false in code
+    if cli.check_params {
+        check_params()?;
     }
 
     // Determine output path
@@ -104,510 +82,99 @@ fn main() -> Result<()> {
         serde_json::to_string(&openapi_value)?
     };
 
-    // Write to file
-    std::fs::write(&output_path, json)?;
+    std::fs::write(&output_path, &json)
+        .with_context(|| format!("write OpenAPI spec to {}", output_path.display()))?;
 
     println!("OpenAPI specification written to: {}", output_path.display());
 
     Ok(())
 }
 
-/// Code sample for a specific language.
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CodeSample {
-    lang: String,
-    source: String,
-}
-
-/// Fetches and parses code samples from all SDK repositories.
-///
-/// Returns a map from OpenAPI key (e.g., `"get_indexes"`) to a list of code samples
-/// for different languages.
-fn fetch_all_code_samples(debug: bool) -> Result<CodeSamplesMap> {
-    // First, fetch the documentation file to get the OpenAPI key -> code sample ID mapping
-    let (docs_url, _) = CODE_SAMPLES
-        .iter()
-        .find(|(_, lang)| *lang == DOCS_LANG)
-        .context("Documentation source not found in CODE_SAMPLES")?;
-
-    let docs_content = reqwest::blocking::get(*docs_url)
-        .context("Failed to fetch documentation code samples")?
-        .text()
-        .context("Failed to read documentation code samples response")?;
-
-    // Build mapping from OpenAPI key to code sample ID (only first match per key)
-    let openapi_key_to_sample_id = build_openapi_key_mapping(&docs_content);
-
-    // Build final result
-    let mut all_samples: CodeSamplesMap = HashMap::new();
-
-    // Loop through all CODE_SAMPLES files
-    for (url, lang) in CODE_SAMPLES {
-        // Fetch content (reuse docs_content for documentation)
-        let content: Cow<'_, str> = if *lang == DOCS_LANG {
-            Cow::Borrowed(&docs_content)
-        } else {
-            match reqwest::blocking::get(*url).and_then(|r| r.text()) {
-                Ok(text) => Cow::Owned(text),
-                Err(e) => {
-                    eprintln!("Warning: Failed to fetch code samples for {}: {}", lang, e);
-                    continue;
-                }
-            }
-        };
-
-        // Parse all code samples from this file
-        let sample_id_to_code = parse_code_samples_from_file(&content);
-
-        // Add to result using the mapping
-        for (openapi_key, sample_id) in &openapi_key_to_sample_id {
-            if let Some(source) = sample_id_to_code.get(sample_id) {
-                all_samples
-                    .entry(openapi_key.clone())
-                    .or_default()
-                    .push(CodeSample { lang: lang.to_string(), source: source.clone() });
-            }
-        }
-    }
-
-    // Debug mode: display mapping table and code samples
-    if debug {
-        println!("\n=== OpenAPI Key to Sample ID Mapping ===\n");
-        let mut keys: Vec<_> = openapi_key_to_sample_id.keys().collect();
-        keys.sort();
-        for key in keys {
-            println!("  {} -> {}", key, openapi_key_to_sample_id[key]);
-        }
-
-        println!("\n=== Code Samples ===\n");
-        let mut sample_keys: Vec<_> = all_samples.keys().collect();
-        sample_keys.sort();
-        for key in sample_keys {
-            let samples = &all_samples[key];
-            let langs: Vec<_> = samples.iter().map(|s| s.lang.as_str()).collect();
-            println!("  {} -> {}", key, langs.join(", "));
-        }
-        println!();
-    }
-
-    Ok(all_samples)
-}
-
-/// Builds a mapping from OpenAPI key to code sample ID from the documentation file.
-///
-/// The OpenAPI key is found on a line starting with `# ` (hash + space), containing a single word
-/// that starts with an HTTP method followed by an underscore (e.g., `# get_indexes`).
-/// The code sample ID is the first word of the next line.
-/// Only keeps the first code sample ID per OpenAPI key.
-///
-/// # Example
-///
-/// ```yaml
-/// # get_indexes
-/// get_indexes_1: |-
-///   curl \
-///     -X GET 'MEILISEARCH_URL/indexes'
-/// get_indexes_2: |-
-///   curl \
-///     -X GET 'MEILISEARCH_URL/indexes?limit=5'
-/// # post_indexes
-/// create_indexes_1: |-
-///   curl \
-///     -X POST 'MEILISEARCH_URL/indexes'
-/// ```
-///
-/// This produces: `{"get_indexes": "get_indexes_1", "post_indexes": "create_indexes_1"}`
-fn build_openapi_key_mapping(content: &str) -> KeyMapping {
-    let mut mapping = KeyMapping::new();
-    let lines: Vec<_> = content.lines().collect();
-
-    for window in lines.windows(2) {
-        let [line, next_line] = window else { continue };
-
-        // Check if line starts with "# " and extract the word
-        let Some(word) = line.strip_prefix("# ").map(str::trim) else {
-            continue;
-        };
-
-        // Must be a single word (no spaces) starting with an HTTP method prefix
-        if word.contains(' ') || !is_http_method_prefixed(word) {
-            continue;
-        }
-
-        // Extract sample ID from next line (first word before `:`)
-        let sample_id = next_line.split(':').next().map(str::trim).filter(|s| !s.is_empty());
-
-        // Only insert if key doesn't exist (keeps first match)
-        if let (Entry::Vacant(entry), Some(id)) = (mapping.entry(word.to_string()), sample_id) {
-            entry.insert(id.to_string());
-        }
-    }
-
-    mapping
-}
-
-/// Checks if a word starts with an HTTP method followed by an underscore.
-fn is_http_method_prefixed(word: &str) -> bool {
-    HTTP_METHODS
-        .iter()
-        .any(|&method| word.strip_prefix(method).is_some_and(|rest| rest.starts_with('_')))
-}
-
-/// Parses all code samples from a YAML-like file.
-///
-/// A code sample ID is found when a line contains `: |-`.
-/// The code sample value is everything between `: |-` and:
-/// - The next code sample (next line containing `: |-`)
-/// - OR a line starting with `#` at column 0 (indented `#` is part of the code sample)
-/// - OR the end of file
-///
-/// # Example
-///
-/// ```yaml
-/// get_indexes_1: |-
-///   client.getIndexes()
-///   # I write something
-/// # COMMENT TO IGNORE
-/// get_indexes_2: |-
-///   client.getIndexes({ limit: 3 })
-/// ```
-///
-/// This produces:
-/// - `get_indexes_1` → `"client.getIndexes()\n# I write something"`
-/// - `get_indexes_2` → `"client.getIndexes({ limit: 3 })"`
-fn parse_code_samples_from_file(content: &str) -> HashMap<String, String> {
-    let mut samples: HashMap<String, String> = HashMap::new();
-    let mut current_sample_id: Option<String> = None;
-    let mut current_lines: Vec<String> = Vec::new();
-    let mut base_indent: Option<usize> = None;
-
-    for line in content.lines() {
-        // Check if this line starts a new code sample (contains `: |-`)
-        if line.contains(": |-") {
-            // Save previous sample if exists
-            if let Some(sample_id) = current_sample_id.take() {
-                let value = current_lines.join("\n").trim_end().to_string();
-                samples.insert(sample_id, value);
-            }
-            current_lines.clear();
-            base_indent = None;
-
-            // Extract sample ID (first word before `:`)
-            if let Some(id) = line.split(':').next() {
-                current_sample_id = Some(id.trim().to_string());
-            }
-            continue;
-        }
-
-        // Check if this line ends the current code sample (line starts with `#` at column 0)
-        // Indented `#` (spaces or tabs) is part of the code sample
-        if line.starts_with('#') {
-            // Save current sample and reset
-            if let Some(sample_id) = current_sample_id.take() {
-                let value = current_lines.join("\n").trim_end().to_string();
-                samples.insert(sample_id, value);
-            }
-            current_lines.clear();
-            base_indent = None;
-            continue;
-        }
-
-        // If we're in a code sample, add this line to the value
-        if current_sample_id.is_some() {
-            // Handle empty lines
-            if line.trim().is_empty() {
-                if !current_lines.is_empty() {
-                    current_lines.push(String::new());
-                }
-                continue;
-            }
-
-            // Calculate indentation and strip base indent
-            let indent = line.len() - line.trim_start().len();
-            let base = *base_indent.get_or_insert(indent);
-
-            // Remove base indentation
-            let dedented = line.get(base..).unwrap_or_else(|| line.trim_start());
-            current_lines.push(dedented.to_string());
-        }
-    }
-
-    // Don't forget the last sample
-    if let Some(sample_id) = current_sample_id {
-        let value = current_lines.join("\n").trim_end().to_string();
-        samples.insert(sample_id, value);
-    }
-
-    samples
-}
-
-/// Converts an OpenAPI path and HTTP method to a code sample key.
-///
-/// # Example
-///
-/// - Path: `/indexes/{index_uid}/documents/{document_id}`
-/// - Method: `GET`
-/// - Result: `get_indexes_indexUid_documents_documentId`
-fn path_to_key(path: &str, method: &str) -> String {
-    let method_lower = method.to_lowercase();
-
-    // Remove leading slash and convert path
-    let path_part = path
-        .trim_start_matches('/')
-        .split('/')
-        .map(|segment| {
-            if segment.starts_with('{') && segment.ends_with('}') {
-                // Convert {param_name} to camelCase
-                let param = &segment[1..segment.len() - 1];
-                to_camel_case(param)
-            } else {
-                // Keep path segments as-is, but replace hyphens with underscores
-                segment.replace('-', "_")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("_");
-
-    if path_part.is_empty() {
-        method_lower
-    } else {
-        format!("{}_{}", method_lower, path_part)
-    }
-}
-
-/// Converts a `snake_case` string to `camelCase`.
-///
-/// # Example
-///
-/// ```
-/// assert_eq!(to_camel_case("index_uid"), "indexUid");
-/// ```
-fn to_camel_case(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut capitalize_next = false;
-
-    for (i, c) in s.chars().enumerate() {
-        match c {
-            '_' => capitalize_next = true,
-            _ if capitalize_next => {
-                result.push(c.to_ascii_uppercase());
-                capitalize_next = false;
-            }
-            _ if i == 0 => result.push(c.to_ascii_lowercase()),
-            _ => result.push(c),
-        }
-    }
-
-    result
-}
-
-/// Adds code samples to the OpenAPI specification as `x-codeSamples` extensions.
-fn add_code_samples_to_openapi(
-    openapi: &mut Value,
-    code_samples: &CodeSamplesMap,
-    debug: bool,
-) -> Result<()> {
-    let paths = openapi
-        .get_mut("paths")
-        .and_then(|p| p.as_object_mut())
-        .context("OpenAPI spec missing 'paths' object")?;
-
-    let mut routes_with_samples: Vec<String> = Vec::new();
-    let mut routes_without_samples: Vec<String> = Vec::new();
-
-    // Collect all routes first for sorted debug output
-    let mut all_routes: Vec<(String, String, String)> = Vec::new(); // (path, method, key)
-
-    for (path, path_item) in paths.iter_mut() {
-        let Some(path_item) = path_item.as_object_mut() else {
-            continue;
-        };
-
-        for method in HTTP_METHODS {
-            let Some(operation) = path_item.get_mut(*method) else {
-                continue;
-            };
-
-            let key = path_to_key(path, method);
-            all_routes.push((path.clone(), method.to_string(), key.clone()));
-
-            if let Some(samples) = code_samples.get(&key) {
-                routes_with_samples.push(key);
-
-                // Create x-codeSamples array according to Redocly spec
-                // Sort by language name for consistent output
-                let mut sorted_samples = samples.clone();
-                sorted_samples.sort_by(|a, b| a.lang.cmp(&b.lang));
-
-                let code_sample_array: Vec<Value> = sorted_samples
-                    .iter()
-                    .map(|sample| {
-                        json!({
-                            "lang": sample.lang,
-                            "source": sample.source
-                        })
-                    })
-                    .collect();
-
-                if let Some(op) = operation.as_object_mut() {
-                    op.insert("x-codeSamples".to_string(), json!(code_sample_array));
-                }
-            } else {
-                routes_without_samples.push(key);
-            }
-        }
-    }
-
-    // Debug output
-    if debug {
-        routes_without_samples.sort();
-
-        if !routes_without_samples.is_empty() {
-            println!("=== Routes without code samples ===\n");
-            for key in &routes_without_samples {
-                println!("  {}", key);
-            }
-        }
-
-        let total = all_routes.len();
-        let with_samples = routes_with_samples.len();
-        let without_samples = routes_without_samples.len();
-        let percentage = if total > 0 { (with_samples as f64 / total as f64) * 100.0 } else { 0.0 };
-
-        println!("\n=== Summary ===\n");
-        println!("  Total routes: {}", total);
-        println!("  With code samples: {} ({:.1}%)", with_samples, percentage);
-        println!("  Missing code samples: {} ({:.1}%)\n", without_samples, 100.0 - percentage);
-    }
-
-    Ok(())
-}
-
-/// Cleans up null descriptions in tags to make Mintlify work.
-///
-/// Removes any `"description"` fields with null values (both JSON `null` and `"null"` string)
-/// from the tags array and all nested objects.
-fn clean_null_descriptions(openapi: &mut Value) {
-    if let Some(tags) = openapi.get_mut("tags").and_then(|t| t.as_array_mut()) {
-        for tag in tags.iter_mut() {
-            remove_null_descriptions_recursive(tag);
-        }
-    }
-}
-
-/// Recursively removes all `"description"` fields that are `null` or the `"null"` string.
-fn remove_null_descriptions_recursive(value: &mut Value) {
-    if let Some(obj) = value.as_object_mut() {
-        // Check and remove description if it's null or "null" string
-        if let Some(desc) = obj.get("description") {
-            if desc.is_null() || (desc.is_string() && desc.as_str() == Some("null")) {
-                obj.remove("description");
-            }
-        }
-
-        // Recursively process all nested objects
-        for (_, v) in obj.iter_mut() {
-            remove_null_descriptions_recursive(v);
-        }
-    } else if let Some(arr) = value.as_array_mut() {
-        // Recursively process arrays
-        for item in arr.iter_mut() {
-            remove_null_descriptions_recursive(item);
-        }
-    }
+/// Returns the top-level `paths` object from the OpenAPI spec.
+fn get_paths_object(openapi: &Value) -> Result<&JsonObject> {
+    openapi.get("paths").and_then(Value::as_object).context("OpenAPI spec missing 'paths' object")
 }
 
 /// Checks that all routes have a summary field.
 ///
 /// Returns an error if any route is missing a summary.
 fn check_all_routes_have_summaries(openapi: &Value) -> Result<()> {
-    let paths = openapi
-        .get("paths")
-        .and_then(|p| p.as_object())
-        .context("OpenAPI spec missing 'paths' object")?;
+    let paths = get_paths_object(openapi)?;
 
-    let mut missing_summaries: Vec<String> = Vec::new();
-
-    for (path, path_item) in paths.iter() {
-        let Some(path_item) = path_item.as_object() else {
-            continue;
-        };
-
-        for method in HTTP_METHODS {
-            let Some(operation) = path_item.get(*method) else {
-                continue;
-            };
-
-            let has_summary =
-                operation.get("summary").and_then(|s| s.as_str()).is_some_and(|s| !s.is_empty());
-
-            if !has_summary {
-                missing_summaries.push(format!("{} {}", method.to_uppercase(), path));
-            }
-        }
-    }
+    let mut missing_summaries: Vec<String> = paths
+        .iter()
+        .flat_map(|(path, path_item)| {
+            path_item.as_object().map(|path_item| {
+                HTTP_METHODS.iter().filter_map(move |method| {
+                    let op = path_item.get(*method)?;
+                    let has_summary =
+                        op.get("summary").and_then(Value::as_str).is_some_and(|s| !s.is_empty());
+                    if has_summary {
+                        None
+                    } else {
+                        Some(format!("{} {}", method.to_uppercase(), path))
+                    }
+                })
+            })
+        })
+        .flatten()
+        .collect();
+    missing_summaries.sort_unstable();
+    missing_summaries.dedup();
 
     if missing_summaries.is_empty() {
         println!("All routes have summaries.");
-        Ok(())
-    } else {
-        missing_summaries.sort();
-        eprintln!("The following routes are missing a summary:");
-        for route in &missing_summaries {
-            eprintln!("  - {}", route);
-        }
-        eprintln!("\nTo fix this, add a doc-comment (///) above the route handler function.");
-        eprintln!("The first line becomes the summary, subsequent lines become the description.");
-        eprintln!("\nExample:");
-        eprintln!("  /// List webhooks");
-        eprintln!("  ///");
-        eprintln!("  /// Get the list of all registered webhooks.");
-        eprintln!("  #[utoipa::path(...)]");
-        eprintln!("  async fn get_webhooks(...) {{ ... }}");
-        anyhow::bail!("{} route(s) missing summary", missing_summaries.len());
+        return Ok(());
     }
+
+    eprintln!("The following routes are missing a summary:");
+    for route in &missing_summaries {
+        eprintln!("  - {}", route);
+    }
+    eprintln!("\nTo fix this, add a doc-comment (///) above the route handler function.");
+    eprintln!("The first line becomes the summary, subsequent lines become the description.");
+    eprintln!("\nExample:");
+    eprintln!("  /// List webhooks");
+    eprintln!("  ///");
+    eprintln!("  /// Get the list of all registered webhooks.");
+    eprintln!("  #[utoipa::path(...)]");
+    eprintln!("  async fn get_webhooks(...) {{ ... }}");
+    anyhow::bail!("{} route(s) missing summary", missing_summaries.len());
 }
 
 /// Checks for path issues in the OpenAPI specification.
 ///
-/// This function validates that:
+/// Validates that:
 /// 1. All paths start with `/`
 /// 2. No paths contain double slashes `//`
 /// 3. No duplicate paths exist (after normalizing slashes)
-///
-/// Returns an error if any issues are found.
 fn check_path_issues(openapi: &Value) -> Result<()> {
-    let paths = openapi
-        .get("paths")
-        .and_then(|p| p.as_object())
-        .context("OpenAPI spec missing 'paths' object")?;
+    let paths = get_paths_object(openapi)?;
 
     let mut issues: Vec<String> = Vec::new();
     let mut normalized_paths: HashMap<String, String> = HashMap::new();
 
     for path in paths.keys() {
-        // Check 1: Path must start with /
         if !path.starts_with('/') {
             issues.push(format!("Path does not start with '/': {}", path));
         }
-
-        // Check 2: Path must not contain //
         if path.contains("//") {
             issues.push(format!("Path contains double slashes '//': {}", path));
         }
 
-        // Check 3: Check for duplicates after normalization
-        // Normalize by: removing leading/trailing slashes, collapsing multiple slashes
         let normalized = normalize_path(path);
-        if let Some(existing) = normalized_paths.get(&normalized) {
-            if existing != path {
+        match normalized_paths.entry(normalized) {
+            Entry::Occupied(entry) if entry.get() != path => {
                 issues.push(format!(
                     "Duplicate routes detected (same path after normalization):\n    - {}\n    - {}",
-                    existing, path
+                    entry.get(),
+                    path
                 ));
             }
-        } else {
-            normalized_paths.insert(normalized, path.clone());
+            Entry::Vacant(entry) => {
+                entry.insert(path.clone());
+            }
+            _ => {}
         }
     }
 
@@ -624,6 +191,346 @@ fn check_path_issues(openapi: &Value) -> Result<()> {
     }
 }
 
+/// Resolves a `$ref` like `#/components/schemas/Foo` against the OpenAPI root.
+fn resolve_ref<'a>(openapi: &'a Value, r#ref: &str) -> Option<&'a Value> {
+    let r#ref = r#ref.strip_prefix("#/")?;
+    let mut current = openapi;
+    for part in r#ref.split('/') {
+        current = current.get(part)?;
+    }
+    Some(current)
+}
+
+/// Returns the properties object of a schema, resolving `$ref` if needed.
+fn get_schema_properties<'a>(openapi: &'a Value, schema: &'a Value) -> Option<&'a JsonObject> {
+    let schema = schema
+        .get("$ref")
+        .and_then(Value::as_str)
+        .and_then(|r#ref| resolve_ref(openapi, r#ref))
+        .unwrap_or(schema);
+    schema.get("properties").and_then(Value::as_object)
+}
+
+/// Returns true if the response object has an example (content.application/json.example or .examples).
+fn response_has_example(response: &Value) -> bool {
+    response
+        .get("content")
+        .and_then(|c| c.get("application/json"))
+        .map(|content| {
+            content.get("example").is_some()
+                || content
+                    .get("examples")
+                    .and_then(Value::as_object)
+                    .is_some_and(|ex| !ex.is_empty())
+        })
+        .unwrap_or(false)
+}
+
+/// Returns true if the response has a JSON body (content.application/json present).
+fn response_has_body(response: &Value) -> bool {
+    response.get("content").and_then(|c| c.get("application/json")).is_some()
+}
+
+/// Returns true if the path has at least one parameter whose name contains "uid" (case insensitive).
+/// E.g. `{indexUid}`, `{taskUid}`, `{batchUid}`, `{uuid}`, `{uidOrKey}`.
+fn path_has_uid_parameter(path: &str) -> bool {
+    path.split('/')
+        .filter_map(|segment| segment.strip_prefix('{').and_then(|s| s.strip_suffix('}')))
+        .any(|name| name.to_lowercase().contains("uid"))
+}
+
+/// Returns true if the schema value has a non-empty description, either directly or inside a oneOf/anyOf branch
+/// (utoipa puts descriptions there for Option-like types like Setting<T>).
+fn property_has_description(prop_obj: &JsonObject) -> bool {
+    prop_obj.get("description").and_then(Value::as_str).is_some_and(|d| !d.trim().is_empty())
+        || ["oneOf", "anyOf"].iter().any(|&key| {
+            prop_obj.get(key).and_then(Value::as_array).is_some_and(|arr| {
+                arr.iter().filter_map(Value::as_object).any(|obj| {
+                    obj.get("description")
+                        .and_then(Value::as_str)
+                        .is_some_and(|d| !d.trim().is_empty())
+                })
+            })
+        })
+}
+
+/// Checks that all properties of a schema have a non-empty description.
+fn check_schema_properties_have_description(
+    openapi: &Value,
+    schema: &Value,
+    context: &str,
+    errors: &mut Vec<String>,
+) {
+    let Some(properties) = get_schema_properties(openapi, schema) else {
+        return;
+    };
+    for (prop_name, prop_value) in properties {
+        let Some(prop_obj) = prop_value.as_object() else {
+            continue;
+        };
+        if !property_has_description(prop_obj) {
+            errors
+                .push(format!("{}: property \"{}\" is missing a description", context, prop_name));
+        }
+        // One level of $ref for nested objects
+        if let Some(nested_ref) = prop_obj.get("$ref").and_then(|r| r.as_str()) {
+            if let Some(resolved) = resolve_ref(openapi, nested_ref) {
+                if let Some(nested_props) = resolved.get("properties").and_then(Value::as_object) {
+                    for (nested_name, nested_value) in nested_props {
+                        let Some(nested_obj) = nested_value.as_object() else {
+                            continue;
+                        };
+                        if !property_has_description(nested_obj) {
+                            errors.push(format!(
+                                "{}: property \"{}.{}\" is missing a description",
+                                context, prop_name, nested_name
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Checks documentation: parameters have descriptions, 2xx responses have examples, and schema properties have descriptions.
+fn check_docs(openapi: &Value) -> Result<()> {
+    let paths = get_paths_object(openapi)?;
+    let mut errors: Vec<String> = Vec::new();
+
+    for (path, path_item) in paths.iter() {
+        let Some(path_item) = path_item.as_object() else { continue };
+        for method in HTTP_METHODS {
+            let Some(operation) = path_item.get(*method) else { continue };
+            check_operation_docs(openapi, path, method, operation, &mut errors);
+        }
+    }
+
+    if errors.is_empty() {
+        println!("OpenAPI documentation check passed.");
+        println!("  - Parameters have descriptions");
+        println!("  - Request/response schema properties have descriptions");
+        println!("  - 2xx responses have examples where applicable");
+        println!("  - 401 (except GET /health), 404 (routes with *Uid param), and 400 responses have examples");
+        Ok(())
+    } else {
+        errors.sort();
+        eprintln!("OpenAPI documentation check failed:\n");
+        for e in &errors {
+            eprintln!("  - {}", e);
+        }
+        eprintln!("\nFix the above and re-run the check.");
+        anyhow::bail!("{} documentation issue(s) found", errors.len());
+    }
+}
+
+fn operation_prefix(operation: &Value, method: &str, path: &str) -> String {
+    let op_id = operation
+        .get("operationId")
+        .and_then(Value::as_str)
+        .map(String::from)
+        .unwrap_or_else(|| format!("{} {}", method, path));
+    format!("{} {} ({})", method.to_uppercase(), path, op_id)
+}
+
+fn check_delete_no_body(method: &str, operation: &Value, prefix: &str, errors: &mut Vec<String>) {
+    if method == "delete" && operation.get("requestBody").is_some() {
+        errors.push(format!("{}: DELETE route must not have a request body", prefix));
+    }
+}
+
+fn check_parameters_descriptions(operation: &Value, prefix: &str, errors: &mut Vec<String>) {
+    let params =
+        operation.get("parameters").and_then(Value::as_array).map(|a| a.as_slice()).unwrap_or(&[]);
+    for param in params {
+        let name = param.get("name").and_then(Value::as_str).unwrap_or("(unnamed)");
+        let param_in = param.get("in").and_then(Value::as_str).unwrap_or("unknown");
+        if param.get("description").and_then(Value::as_str).is_none_or(|s| s.trim().is_empty()) {
+            errors.push(format!(
+                "{}: parameter \"{}\" ({}) is missing a description",
+                prefix, name, param_in
+            ));
+        }
+    }
+}
+
+fn check_request_body_schema(
+    openapi: &Value,
+    operation: &Value,
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    if let Some(schema) = operation
+        .get("requestBody")
+        .and_then(|b| b.get("content"))
+        .and_then(|c| c.get("application/json"))
+        .and_then(|j| j.get("schema"))
+    {
+        check_schema_properties_have_description(
+            openapi,
+            schema,
+            &format!("{} request body", prefix),
+            errors,
+        );
+    }
+}
+
+fn success_codes_from_responses(responses: Option<&JsonObject>) -> Vec<String> {
+    responses
+        .map(|r| r.keys().filter(|k| k.starts_with('2')).cloned().collect())
+        .unwrap_or_default()
+}
+
+fn has_2xx_response_example(responses: Option<&JsonObject>, success_codes: &[String]) -> bool {
+    let Some(resps) = responses else { return false };
+    success_codes.iter().any(|code| {
+        resps
+            .get(code)
+            .and_then(|r| r.get("content").and_then(|c| c.get("application/json")))
+            .is_some_and(|content| {
+                content.get("example").is_some()
+                    || content
+                        .get("examples")
+                        .and_then(Value::as_object)
+                        .is_some_and(|ex| !ex.is_empty())
+            })
+    })
+}
+
+fn success_responses_have_body(responses: Option<&JsonObject>, success_codes: &[String]) -> bool {
+    responses.is_some_and(|r| {
+        success_codes.iter().any(|code| {
+            r.get(code)
+                .and_then(|res| res.get("content").and_then(|c| c.get("application/json")))
+                .is_some()
+        })
+    })
+}
+
+fn check_2xx_has_example(
+    responses: Option<&JsonObject>,
+    success_codes: &[String],
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    let has_body = success_responses_have_body(responses, success_codes);
+    let has_example = has_2xx_response_example(responses, success_codes);
+    if has_body && !has_example {
+        errors.push(format!(
+            "{}: at least one 2xx response must have an example (response example required)",
+            prefix
+        ));
+    }
+}
+
+fn check_401_response(
+    path: &str,
+    responses: Option<&JsonObject>,
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    if path == "/health" {
+        return;
+    }
+    let Some(resps) = responses else { return };
+    match resps.get("401") {
+        Some(r401) if !response_has_example(r401) => {
+            errors.push(format!(
+                "{}: response 401 must have an example (e.g. missing_authorization_header)",
+                prefix
+            ));
+        }
+        None => {
+            errors.push(format!("{}: response 401 is required with an example", prefix));
+        }
+        _ => {}
+    }
+}
+
+fn check_404_response(
+    path: &str,
+    responses: Option<&JsonObject>,
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    if !path_has_uid_parameter(path) {
+        return;
+    }
+    let Some(resps) = responses else { return };
+    match resps.get("404") {
+        Some(r404) if !response_has_example(r404) => {
+            errors.push(format!(
+                "{}: response 404 must have an example (e.g. resource not found by uid)",
+                prefix
+            ));
+        }
+        None => {
+            errors.push(format!(
+                "{}: response 404 is required for routes with a uid path parameter (e.g. resource not found)",
+                prefix
+            ));
+        }
+        _ => {}
+    }
+}
+
+fn check_400_response(responses: Option<&JsonObject>, prefix: &str, errors: &mut Vec<String>) {
+    let Some(r400) = responses.and_then(|r| r.get("400")) else { return };
+    if response_has_body(r400) && !response_has_example(r400) {
+        errors.push(format!(
+            "{}: response 400 must have an example (e.g. error message and code)",
+            prefix
+        ));
+    }
+}
+
+fn check_response_schemas(
+    openapi: &Value,
+    responses: Option<&JsonObject>,
+    success_codes: &[String],
+    prefix: &str,
+    errors: &mut Vec<String>,
+) {
+    let Some(resps) = responses else { return };
+    for code in success_codes {
+        let Some(schema) = resps
+            .get(code)
+            .and_then(|r| r.get("content"))
+            .and_then(|c| c.get("application/json"))
+            .and_then(|j| j.get("schema"))
+        else {
+            continue;
+        };
+        check_schema_properties_have_description(
+            openapi,
+            schema,
+            &format!("{} response {}", prefix, code),
+            errors,
+        );
+    }
+}
+
+fn check_operation_docs(
+    openapi: &Value,
+    path: &str,
+    method: &str,
+    operation: &Value,
+    errors: &mut Vec<String>,
+) {
+    let prefix = operation_prefix(operation, method, path);
+    let responses = operation.get("responses").and_then(Value::as_object);
+    let success_codes = success_codes_from_responses(responses);
+
+    check_delete_no_body(method, operation, &prefix, errors);
+    check_parameters_descriptions(operation, &prefix, errors);
+    check_request_body_schema(openapi, operation, &prefix, errors);
+    check_2xx_has_example(responses, &success_codes, &prefix, errors);
+    check_401_response(path, responses, &prefix, errors);
+    check_404_response(path, responses, &prefix, errors);
+    check_400_response(responses, &prefix, errors);
+    check_response_schemas(openapi, responses, &success_codes, &prefix, errors);
+}
+
 /// Normalizes a path for duplicate detection.
 ///
 /// - Removes leading and trailing slashes
@@ -632,196 +539,279 @@ fn normalize_path(path: &str) -> String {
     path.split('/').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("/")
 }
 
+/// Checks that query and body parameters in Rust source have explicit `required = true` or `required = false`.
+///
+/// Scans crates/meilisearch/src for:
+/// - Query: structs with `#[into_params(..., parameter_in = Query, ...)]`: every `#[param(...)]` field must contain `required = true` or `required = false`.
+/// - Body: structs used as `request_body` in path attributes: every field with `#[schema(...)]` must contain `required = true` or `required = false`.
+fn check_params() -> Result<()> {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").context("CARGO_MANIFEST_DIR not set")?;
+    let meilisearch_src = Path::new(&manifest_dir)
+        .join("../meilisearch/src")
+        .canonicalize()
+        .context("resolve meilisearch/src path (run from workspace root)")?;
+
+    let mut errors: Vec<String> = Vec::new();
+    let mut request_body_types: HashSet<String> = HashSet::new();
+
+    collect_request_body_types(&meilisearch_src, &mut request_body_types)?;
+
+    for entry in walk_rs_files(&meilisearch_src)? {
+        let path = entry.path();
+        let content =
+            std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        let rel = path.strip_prefix(&meilisearch_src).unwrap_or(&path);
+        check_query_params_in_file(&content, rel, &mut errors);
+        check_body_schema_in_file(&content, rel, &request_body_types, &mut errors);
+    }
+
+    if errors.is_empty() {
+        println!("All query and body parameters have explicit required = true/false.");
+        Ok(())
+    } else {
+        eprintln!("We do not want utoipa to infer whether a parameter is required or not, as that does not correctly cover our documentation needs. You must define it explicitly with required = true or required = false.\n");
+        eprintln!(
+            "The following parameters are missing explicit required = true or required = false:\n"
+        );
+        for e in &errors {
+            eprintln!("  - {}", e);
+        }
+        eprintln!("\nFix the above by adding required = true or required = false in the #[param(...)] or #[schema(...)] attribute.");
+        anyhow::bail!("{} parameter(s) missing explicit required", errors.len())
+    }
+}
+
+fn walk_rs_files(dir: &Path) -> Result<Vec<std::fs::DirEntry>> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            out.extend(walk_rs_files(&path)?);
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(entry);
+        }
+    }
+    Ok(out)
+}
+
+/// Extract the content of an attribute: from `#[attr(` to the matching `)`.
+fn extract_attr_content(s: &str, open_pos: usize) -> Option<&str> {
+    let rest = s.get(open_pos..)?;
+    let start = rest.find('(')? + 1;
+    let mut depth = 1u32;
+    let mut i = start;
+    let bytes = rest.as_bytes();
+    while i < bytes.len() && depth > 0 {
+        match bytes[i] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    if depth != 0 {
+        return None;
+    }
+    rest.get(start..i - 1)
+}
+
+fn has_required_explicit(content: &str) -> bool {
+    let content = content.trim();
+    content.contains("required = true") || content.contains("required = false")
+}
+
+/// For a struct body, find every field (pub or private). For each, the "block above" is
+/// the lines between the previous field and this one. Check that block contains required = true/false.
+fn check_struct_fields_have_required(
+    body: &str,
+    struct_name: &str,
+    kind: &str,
+    rel_path: &Path,
+    errors: &mut Vec<String>,
+) {
+    let lines: Vec<&str> = body.lines().collect();
+    let mut block_above_lines: Vec<&str> = Vec::new();
+
+    for line in &lines {
+        let trimmed = line.trim();
+        let field_name: Option<&str> = if let Some(after_pub) = trimmed.strip_prefix("pub ") {
+            let after_pub = after_pub.trim_start();
+            let end = after_pub
+                .find(|c: char| !c.is_alphanumeric() && c != '_')
+                .unwrap_or(after_pub.len());
+            let name = after_pub[..end].trim();
+            if !name.is_empty()
+                && after_pub.get(end..).is_none_or(|s| s.trim_start().starts_with(':'))
+            {
+                Some(name)
+            } else {
+                None
+            }
+        } else if let Some(colon_pos) = trimmed.find(':') {
+            let before_colon = trimmed[..colon_pos].trim();
+            if !before_colon.is_empty()
+                && before_colon.chars().all(|c| c.is_alphanumeric() || c == '_')
+                && !before_colon.eq("pub")
+            {
+                Some(before_colon)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(name) = field_name {
+            let block_above_str = block_above_lines.join("\n");
+            let block_above = block_above_str.trim();
+            if !has_required_explicit(block_above) {
+                errors.push(format!(
+                    "{}: {} struct `{}` has parameter `{}` without required = true/false in the attributes above it",
+                    rel_path.display(),
+                    kind,
+                    struct_name,
+                    name
+                ));
+            }
+            block_above_lines.clear();
+        } else {
+            block_above_lines.push(line);
+        }
+    }
+}
+
+/// Collect type names used as request_body in path attributes (e.g. request_body = CreateApiKey).
+fn collect_request_body_types(dir: &Path, out: &mut HashSet<String>) -> Result<()> {
+    for entry in walk_rs_files(dir)? {
+        let content = std::fs::read_to_string(entry.path())?;
+        for line in content.lines() {
+            let line = line.trim();
+            if let Some(pos) = line.find("request_body") {
+                let after = &line[pos + "request_body".len()..];
+                let after = after.trim_start();
+                let after = after.strip_prefix('=').map(|s| s.trim_start()).unwrap_or("");
+                let name = after
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect::<String>();
+                if !name.is_empty() && name != "serde_json" && name != "Vec" && name != "Value" {
+                    out.insert(name);
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Check query param structs: #[into_params(..., parameter_in = Query, ...)] and then every #[param(...)] must have required.
+fn check_query_params_in_file(content: &str, rel_path: &Path, errors: &mut Vec<String>) {
+    let mut i = 0;
+    while let Some(pos) = content[i..].find("#[into_params(") {
+        let abs_pos = i + pos;
+        let attr = match extract_attr_content(content, abs_pos + 2) {
+            Some(a) => a,
+            None => {
+                i = abs_pos + 1;
+                continue;
+            }
+        };
+        if !attr.contains("parameter_in") || !attr.contains("Query") {
+            i = abs_pos + 1;
+            continue;
+        }
+        let into_params_prefix_len = "#[into_params(".len();
+        let after_attr_offset = abs_pos + into_params_prefix_len + attr.len() + 2;
+        let after_attr_slice = content.get(after_attr_offset..).unwrap_or("");
+        let (struct_start, name_offset) = if let Some(p) = after_attr_slice.find("pub struct ") {
+            (after_attr_offset + p, "pub struct ".len())
+        } else if let Some(p) = after_attr_slice.find("struct ") {
+            (after_attr_offset + p, "struct ".len())
+        } else {
+            i = abs_pos + 1;
+            continue;
+        };
+        let name_start = struct_start + name_offset;
+        let name_end = content[name_start..]
+            .find(|c: char| !c.is_alphanumeric() && c != '_')
+            .map(|p| name_start + p)
+            .unwrap_or(content.len());
+        let struct_name = content[name_start..name_end].trim();
+        let brace =
+            content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
+        let body = match extract_brace_content(content, brace) {
+            Some(b) => b,
+            None => {
+                i = abs_pos + 1;
+                continue;
+            }
+        };
+        check_struct_fields_have_required(body, struct_name, "query", rel_path, errors);
+        i = struct_start + 1;
+    }
+}
+
+/// Extract content inside `{ ... }` starting at the opening brace.
+fn extract_brace_content(s: &str, open_brace_pos: usize) -> Option<&str> {
+    let rest = s.get(open_brace_pos..)?;
+    if !rest.starts_with('{') {
+        return None;
+    }
+    let mut depth = 1u32;
+    let mut i = 1;
+    let bytes = rest.as_bytes();
+    while i < bytes.len() && depth > 0 {
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => depth -= 1,
+            _ => {}
+        }
+        i += 1;
+    }
+    if depth != 0 {
+        return None;
+    }
+    rest.get(1..i - 1)
+}
+
+/// Check body structs: for structs in request_body_types, every #[schema(...)] field must have required.
+fn check_body_schema_in_file(
+    content: &str,
+    rel_path: &Path,
+    request_body_types: &HashSet<String>,
+    errors: &mut Vec<String>,
+) {
+    let mut i = 0;
+    while let Some(pos) = content[i..].find("pub struct ") {
+        let struct_start = i + pos + "pub struct ".len();
+        let name_end = content[struct_start..]
+            .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '<')
+            .map(|p| struct_start + p)
+            .unwrap_or(content.len());
+        let name = content[struct_start..name_end].trim();
+        let base_name = name.split('<').next().unwrap_or(name).trim();
+        if !request_body_types.contains(base_name) {
+            i = struct_start + 1;
+            continue;
+        }
+        let brace =
+            content[struct_start..].find('{').map(|p| struct_start + p).unwrap_or(struct_start);
+        let body = match extract_brace_content(content, brace) {
+            Some(b) => b,
+            None => {
+                i = struct_start + 1;
+                continue;
+            }
+        };
+        check_struct_fields_have_required(body, base_name, "body", rel_path, errors);
+        i = struct_start + 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_path_to_key() {
-        assert_eq!(path_to_key("/indexes", "GET"), "get_indexes");
-        assert_eq!(path_to_key("/indexes/{index_uid}", "GET"), "get_indexes_indexUid");
-        assert_eq!(
-            path_to_key("/indexes/{index_uid}/documents", "POST"),
-            "post_indexes_indexUid_documents"
-        );
-        assert_eq!(
-            path_to_key("/indexes/{index_uid}/documents/{document_id}", "GET"),
-            "get_indexes_indexUid_documents_documentId"
-        );
-        assert_eq!(
-            path_to_key("/indexes/{index_uid}/settings/stop-words", "GET"),
-            "get_indexes_indexUid_settings_stop_words"
-        );
-    }
-
-    #[test]
-    fn test_to_camel_case() {
-        assert_eq!(to_camel_case("index_uid"), "indexUid");
-        assert_eq!(to_camel_case("document_id"), "documentId");
-        assert_eq!(to_camel_case("task_uid"), "taskUid");
-    }
-
-    #[test]
-    fn test_build_openapi_key_mapping() {
-        let yaml = r#"
-# get_indexes
-get_indexes_1: |-
-  curl \
-    -X GET 'MEILISEARCH_URL/indexes'
-get_indexes_2: |-
-  curl \
-    -X GET 'MEILISEARCH_URL/indexes?limit=5'
-# post_indexes
-create_indexes_1: |-
-  curl \
-    -X POST 'MEILISEARCH_URL/indexes'
-# get_version
-get_version_1: |-
-  curl \
-    -X GET 'MEILISEARCH_URL/version'
-# COMMENT WITHOUT KEY - SHOULD BE IGNORED
-## COMMENT WITHOUT KEY - SHOULD BE IGNORED
-unrelated_sample_without_comment: |-
-  curl \
-    -X GET 'MEILISEARCH_URL/something'
-"#;
-        let mapping = build_openapi_key_mapping(yaml);
-
-        // Should have 3 OpenAPI keys
-        assert_eq!(mapping.len(), 3);
-        assert!(mapping.contains_key("get_indexes"));
-        assert!(mapping.contains_key("post_indexes"));
-        assert!(mapping.contains_key("get_version"));
-
-        // Only keeps the first code sample ID per OpenAPI key
-        assert_eq!(mapping["get_indexes"], "get_indexes_1");
-        assert_eq!(mapping["post_indexes"], "create_indexes_1");
-        assert_eq!(mapping["get_version"], "get_version_1");
-
-        // Comments with multiple words or ## should be ignored and not create keys
-        assert!(!mapping.contains_key("COMMENT"));
-        assert!(!mapping.contains_key("##"));
-    }
-
-    #[test]
-    fn test_parse_code_samples_from_file() {
-        let yaml = r#"
-get_indexes_1: |-
-  client.getIndexes()
-  # I write something
-# COMMENT TO IGNORE
-get_indexes_2: |-
-  client.getIndexes({ limit: 3 })
-update_document: |-
-  // Code with blank line
-
-  updateDoc(doc)
-  // End
-
-delete_document_1: |-
-  client.deleteDocument(1)
-no_newline_at_end: |-
-  client.update({ id: 1 })
-key_with_empty_sample: |-
-# This should produce an empty string for the sample
-complex_block: |-
-  // Some code
-    Indented line
-    # Indented comment
-  Last line
-"#;
-        let samples = parse_code_samples_from_file(yaml);
-
-        assert_eq!(samples.len(), 7);
-        assert!(samples.contains_key("get_indexes_1"));
-        assert!(samples.contains_key("get_indexes_2"));
-        assert!(samples.contains_key("update_document"));
-        assert!(samples.contains_key("delete_document_1"));
-        assert!(samples.contains_key("no_newline_at_end"));
-        assert!(samples.contains_key("key_with_empty_sample"));
-        assert!(samples.contains_key("complex_block"));
-
-        // get_indexes_1 includes indented comment
-        assert_eq!(samples["get_indexes_1"], "client.getIndexes()\n# I write something");
-
-        // get_indexes_2 is a single line
-        assert_eq!(samples["get_indexes_2"], "client.getIndexes({ limit: 3 })");
-
-        // update_document contains a blank line and some code
-        assert_eq!(samples["update_document"], "// Code with blank line\n\nupdateDoc(doc)\n// End");
-
-        // delete_document_1
-        assert_eq!(samples["delete_document_1"], "client.deleteDocument(1)");
-
-        // no_newline_at_end, explicitly just one line
-        assert_eq!(samples["no_newline_at_end"], "client.update({ id: 1 })");
-
-        // key_with_empty_sample should be empty string
-        assert_eq!(samples["key_with_empty_sample"], "");
-
-        // complex_block preserves indentation and comments
-        assert_eq!(
-            samples["complex_block"],
-            "// Some code\n  Indented line\n  # Indented comment\nLast line"
-        );
-    }
-
-    #[test]
-    fn test_clean_null_descriptions() {
-        let mut openapi = json!({
-            "tags": [
-                {
-                    "name": "Test1",
-                    "description": "null"
-                },
-                {
-                    "name": "Test2",
-                    "description": null
-                },
-                {
-                    "name": "Test3",
-                    "description": "Valid description"
-                },
-                {
-                    "name": "Test4",
-                    "description": "null",
-                    "externalDocs": {
-                        "url": "https://example.com",
-                        "description": null
-                    }
-                },
-                {
-                    "name": "Test5",
-                    "externalDocs": {
-                        "url": "https://example.com",
-                        "description": "null"
-                    }
-                }
-            ]
-        });
-
-        clean_null_descriptions(&mut openapi);
-
-        let tags = openapi["tags"].as_array().unwrap();
-
-        // Test1: description "null" should be removed
-        assert!(!tags[0].as_object().unwrap().contains_key("description"));
-
-        // Test2: description null should be removed
-        assert!(!tags[1].as_object().unwrap().contains_key("description"));
-
-        // Test3: valid description should remain
-        assert_eq!(tags[2]["description"], "Valid description");
-
-        // Test4: both tag description and externalDocs description should be removed
-        assert!(!tags[3].as_object().unwrap().contains_key("description"));
-        assert!(!tags[3]["externalDocs"].as_object().unwrap().contains_key("description"));
-        assert_eq!(tags[3]["externalDocs"]["url"], "https://example.com");
-
-        // Test5: externalDocs description "null" should be removed
-        assert!(!tags[4]["externalDocs"].as_object().unwrap().contains_key("description"));
-        assert_eq!(tags[4]["externalDocs"]["url"], "https://example.com");
-    }
+    use serde_json::json;
 
     #[test]
     fn test_normalize_path() {
@@ -893,5 +883,50 @@ complex_block: |-
         let err = result.unwrap_err().to_string();
         // Should report at least the duplicate issue (and possibly the missing slash and double slash)
         assert!(err.contains("path issue"));
+    }
+
+    #[test]
+    fn test_check_struct_fields_missing_required() {
+        let body = r#"
+    /// Doc
+    #[deserr(default)]
+    pub q: Option<String>,
+    #[param(value_type = usize)]
+    pub limit: usize,
+"#;
+        let mut errors = Vec::new();
+        check_struct_fields_have_required(
+            body,
+            "SearchQuery",
+            "body",
+            Path::new("search/mod.rs"),
+            &mut errors,
+        );
+        assert!(
+            !errors.is_empty(),
+            "expected errors when no required = true/false in block above pub, got: {:?}",
+            errors
+        );
+        assert!(errors[0].contains("parameter `q`"));
+        assert!(errors[1].contains("parameter `limit`"));
+    }
+
+    #[test]
+    fn test_check_struct_fields_with_required() {
+        let body = r#"
+    #[schema(required = false)]
+    pub q: Option<String>,
+    #[param(required = true, value_type = usize)]
+    pub limit: usize,
+"#;
+        let mut errors = Vec::new();
+        check_struct_fields_have_required(
+            body,
+            "SearchQuery",
+            "body",
+            Path::new("search/mod.rs"),
+            &mut errors,
+        );
+        assert!(errors.is_empty(), "expected no errors when required is explicit: {:?}", errors);
     }
 }

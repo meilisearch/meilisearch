@@ -23,7 +23,6 @@ use crate::extractors::sequential_extractor::SeqHandler;
         description = "The `/experimental-features` route allows you to activate or deactivate some of Meilisearch's experimental features.
 
 This route is **synchronous**. This means that no task object will be returned, and any activated or deactivated features will be made available or unavailable immediately.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/experimental_features"),
     )),
 )]
 pub struct ExperimentalFeaturesApi;
@@ -36,18 +35,16 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
-/// Get all experimental features
+/// List experimental features
 ///
-/// Get a list of all experimental features that can be activated via the
-/// /experimental-features route and whether or not they are currently
-/// activated.
+/// Return all experimental features that can be toggled via this API, and whether each one is currently enabled or disabled.
 #[utoipa::path(
     get,
     path = "",
     tag = "Experimental features",
     security(("Bearer" = ["experimental_features.get", "experimental_features.*", "*"])),
     responses(
-        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
+        (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
             metrics: Some(true),
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
@@ -59,7 +56,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             multimodal: Some(false),
             vector_store_setting: Some(false),
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -192,14 +189,14 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 
 /// Configure experimental features
 ///
-/// Activate or deactivate experimental features.
+/// Enable or disable experimental features at runtime.
 #[utoipa::path(
     patch,
     path = "",
     tag = "Experimental features",
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
     responses(
-        (status = OK, description = "Experimental features are returned", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
+        (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
             metrics: Some(true),
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
@@ -211,7 +208,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             multimodal: Some(false),
             vector_store_setting: Some(false),
          })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

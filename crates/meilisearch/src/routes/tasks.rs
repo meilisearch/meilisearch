@@ -35,7 +35,6 @@ use crate::{aggregate_methods, Opt};
     tags((
         name = "Tasks",
         description = "The tasks route gives information about the progress of the [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html).",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/tasks"),
     )),
 )]
 pub struct TaskApi;
@@ -58,15 +57,15 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct TasksFilterQuery {
-    /// Maximum number of results to return.
+    /// Maximum number of batches to return.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT as u32), error = DeserrQueryParamError<InvalidTaskLimit>)]
     #[param(required = false, value_type = u32, example = 12, default = json!(PAGINATION_DEFAULT_LIMIT))]
     pub limit: Param<u32>,
-    /// Fetch the next set of results from the given uid.
+    /// `uid` of the first batch returned.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskFrom>)]
     #[param(required = false, value_type = Option<u32>, example = 12421)]
     pub from: Option<Param<TaskId>>,
-    /// The order you want to retrieve the objects.
+    /// If `true`, returns results in the reverse order, from oldest to most recent.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskReverse>)]
     #[param(required = false, value_type = Option<bool>, example = true)]
     pub reverse: Option<Param<bool>>,
@@ -342,15 +341,15 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
 
 /// Cancel tasks
 ///
-/// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)
+/// Cancel enqueued and/or processing [tasks](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to cancel.
 #[utoipa::path(
     post,
     path = "/cancel",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.cancel", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -359,7 +358,7 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 400, description = "A filter is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 400, description = "A filter is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
                 "code": "missing_task_filters",
@@ -367,20 +366,12 @@ impl<Method: AggregateMethod + 'static> Aggregate for TaskFilterAnalytics<Method
                 "link": "https://docs.meilisearch.com/errors#missing_task_filters"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
-            }
-        )),
-        (status = 404, description = "The task uid does not exist", body = ResponseError, content_type = "application/json", example = json!(
-            {
-                "message": "Task :taskUid not found.",
-                "code": "task_not_found",
-                "type": "invalid_request",
-                "link": "https://docs.meilisearch.com/errors/#task_not_found"
             }
         ))
     )
@@ -436,15 +427,15 @@ async fn cancel_tasks(
 
 /// Delete tasks
 ///
-/// Delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) on filter
+/// Permanently delete [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) matching the given filters. You must provide at least one filter (e.g. `uids`, `indexUids`, `statuses`) to specify which tasks to delete.
 #[utoipa::path(
     delete,
     path = "",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.delete", "tasks.*", "*"])),
     params(TaskDeletionOrCancelationQuery),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": null,
@@ -453,7 +444,7 @@ async fn cancel_tasks(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 400, description = "A filter is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 400, description = "A filter is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Query parameters to filter the tasks to delete are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.",
                 "code": "missing_task_filters",
@@ -461,7 +452,7 @@ async fn cancel_tasks(
                 "link": "https://docs.meilisearch.com/errors#missing_task_filters"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -469,7 +460,7 @@ async fn cancel_tasks(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "The task uid does not exist", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "The task uid does not exist.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
@@ -542,17 +533,19 @@ pub struct AllTasks {
     pub next: Option<u32>,
 }
 
-/// Get all tasks
+/// List tasks
 ///
-/// Get all [tasks](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html)
+/// The `/tasks` route returns information about [asynchronous operations](https://docs.meilisearch.com/learn/advanced/asynchronous_operations.html) (indexing, document updates, settings changes, and so on).
+///
+/// Tasks are returned in descending order of uid by default, so the most recently created or updated tasks appear first. Results are paginated and can be filtered using query parameters such as `indexUids`, `statuses`, `types`, and date ranges.
 #[utoipa::path(
     get,
     path = "",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
     responses(
-        (status = 200, description = "Get all tasks", body = AllTasks, content_type = "application/json", example = json!(
+        (status = 200, description = "The list of tasks is returned.", body = AllTasks, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -575,7 +568,7 @@ pub struct AllTasks {
               "next": null
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -609,17 +602,17 @@ async fn get_tasks(
     Ok(HttpResponse::Ok().json(tasks))
 }
 
-/// Get a task
+/// Get task
 ///
-/// Get a [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)
+/// Retrieve a single [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations) by its uid.
 #[utoipa::path(
     get,
     path = "/{taskUid}",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
-    params(("taskUid", format = UInt32, example = "0", description = "The task identifier", nullable = false)),
+    params(("taskUid", format = UInt32, example = "0", description = "The task identifier.", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully retrieved", body = TaskView, content_type = "application/json", example = json!(
+        (status = 200, description = "Task successfully retrieved.", body = TaskView, content_type = "application/json", example = json!(
             {
                 "uid": 1,
                 "indexUid": "movies",
@@ -634,7 +627,7 @@ async fn get_tasks(
                 "finishedAt": "2021-01-01T09:39:02.000000Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -642,7 +635,7 @@ async fn get_tasks(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "The task uid does not exist", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "The task uid does not exist.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
@@ -677,18 +670,18 @@ async fn get_task(
     }
 }
 
-/// Get a task's documents.
+/// Get task's documents
 ///
-/// Get a [task's documents file](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+/// Retrieve the list of documents that were processed or affected by a given [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). Only available for document-related tasks.
 #[utoipa::path(
     get,
     path = "/{taskUid}/documents",
-    tag = "Tasks",
+    tag = "Async task management",
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
-    params(("taskUid", format = UInt32, example = "0", description = "The task identifier", nullable = false)),
+    params(("taskUid", format = UInt32, example = "0", description = "The task identifier.", nullable = false)),
     responses(
-        (status = 200, description = "The content of the task update", body = serde_json::Value, content_type = "application/x-ndjson"),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 200, description = "The content of the task update.", body = serde_json::Value, content_type = "application/x-ndjson"),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -696,7 +689,7 @@ async fn get_task(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 404, description = "The task uid does not exist", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "The task uid does not exist.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Task :taskUid not found.",
                 "code": "task_not_found",
