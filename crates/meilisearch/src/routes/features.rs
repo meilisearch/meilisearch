@@ -189,7 +189,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 
 /// Configure experimental features
 ///
-/// Enable or disable experimental features at runtime. Only features that are marked as runtime-togglable can be changed.
+/// Enable or disable experimental features at runtime.
 #[utoipa::path(
     patch,
     path = "",

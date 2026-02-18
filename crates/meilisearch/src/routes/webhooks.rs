@@ -338,7 +338,7 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
         })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "Unique identifier of the webhook.")
+        ("uuid" = Uuid, Path, description = "Universally unique identifier of the webhook.")
     )
 )]
 async fn get_webhook(
