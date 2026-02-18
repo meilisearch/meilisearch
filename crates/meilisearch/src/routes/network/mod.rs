@@ -200,7 +200,7 @@ pub struct Network {
     ///
     /// - Pass `null` as a value for a shard to remove it from the configuration.
     /// - Shards that don't appear in this list will be unmodified by the network call.
-    #[schema(value_type = Option<BTreeMap<String, Shard>>, example = json!({
+    #[schema(required = false, value_type = Option<BTreeMap<String, Shard>>, example = json!({
         "shard-00": {
             "remotes": ["ms-00", "ms-01"]
         }
@@ -211,7 +211,7 @@ pub struct Network {
     /// Previous shard configurations
     ///
     /// This field should not be passed by end-users. It is used in internal communications between Meilisearch instances
-    #[schema(value_type = Option<BTreeMap<String, Shard>>, example = json!({
+    #[schema(required = false, value_type = Option<BTreeMap<String, Shard>>, example = json!({
         "shard-00": {
             "remotes": ["ms-00", "ms-01"]
         }
