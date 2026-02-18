@@ -275,6 +275,13 @@ impl IndexScheduler {
         let webhooks = self.webhooks_dump_view();
         dump.create_webhooks(webhooks)?;
 
+        // 8. Dump the dynamic search rules
+        let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules()?;
+        for result in self.dynamic_search_rules.persisted.iter(&rtxn)? {
+            let (uid, rule) = result?;
+            dump_dynamic_search_rules.push_rule(uid, &rule)?;
+        }
+
         let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"
                 )).unwrap();

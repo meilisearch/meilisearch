@@ -1,0 +1,67 @@
+---
+source: crates/meilisearch-types/src/dynamic_search_rules.rs
+expression: expected
+---
+{
+  "uid": "black-friday-2025",
+  "description": "Black Friday 2025 Merchandising rules",
+  "priority": 1,
+  "active": true,
+  "conditions": [
+    {
+      "scope": "query",
+      "isEmpty": true
+    },
+    {
+      "scope": "time",
+      "start": "2025-11-28T00:00:00Z",
+      "end": "2025-11-28T23:59:59Z"
+    }
+  ],
+  "actions": [
+    {
+      "selector": {
+        "indexUid": "products",
+        "id": "123"
+      },
+      "action": {
+        "type": "pin",
+        "position": 3
+      }
+    },
+    {
+      "selector": {
+        "filter": {
+          "attribute": "brand",
+          "op": "eq",
+          "value": "premium"
+        }
+      },
+      "action": {
+        "type": "boost",
+        "score": 1.5
+      }
+    },
+    {
+      "selector": {
+        "filter": {
+          "attribute": "category",
+          "op": "eq",
+          "value": "clearance"
+        }
+      },
+      "action": {
+        "type": "bury",
+        "score": 0.5
+      }
+    },
+    {
+      "selector": {
+        "id": "456"
+      },
+      "action": {
+        "type": "hide"
+      }
+    }
+  ]
+}
