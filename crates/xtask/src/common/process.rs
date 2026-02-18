@@ -9,6 +9,7 @@ use crate::common::client::Client;
 use crate::common::command::{health_command, run as run_command};
 use crate::common::instance::{Binary, BinarySource, Edition};
 
+#[tracing::instrument]
 pub async fn kill_meili(mut meilisearch: tokio::process::Child) {
     let Some(id) = meilisearch.id() else { return };
 
