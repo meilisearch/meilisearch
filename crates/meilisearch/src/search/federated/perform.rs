@@ -1240,7 +1240,7 @@ impl SearchByIndex {
             })?;
 
         let foreign_keys = index.foreign_keys(&rtxn)?;
-        hydrate_documents(&mut merged_result, &foreign_keys, &params.index_scheduler)?;
+        hydrate_documents(&mut merged_result, &foreign_keys, &params.index_scheduler, progress)?;
         self.results_by_index.push(SearchResultByIndex {
             index: index_uid,
             primary_key,
@@ -1418,7 +1418,9 @@ fn hydrate_documents(
     documents: &mut Vec<SearchHitByIndex>,
     foreign_keys: &[ForeignKey],
     index_scheduler: &IndexScheduler,
+    progress: &Progress,
 ) -> Result<(), ResponseError> {
+    progress.update_progress_scoped(FederatingResultsStep::HydrateDocuments);
     for foreign_key in foreign_keys {
         let index = index_scheduler.index(&foreign_key.foreign_index_uid)?;
         let rtxn = index.read_txn()?;
@@ -1455,6 +1457,7 @@ fn hydrate_documents(
                         &hit_maker,
                         &index.external_documents_ids(),
                         value,
+                        progress,
                     );
                 },
             );
@@ -1472,25 +1475,26 @@ fn hydrate_document_value(
     hit_maker: &HitMaker,
     external_documents_ids: &milli::ExternalDocumentsIds,
     value: &mut Value,
+    progress: &Progress,
 ) -> Result<(), ResponseError> {
     match value {
         Value::String(inner_value) => {
             let Some(docid) = external_documents_ids.get(rtxn, inner_value)? else {
                 todo!("Document not found")
             };
-            let SearchHit { document, .. } = hit_maker.make_hit(docid, &[])?;
+            let SearchHit { document, .. } = hit_maker.make_hit(docid, &[], progress)?;
             *value = Value::Object(document);
         }
         Value::Number(inner_value) => {
             let Some(docid) = external_documents_ids.get(rtxn, inner_value.to_string())? else {
                 todo!("Document not found")
             };
-            let SearchHit { document, .. } = hit_maker.make_hit(docid, &[])?;
+            let SearchHit { document, .. } = hit_maker.make_hit(docid, &[], progress)?;
             *value = Value::Object(document);
         }
         Value::Array(values) => {
             for value in values {
-                hydrate_document_value(rtxn, hit_maker, external_documents_ids, value)?;
+                hydrate_document_value(rtxn, hit_maker, external_documents_ids, value, progress)?;
             }
         }
         _ => unreachable!("Invalid foreign key value type: {value:?}"),
