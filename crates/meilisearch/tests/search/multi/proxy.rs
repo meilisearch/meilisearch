@@ -132,6 +132,7 @@ async fn remote_sharding() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -142,6 +143,7 @@ async fn remote_sharding() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -152,6 +154,7 @@ async fn remote_sharding() {
     {
       "self": "ms2",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -448,6 +451,7 @@ async fn remote_sharding_auto_search() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -458,6 +462,7 @@ async fn remote_sharding_auto_search() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -468,6 +473,7 @@ async fn remote_sharding_auto_search() {
     {
       "self": "ms2",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -758,6 +764,7 @@ async fn remote_sharding_federated_auto_search() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -768,6 +775,7 @@ async fn remote_sharding_federated_auto_search() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -778,6 +786,7 @@ async fn remote_sharding_federated_auto_search() {
     {
       "self": "ms2",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1067,6 +1076,7 @@ async fn remote_sharding_retrieve_vectors() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1077,6 +1087,7 @@ async fn remote_sharding_retrieve_vectors() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1087,6 +1098,7 @@ async fn remote_sharding_retrieve_vectors() {
     {
       "self": "ms2",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1568,6 +1580,7 @@ async fn error_unregistered_remote() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1578,6 +1591,7 @@ async fn error_unregistered_remote() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1690,6 +1704,7 @@ async fn error_no_weighted_score() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1700,6 +1715,7 @@ async fn error_no_weighted_score() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1828,6 +1844,7 @@ async fn error_bad_response() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1838,6 +1855,7 @@ async fn error_bad_response() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1970,6 +1988,7 @@ async fn error_bad_request() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -1980,6 +1999,7 @@ async fn error_bad_request() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2105,6 +2125,7 @@ async fn error_bad_request_facets_by_index() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2115,6 +2136,7 @@ async fn error_bad_request_facets_by_index() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2251,6 +2273,7 @@ async fn error_bad_request_facets_by_index_facet() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2261,6 +2284,7 @@ async fn error_bad_request_facets_by_index_facet() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2609,6 +2633,7 @@ async fn error_remote_404() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2619,6 +2644,7 @@ async fn error_remote_404() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2810,6 +2836,7 @@ async fn error_remote_sharding_auth() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2820,6 +2847,7 @@ async fn error_remote_sharding_auth() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2975,6 +3003,7 @@ async fn remote_sharding_auth() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -2985,6 +3014,7 @@ async fn remote_sharding_auth() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -3135,6 +3165,7 @@ async fn error_remote_500() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -3145,6 +3176,7 @@ async fn error_remote_500() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -3320,6 +3352,7 @@ async fn error_remote_500_once() {
     {
       "self": "ms0",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -3330,6 +3363,7 @@ async fn error_remote_500_once() {
     {
       "self": "ms1",
       "remotes": {},
+      "shards": {},
       "leader": null,
       "version": "[version]"
     }
@@ -3813,20 +3847,34 @@ async fn remote_auto_sharding() {
     let rms2 = LocalMeili::new(ms2.clone()).await;
 
     // set network
-    let network = json!({
-      "self": "ms0",
-      "leader": "ms0",
-      "remotes": {
-        "ms0": {
-            "url": rms0.url()
+    let network = json!(
+      {
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+          "ms0": {
+              "url": rms0.url()
+          },
+          "ms1": {
+              "url": rms1.url()
+          },
+          "ms2": {
+              "url": rms2.url()
+          },
         },
-        "ms1": {
-            "url": rms1.url()
-        },
-        "ms2": {
-            "url": rms2.url()
+        "shards": {
+          "ms0": {
+            "remotes": ["ms0"]
+          },
+          "ms1": {
+            "remotes": ["ms1"]
+          },
+          "ms2": {
+            "remotes": ["ms2"]
+          }
         }
-    }});
+      }
+    );
 
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
@@ -3865,6 +3913,23 @@ async fn remote_auto_sharding() {
           "writeApiKey": null
         }
       },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
       "leader": "ms0",
       "version": "[version]"
     }
@@ -3892,6 +3957,23 @@ async fn remote_auto_sharding() {
           "writeApiKey": null
         }
       },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
       "leader": "ms0",
       "version": "[version]"
     }
@@ -3917,6 +3999,23 @@ async fn remote_auto_sharding() {
           "url": "[url]",
           "searchApiKey": null,
           "writeApiKey": null
+        }
+      },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
         }
       },
       "leader": "ms0",
@@ -4194,20 +4293,34 @@ async fn remote_auto_sharding_auto_search() {
     let rms2 = LocalMeili::new(ms2.clone()).await;
 
     // set network
-    let network = json!({
-      "self": "ms0",
-      "leader": "ms0",
-      "remotes": {
-        "ms0": {
-            "url": rms0.url()
+    let network = json!(
+      {
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+          "ms0": {
+              "url": rms0.url()
+          },
+          "ms1": {
+              "url": rms1.url()
+          },
+          "ms2": {
+              "url": rms2.url()
+          }
         },
-        "ms1": {
-            "url": rms1.url()
-        },
-        "ms2": {
-            "url": rms2.url()
+        "shards": {
+            "ms0": {
+              "remotes": ["ms0"]
+            },
+            "ms1": {
+              "remotes": ["ms1"]
+            },
+            "ms2": {
+              "remotes": ["ms2"]
+            }
         }
-    }});
+      }
+    );
 
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
@@ -4246,6 +4359,23 @@ async fn remote_auto_sharding_auto_search() {
           "writeApiKey": null
         }
       },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
       "leader": "ms0",
       "version": "[version]"
     }
@@ -4273,6 +4403,23 @@ async fn remote_auto_sharding_auto_search() {
           "writeApiKey": null
         }
       },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
       "leader": "ms0",
       "version": "[version]"
     }
@@ -4298,6 +4445,23 @@ async fn remote_auto_sharding_auto_search() {
           "url": "[url]",
           "searchApiKey": null,
           "writeApiKey": null
+        }
+      },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
         }
       },
       "leader": "ms0",
@@ -4593,7 +4757,20 @@ async fn remote_auto_sharding_with_custom_metadata() {
         "ms2": {
             "url": rms2.url()
         }
-    }});
+      },
+      "shards": {
+          "ms0": {
+            "remotes": ["ms0"]
+          },
+          "ms1": {
+            "remotes": ["ms1"]
+          },
+          "ms2": {
+            "remotes": ["ms2"]
+          }
+        }
+      }
+    );
 
     println!("{}", serde_json::to_string_pretty(&network).unwrap());
 
@@ -4632,6 +4809,23 @@ async fn remote_auto_sharding_with_custom_metadata() {
           "writeApiKey": null
         }
       },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
       "leader": "ms0",
       "version": "[version]"
     }
@@ -4659,6 +4853,23 @@ async fn remote_auto_sharding_with_custom_metadata() {
           "writeApiKey": null
         }
       },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
+        }
+      },
       "leader": "ms0",
       "version": "[version]"
     }
@@ -4684,6 +4895,23 @@ async fn remote_auto_sharding_with_custom_metadata() {
           "url": "[url]",
           "searchApiKey": null,
           "writeApiKey": null
+        }
+      },
+      "shards": {
+        "ms0": {
+          "remotes": [
+            "ms0"
+          ]
+        },
+        "ms1": {
+          "remotes": [
+            "ms1"
+          ]
+        },
+        "ms2": {
+          "remotes": [
+            "ms2"
+          ]
         }
       },
       "leader": "ms0",

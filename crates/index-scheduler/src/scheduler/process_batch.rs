@@ -150,7 +150,7 @@ impl IndexScheduler {
                 let index = if must_create_index {
                     // create the index if it doesn't already exist
                     let wtxn = self.env.write_txn()?;
-                    self.index_mapper.create_index(wtxn, &index_uid, None)?
+                    self.index_mapper.create_index(wtxn, &index_uid, None, network.shards())?
                 } else {
                     let rtxn = self.env.read_txn()?;
                     self.index_mapper.index(&rtxn, &index_uid)?
@@ -232,7 +232,8 @@ impl IndexScheduler {
                 if self.index_mapper.exists(&wtxn, &index_uid)? {
                     return Err(Error::IndexAlreadyExists(index_uid));
                 }
-                self.index_mapper.create_index(wtxn, &index_uid, None)?;
+
+                self.index_mapper.create_index(wtxn, &index_uid, None, network.shards())?;
 
                 self.process_batch(
                     Batch::IndexUpdate { index_uid, primary_key, new_index_uid: None, task },

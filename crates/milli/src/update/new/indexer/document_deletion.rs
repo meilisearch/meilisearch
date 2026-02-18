@@ -31,16 +31,17 @@ impl DocumentDeletion {
         primary_key: PrimaryKey<'indexer>,
     ) -> DocumentDeletionChanges<'indexer> {
         let to_delete: bumpalo::collections::Vec<_> =
-            self.to_delete.into_iter().collect_in(indexer_alloc);
+            self.to_delete.iter().collect_in(indexer_alloc);
 
         let to_delete = to_delete.into_bump_slice();
 
-        DocumentDeletionChanges { to_delete, primary_key }
+        DocumentDeletionChanges { to_delete, primary_key, to_delete_roaring: self.to_delete }
     }
 }
 
 pub struct DocumentDeletionChanges<'indexer> {
     to_delete: &'indexer [DocumentId],
+    to_delete_roaring: RoaringBitmap,
     primary_key: PrimaryKey<'indexer>,
 }
 
@@ -83,6 +84,12 @@ impl<'pl> DocumentChanges<'pl> for DocumentDeletionChanges<'pl> {
 
     fn len(&self) -> usize {
         self.to_delete.len()
+    }
+
+    fn shard_docids(&self, _shard: &str, docids: &mut RoaringBitmap) -> bool {
+        let len_before = docids.len();
+        *docids -= &self.to_delete_roaring;
+        len_before != docids.len()
     }
 }
 

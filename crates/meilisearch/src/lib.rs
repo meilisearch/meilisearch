@@ -590,7 +590,8 @@ fn import_dump(
         tracing::info!("Importing index `{uid}`.");
 
         let date = Some((metadata.created_at, metadata.updated_at));
-        let index = index_scheduler.create_raw_index(&metadata.uid, date)?;
+        // no shards at import time
+        let index = index_scheduler.create_raw_index(&metadata.uid, date, None)?;
 
         let mut wtxn = index.write_txn()?;
 

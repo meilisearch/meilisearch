@@ -1,4 +1,6 @@
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::network::Remote;
+use meilisearch_types::tasks::network::Origin;
 use meilisearch_types::tasks::Task;
 
 use super::create_batch::Batch;
@@ -7,6 +9,18 @@ use crate::utils::ProcessingBatch;
 use crate::{Error, IndexScheduler, Result};
 
 impl IndexScheduler {
+    pub(in crate::scheduler) fn notify_import_finished<
+        'a,
+        I: Iterator<Item = (&'a str, &'a Remote)>,
+    >(
+        &self,
+        _remotes: I,
+        _in_name: String,
+        _origin: &Origin,
+    ) -> crate::Result<()> {
+        Ok(())
+    }
+
     pub(super) fn process_network_index_batch(
         &self,
         _network_task: Task,

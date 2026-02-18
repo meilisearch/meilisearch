@@ -8,7 +8,7 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{Criterion, Index, Object, Search, TermsMatchingStrategy};
+use milli::{CreateOrOpen, Criterion, Index, Object, Search, TermsMatchingStrategy};
 use serde_json::{from_value, json};
 use tempfile::tempdir;
 use Criterion::*;
@@ -133,7 +133,7 @@ fn test_typo_disabled_on_word() {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
     options.map_size(4096 * 100);
-    let index = Index::new(options, tmp.path(), true).unwrap();
+    let index = Index::new(options, tmp.path(), CreateOrOpen::create_without_shards()).unwrap();
 
     let doc1: Object = from_value(json!({ "id": 1usize, "data": "zealand" })).unwrap();
     let doc2: Object = from_value(json!({ "id": 2usize, "data": "zearand" })).unwrap();

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::{mem, ops, ptr, vec};
 
@@ -21,8 +22,9 @@ use super::document_changes::DocumentChanges;
 use super::guess_primary_key::retrieve_or_guess_primary_key;
 use crate::documents::PrimaryKey;
 use crate::progress::{AtomicPayloadStep, Progress};
+use crate::sharding::{Shard, Shards};
 use crate::update::new::document::{DocumentContext, Versions};
-use crate::update::new::indexer::current_edition::sharding::Shards;
+use crate::update::new::extract::DelAddRoaringBitmap;
 use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
@@ -86,7 +88,7 @@ impl<'pl> IndexOperations<'pl> {
         new_fields_ids_map: &mut FieldsIdsMap,
         must_stop_processing: &MSP,
         progress: Progress,
-        shards: Option<&Shards>,
+        shards: Option<&'pl Shards>,
     ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
     where
         MSP: Fn() -> bool + Sync,
@@ -123,7 +125,10 @@ impl<'pl> IndexOperations<'pl> {
                     Some(pk) => (pk, pre_payload_stats, operations),
                     None => {
                         return Ok((
-                            DocumentOperationChanges { docids_version_offsets: &[] },
+                            DocumentOperationChanges {
+                                docids_version_offsets: &[],
+                                shard_delta: Default::default(),
+                            },
                             pre_payload_stats,
                             None,
                         ));
@@ -173,6 +178,7 @@ impl<'pl> IndexOperations<'pl> {
         let mut docids_version_offsets = BumpVec::with_capacity_in(number_of_operations, indexer);
 
         let docids = extracted_docids.into_iter().flatten();
+        let mut shard_delta: BTreeMap<&'pl str, DelAddRoaringBitmap> = Default::default();
         for ((external_id, ops), docid_result) in document_operations.into_iter().zip(docids) {
             let (docid, is_missing) = match docid_result? {
                 Some(docid) => (docid, false),
@@ -180,6 +186,18 @@ impl<'pl> IndexOperations<'pl> {
             };
 
             if let Some(ops) = ops.into_payload_operations(is_missing, docid) {
+                if let Some(shard) = ops.shard {
+                    // new docs are added to shard
+                    if ops.is_new {
+                        shard_delta.entry(&shard.name).or_default().insert_add_u32(docid);
+                    }
+
+                    // removed docs are deleted from shard
+                    if ops.is_deletion() {
+                        shard_delta.entry(&shard.name).or_default().insert_del_u32(docid);
+                    }
+                }
+
                 let external_id = &*indexer.alloc_str(&external_id);
                 docids_version_offsets.push((external_id, ops));
             }
@@ -201,6 +219,7 @@ impl<'pl> IndexOperations<'pl> {
         Ok((
             DocumentOperationChanges {
                 docids_version_offsets: docids_version_offsets.into_bump_slice(),
+                shard_delta,
             },
             // Once we got the payload stats for the valid operations
             // we must prepend the stats from skipped ones.
@@ -302,7 +321,7 @@ impl<'pl> IndexedPayloadOperations<'pl> {
     fn from_payload(
         payload_operation: Payload<'pl>,
         primary_key: &PrimaryKey<'_>,
-        shards: Option<&Shards>,
+        shards: Option<&'pl Shards>,
     ) -> Result<Self> {
         use IndexDocumentsMethod::*;
 
@@ -357,9 +376,11 @@ impl ops::BitOr for IndexedPayloadOperations<'_> {
                     // Unfortunately we don't have the OccupiedEntry::replace_entry_with method
                     // on the IndexMap entry. This operation would be much more elegant otherwise.
                     let lhs_docops = mem::replace(entry.get_mut(), DocumentOperations::empty());
+                    let shard = lhs_docops.shard; // the shard doesn't change for a given document
                     match DocumentOperations::from_iter(
                         lhs_docops.into_iter().chain(rhs_docops),
                         DocumentExistence::Unknown,
+                        shard,
                     ) {
                         Some(operations) => entry.insert(operations),
                         None => entry.shift_remove(),
@@ -382,7 +403,10 @@ impl ops::BitOr for IndexedPayloadOperations<'_> {
 }
 
 /// A set of operations applied to a single document in a particular order.
-struct DocumentOperations<'pl>(Vec<DocumentOperation<'pl>>);
+struct DocumentOperations<'pl> {
+    operations: Vec<DocumentOperation<'pl>>,
+    shard: Option<&'pl Shard>,
+}
 
 impl<'pl> DocumentOperations<'pl> {
     /// Creates an empty set of operations.
@@ -390,17 +414,18 @@ impl<'pl> DocumentOperations<'pl> {
     /// This is useful mostly when merging documents operations retrieved
     /// from payload and shouldn't be considered a valid state otherwise.
     fn empty() -> Self {
-        DocumentOperations(Vec::new())
+        DocumentOperations { operations: Vec::new(), shard: None }
     }
 
-    fn one_deletion() -> Self {
-        DocumentOperations(vec![DocumentOperation::Deletion])
+    fn one_deletion(shard: Option<&'pl Shard>) -> Self {
+        DocumentOperations { operations: vec![DocumentOperation::Deletion], shard }
     }
 
     fn from_raw_value(
         method: IndexDocumentsMethod,
         document: &'pl RawValue,
         on_missing_document: MissingDocumentPolicy,
+        shard: Option<&'pl Shard>,
     ) -> Self {
         use DocumentOperation::*;
         use IndexDocumentsMethod::*;
@@ -410,10 +435,14 @@ impl<'pl> DocumentOperations<'pl> {
             UpdateDocuments => Update { document, on_missing_document },
         };
 
-        DocumentOperations(vec![operation])
+        DocumentOperations { operations: vec![operation], shard }
     }
 
-    fn from_iter<I>(operations: I, document_existence: DocumentExistence) -> Option<Self>
+    fn from_iter<I>(
+        operations: I,
+        document_existence: DocumentExistence,
+        shard: Option<&'pl Shard>,
+    ) -> Option<Self>
     where
         I: IntoIterator<Item = DocumentOperation<'pl>>,
     {
@@ -449,7 +478,7 @@ impl<'pl> DocumentOperations<'pl> {
 
         match (document_existence, document_operations.last()) {
             (DocumentExistence::Missing, Some(Deletion) | None) => None,
-            (_, _) => Some(DocumentOperations(document_operations)),
+            (_, _) => Some(DocumentOperations { operations: document_operations, shard }),
         }
     }
 
@@ -462,24 +491,27 @@ impl<'pl> DocumentOperations<'pl> {
         use DocumentOperation::*;
 
         let document_existence = if was_missing { Missing } else { Exists };
-        Self::from_iter(self.0, document_existence).map(|DocumentOperations(operations)| {
-            PayloadOperations {
-                docid,
-                is_new: was_missing, // same thing
-                operations: operations
-                    .into_iter()
-                    .map(|op| match op {
-                        Replacement { document, .. } => {
-                            InnerDocOp::Replace(DocumentOffset { content: document })
-                        }
-                        Update { document, .. } => {
-                            InnerDocOp::Update(DocumentOffset { content: document })
-                        }
-                        Deletion => InnerDocOp::Deletion,
-                    })
-                    .collect(),
-            }
-        })
+        Self::from_iter(self.operations, document_existence, self.shard).map(
+            |DocumentOperations { operations, shard }| {
+                PayloadOperations {
+                    docid,
+                    shard,
+                    is_new: was_missing, // same thing
+                    operations: operations
+                        .into_iter()
+                        .map(|op| match op {
+                            Replacement { document, .. } => {
+                                InnerDocOp::Replace(DocumentOffset { content: document })
+                            }
+                            Update { document, .. } => {
+                                InnerDocOp::Update(DocumentOffset { content: document })
+                            }
+                            Deletion => InnerDocOp::Deletion,
+                        })
+                        .collect(),
+                }
+            },
+        )
     }
 
     fn push_raw_value(
@@ -496,7 +528,7 @@ impl<'pl> DocumentOperations<'pl> {
             UpdateDocuments => Update { document: raw_value, on_missing_document },
         };
 
-        self.0.push(operation);
+        self.operations.push(operation);
     }
 }
 
@@ -505,7 +537,7 @@ impl<'pl> IntoIterator for DocumentOperations<'pl> {
     type IntoIter = vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.0.into_iter()
+        self.operations.into_iter()
     }
 }
 
@@ -528,7 +560,7 @@ fn extract_payload_changes<'pl>(
     on_missing_document: MissingDocumentPolicy,
     primary_key: &PrimaryKey<'_>,
     method: IndexDocumentsMethod,
-    shards: Option<&Shards>,
+    shards: Option<&'pl Shards>,
 ) -> Result<(IndexMap<String, DocumentOperations<'pl>>, PayloadStats, FieldsIdsMap)> {
     let mut new_docids_version_offsets = IndexMap::<_, DocumentOperations>::new();
     let mut fids_map = FieldsIdsMap::new();
@@ -552,8 +584,12 @@ fn extract_payload_changes<'pl>(
                 Err(error) => return Err(error),
             };
 
-        if shards.is_some_and(|shards| !shards.must_process(external_document_id)) {
-            continue;
+        let shard = shards.and_then(|shards| shards.processing_shard(external_document_id));
+
+        if let Some(shard) = shard {
+            if !shard.is_own {
+                continue;
+            }
         }
 
         match new_docids_version_offsets.entry(external_document_id.to_owned()) {
@@ -565,6 +601,7 @@ fn extract_payload_changes<'pl>(
                     method,
                     doc,
                     on_missing_document,
+                    shard,
                 ));
             }
         }
@@ -581,12 +618,20 @@ fn extract_payload_changes<'pl>(
 
 fn extract_payload_deletions<'pl>(
     external_document_ids: &[&str],
-    shards: Option<&Shards>,
+    shards: Option<&'pl Shards>,
 ) -> (IndexMap<String, DocumentOperations<'pl>>, PayloadStats) {
     let docops: IndexMap<_, _> = external_document_ids
         .iter()
-        .filter(|id| shards.is_none_or(|shards| shards.must_process(id)))
-        .map(|id| (id.to_string(), DocumentOperations::one_deletion()))
+        .filter_map(|id| {
+            let shard = shards.and_then(|shards| shards.processing_shard(id));
+
+            if let Some(shard) = shard {
+                if !shard.is_own {
+                    return None;
+                }
+            }
+            Some((id.to_string(), DocumentOperations::one_deletion(shard)))
+        })
         .collect();
     let payload_stats = PayloadStats { bytes: 0, document_count: docops.len() as u64, error: None };
     (docops, payload_stats)
@@ -617,10 +662,31 @@ impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
     fn len(&self) -> usize {
         self.docids_version_offsets.len()
     }
+
+    fn shard_docids(&self, shard: &str, docids: &mut roaring::RoaringBitmap) -> bool {
+        let Some(DelAddRoaringBitmap { del, add }) = self.shard_delta.get(shard) else {
+            return false;
+        };
+
+        let mut modified = false;
+
+        if let Some(del) = del {
+            let len_before = docids.len();
+            *docids -= del;
+            modified |= len_before != docids.len();
+        }
+        if let Some(add) = add {
+            let len_before = docids.len();
+            *docids |= add;
+            modified |= len_before != docids.len();
+        }
+        modified
+    }
 }
 
 pub struct DocumentOperationChanges<'pl> {
     docids_version_offsets: &'pl [(&'pl str, PayloadOperations<'pl>)],
+    shard_delta: BTreeMap<&'pl str, DelAddRoaringBitmap>,
 }
 
 pub enum Payload<'pl> {
@@ -638,10 +704,12 @@ pub struct PayloadStats {
 pub struct PayloadOperations<'pl> {
     /// The internal document id of the document.
     pub docid: DocumentId,
-    /// Wether this document is not in the current database (visible by the rtxn).
+    /// Whether this document is not in the current database (visible by the rtxn).
     pub is_new: bool,
     /// The operations to perform, in order, on this document.
     pub operations: Vec<InnerDocOp<'pl>>,
+    /// The shard for this document. `None` when sharding is disabled
+    pub shard: Option<&'pl Shard>,
 }
 
 impl<'pl> PayloadOperations<'pl> {
@@ -737,6 +805,10 @@ impl<'pl> PayloadOperations<'pl> {
             }
             None => unreachable!("We must not have an empty set of operations on a document"),
         }
+    }
+
+    fn is_deletion(&self) -> bool {
+        matches!(self.operations.last(), Some(&InnerDocOp::Deletion))
     }
 }
 
