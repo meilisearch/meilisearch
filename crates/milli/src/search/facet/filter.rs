@@ -530,14 +530,17 @@ impl<'a> Filter<'a> {
         Ok(match operator {
             Condition::Equal(token) => {
                 let shard_name = token.value();
-                index
-                    .shard_docids()
-                    .docids_intersection(rtxn, shard_name, universe_hint)?
-                    .ok_or_else(|| {
-                        Error::UserError(UserError::FilterShardNotExist {
-                            shard: shard_name.to_owned(),
-                        })
-                    })?
+                let shard_docids = index.shard_docids();
+                let docids = if let Some(universe_hint) = universe_hint {
+                    shard_docids.docids_intersection(rtxn, shard_name, universe_hint)?
+                } else {
+                    shard_docids.docids(rtxn, shard_name)?
+                };
+                docids.ok_or_else(|| {
+                    Error::UserError(UserError::FilterShardNotExist {
+                        shard: shard_name.to_owned(),
+                    })
+                })?
             }
             Condition::NotEqual(token) => {
                 let to_remove = Self::evaluate_shard_operator(
