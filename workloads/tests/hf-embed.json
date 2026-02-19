@@ -4,7 +4,7 @@
   "binary": {
     "source": "release",
     "edition": "community",
-    "version": "1.14.0"
+    "version": "1.27.0"
   },
   "assets": {
     "movies-100.json": {
@@ -749,7 +749,7 @@
             "batchUid": 3,
             "canceledBy": null,
             "details": {
-              "upgradeFrom": "v1.14.0",
+              "upgradeFrom": "v1.27.0",
               "upgradeTo": "v1.35.1"
             },
             "duration": "[duration]",
