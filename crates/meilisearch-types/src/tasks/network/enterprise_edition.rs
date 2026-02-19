@@ -27,7 +27,7 @@ pub struct ExportShard<'a> {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ExportMode {
-    /// Only send orphaned documents
+    /// Only send resharded documents
     ReshardedOnly,
     /// Send whole shard
     FullShard,

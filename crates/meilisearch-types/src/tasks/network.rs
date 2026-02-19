@@ -507,6 +507,8 @@ pub enum NetworkTopologyState {
     /// Shards must be rebalanced when the list of shards **compared with the local one from the instance** changed
     ExportingDocuments,
     /// Import newly owned shards
+    /// This will import all tasks with a network version equal to that of the network change
+    /// and the appropriate metadata indicating they're import tasks.
     ImportingDocuments,
     /// Wait for all remotes to be done importing
     WaitingForOthers,
