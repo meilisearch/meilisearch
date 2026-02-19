@@ -56,7 +56,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             .route(web::patch().to(SeqHandler(patch_network))),
     )
     .service(
-        web::resource(route::NETWORK_PATH_SUFFIX)
+        web::resource(route::NETWORK_CONTROL_PATH_SUFFIX)
             .route(web::post().to(SeqHandler(post_network_change))),
     );
 }
