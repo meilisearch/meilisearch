@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules};
 use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
+use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 
 use crate::Result;
 
@@ -48,5 +48,27 @@ impl DynamicSearchRulesStore {
 
     pub fn get(&self) -> DynamicSearchRules {
         DynamicSearchRules::clone(&*self.runtime.read().unwrap())
+    }
+
+    pub fn get_one(&self, rtxn: &RoTxn, uid: &str) -> Result<Option<DynamicSearchRule>> {
+        Ok(self.persisted.get(rtxn, uid)?)
+    }
+
+    pub fn put_one(&self, wtxn: &mut RwTxn, uid: &str, rule: &DynamicSearchRule) -> Result<()> {
+        self.persisted.put(wtxn, uid, rule)?;
+
+        let mut runtime = self.runtime.write().unwrap();
+        runtime.insert(uid.to_string(), rule.clone());
+        Ok(())
+    }
+
+    pub fn delete_one(&self, wtxn: &mut RwTxn, uid: &str) -> Result<bool> {
+        let deleted = self.persisted.delete(wtxn, uid)?;
+
+        if deleted {
+            let mut runtime = self.runtime.write().unwrap();
+            runtime.remove(uid);
+        }
+        Ok(deleted)
     }
 }
