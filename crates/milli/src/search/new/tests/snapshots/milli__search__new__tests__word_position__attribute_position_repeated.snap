@@ -1,5 +1,5 @@
 ---
-source: crates/milli/src/search/new/tests/attribute_position.rs
+source: crates/milli/src/search/new/tests/word_position.rs
 expression: "format!(\"{document_ids_scores:#?}\")"
 ---
 [
