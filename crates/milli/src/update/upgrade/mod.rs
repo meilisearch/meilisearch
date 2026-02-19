@@ -4,6 +4,7 @@ mod v1_14;
 mod v1_15;
 mod v1_16;
 mod v1_32;
+mod v1_36;
 
 use heed::RwTxn;
 use v1_12::{FixFieldDistribution, RecomputeStats};
@@ -12,6 +13,7 @@ use v1_14::UpgradeArroyVersion;
 use v1_15::RecomputeWordFst;
 use v1_16::SwitchToMultimodal;
 use v1_32::{CleanupFidBasedDatabases, RebuildHannoyGraph};
+use v1_36::ConvertAnnoyToHannoy;
 
 use crate::constants::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use crate::progress::{Progress, VariableNameStep};
@@ -43,6 +45,7 @@ const UPGRADE_FUNCTIONS: &[&dyn UpgradeIndex] = &[
     &SwitchToMultimodal {},
     &CleanupFidBasedDatabases {},
     &RebuildHannoyGraph {},
+    &ConvertAnnoyToHannoy {},
 ];
 
 /// Return true if the cached stats of the index must be regenerated

@@ -151,10 +151,12 @@ async fn execute_run(
 
     let binary = match binary_path {
         Some(binary_path) => Binary {
+            description: Some("initial binary for the workload".into()),
             source: crate::common::instance::BinarySource::Path(binary_path.to_owned()),
             extra_cli_args: workload.extra_cli_args.clone(),
         },
         None => Binary {
+            description: Some("initial binary for the workloard".into()),
             source: crate::common::instance::BinarySource::Build {
                 edition: crate::common::instance::Edition::Community,
             },

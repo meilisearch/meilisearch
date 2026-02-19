@@ -15,6 +15,8 @@ use crate::common::client::{Client, Method};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Command {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub route: String,
     pub method: Method,
     #[serde(default)]
@@ -79,7 +81,11 @@ impl Body {
 
 impl Display for Command {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?} {} ({:?})", self.method, self.route, self.synchronous)
+        write!(f, "{:?} {} ({:?})", self.method, self.route, self.synchronous)?;
+        if let Some(description) = &self.description {
+            write!(f, " /* {description} */")?;
+        }
+        Ok(())
     }
 }
 
@@ -299,7 +305,7 @@ pub async fn run(
                     .await
                     .context("could not read response body as text")
                     .context("reading response body when checking expected status")?;
-                bail!("unexpected status code: got {}, expected {expected_status}, response body: '{response}'", code.as_u16());
+                bail!("command #{command_index} {command}: unexpected status code: got {}, expected {expected_status}, response body: '{response}'", code.as_u16());
             }
         } else if code.is_client_error() {
             tracing::error!(%command, %code, "error in workload file");
@@ -309,7 +315,7 @@ pub async fn run(
                 .context("could not deserialize response as JSON")
                 .context("parsing error in workload file when sending command")?;
             bail!(
-                "error in workload file: server responded with error code {code} and '{response}'"
+                "command #{command_index} {command}: error in workload file: server responded with error code {code} and '{response}'"
             )
         } else if code.is_server_error() {
             tracing::error!(%command, %code, "server error");
@@ -318,7 +324,7 @@ pub async fn run(
                 .await
                 .context("could not deserialize response as JSON")
                 .context("parsing server error when sending command")?;
-            bail!("server error: server responded with error code {code} and '{response}'")
+            bail!("command #{command_index} {command}: server error: server responded with error code {code} and '{response}'")
         }
     }
 
@@ -347,7 +353,7 @@ pub async fn run(
             let response_pretty = serde_json::to_string_pretty(&response)
                 .context("serializing response as pretty JSON")?;
             let diff = SimpleDiff::from_str(&expected_pretty, &response_pretty, "expected", "got");
-            bail!("command #{command_index} unexpected response:\n{diff}");
+            bail!("command #{command_index} {command}: unexpected response:\n{diff}");
         }
     } else if return_value {
         let response: serde_json::Value = response
@@ -394,6 +400,7 @@ pub async fn run_commands(
 
 pub fn health_command() -> Command {
     Command {
+        description: Some("Waiting for the Meilisearch server to be up.".into()),
         route: "/health".into(),
         method: crate::common::client::Method::Get,
         body: Default::default(),

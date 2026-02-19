@@ -163,6 +163,8 @@ impl TestWorkload {
                 }
                 CommandOrBinaryVec::Binary(binary) => {
                     kill_meili(process).await;
+                    tracing::info!("☕️ waiting 5 seconds for the port to be available again");
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                     process = process::start_meili(
                         meili_client,
                         Some("masterKey"),
