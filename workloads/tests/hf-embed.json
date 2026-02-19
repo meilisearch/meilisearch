@@ -20,9 +20,17 @@
       "method": "PATCH",
       "body": {
         "inline": {
-          "filterableAttributes": ["genres", "release_date"],
-          "searchableAttributes": ["title", "overview"],
-          "sortableAttributes": ["release_date"],
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "searchableAttributes": [
+            "title",
+            "overview"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ],
           "searchCutoffMs": 200000000
         }
       },
@@ -83,7 +91,9 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": ["id"],
+          "attributesToRetrieve": [
+            "id"
+          ],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -155,7 +165,9 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": ["id"],
+          "attributesToRetrieve": [
+            "id"
+          ],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -232,7 +244,9 @@
         "source": "release",
         "version": "1.35.1",
         "edition": "community",
-        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade"
+        ]
       }
     },
     {
@@ -252,9 +266,17 @@
       "method": "PATCH",
       "body": {
         "inline": {
-          "filterableAttributes": ["genres", "release_date"],
-          "searchableAttributes": ["title", "overview"],
-          "sortableAttributes": ["release_date"],
+          "filterableAttributes": [
+            "genres",
+            "release_date"
+          ],
+          "searchableAttributes": [
+            "title",
+            "overview"
+          ],
+          "sortableAttributes": [
+            "release_date"
+          ],
           "embedders": {
             "default": {
               "source": "huggingFace",
@@ -306,7 +328,9 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": ["id"],
+          "attributesToRetrieve": [
+            "id"
+          ],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -356,7 +380,9 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": ["id"],
+          "attributesToRetrieve": [
+            "id"
+          ],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -433,7 +459,9 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": ["id"],
+          "attributesToRetrieve": [
+            "id"
+          ],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -482,7 +510,9 @@
         "description": "apply upgrade task",
         "source": "build",
         "edition": "community",
-        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade"
+        ]
       }
     },
     {
@@ -511,7 +541,9 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": ["id"],
+          "attributesToRetrieve": [
+            "id"
+          ],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -561,7 +593,9 @@
       "method": "POST",
       "body": {
         "inline": {
-          "attributesToRetrieve": ["id"],
+          "attributesToRetrieve": [
+            "id"
+          ],
           "hybrid": {
             "embedder": "default",
             "semanticRatio": 1.0
@@ -612,10 +646,27 @@
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
-        "from": 5,
+        "from": 6,
         "limit": 20,
         "next": null,
         "results": [
+          {
+            "batchUid": 6,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.35.1",
+              "upgradeTo": "[latest]"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": null,
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "upgradeDatabase",
+            "uid": 6
+          },
           {
             "batchUid": 5,
             "canceledBy": null,
@@ -639,13 +690,22 @@
             "details": {
               "embedders": {
                 "default": {
+                  "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
                   "source": "huggingFace"
                 }
               },
-              "filterableAttributes": ["genres", "release_date"],
+              "filterableAttributes": [
+                "genres",
+                "release_date"
+              ],
               "searchCutoffMs": 200000000,
-              "searchableAttributes": ["title", "overview"],
-              "sortableAttributes": ["release_date"]
+              "searchableAttributes": [
+                "title",
+                "overview"
+              ],
+              "sortableAttributes": [
+                "release_date"
+              ]
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",
@@ -662,7 +722,7 @@
             "canceledBy": null,
             "details": {
               "upgradeFrom": "v1.14.0",
-              "upgradeTo": "[latest]"
+              "upgradeTo": "v1.35.1"
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",
@@ -697,6 +757,7 @@
             "details": {
               "embedders": {
                 "default": {
+                  "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
                   "source": "huggingFace"
                 }
               }
@@ -715,10 +776,18 @@
             "batchUid": 0,
             "canceledBy": null,
             "details": {
-              "filterableAttributes": ["genres", "release_date"],
+              "filterableAttributes": [
+                "genres",
+                "release_date"
+              ],
               "searchCutoffMs": 200000000,
-              "searchableAttributes": ["title", "overview"],
-              "sortableAttributes": ["release_date"]
+              "searchableAttributes": [
+                "title",
+                "overview"
+              ],
+              "sortableAttributes": [
+                "release_date"
+              ]
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",
@@ -731,7 +800,7 @@
             "uid": 0
           }
         ],
-        "total": 6
+        "total": 7
       },
       "synchronous": "WaitForResponse"
     }
