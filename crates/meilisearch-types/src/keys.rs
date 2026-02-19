@@ -490,11 +490,20 @@ impl Action {
         // It's using an exhaustive match to force the addition of new actions.
         match self {
             // Any action that expands to others must return false, as it wouldn't be able to expand recursively.
-            All | AllGet | DocumentsAll | IndexesAll | ChatsAll | TasksAll | SettingsAll
-            | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll | WebhooksAll
-            | DynamicSearchRulesAll => {
-                false
-            }
+            All
+            | AllGet
+            | DocumentsAll
+            | IndexesAll
+            | ChatsAll
+            | TasksAll
+            | SettingsAll
+            | StatsAll
+            | MetricsAll
+            | DumpsAll
+            | SnapshotsAll
+            | ChatsSettingsAll
+            | WebhooksAll
+            | DynamicSearchRulesAll => false,
 
             Search => true,
             DocumentsAdd => false,
