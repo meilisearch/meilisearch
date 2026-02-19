@@ -407,7 +407,7 @@ impl IndexScheduler {
         use meilisearch_types::network::route;
 
         let bearer = target.api_key.map(|api_key| format!("Bearer {api_key}"));
-        let url = route::url_from_base_and_route(target.base_url, route::network_change_path())
+        let url = route::url_from_base_and_route(target.base_url, route::network_control_path())
             .map_err(|error| Error::InvalidRemoteUrl {
                 url: target.base_url.to_owned(),
                 cause: error.to_string(),
