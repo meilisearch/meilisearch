@@ -78,8 +78,8 @@ async fn export(
     let indexes = match indexes {
         Some(indexes) => indexes
             .into_iter()
-            .map(|(pattern, ExportIndexSettings { filter, override_settings })| {
-                (pattern, DbExportIndexSettings { filter, override_settings })
+            .map(|(pattern, ExportIndexSettings { name, filter, override_settings })| {
+                (pattern, DbExportIndexSettings { name, filter, override_settings })
             })
             .collect(),
         None => BTreeMap::from([(
@@ -175,6 +175,12 @@ where
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
+    /// Optional target index name. Use `$name` to reference the original index name.
+    /// If omitted, uses the original index name.
+    #[schema(value_type = Option<String>, example = json!("mega-$name"))]
+    #[serde(default)]
+    #[deserr(default)]
+    pub name: Option<String>,
     /// Filter expression to select which documents to export
     #[schema(value_type = Option<String>, example = json!("genres = action"))]
     #[serde(default)]
