@@ -210,7 +210,7 @@ impl RankingRules {
                 | Criterion::Proximity
                 | Criterion::Attribute
                 | Criterion::AttributeRank
-                | Criterion::AttributePosition
+                | Criterion::WordPosition
                 | Criterion::Exactness => {
                     canonicalization_actions.push(CanonicalizationAction::RemovedPlaceholder {
                         removed_occurrence: RankingRuleSource::Criterion(criterion_index),
@@ -275,7 +275,7 @@ impl RankingRules {
                 | Criterion::Proximity
                 | Criterion::Attribute
                 | Criterion::AttributeRank
-                | Criterion::AttributePosition
+                | Criterion::WordPosition
                 | Criterion::Exactness => match vector {
                     Some(previous_occurrence) => {
                         if sorted_fields.is_empty() {
@@ -348,7 +348,7 @@ impl RankingRules {
         let mut sort = None;
         let mut attribute = None;
         let mut attribute_rank = None;
-        let mut attribute_position = None;
+        let mut word_position = None;
         let mut exactness = None;
         let mut sorted_fields = HashMap::new();
 
@@ -434,7 +434,7 @@ impl RankingRules {
                         &mut attribute_rank,
                     );
                 }
-                Criterion::AttributePosition => {
+                Criterion::WordPosition => {
                     canonicalize_criterion(
                         criterion,
                         criterion_index,
@@ -442,7 +442,7 @@ impl RankingRules {
                         &mut words,
                         &mut canonicalization_actions,
                         &mut canonical_criteria,
-                        &mut attribute_position,
+                        &mut word_position,
                     );
                 }
                 Criterion::Exactness => {
@@ -752,7 +752,7 @@ impl RankingRule {
             | Criterion::Proximity
             | Criterion::Attribute
             | Criterion::AttributeRank
-            | Criterion::AttributePosition
+            | Criterion::WordPosition
             | Criterion::Exactness => RankingRuleKind::Relevancy,
             Criterion::Asc(s) if s == "_geo" => RankingRuleKind::AscendingGeoSort,
 

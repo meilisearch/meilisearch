@@ -583,7 +583,7 @@ impl Settings<Unchecked> {
         for rule in ranking_rules {
             attribute |= matches!(rule, RankingRuleView::Attribute);
             attribute_rank_or_position |=
-                matches!(rule, RankingRuleView::AttributeRank | RankingRuleView::AttributePosition);
+                matches!(rule, RankingRuleView::AttributeRank | RankingRuleView::WordPosition);
         }
 
         if attribute && attribute_rank_or_position {
@@ -1109,7 +1109,7 @@ pub enum RankingRuleView {
     /// Documents with query words that are closer to the front
     /// of an attribute are considered better. Attribute rank
     /// is not considered.
-    AttributePosition,
+    WordPosition,
     /// Dynamically sort at query time the documents. None, one or multiple
     /// Asc/Desc sortable attributes can be used in place of this criterion at
     /// query time.
@@ -1175,7 +1175,7 @@ impl From<Criterion> for RankingRuleView {
             Criterion::Proximity => RankingRuleView::Proximity,
             Criterion::Attribute => RankingRuleView::Attribute,
             Criterion::AttributeRank => RankingRuleView::AttributeRank,
-            Criterion::AttributePosition => RankingRuleView::AttributePosition,
+            Criterion::WordPosition => RankingRuleView::WordPosition,
             Criterion::Sort => RankingRuleView::Sort,
             Criterion::Exactness => RankingRuleView::Exactness,
             Criterion::Asc(x) => RankingRuleView::Asc(x),
@@ -1191,7 +1191,7 @@ impl From<RankingRuleView> for Criterion {
             RankingRuleView::Proximity => Criterion::Proximity,
             RankingRuleView::Attribute => Criterion::Attribute,
             RankingRuleView::AttributeRank => Criterion::AttributeRank,
-            RankingRuleView::AttributePosition => Criterion::AttributePosition,
+            RankingRuleView::WordPosition => Criterion::WordPosition,
             RankingRuleView::Sort => Criterion::Sort,
             RankingRuleView::Exactness => Criterion::Exactness,
             RankingRuleView::Asc(x) => Criterion::Asc(x),

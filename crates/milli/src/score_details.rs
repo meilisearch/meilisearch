@@ -241,12 +241,11 @@ impl ScoreDetails {
                             // do not update the order since this was already done by fid
                         }
                         AttributeState::Separated => {
-                            let attribute_position_details = serde_json::json!({
+                            let word_position_details = serde_json::json!({
                                 "order": order,
                                 "score": position.local_score(),
                             });
-                            details_map
-                                .insert("attributePosition".into(), attribute_position_details);
+                            details_map.insert("wordPosition".into(), word_position_details);
                             order += 1;
                         }
                     }

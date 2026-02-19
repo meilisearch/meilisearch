@@ -69,10 +69,10 @@ impl Aggregate for SettingsAnalytics {
                     .ranking_rules
                     .attribute_rank_position
                     .or(self.ranking_rules.attribute_rank_position),
-                attribute_position_position: new
+                word_position_position: new
                     .ranking_rules
-                    .attribute_position_position
-                    .or(self.ranking_rules.attribute_position_position),
+                    .word_position_position
+                    .or(self.ranking_rules.word_position_position),
                 sort_position: new.ranking_rules.sort_position.or(self.ranking_rules.sort_position),
                 exactness_position: new
                     .ranking_rules
@@ -229,7 +229,7 @@ pub struct RankingRulesAnalytics {
     pub proximity_position: Option<usize>,
     pub attribute_position: Option<usize>,
     pub attribute_rank_position: Option<usize>,
-    pub attribute_position_position: Option<usize>,
+    pub word_position_position: Option<usize>,
     pub sort_position: Option<usize>,
     pub exactness_position: Option<usize>,
     pub values: Option<String>,
@@ -261,9 +261,9 @@ impl RankingRulesAnalytics {
                     matches!(s, meilisearch_types::settings::RankingRuleView::AttributeRank)
                 })
             }),
-            attribute_position_position: rr.as_ref().and_then(|rr| {
+            word_position_position: rr.as_ref().and_then(|rr| {
                 rr.iter().position(|s| {
-                    matches!(s, meilisearch_types::settings::RankingRuleView::AttributePosition)
+                    matches!(s, meilisearch_types::settings::RankingRuleView::WordPosition)
                 })
             }),
             sort_position: rr.as_ref().and_then(|rr| {

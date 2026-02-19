@@ -363,7 +363,7 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
             | crate::Criterion::Typo
             | crate::Criterion::Attribute
             | crate::Criterion::AttributeRank
-            | crate::Criterion::AttributePosition
+            | crate::Criterion::WordPosition
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness => continue,
             crate::Criterion::Sort => {
@@ -427,7 +427,7 @@ fn get_ranking_rules_for_vector<'ctx>(
             | crate::Criterion::Proximity
             | crate::Criterion::Attribute
             | crate::Criterion::AttributeRank
-            | crate::Criterion::AttributePosition
+            | crate::Criterion::WordPosition
             | crate::Criterion::Exactness => {
                 if !vector {
                     let vector_candidates = ctx.index.documents_ids(ctx.txn)?;
@@ -492,7 +492,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut sort = false;
     let mut attribute = false;
     let mut attribute_rank = false;
-    let mut attribute_position = false;
+    let mut word_position = false;
     let mut exactness = false;
     let mut sorted_fields = HashSet::new();
     let mut geo_sorted = false;
@@ -541,7 +541,7 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Proximity::new(None)));
             }
             crate::Criterion::Attribute => {
-                if attribute || attribute_rank || attribute_position {
+                if attribute || attribute_rank || word_position {
                     continue;
                 }
                 attribute = true;
@@ -555,11 +555,11 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 attribute_rank = true;
                 ranking_rules.push(Box::new(Fid::new(None)));
             }
-            crate::Criterion::AttributePosition => {
-                if attribute || attribute_position {
+            crate::Criterion::WordPosition => {
+                if attribute || word_position {
                     continue;
                 }
-                attribute_position = true;
+                word_position = true;
                 ranking_rules.push(Box::new(Position::new(None)));
             }
             crate::Criterion::Sort => {

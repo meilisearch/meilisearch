@@ -43,7 +43,7 @@ pub enum Criterion {
     /// Documents with query words that are closer to the front
     /// of an attribute are considered better. Attribute rank
     /// is not considered.
-    AttributePosition,
+    WordPosition,
     /// Dynamically sort at query time the documents. None, one
     /// or multiple Asc/Desc sortable attributes can be used in
     /// place of this criterion at query time.
@@ -64,19 +64,19 @@ pub enum AttributeState {
     /// of the rank and position.
     #[default]
     Unified,
-    /// The AttributeRank and AttributePosition
+    /// The AttributeRank and WordPosition
     /// ranking rules are defined separately.
     Separated,
 }
 
 impl AttributeState {
-    /// If the index has the AttributeRank or AttributePosition ranking rule,
+    /// If the index has the AttributeRank or WordPosition ranking rule,
     /// We consider them separated, else we consider them unified as the default
     /// state is the Attribute ranking rule alone.
     pub fn from_criteria(criterion: impl IntoIterator<Item = Criterion>) -> AttributeState {
-        use Criterion::{AttributePosition, AttributeRank};
+        use Criterion::{AttributeRank, WordPosition};
 
-        if criterion.into_iter().any(|r| matches!(r, AttributeRank | AttributePosition)) {
+        if criterion.into_iter().any(|r| matches!(r, AttributeRank | WordPosition)) {
             AttributeState::Separated
         } else {
             AttributeState::Unified
@@ -104,7 +104,7 @@ impl FromStr for Criterion {
             "proximity" => Ok(Criterion::Proximity),
             "attribute" => Ok(Criterion::Attribute),
             "attributeRank" => Ok(Criterion::AttributeRank),
-            "attributePosition" => Ok(Criterion::AttributePosition),
+            "wordPosition" => Ok(Criterion::WordPosition),
             "sort" => Ok(Criterion::Sort),
             "exactness" => Ok(Criterion::Exactness),
             text => match AscDesc::from_str(text)? {
@@ -125,7 +125,7 @@ pub fn default_criteria() -> Vec<Criterion> {
         Criterion::Proximity,
         Criterion::AttributeRank,
         Criterion::Sort,
-        Criterion::AttributePosition,
+        Criterion::WordPosition,
         Criterion::Exactness,
     ]
 }
@@ -140,7 +140,7 @@ impl fmt::Display for Criterion {
             Proximity => f.write_str("proximity"),
             Attribute => f.write_str("attribute"),
             AttributeRank => f.write_str("attributeRank"),
-            AttributePosition => f.write_str("attributePosition"),
+            WordPosition => f.write_str("wordPosition"),
             Sort => f.write_str("sort"),
             Exactness => f.write_str("exactness"),
             Asc(attr) => write!(f, "{}:asc", attr),
@@ -165,7 +165,7 @@ mod tests {
             ("proximity", Criterion::Proximity),
             ("attribute", Criterion::Attribute),
             ("attributeRank", Criterion::AttributeRank),
-            ("attributePosition", Criterion::AttributePosition),
+            ("wordPosition", Criterion::WordPosition),
             ("attribute", Criterion::Attribute),
             ("sort", Criterion::Sort),
             ("exactness", Criterion::Exactness),

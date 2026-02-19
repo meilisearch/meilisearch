@@ -71,7 +71,7 @@ impl GraphBasedRankingRule<ProximityGraph> {
 pub type Fid = GraphBasedRankingRule<FidGraph>;
 impl GraphBasedRankingRule<FidGraph> {
     pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
-        Self::new_with_id(RankingRuleId::AttributePosition, terms_matching_strategy)
+        Self::new_with_id(RankingRuleId::WordPosition, terms_matching_strategy)
     }
 }
 pub type Position = GraphBasedRankingRule<PositionGraph>;
