@@ -51,7 +51,7 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
 
     /// Update the docids associated with a shard.
     ///
-    /// Returns `false` if `docids` where definitely not modified.
+    /// Returns `false` if `docids` were definitely not modified.
     ///
     /// For example, add newly added documents to a shard, remove deleted documents from a shard, or
     /// leave the docids unchanged.
