@@ -268,7 +268,10 @@ pub(crate) mod test {
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::RuntimeTogglableFeatures;
+    use meilisearch_types::features::{
+        ChatCompletionPrompts, ChatCompletionSettings, ChatCompletionSource,
+        RuntimeTogglableFeatures,
+    };
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
@@ -549,6 +552,13 @@ pub(crate) mod test {
         let network = create_test_network();
         dump.create_network(network).unwrap();
 
+        // ========== chat completion settings
+        let chat_settings = create_test_chat_completion_settings();
+        let mut chat_writer = dump.create_chat_completions_settings().unwrap();
+        for (name, settings) in &chat_settings {
+            chat_writer.push_settings(name, settings).unwrap();
+        }
+
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
         dump.persist_to(&mut file).unwrap();
@@ -559,6 +569,37 @@ pub(crate) mod test {
 
     fn create_test_features() -> RuntimeTogglableFeatures {
         RuntimeTogglableFeatures::default()
+    }
+
+    pub fn create_test_chat_completion_settings() -> Vec<(String, ChatCompletionSettings)> {
+        vec![
+            (
+                "default".to_string(),
+                ChatCompletionSettings {
+                    source: ChatCompletionSource::OpenAi,
+                    org_id: None,
+                    project_id: None,
+                    api_version: None,
+                    deployment_id: None,
+                    base_url: None,
+                    api_key: Some("test-openai-key".to_string()),
+                    prompts: ChatCompletionPrompts::default(),
+                },
+            ),
+            (
+                "azure-config".to_string(),
+                ChatCompletionSettings {
+                    source: ChatCompletionSource::AzureOpenAi,
+                    org_id: None,
+                    project_id: None,
+                    api_version: Some("2024-02-01".to_string()),
+                    deployment_id: Some("my-deployment".to_string()),
+                    base_url: Some("https://my-resource.openai.azure.com".to_string()),
+                    api_key: Some("test-azure-key".to_string()),
+                    prompts: ChatCompletionPrompts::default(),
+                },
+            ),
+        ]
     }
 
     fn create_test_network() -> Network {
@@ -625,5 +666,17 @@ pub(crate) mod test {
         expected.leader = None;
         expected.local = None;
         assert_eq!(&expected, dump.network().unwrap().unwrap());
+
+        // ==== checking the chat completion settings
+        let expected_chat_settings = create_test_chat_completion_settings();
+        let mut actual_chat_settings: Vec<(String, _)> = dump
+            .chat_completions_settings()
+            .unwrap()
+            .map(|r| r.unwrap())
+            .collect();
+        actual_chat_settings.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut expected_sorted = expected_chat_settings;
+        expected_sorted.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(actual_chat_settings, expected_sorted);
     }
 }
