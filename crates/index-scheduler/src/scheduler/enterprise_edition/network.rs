@@ -233,7 +233,7 @@ impl IndexScheduler {
 
                 let shard_docids = index.shard_docids();
                 let ShardBalancingOutcome { unsharded, new_shards, existing_shards } = shard_docids
-                    .rebalance_shards(index, &mut index_wtxn, &new_shards)
+                    .rebalance_shards(index.documents_ids(&index_wtxn)?, &mut index_wtxn, &new_shards)
                     .map_err(err)?;
 
                 // if we have unsharded documents or new shards, we need to reshard
