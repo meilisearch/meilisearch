@@ -53,7 +53,11 @@
           "embedders": {
             "default": {
               "source": "huggingFace",
-              "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…"
+              "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
+              "distribution": {
+                "mean": 0.5,
+                "sigma": 0.4
+              }
             }
           }
         }
@@ -125,6 +129,10 @@
       "expectedStatus": 200,
       "expectedResponse": {
         "default": {
+          "distribution": {
+            "mean": 0.5,
+            "sigma": 0.4
+          },
           "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
           "documentTemplateMaxBytes": 400,
           "model": "BAAI/bge-base-en-v1.5",
@@ -219,6 +227,10 @@
       "expectedStatus": 200,
       "expectedResponse": {
         "default": {
+          "distribution": {
+            "mean": 0.5,
+            "sigma": 0.4
+          },
           "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
           "documentTemplateMaxBytes": 400,
           "model": "BAAI/bge-base-en-v1.5",
@@ -280,7 +292,11 @@
           "embedders": {
             "default": {
               "source": "huggingFace",
-              "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…"
+              "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
+              "distribution": {
+                "mean": 0.5,
+                "sigma": 0.4
+              }
             }
           },
           "searchCutoffMs": 200000000
@@ -414,6 +430,10 @@
       "expectedStatus": 200,
       "expectedResponse": {
         "default": {
+          "distribution": {
+            "mean": 0.5,
+            "sigma": 0.4
+          },
           "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
           "documentTemplateMaxBytes": 400,
           "model": "BAAI/bge-base-en-v1.5",
@@ -432,6 +452,10 @@
       "expectedStatus": 200,
       "expectedResponse": {
         "default": {
+          "distribution": {
+            "mean": 0.5,
+            "sigma": 0.4
+          },
           "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
           "documentTemplateMaxBytes": 400,
           "model": "BAAI/bge-base-en-v1.5",
@@ -690,6 +714,10 @@
             "details": {
               "embedders": {
                 "default": {
+                  "distribution": {
+                    "mean": 0.5,
+                    "sigma": 0.4
+                  },
                   "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
                   "source": "huggingFace"
                 }
@@ -757,6 +785,10 @@
             "details": {
               "embedders": {
                 "default": {
+                  "distribution": {
+                    "mean": 0.5,
+                    "sigma": 0.4
+                  },
                   "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
                   "source": "huggingFace"
                 }
