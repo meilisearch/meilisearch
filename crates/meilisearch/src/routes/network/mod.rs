@@ -122,7 +122,10 @@ pub struct Remote {
     pub write_api_key: Setting<String>,
 }
 
-/// Configuration for a named shard of the
+/// Configuration for a named shard of the network
+///
+/// Documents are distributed among the various declared shards.
+/// Remotes own shards, meaning they own the documents that belong to these shards.
 #[derive(Clone, Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError<InvalidNetworkShards>, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
@@ -135,6 +138,7 @@ pub struct Shard {
     /// - `addRemotes` and `removeRemotes` are applied after `remotes` if multiple options are present.
     #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     #[serde(default)]
+    #[schema(required = false)]
     pub remotes: Option<BTreeSet<String>>,
     /// Remotes to add to the list of owners of this shard.
     ///
@@ -144,6 +148,7 @@ pub struct Shard {
     /// - `removeRemotes` is applied after `addRemotes`
     #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     #[serde(default)]
+    #[schema(required = false)]
     pub add_remotes: Option<BTreeSet<String>>,
     /// Remotes to remove from the list of owners of this shard.
     ///
@@ -154,6 +159,7 @@ pub struct Shard {
     ///   to explicitly pass them as `removeRemotes`.
     #[deserr(default, error = DeserrJsonError<InvalidNetworkRemotes>)]
     #[serde(default)]
+    #[schema(required = false)]
     pub remove_remotes: Option<BTreeSet<String>>,
 }
 
@@ -333,7 +339,7 @@ async fn post_network_change(
     index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
     payload: Json<route::NetworkChange>,
 ) -> Result<HttpResponse, ResponseError> {
-    index_scheduler.features().check_network("Using the /network route")?;
+    index_scheduler.features().check_network("Using the /network/control route")?;
     current_edition::post_network_change(index_scheduler, payload.into_inner()).await
 }
 
