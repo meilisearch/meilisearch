@@ -134,7 +134,7 @@ async fn list_rules(
     let results: Vec<DynamicSearchRule> = rules.into_values().collect();
     let response = ListRulesResponse { results };
 
-    debug!(returns = ?response, "List dynamic search rules");
+    debug!(returns = ?response, "list dynamic search rules");
     Ok(HttpResponse::Ok().json(response))
 }
 
@@ -150,7 +150,7 @@ async fn get_rule(
         .get_search_dynamic_rule(&uid)?
         .ok_or_else(|| DynamicSearchRulesError::NotFound(uid))?;
 
-    debug!(returns = ?rule, "Get dynamic search rule");
+    debug!(returns = ?rule, "get dynamic search rule");
     Ok(HttpResponse::Ok().json(rule))
 }
 
@@ -181,7 +181,7 @@ async fn create_rule(
     index_scheduler.put_search_dynamic_rule(&rule.uid, &rule)?;
     analytics.publish(CreateDynamicSearchRuleAnalytics, &req);
 
-    debug!(returns = ?rule, "Created dynamic search rule");
+    debug!(returns = ?rule, "created dynamic search rule");
     Ok(HttpResponse::Created().json(rule))
 }
 
@@ -225,7 +225,7 @@ async fn update_rule(
     index_scheduler.put_search_dynamic_rule(&uid, &rule)?;
     analytics.publish(UpdateDynamicSearchRuleAnalytics, &req);
 
-    debug!(returns = ?rule, "Updated dynamic search rule");
+    debug!(returns = ?rule, "updated dynamic search rule");
     Ok(HttpResponse::Ok().json(rule))
 }
 
@@ -247,6 +247,6 @@ async fn delete_rule(
 
     analytics.publish(DeleteDynamicSearchRuleAnalytics, &req);
 
-    debug!("Deleted dynamic search rule `{uid}`");
+    debug!("deleted dynamic search rule `{uid}`");
     Ok(HttpResponse::NoContent().finish())
 }
