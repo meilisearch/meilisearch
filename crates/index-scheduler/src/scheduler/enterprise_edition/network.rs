@@ -433,7 +433,7 @@ impl IndexScheduler {
 
         for (remote_name, remote) in remotes {
             let url =
-                match route::url_from_base_and_route(&remote.url, route::network_change_path()) {
+                match route::url_from_base_and_route(&remote.url, route::network_control_path()) {
                     Ok(url) => url,
                     Err(err) => {
                         tracing::warn!("could not build url to {remote_name}: {err}");
