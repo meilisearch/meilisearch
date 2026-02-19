@@ -44,15 +44,11 @@ impl DbShardDocids {
         &self,
         rtxn: &RoTxn<'_>,
         shard: &str,
-        universe: Option<&RoaringBitmap>,
+        universe: &RoaringBitmap,
     ) -> Result<Option<RoaringBitmap>> {
-        Ok(if let Some(universe) = universe {
-            let db = self.0.remap_data_type::<Bytes>();
-            let Some(docids) = db.get(rtxn, shard)? else { return Ok(None) };
-            Some(CboRoaringBitmapCodec::intersection_with_serialized(docids, universe)?)
-        } else {
-            self.0.get(rtxn, shard)?
-        })
+        let db = self.0.remap_data_type::<Bytes>();
+        let Some(docids) = db.get(rtxn, shard)? else { return Ok(None) };
+        Ok(Some(CboRoaringBitmapCodec::intersection_with_serialized(docids, universe)?))
     }
 
     pub fn docids(&self, rtxn: &RoTxn<'_>, shard: &str) -> Result<Option<RoaringBitmap>> {
@@ -141,14 +137,14 @@ impl DbShardDocids {
     ///   need to be resharded.
     pub fn rebalance_shards<'network>(
         &self,
-        index: &Index,
+        universe: RoaringBitmap,
         wtxn: &mut RwTxn<'_>,
         network_shards: &'network Shards,
     ) -> Result<ShardBalancingOutcome<'network>> {
         // we list the documents that were without shard before the rebalancing.
         // this list should normally be empty, as instances without shards should be empty when added to sharding.
         // this lets us correct and signal any error.
-        let mut unsharded = index.documents_ids(wtxn)?;
+        let mut unsharded = universe;
 
         let db_keys: Result<Vec<_>> = self
             .0
@@ -174,14 +170,14 @@ impl DbShardDocids {
             })
         {
             match eob {
-                itertools::EitherOrBoth::Both(left, _) => {
+                itertools::EitherOrBoth::Both(name, _) => {
                     // unchanged shard, nothing to do
-                    let docids = self.0.get(wtxn, &left)?.unwrap_or_default();
+                    let docids = self.docids(wtxn, &name)?.unwrap_or_default();
                     unsharded -= &docids;
-                    existing_shards.insert(left);
+                    existing_shards.insert(name);
                 }
                 itertools::EitherOrBoth::Left(db) => {
-                    let docids = self.0.get(wtxn, &db)?.unwrap_or_default();
+                    let docids = self.docids(wtxn, &db)?.unwrap_or_default();
                     unsharded -= &docids;
                     desharded |= &docids;
                     self.remove_shard(wtxn, &db)?;
