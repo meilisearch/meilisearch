@@ -812,7 +812,7 @@ async fn test_score_details() {
                         "order": 3,
                         "score": 1.0
                       },
-                      "attributePosition": {
+                      "wordPosition": {
                         "order": 4,
                         "score": 0.8095238095238095
                       },
@@ -846,7 +846,7 @@ async fn test_score_details_with_attribute_rank_and_position() {
             "typo",
             "proximity",
             "attributeRank",
-            "attributePosition",
+            "wordPosition",
             "exactness",
     ] }))
         .await;
@@ -893,7 +893,7 @@ async fn test_score_details_with_attribute_rank_and_position() {
                         "order": 3,
                         "score": 1.0
                       },
-                      "attributePosition": {
+                      "wordPosition": {
                         "order": 4,
                         "score": 0.8095238095238095
                       },

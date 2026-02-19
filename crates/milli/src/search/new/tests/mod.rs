@@ -1,5 +1,4 @@
 pub mod attribute_fid;
-pub mod attribute_position;
 pub mod cutoff;
 pub mod distinct;
 pub mod exactness;
@@ -15,6 +14,7 @@ pub mod sort;
 pub mod stop_words;
 pub mod typo;
 pub mod typo_proximity;
+pub mod word_position;
 pub mod words_tms;
 
 fn collect_field_values(

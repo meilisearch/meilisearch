@@ -132,7 +132,7 @@ test_setting_routes!(
     {
         setting: ranking_rules,
         update_verb: put,
-        default_value: ["words", "typo", "proximity", "attributeRank", "sort", "attributePosition", "exactness"]
+        default_value: ["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"]
     },
     {
         setting: synonyms,
@@ -226,15 +226,7 @@ async fn get_settings() {
     assert_eq!(settings["distinctAttribute"], json!(null));
     assert_eq!(
         settings["rankingRules"],
-        json!([
-            "words",
-            "typo",
-            "proximity",
-            "attributeRank",
-            "sort",
-            "attributePosition",
-            "exactness"
-        ])
+        json!(["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"])
     );
     assert_eq!(settings["stopWords"], json!([]));
     assert_eq!(settings["nonSeparatorTokens"], json!([]));
@@ -332,7 +324,7 @@ async fn secrets_are_hidden_in_settings() {
         "proximity",
         "attributeRank",
         "sort",
-        "attributePosition",
+        "wordPosition",
         "exactness"
       ],
       "stopWords": [],

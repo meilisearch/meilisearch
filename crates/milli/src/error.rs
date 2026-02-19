@@ -432,8 +432,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     InvalidChatSettingsDocumentTemplateMaxBytes,
     #[error("{0}")]
     DocumentEmbeddingError(String),
-    #[error("Mixed usage of the attribute, attributeRank, and attributePosition ranking rules. \
-        You must either use the attribute ranking rule alone or the attributeRank and attributePosition ranking rules.")]
+    #[error("Mixed usage of the attribute, attributeRank, and wordPosition ranking rules. \
+        You must either use the attribute ranking rule alone or the attributeRank and wordPosition ranking rules.")]
     MixedAttributeRankingRulesUsage,
 }
 

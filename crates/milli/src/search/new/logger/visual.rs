@@ -51,7 +51,7 @@ impl From<RankingRuleId> for Location {
             RankingRuleId::Words => Self::Words,
             RankingRuleId::Typo => Self::Typo,
             RankingRuleId::Proximity => Self::Proximity,
-            RankingRuleId::AttributePosition => Self::Fid,
+            RankingRuleId::AttributeRank => Self::Fid,
             RankingRuleId::WordPosition => Self::Position,
             _ => Self::Other,
         }
