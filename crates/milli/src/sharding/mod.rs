@@ -137,8 +137,8 @@ impl DbShardDocids {
     /// Add all shards that newly belong to the list of shards, and remove all shards that no longer belong to the list of shards.
     ///
     /// - If the shard list is unchanged, returns `None`
-    /// - If the shard list is modified, returns `Some(orphans)`, with `orphans` the docids that no longer belong to any shard and will
-    ///   need to be redistributed.
+    /// - If the shard list is modified, returns `Some(unsharded)`, with `unsharded` the docids that no longer belong to any shard and will
+    ///   need to be resharded.
     pub fn rebalance_shards<'network>(
         &self,
         index: &Index,

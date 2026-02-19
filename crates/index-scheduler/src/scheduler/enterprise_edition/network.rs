@@ -526,8 +526,8 @@ fn balance_shards(
     }
 
     // set the correct shard for each document
-    // we must iterate over all documents rahter than just orphans because:
-    // 1. there can be new shards, causing reparenting
+    // we must iterate over all documents rather than just unsharded because:
+    // 1. there can be new shards, causing resharding
     // 2. we don't have a good way to filter on external docids from a roaring anyway
     let all_docids = index.external_documents_ids();
 
