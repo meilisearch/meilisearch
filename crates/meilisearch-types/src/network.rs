@@ -42,10 +42,10 @@ pub mod route {
 
     use crate::tasks::network::Origin;
 
-    pub const NETWORK_PATH_SUFFIX: &str = "/change";
+    pub const NETWORK_CONTROL_PATH_SUFFIX: &str = "/control";
 
-    pub fn network_change_path() -> PathAndQuery {
-        PathAndQuery::from_static("/network/change")
+    pub fn network_control_path() -> PathAndQuery {
+        PathAndQuery::from_static("/network/control")
     }
 
     pub fn url_from_base_and_route(
