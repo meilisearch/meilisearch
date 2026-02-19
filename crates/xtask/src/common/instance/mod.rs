@@ -15,6 +15,9 @@ pub use release::{add_releases_to_assets, Release};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Binary {
+    /// Describes why we are instantiating this binary
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     /// Describes how this binary should be instantiated
     #[serde(flatten)]
     pub source: BinarySource,
@@ -27,6 +30,9 @@ pub struct Binary {
 
 impl Display for Binary {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(description) = &self.description {
+            write!(f, "description: {description}")?;
+        }
         write!(f, "{}", self.source)?;
         if !self.extra_cli_args.is_empty() {
             write!(f, ", with arguments: {:?}", self.extra_cli_args)?;
