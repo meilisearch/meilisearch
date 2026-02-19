@@ -306,8 +306,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     NoPrimaryKeyCandidateFound,
     #[error("The primary key inference failed as the engine found {} fields ending with `id` in their names: '{}' and '{}'. Please specify the primary key manually using the `primaryKey` query parameter.", .candidates.len(), .candidates.first().unwrap(), .candidates.get(1).unwrap())]
     MultiplePrimaryKeyCandidatesFound { candidates: Vec<String> },
-    #[error("There is no more space left on the device. Consider increasing the size of the disk/partition.")]
-    NoSpaceLeftOnDevice,
+    #[error("There is no more space left on the device ({source_}). Consider increasing the size of the disk/partition.")]
+    NoSpaceLeftOnDevice { source_: &'static str },
     #[error("Index already has a primary key: `{0}`.")]
     PrimaryKeyCannotBeChanged(String),
     #[error(transparent)]

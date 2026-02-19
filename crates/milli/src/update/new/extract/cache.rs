@@ -417,25 +417,33 @@ fn spill_entry_to_sorter(
     deladd_buffer.clear();
     let mut value_writer = KvWriterDelAdd::new(deladd_buffer);
 
+    fn convert_io_to_user_error(error: io::Error) -> crate::Error {
+        if error.kind() == io::ErrorKind::StorageFull {
+            crate::Error::UserError(crate::UserError::NoSpaceLeftOnDevice { source_: "grenad" })
+        } else {
+            crate::Error::IoError(error)
+        }
+    }
+
     match deladd {
         DelAddRoaringBitmap { del: Some(del), add: None } => {
             cbo_buffer.clear();
             CboRoaringBitmapCodec::serialize_into_vec(&del, cbo_buffer);
-            value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
+            value_writer.insert(DelAdd::Deletion, &cbo_buffer).map_err(convert_io_to_user_error)?;
         }
         DelAddRoaringBitmap { del: None, add: Some(add) } => {
             cbo_buffer.clear();
             CboRoaringBitmapCodec::serialize_into_vec(&add, cbo_buffer);
-            value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
+            value_writer.insert(DelAdd::Addition, &cbo_buffer).map_err(convert_io_to_user_error)?;
         }
         DelAddRoaringBitmap { del: Some(del), add: Some(add) } => {
             cbo_buffer.clear();
             CboRoaringBitmapCodec::serialize_into_vec(&del, cbo_buffer);
-            value_writer.insert(DelAdd::Deletion, &cbo_buffer)?;
+            value_writer.insert(DelAdd::Deletion, &cbo_buffer).map_err(convert_io_to_user_error)?;
 
             cbo_buffer.clear();
             CboRoaringBitmapCodec::serialize_into_vec(&add, cbo_buffer);
-            value_writer.insert(DelAdd::Addition, &cbo_buffer)?;
+            value_writer.insert(DelAdd::Addition, &cbo_buffer).map_err(convert_io_to_user_error)?;
         }
         DelAddRoaringBitmap { del: None, add: None } => return Ok(()),
     }
