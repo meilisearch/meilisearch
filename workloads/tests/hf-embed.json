@@ -15,6 +15,7 @@
   },
   "commands": [
     {
+      "description": "initial settings for movies index",
       "route": "indexes/movies/settings",
       "method": "PATCH",
       "body": {
@@ -36,13 +37,15 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "add embedder for movies index",
       "route": "indexes/movies/settings",
       "method": "PATCH",
       "body": {
         "inline": {
           "embedders": {
             "default": {
-              "source": "huggingFace"
+              "source": "huggingFace",
+              "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…"
             }
           }
         }
@@ -58,6 +61,7 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "add 100 movies to movies index for embedding",
       "route": "indexes/movies/documents",
       "method": "POST",
       "body": {
@@ -74,6 +78,7 @@
       "synchronous": "WaitForTask"
     },
     {
+      "description": "initial search with arroy, register results",
       "route": "indexes/movies/search",
       "method": "POST",
       "body": {
@@ -103,13 +108,14 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "check embedder settings",
       "route": "indexes/movies/settings/embedders",
       "method": "GET",
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
         "default": {
-          "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+          "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
           "documentTemplateMaxBytes": 400,
           "model": "BAAI/bge-base-en-v1.5",
           "pooling": "useModel",
@@ -121,6 +127,7 @@
     },
     {
       "binary": {
+        "description": "last version where arroy is available, no update task",
         "source": "release",
         "version": "1.35.1",
         "edition": "community",
@@ -131,6 +138,7 @@
       }
     },
     {
+      "description": "enable vectorStore setting",
       "route": "experimental-features",
       "method": "PATCH",
       "body": {
@@ -142,6 +150,7 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "search results haven't changed for movies",
       "route": "indexes/movies/search",
       "method": "POST",
       "body": {
@@ -191,13 +200,14 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "settings haven't changed for movies embedder",
       "route": "indexes/movies/settings/embedders",
       "method": "GET",
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
         "default": {
-          "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+          "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
           "documentTemplateMaxBytes": 400,
           "model": "BAAI/bge-base-en-v1.5",
           "pooling": "useModel",
@@ -208,6 +218,7 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "check that the vector store is the default (arroy)",
       "route": "indexes/movies/settings/vector-store",
       "method": "GET",
       "body": null,
@@ -217,6 +228,7 @@
     },
     {
       "binary": {
+        "description": "perform upgrade task",
         "source": "release",
         "version": "1.35.1",
         "edition": "community",
@@ -224,6 +236,7 @@
       }
     },
     {
+      "description": "wait for upgrade task to complete",
       "route": "health",
       "method": "GET",
       "body": null,
@@ -234,6 +247,7 @@
       "synchronous": "WaitForTask"
     },
     {
+      "description": "creates movies-hannoy index with same settings as movies, but using hannoy",
       "route": "indexes/movies-hannoy/settings",
       "method": "PATCH",
       "body": {
@@ -243,7 +257,8 @@
           "sortableAttributes": ["release_date"],
           "embedders": {
             "default": {
-              "source": "huggingFace"
+              "source": "huggingFace",
+              "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…"
             }
           },
           "searchCutoffMs": 200000000
@@ -260,6 +275,7 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "embed same docs as for arroy index",
       "route": "indexes/movies-hannoy/documents",
       "method": "POST",
       "body": {
@@ -276,14 +292,16 @@
       "synchronous": "WaitForTask"
     },
     {
+      "description": "check that the vector store is hannoy",
       "route": "indexes/movies-hannoy/settings/vector-store",
       "method": "GET",
       "body": null,
       "expectedStatus": 200,
-      "expectedResponse": null,
+      "expectedResponse": "experimental",
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "search results didn't change for arroy index post-upgrade",
       "route": "indexes/movies/search",
       "method": "POST",
       "body": {
@@ -333,6 +351,7 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "register results for the index using hannoy",
       "route": "indexes/movies-hannoy/search",
       "method": "POST",
       "body": {
@@ -362,13 +381,14 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "check embedder settings one more time (?)",
       "route": "indexes/movies/settings/embedders",
       "method": "GET",
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
         "default": {
-          "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+          "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
           "documentTemplateMaxBytes": 400,
           "model": "BAAI/bge-base-en-v1.5",
           "pooling": "useModel",
@@ -379,13 +399,14 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "check embedding settings for hannoy index",
       "route": "indexes/movies-hannoy/settings/embedders",
       "method": "GET",
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
         "default": {
-          "documentTemplate": "{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}",
+          "documentTemplate": "A movie titled {{doc.title}} about {{doc.overview|truncatewords:10}}…",
           "documentTemplateMaxBytes": 400,
           "model": "BAAI/bge-base-en-v1.5",
           "pooling": "useModel",
@@ -397,6 +418,7 @@
     },
     {
       "binary": {
+        "description": "current binary migrates arroy indexes to hannoy indexes, no upgrade task",
         "source": "build",
         "edition": "community",
         "extraCliArgs": [
@@ -406,6 +428,7 @@
       }
     },
     {
+      "description": "results didn't change for arroy index because no upgrade",
       "route": "indexes/movies/search",
       "method": "POST",
       "body": {
@@ -456,12 +479,14 @@
     },
     {
       "binary": {
+        "description": "apply upgrade task",
         "source": "build",
         "edition": "community",
         "extraCliArgs": ["--experimental-dumpless-upgrade"]
       }
     },
     {
+      "description": "wait for upgrade task to complete",
       "route": "health",
       "method": "GET",
       "body": null,
@@ -472,6 +497,66 @@
       "synchronous": "WaitForTask"
     },
     {
+      "description": "arroy was migrated to hannoy",
+      "route": "indexes/movies/settings/vector-store",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": "experimental",
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "description": "results didn't change for hannoy index",
+      "route": "indexes/movies-hannoy/search",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "attributesToRetrieve": ["id"],
+          "hybrid": {
+            "embedder": "default",
+            "semanticRatio": 1.0
+          },
+          "limit": 5,
+          "q": "Police",
+          "showRankingScore": true
+        }
+      },
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 99,
+        "hits": [
+          {
+            "_rankingScore": "{{ hitHannoy0score }}",
+            "id": "{{ hitHannoy0 }}"
+          },
+          {
+            "_rankingScore": "{{ hitHannoy1score }}",
+            "id": "{{ hitHannoy1 }}"
+          },
+          {
+            "_rankingScore": "{{ hitHannoy2score }}",
+            "id": "{{ hitHannoy2 }}"
+          },
+          {
+            "_rankingScore": "{{ hitHannoy3score }}",
+            "id": "{{ hitHannoy3 }}"
+          },
+          {
+            "_rankingScore": "{{ hitHannoy4score }}",
+            "id": "{{ hitHannoy4 }}"
+          }
+        ],
+        "limit": 5,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "Police",
+        "requestUid": "[uuid]",
+        "semanticHitCount": 5
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "description": "results became the same as hannoy index for (formerly) arroy index",
       "route": "indexes/movies/search",
       "method": "POST",
       "body": {
@@ -521,6 +606,7 @@
       "synchronous": "WaitForResponse"
     },
     {
+      "description": "summary of tasks",
       "route": "tasks",
       "method": "GET",
       "body": null,
