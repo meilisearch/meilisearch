@@ -42,6 +42,8 @@ impl UpgradeIndex for ConvertAnnoyToHannoy {
             )?;
         }
 
+        index.put_vector_store(wtxn, VectorStoreBackend::Hannoy)?;
+
         Ok(false)
     }
 
