@@ -808,14 +808,97 @@ async fn test_score_details() {
                         "order": 2,
                         "score": 0.75
                       },
-                      "attribute": {
+                      "attributeRank": {
                         "order": 3,
-                        "attributeRankingOrderScore": 1.0,
-                        "queryWordDistanceScore": 0.8095238095238095,
+                        "score": 1.0
+                      },
+                      "wordPosition": {
+                        "order": 4,
                         "score": 0.8095238095238095
                       },
                       "exactness": {
+                        "order": 5,
+                        "matchType": "noExactMatch",
+                        "matchingWords": 2,
+                        "maxMatchingWords": 2,
+                        "score": 0.3333333333333333
+                      }
+                    }
+                  }
+                ]
+                "###);
+            },
+        )
+        .await;
+}
+
+#[actix_rt::test]
+async fn test_score_details_with_attribute_rank_and_position() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    index
+        .update_settings(json!({
+        "filterableAttributes": ["id", "title"],
+        "sortableAttributes": ["id", "title"],
+        "rankingRules": [
+            "words",
+            "typo",
+            "proximity",
+            "attributeRank",
+            "wordPosition",
+            "exactness",
+    ] }))
+        .await;
+
+    let documents = DOCUMENTS.clone();
+    let (response, _code) = index.add_documents(documents, None).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    index
+        .search(
+            json!({
+                "q": "train dragon",
+                "showRankingScoreDetails": true,
+            }),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response["hits"]), @r###"
+                [
+                  {
+                    "title": "How to Train Your Dragon: The Hidden World",
+                    "id": "166428",
+                    "color": [
+                      "green",
+                      "red"
+                    ],
+                    "_rankingScoreDetails": {
+                      "words": {
+                        "order": 0,
+                        "matchingWords": 2,
+                        "maxMatchingWords": 2,
+                        "score": 1.0
+                      },
+                      "typo": {
+                        "order": 1,
+                        "typoCount": 0,
+                        "maxTypoCount": 2,
+                        "score": 1.0
+                      },
+                      "proximity": {
+                        "order": 2,
+                        "score": 0.75
+                      },
+                      "attributeRank": {
+                        "order": 3,
+                        "score": 1.0
+                      },
+                      "wordPosition": {
                         "order": 4,
+                        "score": 0.8095238095238095
+                      },
+                      "exactness": {
+                        "order": 5,
                         "matchType": "noExactMatch",
                         "matchingWords": 2,
                         "maxMatchingWords": 2,
@@ -2168,6 +2251,7 @@ async fn ranking_score_bug_with_sort() {
     // Configure sortable attributes
     let (task, code) = index
         .update_settings(json!({
+            "rankingRules": ["typo", "words", "proximity", "attribute", "sort", "exactness"],
             "sortableAttributes": ["created"]
         }))
         .await;

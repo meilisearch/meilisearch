@@ -27,14 +27,7 @@ use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
 #[derive(OpenApi)]
-#[openapi(
-    paths(export),
-    tags((
-        name = "Export",
-        description = "The `/export` route allows you to trigger an export process to a remote Meilisearch instance.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/export"),
-    )),
-)]
+#[openapi(paths(export))]
 pub struct ExportApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
@@ -43,8 +36,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Export to a remote Meilisearch
 ///
-/// Triggers an export process to a remote Meilisearch instance. This allows you to send
-/// documents and settings from the current instance to another Meilisearch server.
+/// Trigger an export that sends documents and settings from this instance to a remote Meilisearch server. Configure the remote URL and optional API key in the request body.
 #[utoipa::path(
     post,
     path = "",
@@ -52,14 +44,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     request_body = Export,
     security(("Bearer" = ["export", "*"])),
     responses(
-        (status = 202, description = "Export successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Export successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 1,
                 "status": "enqueued",
                 "type": "export",
                 "enqueuedAt": "2021-08-11T09:25:53.000000Z"
             })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -121,22 +113,22 @@ async fn export(
 #[schema(rename_all = "camelCase")]
 pub struct Export {
     /// URL of the destination Meilisearch instance
-    #[schema(value_type = Option<String>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
+    #[schema(required = false, value_type = Option<String>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportUrl>)]
     pub url: String,
     /// API key for authenticating with the destination instance
-    #[schema(value_type = Option<String>, example = json!("1234abcd"))]
+    #[schema(required = false, value_type = Option<String>, example = json!("1234abcd"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportApiKey>)]
     pub api_key: Option<String>,
     /// Maximum payload size per request
-    #[schema(value_type = Option<String>, example = json!("24MiB"))]
+    #[schema(required = false, value_type = Option<String>, example = json!("24MiB"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportPayloadSize>)]
     pub payload_size: Option<ByteWithDeserr>,
     /// Index patterns to export with their settings
-    #[schema(value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
+    #[schema(required = false, value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
     #[deserr(default)]
     #[serde(default)]
     pub indexes: Option<BTreeMap<IndexUidPattern, ExportIndexSettings>>,

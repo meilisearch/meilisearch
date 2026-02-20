@@ -37,7 +37,7 @@ use crate::milli::progress::{ProgressStepView, ProgressView};
 use crate::routes::batches::AllBatches;
 use crate::routes::features::RuntimeTogglableFeatures;
 use crate::routes::indexes::documents::{DocumentDeletionByFilter, DocumentEditionByFunction};
-use crate::routes::indexes::IndexView;
+use crate::routes::indexes::{IndexView, ListFields, ListFieldsFilter};
 use crate::routes::multi_search::SearchResults;
 use crate::routes::network::{Network, Remote};
 use crate::routes::swap_indexes::SwapIndexesPayload;
@@ -101,13 +101,16 @@ mod webhooks;
         (name = "Stats", description = "Stats gives extended information and metrics about indexes and the Meilisearch database."),
         (name = "Health", description = "The health check endpoint enables you to periodically test the health of your Meilisearch instance."),
         (name = "Version", description = "Returns the version of the running Meilisearch instance."),
+        (name = "Backups", description = "Meilisearch offers two types of backups: snapshots and dumps. Snapshots are mainly intended as a safeguard, while dumps are useful when migrating Meilisearch."),
+        (name = "Export", description = "Export documents and settings from this instance to a remote Meilisearch server."),
+        (name = "Async task management", description = "Routes for listing and managing batches and tasks (asynchronous operations)."),
     ),
     modifiers(&OpenApiAuth),
     servers((
-        url = "/",
-        description = "Local server",
+        url = "http://localhost:7700",
+        description = "Local server.",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, ListFields, ListFieldsFilter))
 )]
 pub struct MeilisearchApi;
 
@@ -206,26 +209,25 @@ pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SummarizedTaskView {
-    /// Unique sequential identifier of the task
+    /// Unique sequential identifier of the task.
     #[schema(value_type = u32)]
     pub task_uid: TaskId,
-    /// Unique identifier of the targeted index. Null for global tasks
+    /// Unique identifier of the targeted index. Null for global tasks.
     pub index_uid: Option<String>,
-    /// Status of the task. Possible values are enqueued, processing,
-    /// succeeded, failed, and canceled
+    /// Status of the task. Possible values are `enqueued`, `processing`,
+    /// `succeeded`, `failed`, and `canceled`.
     pub status: Status,
-    /// Type of operation performed by the task
+    /// Type of operation performed by the task.
     #[serde(rename = "type")]
     pub kind: Kind,
-    /// Date and time when the task was enqueued
+    /// Date and time when the task was enqueued.
     #[serde(
         serialize_with = "time::serde::rfc3339::serialize",
         deserialize_with = "time::serde::rfc3339::deserialize"
     )]
     pub enqueued_at: OffsetDateTime,
-    /// Custom metadata string that was attached to this task when it was
-    /// created. This can be used to associate tasks with external systems or
-    /// add application-specific information.
+    /// Custom metadata attached to this task at creation. Use it to associate
+    /// tasks with external systems or add application-specific information.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_metadata: Option<String>,
 }
@@ -248,18 +250,17 @@ pub struct Pagination {
     pub limit: usize,
 }
 
-/// Paginated response wrapper
 #[derive(Debug, Clone, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct PaginationView<T> {
-    /// Array of items for the current page
+    /// Items for the current page.
     pub results: Vec<T>,
-    /// Number of items skipped
+    /// Number of items skipped.
     pub offset: usize,
-    /// Maximum number of items returned
+    /// Maximum number of items returned.
     pub limit: usize,
-    /// Total number of items matching the query
+    /// Total number of items matching the query.
     pub total: usize,
 }
 
@@ -430,16 +431,16 @@ pub struct Stats {
     pub indexes: BTreeMap<String, indexes::IndexStats>,
 }
 
-/// Get stats of all indexes.
+/// Get stats of all indexes
 ///
-/// Get stats of all indexes.
+/// Return statistics for the Meilisearch instance and for each index. Includes database size, last update time, document counts, and indexing status per index.
 #[utoipa::path(
     get,
     path = "/stats",
     tag = "Stats",
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
     responses(
-        (status = 200, description = "The stats of the instance", body = Stats, content_type = "application/json", example = json!(
+        (status = 200, description = "The stats of the instance.", body = Stats, content_type = "application/json", example = json!(
             {
                 "databaseSize": 567,
                 "usedDatabaseSize": 456,
@@ -459,7 +460,7 @@ pub struct Stats {
                 }
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -531,21 +532,21 @@ struct VersionResponse {
 
 /// Get version
 ///
-/// Current version of Meilisearch.
+/// Return the current Meilisearch version, including the commit SHA and build date.
 #[utoipa::path(
     get,
     path = "/version",
     tag = "Version",
     security(("Bearer" = ["version", "*"])),
     responses(
-        (status = 200, description = "Instance is healthy", body = VersionResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "Instance is healthy.", body = VersionResponse, content_type = "application/json", example = json!(
             {
                 "commitSha": "b46889b5f0f2f8b91438a08a358ba8f05fc09fc1",
                 "commitDate": "2021-07-08",
                 "pkgVersion": "0.23.0"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -588,16 +589,15 @@ enum HealthStatus {
     Available,
 }
 
-/// Get Health
+/// Get health
 ///
-/// The health check endpoint enables you to periodically test the health of
-/// your Meilisearch instance.
+/// The health check endpoint enables you to periodically test the health of your Meilisearch instance. Returns a simple status indicating that the server is available.
 #[utoipa::path(
     get,
     path = "/health",
     tag = "Health",
     responses(
-        (status = 200, description = "Instance is healthy", body = HealthResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "Instance is healthy.", body = HealthResponse, content_type = "application/json", example = json!(
             {
                 "status": "available"
             }

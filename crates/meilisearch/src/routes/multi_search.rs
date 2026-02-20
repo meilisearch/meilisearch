@@ -32,7 +32,6 @@ use crate::search_queue::SearchQueue;
     tags((
         name = "Multi-search",
         description = "The `/multi-search` route allows you to perform multiple search queries on one or more indexes by bundling them into a single HTTP request. Multi-search is also known as federated search.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/multi_search"),
     )),
 )]
 pub struct MultiSearchApi;
@@ -50,16 +49,17 @@ pub struct SearchResults {
 
 /// Perform a multi-search
 ///
-/// Bundle multiple search queries in a single API request. Use this endpoint
-/// to search through multiple indexes at once.
+/// Run multiple search queries in a single API request.
+///
+/// Each query can target a different index, so you can search across several indexes at once and get one combined response.
 #[utoipa::path(
     post,
     request_body = FederatedSearch,
     path = "",
-    tag = "Multi-search",
+    tag = "Search",
     security(("Bearer" = ["search", "*"])),
     responses(
-        (status = OK, description = "Non federated multi-search", body = SearchResults, content_type = "application/json", example = json!(
+        (status = OK, description = "Non federated multi-search.", body = SearchResults, content_type = "application/json", example = json!(
             {
                 "results":[
                     {
@@ -107,7 +107,7 @@ pub struct SearchResults {
                 ]
             }
         )),
-        (status = OK, description = "Federated multi-search", body = FederatedSearchResult, content_type = "application/json", example = json!(
+        (status = OK, description = "Federated multi-search.", body = FederatedSearchResult, content_type = "application/json", example = json!(
             {
                 "hits": [
                     {
@@ -136,7 +136,7 @@ pub struct SearchResults {
                 "semanticHitCount": 0
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

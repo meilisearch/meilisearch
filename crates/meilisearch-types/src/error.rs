@@ -511,10 +511,10 @@ impl ErrorCode for milli::Error {
                     | UserError::InvalidDisableBinaryQuantization { .. }
                     | UserError::InvalidSourceForNested { .. }
                     | UserError::MissingSourceForNested { .. }
-                    | UserError::InvalidSettingsEmbedder { .. } => Code::InvalidSettingsEmbedders,
-                    UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
-                    UserError::TooManyFragments(_) => Code::InvalidSettingsEmbedders,
-                    UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
+                    | UserError::InvalidSettingsEmbedder { .. }
+                    | UserError::TooManyEmbedders(_)
+                    | UserError::TooManyFragments(_)
+                    | UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
                     UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
                     UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
                         Code::IndexPrimaryKeyMultipleCandidatesFound
@@ -531,7 +531,9 @@ impl ErrorCode for milli::Error {
                     UserError::InvalidFacetSearchFacetName { .. } => {
                         Code::InvalidFacetSearchFacetName
                     }
-                    UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
+                    UserError::CriterionError(_) | UserError::MixedAttributeRankingRulesUsage => {
+                        Code::InvalidSettingsRankingRules
+                    }
                     UserError::InvalidGeoField { .. } | UserError::GeoJsonError(_) => {
                         Code::InvalidDocumentGeoField
                     }

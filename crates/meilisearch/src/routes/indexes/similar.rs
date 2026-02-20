@@ -34,7 +34,6 @@ use crate::search::{
             description = "The /similar route uses AI-powered search to return a number of documents similar to a target document.
 
 Meilisearch exposes two routes for retrieving similar documents: POST and GET. In the majority of cases, POST will offer better performance and ease of use.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/similar"),
         ),
     ),
 )]
@@ -50,18 +49,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get similar documents with GET
 ///
-/// Retrieve documents similar to a specific search result.
+/// Retrieve documents similar to a reference document identified by its id.
+///
+/// > Useful for “more like this” or recommendations.
 #[utoipa::path(
     get,
     path = "{indexUid}/similar",
     tag = "Similar documents",
     security(("Bearer" = ["search", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false),
+        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
         SimilarQueryGet
     ),
     responses(
-        (status = 200, description = "The documents are returned", body = SimilarResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = SimilarResult, content_type = "application/json", example = json!(
             {
               "hits": [
                 {
@@ -86,7 +87,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
               "processingTimeMs": 35
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -94,7 +95,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -134,16 +135,18 @@ pub async fn similar_get(
 
 /// Get similar documents with POST
 ///
-/// Retrieve documents similar to a specific search result.
+/// Retrieve documents similar to a reference document identified by its id.
+///
+/// > Useful for “more like this” or recommendations.
 #[utoipa::path(
     post,
     path = "{indexUid}/similar",
     tag = "Similar documents",
     security(("Bearer" = ["search", "*"])),
-    params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = SimilarQuery,
     responses(
-        (status = 200, description = "The documents are returned", body = SimilarResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = SimilarResult, content_type = "application/json", example = json!(
             {
               "hits": [
                 {
@@ -168,7 +171,7 @@ pub async fn similar_get(
               "processingTimeMs": 35
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -176,7 +179,7 @@ pub async fn similar_get(
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -262,44 +265,52 @@ async fn similar(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(parameter_in = Query)]
 pub struct SimilarQueryGet {
-    /// The unique identifier (primary key value) of the target document.
+    /// The unique identifier ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) value) of the target document.
     /// Meilisearch will find and return documents that are semantically
     /// similar to this document based on their vector embeddings. This is a
     /// required parameter.
     #[deserr(error = DeserrQueryParamError<InvalidSimilarId>)]
-    #[param(value_type = String)]
+    #[param(required = true, value_type = String)]
     id: Param<String>,
+    /// The name of the embedder to use for finding similar documents. This
+    /// must match one of the embedders configured in your index settings. The
+    /// embedder determines how document similarity is calculated based on
+    /// vector embeddings.
+    #[param(required = true)]
+    #[deserr(error = DeserrQueryParamError<InvalidSimilarEmbedder>)]
+    pub embedder: String,
     /// Number of similar documents to skip in the response. Use together with
     /// `limit` for pagination through large result sets. For example, to get
     /// similar documents 21-40, set `offset=20` and `limit=20`. Defaults to
     /// `0`.
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSimilarOffset>)]
-    #[param(value_type = usize, default = DEFAULT_SEARCH_OFFSET)]
+    #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_OFFSET)]
     offset: Param<usize>,
     /// Maximum number of similar documents to return in a single response. Use
     /// together with `offset` for pagination. Higher values return more
     /// results but may increase response time. Defaults to `20`.
     #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSimilarLimit>)]
-    #[param(value_type = usize, default = DEFAULT_SEARCH_LIMIT)]
+    #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_LIMIT)]
     limit: Param<usize>,
     /// Comma-separated list of document attributes to include in the response.
     /// Use `*` to retrieve all attributes. By default, all attributes listed
     /// in the `displayedAttributes` setting are returned. Example:
     /// `title,description,price`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarAttributesToRetrieve>)]
-    #[param(value_type = Vec<String>)]
+    #[param(required = false, value_type = Vec<String>)]
     attributes_to_retrieve: Option<CS<String>>,
     /// When `true`, includes the vector embeddings for each returned document.
     /// Useful for debugging or when you need to inspect the vector data. Note
     /// that this can significantly increase response size. Defaults to
     /// `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRetrieveVectors>)]
-    #[param(value_type = bool, default)]
+    #[param(required = false, value_type = bool, default)]
     retrieve_vectors: Param<bool>,
     /// Filter expression to narrow down which documents can be returned as
     /// similar. Uses the same syntax as search filters. Only documents
     /// matching this filter will be considered when finding similar documents.
     /// Example: `genres = action AND year > 2000`.
+    #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarFilter>)]
     filter: Option<String>,
     /// When `true`, includes a global `_rankingScore` field in each document
@@ -307,33 +318,27 @@ pub struct SimilarQueryGet {
     /// between 0 and 1, where higher values indicate greater similarity.
     /// Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScore>)]
-    #[param(value_type = bool, default)]
+    #[param(required = false, value_type = bool, default)]
     show_ranking_score: Param<bool>,
     /// When `true`, includes a detailed `_rankingScoreDetails` object in each
     /// document breaking down how the similarity score was calculated. Useful
     /// for debugging and understanding why certain documents are considered
     /// more similar. Defaults to `false`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowRankingScoreDetails>)]
-    #[param(value_type = bool, default)]
+    #[param(required = false, value_type = bool, default)]
     show_ranking_score_details: Param<bool>,
     /// When `true`, includes a `_performanceDetails` object showing the
     /// performance details of the search.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarShowPerformanceDetails>)]
-    #[param(value_type = bool, default)]
+    #[param(required = false, value_type = bool, default)]
     show_performance_details: Param<bool>,
     /// Minimum ranking score threshold (between 0.0 and 1.0) that documents
     /// must meet to be included in results. Documents with a similarity score
     /// below this threshold will be excluded. Useful for ensuring only highly
     /// similar documents are returned.
     #[deserr(default, error = DeserrQueryParamError<InvalidSimilarRankingScoreThreshold>, default)]
-    #[param(value_type = Option<f32>)]
+    #[param(required = false, value_type = Option<f32>)]
     pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
-    /// The name of the embedder to use for finding similar documents. This
-    /// must match one of the embedders configured in your index settings. The
-    /// embedder determines how document similarity is calculated based on
-    /// vector embeddings.
-    #[deserr(error = DeserrQueryParamError<InvalidSimilarEmbedder>)]
-    pub embedder: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]

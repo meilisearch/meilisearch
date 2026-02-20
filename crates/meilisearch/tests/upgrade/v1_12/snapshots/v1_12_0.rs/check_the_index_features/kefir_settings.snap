@@ -19,8 +19,9 @@ source: crates/meilisearch/tests/upgrade/v1_12/v1_12_0.rs
     "words",
     "typo",
     "proximity",
-    "attribute",
+    "attributeRank",
     "sort",
+    "wordPosition",
     "exactness"
   ],
   "stopWords": [

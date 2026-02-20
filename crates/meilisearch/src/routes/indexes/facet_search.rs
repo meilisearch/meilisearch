@@ -32,7 +32,6 @@ use crate::search_queue::SearchQueue;
         (
             name = "Facet Search",
             description = "The `/facet-search` route allows you to search for facet values. Facet search supports prefix search and typo tolerance. The returned hits are sorted lexicographically in ascending order. You can configure how facets are sorted using the sortFacetValuesBy property of the faceting index settings.",
-            external_docs(url = "https://www.meilisearch.com/docs/reference/api/facet_search"),
         ),
     ),
 )]
@@ -50,18 +49,23 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 #[deserr(error = DeserrJsonError, rename_all = camelCase)]
 pub struct FacetSearchQuery {
     /// Query string to search for facet values
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidFacetSearchQuery>)]
     pub facet_query: Option<String>,
     /// Name of the facet to search
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidFacetSearchFacetName>, missing_field_error = DeserrJsonError::missing_facet_search_facet_name)]
     pub facet_name: String,
     /// Query string to filter documents before facet search
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
     /// Custom query vector for semantic search
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
     /// Multimodal content for AI-powered search
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<Value>,
     /// Hybrid search configuration that combines keyword search with semantic
@@ -69,27 +73,32 @@ pub struct FacetSearchQuery {
     /// matching (0.0) and semantic similarity (1.0). Requires an embedder to
     /// be configured in the index settings.
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
-    #[schema(value_type = Option<HybridQuery>)]
+    #[schema(required = false, value_type = Option<HybridQuery>)]
     pub hybrid: Option<HybridQuery>,
     /// Filter expression to apply before facet search
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
     /// Strategy used to match query terms
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>, default)]
     pub matching_strategy: MatchingStrategy,
     /// Restrict search to specified attributes
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>, default)]
     pub attributes_to_search_on: Option<Vec<String>>,
     /// Minimum ranking score threshold (0.0 to 1.0) that documents must
     /// achieve to be considered when computing facet counts. Documents with
     /// scores below this threshold are excluded from facet value counts.
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>, default)]
-    #[schema(value_type = Option<f64>)]
+    #[schema(required = false, value_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
     /// Languages to use for query processing
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>, default)]
     pub locales: Option<Vec<Locale>>,
     /// Return exhaustive facet count instead of an estimate
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidFacetSearchExhaustiveFacetCount>, default)]
     pub exhaustive_facet_count: Option<bool>,
 }
@@ -200,18 +209,20 @@ impl Aggregate for FacetSearchAggregator {
     }
 }
 
-/// Perform a facet search
+/// Search in facets
 ///
-/// Search for a facet value within a given facet.
+/// Search for facet values within a given facet.
+///
+/// > Use this to build autocomplete or refinement UIs for facet filters.
 #[utoipa::path(
     post,
     path = "{indexUid}/facet-search",
     tag = "Facet Search",
     security(("Bearer" = ["search", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = FacetSearchQuery,
     responses(
-        (status = 200, description = "The documents are returned", body = SearchResult, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = SearchResult, content_type = "application/json", example = json!(
             {
               "hits": [
                 {
@@ -236,7 +247,7 @@ impl Aggregate for FacetSearchAggregator {
               "query": "american "
             }
         )),
-        (status = 404, description = "Index not found", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Index `movies` not found.",
                 "code": "index_not_found",
@@ -244,7 +255,7 @@ impl Aggregate for FacetSearchAggregator {
                 "link": "https://docs.meilisearch.com/errors#index_not_found"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

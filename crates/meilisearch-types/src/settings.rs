@@ -483,7 +483,7 @@ impl Settings<Checked> {
             pagination,
             embedders,
             search_cutoff_ms,
-            localized_attributes: localized_attributes_rules,
+            localized_attributes,
             facet_search,
             prefix_search,
             chat,
@@ -509,7 +509,7 @@ impl Settings<Checked> {
             pagination,
             embedders,
             search_cutoff_ms,
-            localized_attributes: localized_attributes_rules,
+            localized_attributes,
             facet_search,
             prefix_search,
             vector_store,
@@ -571,7 +571,26 @@ impl Settings<Unchecked> {
     }
 
     pub fn validate(self) -> Result<Self, milli::Error> {
-        self.validate_embedding_settings()
+        self.validate_ranking_rules_settings()?.validate_embedding_settings()
+    }
+
+    fn validate_ranking_rules_settings(self) -> Result<Self, milli::Error> {
+        let Setting::Set(ranking_rules) = self.ranking_rules.as_ref() else { return Ok(self) };
+
+        let mut attribute = false;
+        let mut attribute_rank_or_position = false;
+
+        for rule in ranking_rules {
+            attribute |= matches!(rule, RankingRuleView::Attribute);
+            attribute_rank_or_position |=
+                matches!(rule, RankingRuleView::AttributeRank | RankingRuleView::WordPosition);
+        }
+
+        if attribute && attribute_rank_or_position {
+            return Err(milli::Error::UserError(milli::UserError::MixedAttributeRankingRulesUsage));
+        }
+
+        Ok(self)
     }
 
     fn validate_embedding_settings(mut self) -> Result<Self, milli::Error> {
@@ -1074,16 +1093,23 @@ pub fn settings(
 #[deserr(try_from(&String) = FromStr::from_str -> CriterionError)]
 pub enum RankingRuleView {
     /// Sorted by decreasing number of matched query terms.
-    /// Query words at the front of an attribute is considered better than if
-    /// it was at the back.
     Words,
     /// Sorted by increasing number of typos.
     Typo,
     /// Sorted by increasing distance between matched query terms.
     Proximity,
-    /// Documents with quey words contained in more important
-    /// attributes are considered better.
+    /// Documents with query words contained in more important
+    /// attributes and at a closer-to-the-front position in it
+    /// are considered better.
     Attribute,
+    /// Documents with query words contained in more important
+    /// attributes are considered better. Position of the
+    /// query words in an attribute is not considered.
+    AttributeRank,
+    /// Documents with query words that are closer to the front
+    /// of an attribute are considered better. Attribute rank
+    /// is not considered.
+    WordPosition,
     /// Dynamically sort at query time the documents. None, one or multiple
     /// Asc/Desc sortable attributes can be used in place of this criterion at
     /// query time.
@@ -1095,6 +1121,7 @@ pub enum RankingRuleView {
     /// Sorted by the decreasing value of the field specified.
     Desc(String),
 }
+
 impl Serialize for RankingRuleView {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -1103,6 +1130,7 @@ impl Serialize for RankingRuleView {
         serializer.serialize_str(&format!("{}", Criterion::from(self.clone())))
     }
 }
+
 impl<'de> Deserialize<'de> for RankingRuleView {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -1146,6 +1174,8 @@ impl From<Criterion> for RankingRuleView {
             Criterion::Typo => RankingRuleView::Typo,
             Criterion::Proximity => RankingRuleView::Proximity,
             Criterion::Attribute => RankingRuleView::Attribute,
+            Criterion::AttributeRank => RankingRuleView::AttributeRank,
+            Criterion::WordPosition => RankingRuleView::WordPosition,
             Criterion::Sort => RankingRuleView::Sort,
             Criterion::Exactness => RankingRuleView::Exactness,
             Criterion::Asc(x) => RankingRuleView::Asc(x),
@@ -1160,6 +1190,8 @@ impl From<RankingRuleView> for Criterion {
             RankingRuleView::Typo => Criterion::Typo,
             RankingRuleView::Proximity => Criterion::Proximity,
             RankingRuleView::Attribute => Criterion::Attribute,
+            RankingRuleView::AttributeRank => Criterion::AttributeRank,
+            RankingRuleView::WordPosition => Criterion::WordPosition,
             RankingRuleView::Sort => Criterion::Sort,
             RankingRuleView::Exactness => Criterion::Exactness,
             RankingRuleView::Asc(x) => Criterion::Asc(x),

@@ -19,5 +19,5 @@ meilisearch-types = { path = "../meilisearch-types" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
 tempfile = "3.23.0"
-time = { version = "0.3.44", features = ["formatting", "parsing", "alloc"] }
+time = { version = "0.3.47", features = ["formatting", "parsing", "alloc"] }
 uuid = { version = "1.18.1", features = ["v4"], default-features = false }

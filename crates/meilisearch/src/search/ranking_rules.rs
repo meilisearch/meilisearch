@@ -209,6 +209,8 @@ impl RankingRules {
                 | Criterion::Typo
                 | Criterion::Proximity
                 | Criterion::Attribute
+                | Criterion::AttributeRank
+                | Criterion::WordPosition
                 | Criterion::Exactness => {
                     canonicalization_actions.push(CanonicalizationAction::RemovedPlaceholder {
                         removed_occurrence: RankingRuleSource::Criterion(criterion_index),
@@ -272,6 +274,8 @@ impl RankingRules {
                 | Criterion::Typo
                 | Criterion::Proximity
                 | Criterion::Attribute
+                | Criterion::AttributeRank
+                | Criterion::WordPosition
                 | Criterion::Exactness => match vector {
                     Some(previous_occurrence) => {
                         if sorted_fields.is_empty() {
@@ -343,6 +347,8 @@ impl RankingRules {
         let mut proximity = None;
         let mut sort = None;
         let mut attribute = None;
+        let mut attribute_rank = None;
+        let mut word_position = None;
         let mut exactness = None;
         let mut sorted_fields = HashMap::new();
 
@@ -415,6 +421,28 @@ impl RankingRules {
                         &mut canonicalization_actions,
                         &mut canonical_criteria,
                         &mut attribute,
+                    );
+                }
+                Criterion::AttributeRank => {
+                    canonicalize_criterion(
+                        criterion,
+                        criterion_index,
+                        terms_matching_strategy,
+                        &mut words,
+                        &mut canonicalization_actions,
+                        &mut canonical_criteria,
+                        &mut attribute_rank,
+                    );
+                }
+                Criterion::WordPosition => {
+                    canonicalize_criterion(
+                        criterion,
+                        criterion_index,
+                        terms_matching_strategy,
+                        &mut words,
+                        &mut canonicalization_actions,
+                        &mut canonical_criteria,
+                        &mut word_position,
                     );
                 }
                 Criterion::Exactness => {
@@ -723,6 +751,8 @@ impl RankingRule {
             | Criterion::Typo
             | Criterion::Proximity
             | Criterion::Attribute
+            | Criterion::AttributeRank
+            | Criterion::WordPosition
             | Criterion::Exactness => RankingRuleKind::Relevancy,
             Criterion::Asc(s) if s == "_geo" => RankingRuleKind::AscendingGeoSort,
 

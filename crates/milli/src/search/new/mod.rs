@@ -178,8 +178,15 @@ impl<'ctx> SearchContext<'ctx> {
                 Some((_name, fid, weight)) => (*fid, *weight),
                 // The field is not searchable but the user didn't define any searchable attributes
                 None if user_defined_searchable.is_none() => continue,
-                // The field is not searchable => User error
+                // The field is not searchable
                 None => {
+                    // field exists in user settings
+                    if let Some(defined_searchable) = &user_defined_searchable {
+                        if defined_searchable.iter().any(|s| s == field_name) {
+                            continue;
+                        }
+                    }
+                    // field does not exist in user settings => user error
                     let (valid_fields, hidden_fields) = self.index.remove_hidden_fields(
                         self.txn,
                         searchable_fields_weights.iter().map(|(name, _, _)| name),
@@ -355,6 +362,8 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
             crate::Criterion::Words
             | crate::Criterion::Typo
             | crate::Criterion::Attribute
+            | crate::Criterion::AttributeRank
+            | crate::Criterion::WordPosition
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness => continue,
             crate::Criterion::Sort => {
@@ -417,6 +426,8 @@ fn get_ranking_rules_for_vector<'ctx>(
             | crate::Criterion::Typo
             | crate::Criterion::Proximity
             | crate::Criterion::Attribute
+            | crate::Criterion::AttributeRank
+            | crate::Criterion::WordPosition
             | crate::Criterion::Exactness => {
                 if !vector {
                     let vector_candidates = ctx.index.documents_ids(ctx.txn)?;
@@ -480,6 +491,8 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut proximity = false;
     let mut sort = false;
     let mut attribute = false;
+    let mut attribute_rank = false;
+    let mut word_position = false;
     let mut exactness = false;
     let mut sorted_fields = HashSet::new();
     let mut geo_sorted = false;
@@ -528,11 +541,25 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Proximity::new(None)));
             }
             crate::Criterion::Attribute => {
-                if attribute {
+                if attribute || attribute_rank || word_position {
                     continue;
                 }
                 attribute = true;
                 ranking_rules.push(Box::new(Fid::new(None)));
+                ranking_rules.push(Box::new(Position::new(None)));
+            }
+            crate::Criterion::AttributeRank => {
+                if attribute || attribute_rank {
+                    continue;
+                }
+                attribute_rank = true;
+                ranking_rules.push(Box::new(Fid::new(None)));
+            }
+            crate::Criterion::WordPosition => {
+                if attribute || word_position {
+                    continue;
+                }
+                word_position = true;
                 ranking_rules.push(Box::new(Position::new(None)));
             }
             crate::Criterion::Sort => {

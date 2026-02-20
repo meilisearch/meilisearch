@@ -23,18 +23,16 @@ pub fn configure(config: &mut web::ServiceConfig) {
     config.service(web::resource("").route(web::get().to(get_metrics)));
 }
 
-/// Get prometheus metrics
+/// Get Prometheus metrics
 ///
-/// Retrieve metrics on the engine. See https://www.meilisearch.com/docs/learn/experimental/metrics
-/// Currently, [the feature is experimental](https://www.meilisearch.com/docs/learn/experimental/overview)
-/// which means it must be enabled.
+/// Return metrics for the engine in Prometheus format. This is an [experimental feature](https://www.meilisearch.com/docs/learn/experimental/overview) and must be enabled before use.
 #[utoipa::path(
     get,
     path = "",
     tag = "Stats",
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
-        (status = 200, description = "The metrics of the instance", body = String, content_type = "text/plain", example = json!(
+        (status = 200, description = "The metrics of the instance.", body = String, content_type = "text/plain", example = json!(
             r#"
 # HELP meilisearch_db_size_bytes Meilisearch DB Size In Bytes
 # TYPE meilisearch_db_size_bytes gauge
@@ -112,7 +110,7 @@ meilisearch_nb_tasks{kind="types",value="taskDeletion"} 0
 meilisearch_used_db_size_bytes 409600
 "#
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
