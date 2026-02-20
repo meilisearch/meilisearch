@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::{bail, Context};
+use bstr::ByteSlice;
 use clap::{Parser, Subcommand, ValueEnum};
 use dump::{DumpWriter, IndexMetadata};
 use file_store::FileStore;
@@ -19,10 +20,12 @@ use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
 use meilisearch_types::milli::documents::{obkv_to_object, DocumentsBatchReader};
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
-use meilisearch_types::milli::{obkv_to_json, BEU32};
+use meilisearch_types::milli::{obkv_to_json, DeCboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Status, Task};
 use meilisearch_types::versioning::{get_version, parse_version};
 use meilisearch_types::Index;
+use rayon::iter::{IndexedParallelIterator as _, IntoParallelRefIterator, ParallelIterator};
+use rayon::slice::ParallelSlice as _;
 use serde_json::Value::Object;
 use time::macros::format_description;
 use time::OffsetDateTime;
@@ -140,6 +143,26 @@ enum Command {
         #[arg(long, value_delimiter = ',')]
         index_part: Vec<IndexPart>,
     },
+
+    /// Outputs all entries of the index in a formatted way.
+    ///
+    /// This command is useful for debugging purposes.
+    OutputFormattedEntries {
+        #[arg(long)]
+        index_name: String,
+    },
+
+    /// Compare two database indexes entries.
+    ///
+    /// This command is useful for debugging purposes.
+    CompareEntries {
+        /// The second database path to compare to.
+        #[arg(long, default_value = "data1.ms/")]
+        other_db_path: PathBuf,
+
+        #[arg(long)]
+        index_name: String,
+    },
 }
 
 #[derive(Clone, ValueEnum)]
@@ -169,7 +192,190 @@ fn main() -> anyhow::Result<()> {
         Command::HairDryer { index_name, index_part } => {
             hair_dryer(db_path, &index_name, &index_part)
         }
+        Command::OutputFormattedEntries { index_name } => {
+            output_formatted_entries(db_path, &index_name)
+        }
+        Command::CompareEntries { other_db_path, index_name } => {
+            compare_entries(db_path, other_db_path, &index_name)
+        }
     }
+}
+
+struct DatabaseInfo {
+    name: &'static str,
+    database: Database<Bytes, DeCboRoaringBitmapCodec>,
+}
+
+impl DatabaseInfo {
+    fn new(name: &'static str, database: Database<Bytes, DeCboRoaringBitmapCodec>) -> Self {
+        DatabaseInfo { name, database }
+    }
+}
+
+fn index_cbo_databases(
+    db_path: PathBuf,
+    index_name: &str,
+) -> anyhow::Result<(Index, Vec<DatabaseInfo>)> {
+    let index_scheduler_path = db_path.join("tasks");
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+
+    let index_mapper_rtxn = env.read_txn()?;
+    let index_mapping: Database<Str, UuidCodec> =
+        try_opening_database(&env, &index_mapper_rtxn, "index-mapping")?;
+
+    for result in index_mapping.iter(&index_mapper_rtxn)? {
+        let (uid, uuid) = result?;
+        if uid != index_name {
+            continue;
+        }
+
+        let index_path = db_path.join("indexes").join(uuid.to_string());
+        let index = Index::new(EnvOpenOptions::new().read_txn_without_tls(), &index_path, false)
+            .with_context(|| {
+                format!("While trying to open the index at path {:?}", index_path.display())
+            })?;
+
+        let Index {
+            word_docids,
+            exact_word_docids,
+            word_prefix_docids,
+            exact_word_prefix_docids,
+            word_pair_proximity_docids,
+            word_position_docids,
+            word_fid_docids,
+            field_id_word_count_docids,
+            word_prefix_position_docids,
+            word_prefix_fid_docids,
+            facet_id_exists_docids,
+            facet_id_is_null_docids,
+            facet_id_is_empty_docids,
+            ..
+        } = index;
+
+        let databases = vec![
+            DatabaseInfo::new("word_docids", word_docids.remap_key_type()),
+            DatabaseInfo::new("exact_word_docids", exact_word_docids.remap_key_type()),
+            DatabaseInfo::new("word_prefix_docids", word_prefix_docids.remap_key_type()),
+            DatabaseInfo::new(
+                "exact_word_prefix_docids",
+                exact_word_prefix_docids.remap_key_type(),
+            ),
+            DatabaseInfo::new(
+                "word_pair_proximity_docids",
+                word_pair_proximity_docids.remap_key_type(),
+            ),
+            DatabaseInfo::new("word_position_docids", word_position_docids.remap_key_type()),
+            DatabaseInfo::new("word_fid_docids", word_fid_docids.remap_key_type()),
+            DatabaseInfo::new(
+                "field_id_word_count_docids",
+                field_id_word_count_docids.remap_key_type(),
+            ),
+            DatabaseInfo::new(
+                "word_prefix_position_docids",
+                word_prefix_position_docids.remap_key_type(),
+            ),
+            DatabaseInfo::new("word_prefix_fid_docids", word_prefix_fid_docids.remap_key_type()),
+            DatabaseInfo::new("facet_id_exists_docids", facet_id_exists_docids.remap_key_type()),
+            DatabaseInfo::new("facet_id_is_null_docids", facet_id_is_null_docids.remap_key_type()),
+            DatabaseInfo::new(
+                "facet_id_is_empty_docids",
+                facet_id_is_empty_docids.remap_key_type(),
+            ),
+        ];
+
+        return Ok((index, databases));
+    }
+
+    anyhow::bail!("Couldn't find index {index_name} in database {:?}", db_path.display())
+}
+
+fn output_formatted_entries(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
+    let (index, databases) = index_cbo_databases(db_path, index_name)?;
+    let rtxn = index.read_txn()?;
+
+    use bstr::ByteSlice as _;
+
+    let stdout = std::io::stdout();
+    let mut stdout_lock = BufWriter::new(stdout.lock());
+
+    for DatabaseInfo { name: db_name, database } in databases {
+        for result in database.iter(&rtxn)? {
+            let (key, bitmap) = result?;
+            let value: Vec<u32> = bitmap.iter().collect();
+            writeln!(&mut stdout_lock, "{db_name}: {} -> {:?}", key.as_bstr(), value)?;
+        }
+    }
+
+    {
+        let db_name = "main";
+
+        let fst = index.words_fst(&rtxn)?;
+        writeln!(&mut stdout_lock, "{db_name}: words-fst -> {fst:?}")?;
+
+        let prefix_fst = index.words_prefixes_fst(&rtxn)?;
+        writeln!(&mut stdout_lock, "{db_name}: words-prefixes-fst -> {prefix_fst:?}")?;
+
+        let documents_ids = index.documents_ids(&rtxn)?;
+        writeln!(&mut stdout_lock, "{db_name}: documents-ids -> {documents_ids:?}")?;
+
+        let exact_words = index.exact_words(&rtxn)?;
+        writeln!(&mut stdout_lock, "{db_name}: exact-words -> {exact_words:?}")?;
+    }
+
+    Ok(())
+}
+
+fn compare_entries(
+    lhs_db_path: PathBuf,
+    rhs_db_path: PathBuf,
+    index_name: &str,
+) -> anyhow::Result<()> {
+    let (lhs_index, lhs_databases) = index_cbo_databases(lhs_db_path, index_name)?;
+    let (rhs_index, rhs_databases) = index_cbo_databases(rhs_db_path, index_name)?;
+
+    lhs_databases
+        .as_parallel_slice()
+        .par_iter()
+        .zip(rhs_databases.as_parallel_slice())
+        .try_for_each(
+            |(
+                DatabaseInfo { name: lhs_db_name, database: lhs_database },
+                DatabaseInfo { name: rhs_db_name, database: rhs_database },
+            )| {
+                assert_eq!(lhs_db_name, rhs_db_name);
+
+                let lhs_rtxn = lhs_index.read_txn()?;
+                let rhs_rtxn = rhs_index.read_txn()?;
+
+                for (lhs_result, rhs_result) in
+                    lhs_database.iter(&lhs_rtxn)?.zip(rhs_database.iter(&rhs_rtxn)?)
+                {
+                    let (lhs_key, lhs_bitmap) = lhs_result?;
+                    let (rhs_key, rhs_bitmap) = rhs_result?;
+                    if lhs_key != rhs_key {
+                        anyhow::bail!(
+                            "Key mismatch: {:?} != {:?}",
+                            lhs_key.as_bstr(),
+                            rhs_key.as_bstr()
+                        );
+                    }
+                    if lhs_bitmap != rhs_bitmap {
+                        anyhow::bail!(
+                            "Bitmap mismatch in database {:?} for key {:?}\
+                            Left bitmap: {lhs_bitmap:?}\
+                            Right bitmap: {rhs_bitmap:?}",
+                            lhs_db_name,
+                            lhs_key.as_bstr()
+                        );
+                    }
+                }
+
+                Ok(())
+            },
+        )
 }
 
 /// Clears the task queue located at `db_path`.

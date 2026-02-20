@@ -15,8 +15,8 @@ use crate::heed_codec::BytesRefCodec;
 use crate::search::facet::get_highest_level;
 use crate::update::del_add::DelAdd;
 use crate::update::index_documents::valid_lmdb_key;
-use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::update::MergeDeladdDeCboRoaringBitmaps;
+use crate::{DeCboRoaringBitmapCodec, Index, Result};
 
 /// Enum used as a return value for the facet incremental indexing.
 ///
@@ -58,14 +58,14 @@ enum ModificationResult {
 /// `facet_id_(string/f64)_docids` databases.
 pub struct FacetsUpdateIncremental {
     inner: FacetsUpdateIncrementalInner,
-    delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
+    delta_data: Merger<BufReader<File>, MergeDeladdDeCboRoaringBitmaps>,
 }
 
 impl FacetsUpdateIncremental {
     pub fn new(
         index: &Index,
         facet_type: FacetType,
-        delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
+        delta_data: Merger<BufReader<File>, MergeDeladdDeCboRoaringBitmaps>,
         group_size: u8,
         min_level_size: u8,
         max_group_size: u8,
@@ -112,13 +112,13 @@ impl FacetsUpdateIncremental {
             let value = KvReader::from_slice(value);
             let docids_to_delete = value
                 .get(DelAdd::Deletion)
-                .map(CboRoaringBitmapCodec::bytes_decode)
+                .map(DeCboRoaringBitmapCodec::bytes_decode)
                 .map(|o| o.map_err(heed::Error::Encoding))
                 .transpose()?;
 
             let docids_to_add = value
                 .get(DelAdd::Addition)
-                .map(CboRoaringBitmapCodec::bytes_decode)
+                .map(DeCboRoaringBitmapCodec::bytes_decode)
                 .map(|o| o.map_err(heed::Error::Encoding))
                 .transpose()?;
 
