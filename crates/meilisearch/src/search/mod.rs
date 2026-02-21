@@ -1947,6 +1947,7 @@ impl<'a> HitMaker<'a> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn make_hits<'a>(
     index: &'a Index,
     rtxn: &'a RoTxn<'_>,
