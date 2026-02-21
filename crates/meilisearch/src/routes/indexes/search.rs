@@ -16,6 +16,7 @@ use serde_json::Value;
 use tracing::debug;
 use utoipa::{IntoParams, OpenApi};
 use uuid::Uuid;
+use either::Either;
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
@@ -25,12 +26,14 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
+use crate::routes::indexes::streaming::{stream_search_hits, StreamedJsonObject};
 use crate::search::{
-    add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
-    MatchingStrategy, Partition, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
-    SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    add_search_rules, make_hits, network_partition, perform_federated_search, perform_search,
+    AttributesFormat, Federation, HybridQuery, MatchingStrategy, Partition, Personalize,
+    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchMetadataResult, SearchParams,
+    SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -463,7 +466,7 @@ pub async fn search_with_url_query(
 
     let include_metadata = parse_include_metadata_header(&req);
 
-    let search_result = search(
+    let res = search(
         query,
         index_scheduler.clone(),
         index_uid,
@@ -477,16 +480,31 @@ pub async fn search_with_url_query(
 
     permit.drop().await;
 
-    if let Ok(search_result) = search_result.as_ref() {
-        aggregate.succeed(search_result);
+    let (res, _deadline) = res?;
+
+    match res {
+        Either::Left(search_result) => {
+            aggregate.succeed(&search_result);
+            analytics.publish(aggregate, &req);
+            debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
+            Ok(HttpResponse::Ok().json(search_result))
+        }
+        Either::Right((metadata, index)) => {
+            aggregate.succeed(&metadata.result);
+            analytics.publish(aggregate, &req);
+            debug!(request_uid = ?request_uid, returns = "[streaming search results]", progress = ?progress.accumulated_durations(), "Search get");
+
+            let hits_stream = stream_search_hits(
+                index,
+                metadata.format,
+                metadata.matching_words,
+                metadata.documents_ids,
+                metadata.document_scores,
+            );
+            let response_stream = StreamedJsonObject::new_search(metadata.result, hits_stream);
+            Ok(HttpResponse::Ok().streaming(response_stream))
+        }
     }
-    analytics.publish(aggregate, &req);
-
-    let search_result = search_result?;
-
-    debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search get");
-
-    Ok(HttpResponse::Ok().json(search_result))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -499,7 +517,7 @@ pub(crate) async fn search(
     progress: &Progress,
     service: &PersonalizationService,
     index_not_found_http_code: StatusCode,
-) -> Result<SearchResult, ResponseError> {
+) -> Result<(Either<SearchResult, (SearchMetadataResult, Index)>, Deadline), ResponseError> {
     // Extract personalization and query string before moving query
     let personalize = query.personalize.take();
     // Save the query string for personalization if requested
@@ -510,7 +528,7 @@ pub(crate) async fn search(
         features.check_network("passing `useNetwork` in a search query")?
     }
 
-    let (mut search_result, deadline) = if query
+    let (res, deadline) = if query
         .use_network
         // avoid accidental recursion
         .take()
@@ -538,7 +556,7 @@ pub(crate) async fn search(
         let search_result =
             search_result.into_search_result(query.q.unwrap_or_default(), index_uid.as_str());
 
-        (search_result, deadline)
+        (Either::Left(search_result), deadline)
     } else {
         let index = index_scheduler.index(&index_uid).map_err(|err| match &err {
             index_scheduler::Error::IndexNotFound(_) => {
@@ -570,11 +588,31 @@ pub(crate) async fn search(
         })
         .await;
 
-        search_result??
+        let (metadata, deadline) = search_result??;
+        (Either::Right((metadata, index)), deadline)
     };
 
     // Apply personalization if requested
     if let Some(personalize) = personalize {
+        let mut search_result = match res {
+            Either::Left(res) => res,
+            Either::Right((metadata, index)) => {
+                let rtxn = index.read_txn()?;
+                let hits = make_hits(
+                    &index,
+                    &rtxn,
+                    metadata.format,
+                    metadata.matching_words,
+                    metadata.documents_ids.into_iter().zip(metadata.document_scores.iter()),
+                    progress,
+                )?
+                .collect::<milli::Result<Vec<_>>>()?;
+                let mut res = metadata.result;
+                res.hits = hits;
+                res
+            }
+        };
+
         search_result.hits = service
             .rerank_search_results(
                 std::mem::take(&mut search_result.hits),
@@ -584,9 +622,10 @@ pub(crate) async fn search(
                 progress,
             )
             .await?;
+        Ok((Either::Left(search_result), deadline))
+    } else {
+        Ok((res, deadline))
     }
-
-    Ok(search_result)
 }
 
 /// Search with POST
@@ -676,7 +715,7 @@ pub async fn search_with_post(
 
     let include_metadata = parse_include_metadata_header(&req);
 
-    let search_result = search(
+    let res = search(
         query,
         index_scheduler.clone(),
         index_uid,
@@ -690,16 +729,31 @@ pub async fn search_with_post(
 
     permit.drop().await;
 
-    if let Ok(search_result) = search_result.as_ref() {
-        aggregate.succeed(search_result);
+    let (res, _deadline) = res?;
+
+    match res {
+        Either::Left(search_result) => {
+            aggregate.succeed(&search_result);
+            analytics.publish(aggregate, &req);
+            debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
+            Ok(HttpResponse::Ok().json(search_result))
+        }
+        Either::Right((metadata, index)) => {
+            aggregate.succeed(&metadata.result);
+            analytics.publish(aggregate, &req);
+            debug!(request_uid = ?request_uid, returns = "[streaming search results]", progress = ?progress.accumulated_durations(), "Search post");
+
+            let hits_stream = stream_search_hits(
+                index,
+                metadata.format,
+                metadata.matching_words,
+                metadata.documents_ids,
+                metadata.document_scores,
+            );
+            let response_stream = StreamedJsonObject::new_search(metadata.result, hits_stream);
+            Ok(HttpResponse::Ok().streaming(response_stream))
+        }
     }
-    analytics.publish(aggregate, &req);
-
-    let search_result = search_result?;
-
-    debug!(request_uid = ?request_uid, returns = ?search_result, progress = ?progress.accumulated_durations(), "Search post");
-
-    Ok(HttpResponse::Ok().json(search_result))
 }
 
 pub fn search_kind(

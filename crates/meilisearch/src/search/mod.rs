@@ -1429,11 +1429,19 @@ pub struct SearchParams {
     pub include_metadata: bool,
 }
 
+pub struct SearchMetadataResult {
+    pub result: SearchResult,
+    pub format: AttributesFormat,
+    pub matching_words: milli::MatchingWords,
+    pub documents_ids: Vec<u32>,
+    pub document_scores: Vec<Vec<ScoreDetails>>,
+}
+
 pub fn perform_search(
     params: SearchParams,
     index: &Index,
     progress: &Progress,
-) -> Result<(SearchResult, Deadline), ResponseError> {
+) -> Result<(SearchMetadataResult, Deadline), ResponseError> {
     let SearchParams {
         index_uid,
         query,
@@ -1529,15 +1537,6 @@ pub fn perform_search(
         locales: locales.map(|l| l.iter().copied().map(Into::into).collect()),
     };
 
-    let documents = make_hits(
-        index,
-        &rtxn,
-        format,
-        matching_words,
-        documents_ids.iter().copied().zip(document_scores.iter()),
-        progress,
-    )?;
-
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
     let hits_info = if is_finite_pagination {
         let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
@@ -1568,7 +1567,7 @@ pub fn perform_search(
     let performance_details =
         query.show_performance_details.then(|| progress.accumulated_durations());
     let result = SearchResult {
-        hits: documents,
+        hits: Vec::new(),
         hits_info,
         query: q.unwrap_or_default(),
         query_vector,
@@ -1583,7 +1582,10 @@ pub fn perform_search(
         remote_errors: None,
         performance_details,
     };
-    Ok((result, deadline))
+    Ok((
+        SearchMetadataResult { result, format, matching_words, documents_ids, document_scores },
+        deadline,
+    ))
 }
 
 /// Computed facet data from a search
@@ -1945,16 +1947,14 @@ impl<'a> HitMaker<'a> {
     }
 }
 
-fn make_hits<'a>(
-    index: &Index,
-    rtxn: &RoTxn<'_>,
+pub fn make_hits<'a>(
+    index: &'a Index,
+    rtxn: &'a RoTxn<'_>,
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
-    progress: &Progress,
-) -> milli::Result<Vec<SearchHit>> {
-    let mut documents = Vec::new();
-
+    progress: &'a Progress,
+) -> milli::Result<impl Iterator<Item = milli::Result<SearchHit>> + 'a> {
     let dictionary = index.dictionary(rtxn)?;
     let dictionary: Option<Vec<_>> =
         dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
@@ -1968,10 +1968,7 @@ fn make_hits<'a>(
 
     let hit_maker = HitMaker::new(index, rtxn, format, formatter_builder)?;
 
-    for (id, score) in documents_ids_scores {
-        documents.push(hit_maker.make_hit(id, score, progress)?);
-    }
-    Ok(documents)
+    Ok(documents_ids_scores.map(move |(id, score)| hit_maker.make_hit(id, score, progress)))
 }
 
 pub fn perform_facet_search(
