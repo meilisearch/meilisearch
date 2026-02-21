@@ -323,8 +323,10 @@ impl FacetedDocidsExtractor {
             }
             // Null
             // key: fid
+            // Track null values for both filterable and sortable fields
             Value::Null
-                if depth == perm_json_p::Depth::OnBaseKey && features.is_filterable_null() =>
+                if depth == perm_json_p::Depth::OnBaseKey
+                    && (features.is_filterable_null() || meta.is_sortable()) =>
             {
                 buffer.clear();
                 buffer.push(FacetKind::Null as u8);
