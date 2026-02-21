@@ -39,6 +39,7 @@ dump = { path = "../dump" }
 either = "1.15.0"
 file-store = { path = "../file-store" }
 flate2 = "1.1.5"
+flume = "0.11.1"
 fst = "0.4.7"
 futures = "0.3.31"
 futures-util = "0.3.31"

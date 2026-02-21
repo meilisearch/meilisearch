@@ -1429,7 +1429,7 @@ pub struct SearchParams {
     pub include_metadata: bool,
 }
 
-pub struct SearchMetadataResult {
+pub(crate) struct SearchMetadataResult {
     pub result: SearchResult,
     pub format: AttributesFormat,
     pub matching_words: milli::MatchingWords,
@@ -1437,7 +1437,7 @@ pub struct SearchMetadataResult {
     pub document_scores: Vec<Vec<ScoreDetails>>,
 }
 
-pub fn perform_search(
+pub(crate) fn perform_search(
     params: SearchParams,
     index: &Index,
     progress: &Progress,
@@ -1674,20 +1674,20 @@ pub fn search_from_kind(
     Ok((milli_result, semantic_hit_count))
 }
 
-struct AttributesFormat {
-    attributes_to_retrieve: Option<BTreeSet<String>>,
-    retrieve_vectors: RetrieveVectors,
-    attributes_to_highlight: Option<HashSet<String>>,
-    attributes_to_crop: Option<Vec<String>>,
-    crop_length: usize,
-    crop_marker: String,
-    highlight_pre_tag: String,
-    highlight_post_tag: String,
-    show_matches_position: bool,
-    sort: Option<Vec<String>>,
-    show_ranking_score: bool,
-    show_ranking_score_details: bool,
-    locales: Option<Vec<Language>>,
+pub(crate) struct AttributesFormat {
+    pub(crate) attributes_to_retrieve: Option<BTreeSet<String>>,
+    pub(crate) retrieve_vectors: RetrieveVectors,
+    pub(crate) attributes_to_highlight: Option<HashSet<String>>,
+    pub(crate) attributes_to_crop: Option<Vec<String>>,
+    pub(crate) crop_length: usize,
+    pub(crate) crop_marker: String,
+    pub(crate) highlight_pre_tag: String,
+    pub(crate) highlight_post_tag: String,
+    pub(crate) show_matches_position: bool,
+    pub(crate) sort: Option<Vec<String>>,
+    pub(crate) show_ranking_score: bool,
+    pub(crate) show_ranking_score_details: bool,
+    pub(crate) locales: Option<Vec<Language>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1947,22 +1947,17 @@ impl<'a> HitMaker<'a> {
     }
 }
 
-pub fn make_hits<'a>(
+pub(crate) fn make_hits<'a>(
     index: &'a Index,
     rtxn: &'a RoTxn<'_>,
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
     progress: &'a Progress,
+    dictionary: Option<&'a [&'a str]>,
+    separators: Option<&'a [&'a str]>,
 ) -> milli::Result<impl Iterator<Item = milli::Result<SearchHit>> + 'a> {
-    let dictionary = index.dictionary(rtxn)?;
-    let dictionary: Option<Vec<_>> =
-        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
-    let separators = index.allowed_separators(rtxn)?;
-    let separators: Option<Vec<_>> =
-        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-
-    let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
+    let tokenizer = HitMaker::tokenizer(dictionary, separators);
 
     let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
@@ -2127,6 +2122,13 @@ pub fn perform_similar(
         locales: None,
     };
 
+    let dictionary = index.dictionary(&rtxn)?;
+    let dictionary: Option<Vec<_>> =
+        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    let separators = index.allowed_separators(&rtxn)?;
+    let separators: Option<Vec<_>> =
+        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+
     let hits = make_hits(
         index,
         &rtxn,
@@ -2134,7 +2136,10 @@ pub fn perform_similar(
         Default::default(),
         documents_ids.iter().copied().zip(document_scores.iter()),
         progress,
-    )?;
+        dictionary.as_deref(),
+        separators.as_deref(),
+    )?
+    .collect::<milli::Result<Vec<_>>>()?;
 
     let max_total_hits = index
         .pagination_max_total_hits(&rtxn)
