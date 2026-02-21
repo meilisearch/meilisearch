@@ -32,6 +32,7 @@ use fields::post_index_fields;
 
 pub mod compact;
 pub mod documents;
+pub mod streaming;
 
 pub mod facet_search;
 mod fields;
