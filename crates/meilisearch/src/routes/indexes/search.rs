@@ -2,6 +2,7 @@ use actix_http::StatusCode;
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
+use either::Either;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
@@ -9,15 +10,14 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
-use meilisearch_types::Index;
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{self, TotalProcessingTimeStep, Deadline};
+use meilisearch_types::milli::{self, Deadline, TotalProcessingTimeStep};
 use meilisearch_types::serde_cs::vec::CS;
+use meilisearch_types::Index;
 use serde_json::Value;
 use tracing::debug;
 use utoipa::{IntoParams, OpenApi};
 use uuid::Uuid;
-use either::Either;
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
@@ -26,17 +26,16 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
-use crate::routes::parse_include_metadata_header;
 use crate::routes::indexes::streaming::{stream_search_hits, StreamedJsonObject};
+use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, make_hits, network_partition, perform_federated_search, perform_search,
-    Federation, HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchMetadataResult, SearchParams, SearchQuery, SearchResult,
-    SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    Federation, HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors,
+    SearchKind, SearchMetadataResult, SearchParams, SearchQuery, SearchResult, SemanticRatio,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
-
 
 #[derive(OpenApi)]
 #[openapi(

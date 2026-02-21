@@ -282,7 +282,10 @@ pub async fn multi_search_with_post(
                     .await
                     .with_index(query_index)?;
 
-                    let search_result = crate::routes::indexes::search::search_to_full_result(res, &progress).await.with_index(query_index)?;
+                    let search_result =
+                        crate::routes::indexes::search::search_to_full_result(res, &progress)
+                            .await
+                            .with_index(query_index)?;
 
                     search_results.push(SearchResultWithIndex {
                         index_uid: index_uid.into_inner(),

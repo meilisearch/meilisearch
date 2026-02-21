@@ -47,10 +47,10 @@ use crate::extractors::payload::Payload;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
+use crate::routes::indexes::streaming::{stream_documents, StreamedJsonObject};
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
 };
-use crate::routes::indexes::streaming::{stream_documents, StreamedJsonObject};
 use crate::search::{parse_filter, ExternalDocumentId, RetrieveVectors};
 use crate::{aggregate_methods, Opt};
 
@@ -751,7 +751,8 @@ fn documents_by_query(
 
     let header = PaginationViewHeader { offset, limit, total: total as usize };
 
-    let documents_stream = stream_documents(index.clone(), ids.into_iter(), fields, retrieve_vectors);
+    let documents_stream =
+        stream_documents(index.clone(), ids.into_iter(), fields, retrieve_vectors);
     let response_stream = StreamedJsonObject::new(header, documents_stream);
 
     debug!(returns = "[streaming documents]", "Get documents");
@@ -797,7 +798,6 @@ struct PaginationViewHeader {
     limit: usize,
     total: usize,
 }
-
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
