@@ -738,7 +738,7 @@ fn documents_by_query(
 
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
-    let (total, ids) = retrieve_document_ids::<String>(
+    let (total, ids) = retrieve_document_ids(
         &index,
         &rtxn,
         offset,
@@ -1866,7 +1866,7 @@ fn some_documents<'a, 't: 'a>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn retrieve_document_ids<S: AsRef<str>>(
+fn retrieve_document_ids(
     index: &Index,
     rtxn: &RoTxn,
     offset: usize,
