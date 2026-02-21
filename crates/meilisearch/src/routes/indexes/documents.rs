@@ -50,6 +50,7 @@ use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
 };
+use crate::routes::indexes::streaming::{stream_documents, StreamedJsonObject};
 use crate::search::{parse_filter, ExternalDocumentId, RetrieveVectors};
 use crate::{aggregate_methods, Opt};
 
@@ -736,22 +737,25 @@ fn documents_by_query(
     };
 
     let index = index_scheduler.index(&index_uid)?;
-    let (total, documents) = retrieve_documents(
+    let rtxn = index.read_txn()?;
+    let (total, ids) = retrieve_document_ids(
         &index,
+        &rtxn,
         offset,
         limit,
         ids,
         filter,
-        fields,
-        retrieve_vectors,
         index_scheduler.features(),
         sort_criteria,
     )?;
 
-    let ret = PaginationView::new(offset, limit, total as usize, documents);
+    let header = PaginationViewHeader { offset, limit, total: total as usize };
 
-    debug!(returns = ?ret, "Get documents");
-    Ok(HttpResponse::Ok().json(ret))
+    let documents_stream = stream_documents(index.clone(), ids.into_iter(), fields, retrieve_vectors);
+    let response_stream = StreamedJsonObject::new(header, documents_stream);
+
+    debug!(returns = "[streaming documents]", "Get documents");
+    Ok(HttpResponse::Ok().streaming(response_stream))
 }
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
@@ -785,6 +789,15 @@ pub struct UpdateDocumentsQuery {
     #[deserr(default, try_from(&String) = from_string_skip_creation -> DeserrQueryParamError<InvalidSkipCreation>, error = DeserrQueryParamError<InvalidSkipCreation>)]
     pub skip_creation: Option<bool>,
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PaginationViewHeader {
+    offset: usize,
+    limit: usize,
+    total: usize,
+}
+
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
@@ -1853,6 +1866,63 @@ fn some_documents<'a, 't: 'a>(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn retrieve_document_ids<S: AsRef<str>>(
+    index: &Index,
+    rtxn: &RoTxn,
+    offset: usize,
+    limit: usize,
+    ids: Option<Vec<ExternalDocumentId>>,
+    filter: Option<Value>,
+    features: RoFeatures,
+    sort_criteria: Option<Vec<AscDesc>>,
+) -> Result<(u64, Vec<DocumentId>), ResponseError> {
+    let filter = &filter;
+    let filter = if let Some(filter) = filter {
+        parse_filter(filter, Code::InvalidDocumentFilter, features)?
+    } else {
+        None
+    };
+
+    let mut candidates = if let Some(ids) = ids {
+        let external_document_ids = index.external_documents_ids();
+        let mut candidates = RoaringBitmap::new();
+        for id in ids.iter() {
+            let Some(docid) = external_document_ids.get(rtxn, id)? else {
+                continue;
+            };
+            candidates.insert(docid);
+        }
+        candidates
+    } else {
+        index.documents_ids(rtxn)?
+    };
+
+    if let Some(filter) = filter {
+        candidates &= filter.evaluate(rtxn, index).map_err(|err| match err {
+            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
+                ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
+            }
+            e => e.into(),
+        })?
+    }
+
+    let (ids, number_of_documents) = if let Some(sort) = sort_criteria {
+        let number_of_documents = candidates.len();
+        let facet_sort = recursive_sort(index, rtxn, sort, &candidates)?;
+        let iter = facet_sort.iter()?;
+        let mut ids = Vec::with_capacity(limit);
+        for result in iter.skip(offset).take(limit) {
+            ids.push(result?);
+        }
+        (ids, number_of_documents)
+    } else {
+        let number_of_documents = candidates.len();
+        (candidates.into_iter().skip(offset).take(limit).collect(), number_of_documents)
+    };
+
+    Ok((number_of_documents, ids))
+}
+
 fn retrieve_documents<S: AsRef<str>>(
     index: &Index,
     offset: usize,
