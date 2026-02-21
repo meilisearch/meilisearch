@@ -9,6 +9,8 @@ use meilisearch_types::milli;
 use meilisearch_types::milli::obkv_to_json;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
+use meilisearch_types::milli::score_details::ScoreDetails;
+use crate::search::{AttributesFormat, SearchHit, make_hits};
 use serde_json::Value;
 
 pub struct StreamedJsonArray<S, T>
@@ -103,6 +105,7 @@ where
     header: Option<H>,
     hits_stream: StreamedJsonArray<S, T>,
     state: ObjectState,
+    hits_field: &'static str,
 }
 
 enum ObjectState {
@@ -122,6 +125,16 @@ where
             header: Some(header),
             hits_stream: StreamedJsonArray::new(hits_stream),
             state: ObjectState::Header,
+            hits_field: "results",
+        }
+    }
+
+    pub fn new_search(header: H, hits_stream: S) -> Self {
+        Self {
+            header: Some(header),
+            hits_stream: StreamedJsonArray::new(hits_stream),
+            state: ObjectState::Header,
+            hits_field: "hits",
         }
     }
 }
@@ -144,7 +157,9 @@ where
                             if *last == b'}' {
                                 json.pop();
                                 let mut bytes = BytesMut::from(json.as_slice());
-                                bytes.extend_from_slice(b",\"results\":");
+                                bytes.extend_from_slice(b",\"");
+                                bytes.extend_from_slice(self.hits_field.as_bytes());
+                                bytes.extend_from_slice(b"\":");
                                 self.state = ObjectState::Hits;
                                 return Poll::Ready(Some(Ok(bytes.freeze())));
                             }
@@ -256,3 +271,46 @@ where
     });
     rx.into_stream()
 }
+
+pub fn stream_search_hits(
+    index: Index,
+    format: AttributesFormat,
+    matching_words: milli::MatchingWords,
+    documents_ids: Vec<u32>,
+    document_scores: Vec<Vec<ScoreDetails>>,
+) -> impl Stream<Item = Result<SearchHit, ResponseError>> {
+    let (tx, rx) = flume::unbounded();
+    let progress = meilisearch_types::milli::progress::Progress::default();
+    tokio::task::spawn_blocking(move || {
+        let rtxn = match index.read_txn() {
+            Ok(rtxn) => rtxn,
+            Err(e) => {
+                let _ = tx.send(Err(ResponseError::from(e)));
+                return;
+            }
+        };
+
+        let hits_iter = match make_hits(
+            &index,
+            &rtxn,
+            format,
+            matching_words,
+            documents_ids.into_iter().zip(document_scores.iter()),
+            &progress,
+        ) {
+            Ok(iter) => iter,
+            Err(e) => {
+                let _ = tx.send(Err(ResponseError::from(e)));
+                return;
+            }
+        };
+
+        for hit in hits_iter {
+            if tx.send(hit.map_err(ResponseError::from)).is_err() {
+                break;
+            }
+        }
+    });
+    rx.into_stream()
+}
+
