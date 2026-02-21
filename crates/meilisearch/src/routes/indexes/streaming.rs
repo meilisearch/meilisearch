@@ -11,6 +11,7 @@ use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
 use meilisearch_types::milli::score_details::ScoreDetails;
 use crate::search::{AttributesFormat, SearchHit, make_hits};
+use crate::error::MeilisearchHttpError;
 use serde_json::Value;
 
 pub struct StreamedJsonArray<S, T>
@@ -59,7 +60,7 @@ where
                         self.state = State::OtherItems;
                         match serde_json::to_vec(&item) {
                             Ok(json) => Poll::Ready(Some(Ok(Bytes::from(json)))),
-                            Err(e) => Poll::Ready(Some(Err(ResponseError::from(e)))),
+                            Err(e) => Poll::Ready(Some(Err(ResponseError::from(MeilisearchHttpError::from(e))))),
                         }
                     }
                     Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
@@ -80,7 +81,7 @@ where
                                 bytes.extend_from_slice(&json);
                                 Poll::Ready(Some(Ok(bytes.freeze())))
                             }
-                            Err(e) => Poll::Ready(Some(Err(ResponseError::from(e)))),
+                            Err(e) => Poll::Ready(Some(Err(ResponseError::from(MeilisearchHttpError::from(e))))),
                         }
                     }
                     Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
@@ -100,7 +101,7 @@ pub struct StreamedJsonObject<S, T, H>
 where
     S: Stream<Item = Result<T, ResponseError>>,
     T: Serialize,
-    H: Serialize,
+    H: Serialize + Unpin,
 {
     header: Option<H>,
     hits_stream: StreamedJsonArray<S, T>,
@@ -108,6 +109,7 @@ where
     hits_field: &'static str,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum ObjectState {
     Header,
     Hits,
@@ -118,7 +120,7 @@ impl<S, T, H> StreamedJsonObject<S, T, H>
 where
     S: Stream<Item = Result<T, ResponseError>> + Unpin,
     T: Serialize,
-    H: Serialize,
+    H: Serialize + Unpin,
 {
     pub fn new(header: H, hits_stream: S) -> Self {
         Self {
@@ -143,14 +145,15 @@ impl<S, T, H> Stream for StreamedJsonObject<S, T, H>
 where
     S: Stream<Item = Result<T, ResponseError>> + Unpin,
     T: Serialize,
-    H: Serialize,
+    H: Serialize + Unpin,
 {
     type Item = Result<Bytes, ResponseError>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.state {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        match this.state {
             ObjectState::Header => {
-                let header = self.header.take().unwrap();
+                let header = this.header.take().unwrap();
                 match serde_json::to_vec(&header) {
                     Ok(mut json) => {
                         if let Some(last) = json.last_mut() {
@@ -158,23 +161,23 @@ where
                                 json.pop();
                                 let mut bytes = BytesMut::from(json.as_slice());
                                 bytes.extend_from_slice(b",\"");
-                                bytes.extend_from_slice(self.hits_field.as_bytes());
+                                bytes.extend_from_slice(this.hits_field.as_bytes());
                                 bytes.extend_from_slice(b"\":");
-                                self.state = ObjectState::Hits;
+                                this.state = ObjectState::Hits;
                                 return Poll::Ready(Some(Ok(bytes.freeze())));
                             }
                         }
                         Poll::Ready(Some(Err(ResponseError::from_msg("Invalid header".to_string(), meilisearch_types::error::Code::Internal))))
                     }
-                    Err(e) => Poll::Ready(Some(Err(ResponseError::from(e)))),
+                    Err(e) => Poll::Ready(Some(Err(ResponseError::from(MeilisearchHttpError::from(e))))),
                 }
             }
             ObjectState::Hits => {
-                match Pin::new(&mut self.hits_stream).poll_next(cx) {
+                match Pin::new(&mut this.hits_stream).poll_next(cx) {
                     Poll::Ready(Some(Ok(bytes))) => Poll::Ready(Some(Ok(bytes))),
                     Poll::Ready(Some(Err(e))) => Poll::Ready(Some(Err(e))),
                     Poll::Ready(None) => {
-                        self.state = ObjectState::Done;
+                        this.state = ObjectState::Done;
                         Poll::Ready(Some(Ok(Bytes::from("}"))))
                     }
                     Poll::Pending => Poll::Pending,
@@ -185,7 +188,7 @@ where
     }
 }
 
-pub fn stream_documents<I, S>(
+pub(crate) fn stream_documents<I, S>(
     index: Index,
     ids: I,
     attributes_to_retrieve: Option<Vec<S>>,
@@ -195,7 +198,7 @@ where
     I: Iterator<Item = u32> + Send + 'static,
     S: AsRef<str> + Send + 'static,
 {
-    let (tx, rx) = flume::unbounded();
+    let (tx, rx) = flume::unbounded::<Result<meilisearch_types::Document, ResponseError>>();
     tokio::task::spawn_blocking(move || {
         let rtxn = match index.read_txn() {
             Ok(rtxn) => rtxn,
@@ -272,14 +275,14 @@ where
     rx.into_stream()
 }
 
-pub fn stream_search_hits(
+pub(crate) fn stream_search_hits(
     index: Index,
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids: Vec<u32>,
     document_scores: Vec<Vec<ScoreDetails>>,
 ) -> impl Stream<Item = Result<SearchHit, ResponseError>> {
-    let (tx, rx) = flume::unbounded();
+    let (tx, rx) = flume::unbounded::<Result<SearchHit, ResponseError>>();
     let progress = meilisearch_types::milli::progress::Progress::default();
     tokio::task::spawn_blocking(move || {
         let rtxn = match index.read_txn() {
@@ -290,6 +293,26 @@ pub fn stream_search_hits(
             }
         };
 
+        let dictionary = match index.dictionary(&rtxn) {
+            Ok(dict) => dict,
+            Err(e) => {
+                let _ = tx.send(Err(ResponseError::from(e)));
+                return;
+            }
+        };
+        let dictionary_vec: Option<Vec<&str>> =
+            dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+        
+        let separators = match index.allowed_separators(&rtxn) {
+            Ok(sep) => sep,
+            Err(e) => {
+                let _ = tx.send(Err(ResponseError::from(e)));
+                return;
+            }
+        };
+        let separators_vec: Option<Vec<&str>> =
+            separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+
         let hits_iter = match make_hits(
             &index,
             &rtxn,
@@ -297,6 +320,8 @@ pub fn stream_search_hits(
             matching_words,
             documents_ids.into_iter().zip(document_scores.iter()),
             &progress,
+            dictionary_vec.as_deref(),
+            separators_vec.as_deref(),
         ) {
             Ok(iter) => iter,
             Err(e) => {
@@ -313,4 +338,3 @@ pub fn stream_search_hits(
     });
     rx.into_stream()
 }
-

@@ -9,8 +9,9 @@ use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
+use meilisearch_types::Index;
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{self, TotalProcessingTimeStep};
+use meilisearch_types::milli::{self, TotalProcessingTimeStep, Deadline};
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
@@ -29,13 +30,13 @@ use crate::routes::parse_include_metadata_header;
 use crate::routes::indexes::streaming::{stream_search_hits, StreamedJsonObject};
 use crate::search::{
     add_search_rules, make_hits, network_partition, perform_federated_search, perform_search,
-    AttributesFormat, Federation, HybridQuery, MatchingStrategy, Personalize,
-    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchMetadataResult, SearchParams,
-    SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    Federation, HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold,
+    RetrieveVectors, SearchKind, SearchMetadataResult, SearchParams, SearchQuery, SearchResult,
+    SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
+
 
 #[derive(OpenApi)]
 #[openapi(
@@ -570,6 +571,7 @@ pub(crate) async fn search(
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
         let progress_clone = progress.clone();
+        let index_clone = index.clone();
         let search_result = tokio::task::spawn_blocking(move || {
             perform_search(
                 SearchParams {
@@ -581,7 +583,7 @@ pub(crate) async fn search(
                     request_uid,
                     include_metadata,
                 },
-                &index,
+                &index_clone,
                 &progress_clone,
             )
         })
@@ -597,6 +599,13 @@ pub(crate) async fn search(
             Either::Left(res) => res,
             Either::Right((metadata, index)) => {
                 let rtxn = index.read_txn()?;
+                let dictionary = index.dictionary(&rtxn)?;
+                let dictionary: Option<Vec<_>> =
+                    dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+                let separators = index.allowed_separators(&rtxn)?;
+                let separators: Option<Vec<_>> =
+                    separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+
                 let hits = make_hits(
                     &index,
                     &rtxn,
@@ -604,6 +613,8 @@ pub(crate) async fn search(
                     metadata.matching_words,
                     metadata.documents_ids.into_iter().zip(metadata.document_scores.iter()),
                     progress,
+                    dictionary.as_deref(),
+                    separators.as_deref(),
                 )?
                 .collect::<milli::Result<Vec<_>>>()?;
                 let mut res = metadata.result;
@@ -617,7 +628,7 @@ pub(crate) async fn search(
                 std::mem::take(&mut search_result.hits),
                 &personalize,
                 personalize_query.as_deref(),
-                deadline,
+                deadline.clone(),
                 progress,
             )
             .await?;
@@ -751,6 +762,39 @@ pub async fn search_with_post(
             );
             let response_stream = StreamedJsonObject::new_search(metadata.result, hits_stream);
             Ok(HttpResponse::Ok().streaming(response_stream))
+        }
+    }
+}
+
+pub(crate) async fn search_to_full_result(
+    res: Either<SearchResult, (SearchMetadataResult, Index)>,
+    progress: &Progress,
+) -> Result<SearchResult, ResponseError> {
+    match res {
+        Either::Left(res) => Ok(res),
+        Either::Right((metadata, index)) => {
+            let rtxn = index.read_txn()?;
+            let dictionary = index.dictionary(&rtxn)?;
+            let dictionary: Option<Vec<_>> =
+                dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+            let separators = index.allowed_separators(&rtxn)?;
+            let separators: Option<Vec<_>> =
+                separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+
+            let hits = make_hits(
+                &index,
+                &rtxn,
+                metadata.format,
+                metadata.matching_words,
+                metadata.documents_ids.into_iter().zip(metadata.document_scores.iter()),
+                progress,
+                dictionary.as_deref(),
+                separators.as_deref(),
+            )?
+            .collect::<milli::Result<Vec<_>>>()?;
+            let mut res = metadata.result;
+            res.hits = hits;
+            Ok(res)
         }
     }
 }

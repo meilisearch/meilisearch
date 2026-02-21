@@ -738,7 +738,7 @@ fn documents_by_query(
 
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
-    let (total, ids) = retrieve_document_ids(
+    let (total, ids) = retrieve_document_ids::<String>(
         &index,
         &rtxn,
         offset,
@@ -1921,95 +1921,6 @@ fn retrieve_document_ids<S: AsRef<str>>(
     };
 
     Ok((number_of_documents, ids))
-}
-
-fn retrieve_documents<S: AsRef<str>>(
-    index: &Index,
-    offset: usize,
-    limit: usize,
-    ids: Option<Vec<ExternalDocumentId>>,
-    filter: Option<Value>,
-    attributes_to_retrieve: Option<Vec<S>>,
-    retrieve_vectors: RetrieveVectors,
-    features: RoFeatures,
-    sort_criteria: Option<Vec<AscDesc>>,
-) -> Result<(u64, Vec<Document>), ResponseError> {
-    let rtxn = index.read_txn()?;
-    let filter = &filter;
-    let filter = if let Some(filter) = filter {
-        parse_filter(filter, Code::InvalidDocumentFilter, features)?
-    } else {
-        None
-    };
-
-    let mut candidates = if let Some(ids) = ids {
-        let external_document_ids = index.external_documents_ids();
-        let mut candidates = RoaringBitmap::new();
-        for id in ids.iter() {
-            let Some(docid) = external_document_ids.get(&rtxn, id)? else {
-                continue;
-            };
-            candidates.insert(docid);
-        }
-        candidates
-    } else {
-        index.documents_ids(&rtxn)?
-    };
-
-    if let Some(filter) = filter {
-        candidates &= filter.evaluate(&rtxn, index).map_err(|err| match err {
-            milli::Error::UserError(milli::UserError::InvalidFilter(_)) => {
-                ResponseError::from_msg(err.to_string(), Code::InvalidDocumentFilter)
-            }
-            e => e.into(),
-        })?
-    }
-
-    let (it, number_of_documents) = if let Some(sort) = sort_criteria {
-        let number_of_documents = candidates.len();
-        let facet_sort = recursive_sort(index, &rtxn, sort, &candidates)?;
-        let iter = facet_sort.iter()?;
-        let mut documents = Vec::with_capacity(limit);
-        for result in iter.skip(offset).take(limit) {
-            documents.push(result?);
-        }
-        (
-            itertools::Either::Left(some_documents(
-                index,
-                &rtxn,
-                documents.into_iter(),
-                retrieve_vectors,
-            )?),
-            number_of_documents,
-        )
-    } else {
-        let number_of_documents = candidates.len();
-        (
-            itertools::Either::Right(some_documents(
-                index,
-                &rtxn,
-                candidates.into_iter().skip(offset).take(limit),
-                retrieve_vectors,
-            )?),
-            number_of_documents,
-        )
-    };
-
-    let documents: Vec<_> = it
-        .map(|document| {
-            Ok(match &attributes_to_retrieve {
-                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    &document?,
-                    attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
-                        (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
-                    ),
-                ),
-                None => document?,
-            })
-        })
-        .collect::<Result<_, ResponseError>>()?;
-
-    Ok((number_of_documents, documents))
 }
 
 fn retrieve_document<S: AsRef<str>>(
