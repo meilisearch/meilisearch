@@ -82,7 +82,7 @@ impl super::UpgradeIndexScheduler for MigrateNetwork {
     }
 
     fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
-        initial_version < (1, 38, 0)
+        initial_version < (1, 37, 0)
     }
 
     fn description(&self) -> &'static str {
