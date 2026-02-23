@@ -535,7 +535,7 @@ fn balance_shards(
         let (external_docid, docid) = res?;
 
         let new = if unsharded.contains(docid) {
-            let Some(shard) = Shards::shard(
+            let Some(shard) = Shards::hash_rendezvous(
                 existing_shards.iter().map(|x| x.as_str()).chain(new_shards.iter().copied()),
                 external_docid,
             ) else {
