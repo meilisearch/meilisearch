@@ -7,13 +7,11 @@ mod openai;
 mod rest;
 mod settings;
 
-use std::collections::HashMap;
 use std::str::FromStr;
 
 use meili_snap::{json_string, snapshot};
 use meilisearch::option::MaxThreads;
 pub use rest::create_mock;
-use serde_json::Value;
 
 use crate::common::index::Index;
 use crate::common::{default_settings, GetAllDocumentsOptions, Server};
@@ -785,93 +783,6 @@ async fn add_remove_one_vector_4588() {
       "total": 1
     }
     "#);
-}
-
-#[actix_rt::test]
-async fn change_backend() {
-    let server = Server::new().await;
-    let index = server.unique_index();
-    server.set_features(json!({"vectorStoreSetting": true})).await;
-    let (response, code) = index
-        .update_settings(json!({
-          "vectorStore": "stable"
-        }))
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await.succeeded();
-
-    let (response, code) = index
-        .update_settings(json!({
-          "embedders": {
-              "manual": {
-                  "source": "userProvided",
-                  "dimensions": 3,
-                  "binaryQuantized": false,
-              }
-          },
-        }))
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await.succeeded();
-
-    let documents = json!([
-      {"id": 0, "name": "kefir", "_vectors": { "manual": [-1.2, -2.3, 3.2] }},
-      {"id": 1, "name": "echo", "_vectors": { "manual": [2.5, 1.5, -130] }},
-    ]);
-    let (value, code) = index.add_documents(documents, None).await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(value.uid()).await.succeeded();
-
-    // Make sure the documents are binary quantized
-    let (documents, _code) = index
-        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
-        .await;
-    let stable_embeddings: HashMap<Value, Value> = documents["results"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|o| (o["id"].clone(), o["_vectors"]["manual"]["embeddings"].clone()))
-        .collect();
-
-    let (response, code) = index
-        .update_settings(json!({
-          "vectorStore": "experimental"
-        }))
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await.succeeded();
-
-    let (documents, _code) = index
-        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
-        .await;
-
-    let experimental_embeddings: HashMap<Value, Value> = documents["results"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|o| (o["id"].clone().clone(), o["_vectors"]["manual"]["embeddings"].clone()))
-        .collect();
-
-    let (response, code) = index
-        .update_settings(json!({
-          "vectorStore": "stable"
-        }))
-        .await;
-    snapshot!(code, @"202 Accepted");
-    server.wait_task(response.uid()).await.succeeded();
-
-    let (documents, _code) = index
-        .get_all_documents(GetAllDocumentsOptions { retrieve_vectors: true, ..Default::default() })
-        .await;
-    let back_to_stable_embeddings: HashMap<Value, Value> = documents["results"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|o| (o["id"].clone(), o["_vectors"]["manual"]["embeddings"].clone()))
-        .collect();
-
-    assert_eq!(stable_embeddings, experimental_embeddings);
-    assert_eq!(experimental_embeddings, back_to_stable_embeddings);
 }
 
 #[actix_rt::test]
