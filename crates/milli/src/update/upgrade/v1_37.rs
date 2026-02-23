@@ -4,7 +4,7 @@ pub struct AddShards {}
 
 impl super::UpgradeIndex for AddShards {
     fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
-        initial_version < (1, 38, 0)
+        initial_version < (1, 37, 0)
     }
 
     fn upgrade(
