@@ -73,9 +73,10 @@ impl NetworkTopologyChange {
                             break 'mode ExportMode::ReshardedOnly;
                         };
 
-                        let Some(candidate) =
-                            Shards::shard(shard.remotes.iter().map(|s| s.as_str()), shard_name)
-                        else {
+                        let Some(candidate) = Shards::hash_rendezvous(
+                            shard.remotes.iter().map(|s| s.as_str()),
+                            shard_name,
+                        ) else {
                             break 'mode ExportMode::ReshardedOnly;
                         };
 
