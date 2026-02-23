@@ -1,21 +1,15 @@
 use heed::RwTxn;
 
 use super::UpgradeIndex;
-use crate::progress::Progress;
+use crate::update::upgrade::UpgradeParams;
 use crate::vector::{VectorStore, VectorStoreBackend};
-use crate::{Index, MustStopProcessing, Result};
+use crate::{Index, Result};
 
 /// Convert old Annoy vector stores to Hannoy ones
 pub(super) struct ConvertAnnoyToHannoy();
 
 impl UpgradeIndex for ConvertAnnoyToHannoy {
-    fn upgrade(
-        &self,
-        wtxn: &mut RwTxn,
-        index: &Index,
-        must_stop_processing: &MustStopProcessing,
-        progress: Progress,
-    ) -> Result<bool> {
+    fn upgrade(&self, wtxn: &mut RwTxn, index: &Index, params: UpgradeParams<'_>) -> Result<bool> {
         let embedders = index.embedding_configs();
         let backend = index.get_vector_store(wtxn)?.unwrap_or_default();
         if backend == VectorStoreBackend::Hannoy {
@@ -36,8 +30,8 @@ impl UpgradeIndex for ConvertAnnoyToHannoy {
             vector_store.change_backend(
                 &rtxn,
                 wtxn,
-                progress.clone(),
-                &|| must_stop_processing.get(),
+                params.progress.clone(),
+                &|| params.must_stop_processing.get(),
                 None,
             )?;
         }
