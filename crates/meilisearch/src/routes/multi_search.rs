@@ -21,8 +21,9 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
-    SearchQueryWithIndex, SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    add_search_rules, perform_federated_search, ActiveRules, FederatedSearch,
+    FederatedSearchResult, SearchContext, SearchQueryWithIndex, SearchResultWithIndex,
+    PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
 
@@ -206,6 +207,10 @@ pub async fn multi_search_with_post(
                 "Federated-search"
             );
 
+            // Save query context for dynamic search rules before queries are consumed.
+            let query_is_empty =
+                !queries.iter().any(|q| q.q.as_ref().is_some_and(|s| !s.trim().is_empty()));
+
             // check remote header
             let is_proxy = req
                 .headers()
@@ -237,7 +242,14 @@ pub async fn multi_search_with_post(
                 "Federated-search"
             );
 
-            let (search_result, _) = search_result?;
+            let (mut search_result, _) = search_result?;
+
+            let rules = index_scheduler.dynamic_search_rules();
+            let ctx = SearchContext { query_is_empty, index_uid: "", primary_key: None };
+            let active_rules = ActiveRules::new(&rules, &ctx);
+            if !active_rules.is_empty() {
+                active_rules.apply(&ctx, &mut search_result.hits);
+            }
 
             HttpResponse::Ok().json(search_result)
         }
