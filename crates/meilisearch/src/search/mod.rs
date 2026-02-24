@@ -7,7 +7,7 @@ use std::time::Instant;
 
 use deserr::Deserr;
 use either::Either;
-use index_scheduler::RoFeatures;
+use index_scheduler::{IndexScheduler, RoFeatures};
 use indexmap::IndexMap;
 use meilisearch_auth::IndexSearchRules;
 use meilisearch_types::deserr::DeserrJsonError;
@@ -48,6 +48,8 @@ pub use federated::{
     Federation, FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
+mod hydration;
+use hydration::hydrate_documents;
 mod ranking_rules;
 
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
@@ -1427,6 +1429,7 @@ pub struct SearchParams {
 
 pub fn perform_search(
     params: SearchParams,
+    index_scheduler: &IndexScheduler,
     index: &Index,
     progress: &Progress,
 ) -> Result<(SearchResult, Deadline), ResponseError> {
@@ -1525,7 +1528,7 @@ pub fn perform_search(
         locales: locales.map(|l| l.iter().copied().map(Into::into).collect()),
     };
 
-    let documents = make_hits(
+    let mut documents = make_hits(
         index,
         &rtxn,
         format,
@@ -1533,6 +1536,9 @@ pub fn perform_search(
         documents_ids.iter().copied().zip(document_scores.iter()),
         progress,
     )?;
+
+    let foreign_keys = index.foreign_keys(&rtxn)?;
+    hydrate_documents(&mut documents, &foreign_keys, &index_scheduler, progress)?;
 
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
     let hits_info = if is_finite_pagination {

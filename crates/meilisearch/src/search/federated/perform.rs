@@ -39,6 +39,7 @@ use super::weighted_scores;
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE};
+use crate::search::hydration::hydrate_federated_documents;
 use crate::search::DEFAULT_SEARCH_LIMIT;
 
 #[allow(clippy::too_many_arguments)]
@@ -497,8 +498,8 @@ impl<'a> Iterator for SearchResultByQueryIter<'a> {
     }
 }
 
-struct SearchHitByIndex {
-    hit: SearchHit,
+pub struct SearchHitByIndex {
+    pub hit: SearchHit,
     score: Vec<ScoreDetails>,
     weight: Weight,
     query_index: usize,
@@ -1210,7 +1211,7 @@ impl SearchByIndex {
                     },
                 )
                 .collect();
-        let merged_result = merged_result?;
+        let mut merged_result = merged_result?;
         let estimated_total_hits = candidates.len() as usize;
         let facets = facets_by_index
             .map(|facets_by_index| {
@@ -1235,6 +1236,14 @@ impl SearchByIndex {
                 );
                 error
             })?;
+
+        let foreign_keys = index.foreign_keys(&rtxn)?;
+        hydrate_federated_documents(
+            &mut merged_result,
+            &foreign_keys,
+            &params.index_scheduler,
+            progress,
+        )?;
         self.results_by_index.push(SearchResultByIndex {
             index: index_uid,
             primary_key,

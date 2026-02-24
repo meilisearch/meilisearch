@@ -55,6 +55,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
             chat_completions: Some(false),
             multimodal: Some(false),
             vector_store_setting: Some(false),
+            foreign_keys: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -116,6 +117,8 @@ pub struct RuntimeTogglableFeatures {
     /// Enable vector store settings configuration
     #[deserr(default)]
     pub vector_store_setting: Option<bool>,
+    #[deserr(default)]
+    pub foreign_keys: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -131,6 +134,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             chat_completions,
             multimodal,
             vector_store_setting,
+            foreign_keys,
         } = value;
 
         Self {
@@ -144,6 +148,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             chat_completions: Some(chat_completions),
             multimodal: Some(multimodal),
             vector_store_setting: Some(vector_store_setting),
+            foreign_keys: Some(foreign_keys),
         }
     }
 }
@@ -160,6 +165,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     chat_completions: bool,
     multimodal: bool,
     vector_store_setting: bool,
+    foreign_keys: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -179,6 +185,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             chat_completions: new.chat_completions,
             multimodal: new.multimodal,
             vector_store_setting: new.vector_store_setting,
+            foreign_keys: new.foreign_keys,
         })
     }
 
@@ -207,6 +214,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             chat_completions: Some(false),
             multimodal: Some(false),
             vector_store_setting: Some(false),
+            foreign_keys: Some(false),
          })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -254,6 +262,7 @@ async fn patch_features(
             .0
             .vector_store_setting
             .unwrap_or(old_features.vector_store_setting),
+        foreign_keys: new_features.0.foreign_keys.unwrap_or(old_features.foreign_keys),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -270,6 +279,7 @@ async fn patch_features(
         chat_completions,
         multimodal,
         vector_store_setting,
+        foreign_keys,
     } = new_features;
 
     analytics.publish(
@@ -284,6 +294,7 @@ async fn patch_features(
             chat_completions,
             multimodal,
             vector_store_setting,
+            foreign_keys,
         },
         &req,
     );
