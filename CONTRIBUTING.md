@@ -143,7 +143,6 @@ You can run the [documentation](https://github.com/meilisearch/documentation) si
 
 - [Node.js](https://nodejs.org/) and npm
 
-
 **1. Generate the OpenAPI file**
 
 ```bash
