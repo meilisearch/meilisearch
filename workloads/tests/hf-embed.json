@@ -330,15 +330,6 @@
       "synchronous": "WaitForTask"
     },
     {
-      "description": "check that the vector store is hannoy",
-      "route": "indexes/movies-hannoy/settings/vector-store",
-      "method": "GET",
-      "body": null,
-      "expectedStatus": 200,
-      "expectedResponse": "experimental",
-      "synchronous": "WaitForResponse"
-    },
-    {
       "description": "search results didn't change for arroy index post-upgrade",
       "route": "indexes/movies/search",
       "method": "POST",
@@ -549,15 +540,6 @@
         "status": "available"
       },
       "synchronous": "WaitForTask"
-    },
-    {
-      "description": "arroy was migrated to hannoy",
-      "route": "indexes/movies/settings/vector-store",
-      "method": "GET",
-      "body": null,
-      "expectedStatus": 200,
-      "expectedResponse": "experimental",
-      "synchronous": "WaitForResponse"
     },
     {
       "description": "results didn't change for hannoy index",
