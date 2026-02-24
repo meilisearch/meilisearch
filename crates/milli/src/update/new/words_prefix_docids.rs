@@ -112,7 +112,7 @@ impl<'i> WordPrefixDocids<'i> {
     }
 }
 
-/// Represents a prefix and the lenght the bitmap takes on disk.
+/// Represents a prefix and the length the bitmap takes on disk.
 struct PrefixEntry<'a> {
     prefix: &'a str,
     serialized_length: usize,

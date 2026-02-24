@@ -36,12 +36,12 @@ impl IndexUidPattern {
         !self.0.ends_with('*')
     }
 
-    /// Returns wether this index uid matches this index uid pattern.
+    /// Returns whether this index uid matches this index uid pattern.
     pub fn matches(&self, uid: &IndexUid) -> bool {
         self.matches_str(uid.as_str())
     }
 
-    /// Returns wether this string matches this index uid pattern.
+    /// Returns whether this string matches this index uid pattern.
     pub fn matches_str(&self, uid: &str) -> bool {
         match self.0.strip_suffix('*') {
             Some(prefix) => uid.starts_with(prefix),
