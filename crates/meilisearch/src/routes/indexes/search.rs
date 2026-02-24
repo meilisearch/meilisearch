@@ -26,11 +26,11 @@ use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, network_partition, perform_federated_search, perform_search, Federation,
-    HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
-    SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    add_search_rules, network_partition, perform_federated_search, perform_search, ActiveRules,
+    Federation, HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors,
+    SearchContext, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -487,12 +487,16 @@ pub(crate) async fn search(
     // Save the query string for personalization if requested
     let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
+    // Save context for dynamic search rules (query and index_uid are moved later).
+    let query_is_empty_for_rules = query.q.as_ref().map_or(true, |q| q.trim().is_empty());
+    let index_uid_for_rules = index_uid.to_string();
+
     let features = index_scheduler.features();
     if query.use_network.is_some() {
         features.check_network("passing `useNetwork` in a search query")?
     }
 
-    let (mut search_result, deadline) = if query
+    let (mut search_result, deadline, primary_key) = if query
         .use_network
         // avoid accidental recursion
         .take()
@@ -519,7 +523,7 @@ pub(crate) async fn search(
         let search_result =
             search_result.into_search_result(query.q.unwrap_or_default(), index_uid.as_str());
 
-        (search_result, deadline)
+        (search_result, deadline, None)
     } else {
         let index = index_scheduler.index(&index_uid).map_err(|err| match &err {
             index_scheduler::Error::IndexNotFound(_) => {
@@ -529,6 +533,11 @@ pub(crate) async fn search(
             }
             _ => ResponseError::from(err),
         })?;
+
+        let primary_key = {
+            let rtxn = index.read_txn()?;
+            index.primary_key(&rtxn)?.map(|s| s.to_string())
+        };
 
         let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
@@ -551,8 +560,20 @@ pub(crate) async fn search(
         })
         .await;
 
-        search_result??
+        let (result, deadline) = search_result??;
+        (result, deadline, primary_key)
     };
+
+    let rules = index_scheduler.dynamic_search_rules();
+    let ctx = SearchContext {
+        query_is_empty: query_is_empty_for_rules,
+        index_uid: &index_uid_for_rules,
+        primary_key: primary_key.as_deref(),
+    };
+    let active_rules = ActiveRules::new(&rules, &ctx);
+    if !active_rules.is_empty() {
+        active_rules.apply(&ctx, &mut search_result.hits);
+    }
 
     // Apply personalization if requested
     if let Some(personalize) = personalize {

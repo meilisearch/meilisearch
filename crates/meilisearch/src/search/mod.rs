@@ -47,6 +47,9 @@ pub use federated::{
     Federation, FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
+mod dynamic_rules;
+pub use dynamic_rules::{ActiveRules, SearchContext};
+
 mod ranking_rules;
 
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
