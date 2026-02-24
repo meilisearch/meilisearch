@@ -496,6 +496,14 @@ pub(crate) async fn search(
         features.check_network("passing `useNetwork` in a search query")?
     }
 
+    let rules = index_scheduler.dynamic_search_rules();
+    let rules_ctx = SearchContext {
+        query_is_empty: query_is_empty_for_rules,
+        index_uid: &index_uid_for_rules,
+        primary_key: None,
+    };
+    let active_rules = ActiveRules::new(&rules, &rules_ctx);
+
     let (mut search_result, deadline, primary_key) = if query
         .use_network
         // avoid accidental recursion
@@ -539,6 +547,21 @@ pub(crate) async fn search(
             index.primary_key(&rtxn)?.map(|s| s.to_string())
         };
 
+        let mut resolved_pins = Vec::new();
+        if !active_rules.is_empty() {
+            let pin_actions = active_rules.collect_pins(&index_uid_for_rules);
+            if !pin_actions.is_empty() {
+                let rtxn = index.read_txn()?;
+                let external_ids = index.external_documents_ids();
+                for (position, ext_id) in pin_actions {
+                    if let Ok(Some(internal_id)) = external_ids.get(&rtxn, ext_id) {
+                        resolved_pins.push((position, internal_id));
+                    }
+                }
+                resolved_pins.sort_by_key(|&(pos, _)| pos);
+            }
+        }
+
         let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
@@ -553,6 +576,7 @@ pub(crate) async fn search(
                     features,
                     request_uid,
                     include_metadata,
+                    pins: resolved_pins,
                 },
                 &index,
                 &progress_clone,
@@ -564,14 +588,12 @@ pub(crate) async fn search(
         (result, deadline, primary_key)
     };
 
-    let rules = index_scheduler.dynamic_search_rules();
-    let ctx = SearchContext {
-        query_is_empty: query_is_empty_for_rules,
-        index_uid: &index_uid_for_rules,
-        primary_key: primary_key.as_deref(),
-    };
-    let active_rules = ActiveRules::new(&rules, &ctx);
     if !active_rules.is_empty() {
+        let ctx = SearchContext {
+            query_is_empty: query_is_empty_for_rules,
+            index_uid: &index_uid_for_rules,
+            primary_key: primary_key.as_deref(),
+        };
         active_rules.apply(&ctx, &mut search_result.hits);
     }
 

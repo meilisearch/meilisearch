@@ -34,6 +34,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ranking_score_threshold: Option<f64>,
     exhaustive_number_hits: bool,
     max_total_hits: Option<usize>,
+    pins: &[(u32, u32)],
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -41,20 +42,67 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     let distinct_fid = distinct_fid(distinct, ctx.index, ctx.txn)?;
 
-    if universe.len() < from as u64 {
-        return Ok(BucketSortOutput {
-            docids: vec![],
-            scores: vec![],
-            all_candidates: universe.clone(),
-            degraded: false,
-        });
+    // Pinned documents are excluded from the ranking process so they don't appear
+    // in the normal candidate set. They will be injected at their exact target
+    // positions by `inject_pins` at the end.
+    let mut pinned_bitmap = RoaringBitmap::new();
+    for &(_, docid) in pins {
+        pinned_bitmap.insert(docid);
+    }
+    let adjusted_universe = universe - &pinned_bitmap;
+
+    // Adjust pagination to reserve slots for pinned documents. The final result list interleaves
+    // ranked docs and pinned docs. To get the right ranked docs for the current page, we adjust
+    // `from` and `length`:
+    //
+    //   - Each pin before the page inserts a slot into the combined list, pushing every ranked
+    //     doc after its one position to the right. So the ranked doc that would have been at
+    //     position `from` is now at `from + pins_before`, and we need to start fetching ranked
+    //     docs earlier: `ranked_from = from - pins_before`.
+    //
+    //   - Each pin on the page takes one of the `length` slots, leaving fewer slots for ranked
+    //     docs: `ranked_length = length - pins_on_page`.
+    //
+    // Example: from=10, length=10, pin at position 5
+    //   The pin at 5 pushes ranked[5..] one slot right, so the page [10,20) now starts at
+    //   ranked[9] instead of ranked[10].
+    //   pins_before=1, pins_on_page=0 means ranked_from=9, ranked_length=10
+    //
+    // Example: from=0, length=10, pins at positions 2 and 7
+    //   No pins before the page, but 2 slots on the page are taken by pins,
+    //   so we only need 8 ranked docs to fill the remaining slots.
+    //   pins_before=0, pins_on_page=2 means ranked_from=0, ranked_length=8
+    let pins_before = pins.iter().filter(|&&(pos, _)| (pos as usize) < from).count();
+    let pins_on_page = pins
+        .iter()
+        .filter(|&&(pos, _)| {
+            let pos = pos as usize;
+            pos >= from && pos < from + length
+        })
+        .count();
+    let ranked_from = from.saturating_sub(pins_before);
+    let ranked_length = length.saturating_sub(pins_on_page);
+
+    if adjusted_universe.len() < ranked_from as u64 {
+        return Ok(inject_pins(
+            pins,
+            from,
+            length,
+            &pinned_bitmap,
+            BucketSortOutput {
+                docids: vec![],
+                scores: vec![],
+                all_candidates: adjusted_universe,
+                degraded: false,
+            },
+        ));
     }
     if ranking_rules.is_empty() {
         if let Some(distinct_fid) = distinct_fid {
             let mut excluded = RoaringBitmap::new();
             let mut results = vec![];
-            for docid in universe.iter() {
-                if results.len() >= from + length {
+            for docid in adjusted_universe.iter() {
+                if results.len() >= ranked_from + ranked_length {
                     break;
                 }
                 if excluded.contains(docid) {
@@ -65,45 +113,58 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 results.push(docid);
             }
 
-            let mut all_candidates = universe - excluded;
+            let mut all_candidates = &adjusted_universe - &excluded;
             all_candidates.extend(results.iter().copied());
             // drain the results of the skipped elements
             // this **must** be done **after** writing the entire results in `all_candidates` to ensure
             // e.g. estimatedTotalHits is correct.
-            if results.len() >= from {
-                results.drain(..from);
+            if results.len() >= ranked_from {
+                results.drain(..ranked_from);
             } else {
                 results.clear();
             }
 
-            return Ok(BucketSortOutput {
-                scores: vec![Default::default(); results.len()],
-                docids: results,
-                all_candidates,
-                degraded: false,
-            });
+            return Ok(inject_pins(
+                pins,
+                from,
+                length,
+                &pinned_bitmap,
+                BucketSortOutput {
+                    scores: vec![Default::default(); results.len()],
+                    docids: results,
+                    all_candidates,
+                    degraded: false,
+                },
+            ));
         } else {
-            let docids: Vec<u32> = universe.iter().skip(from).take(length).collect();
-            return Ok(BucketSortOutput {
-                scores: vec![Default::default(); docids.len()],
-                docids,
-                all_candidates: universe.clone(),
-                degraded: false,
-            });
+            let docids: Vec<u32> =
+                adjusted_universe.iter().skip(ranked_from).take(ranked_length).collect();
+            return Ok(inject_pins(
+                pins,
+                from,
+                length,
+                &pinned_bitmap,
+                BucketSortOutput {
+                    scores: vec![Default::default(); docids.len()],
+                    docids,
+                    all_candidates: adjusted_universe.clone(),
+                    degraded: false,
+                },
+            ));
         };
     }
 
     let ranking_rules_len = ranking_rules.len();
 
-    logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query, universe);
+    logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query, &adjusted_universe);
 
-    ranking_rules[0].start_iteration(ctx, logger, universe, query, &deadline)?;
+    ranking_rules[0].start_iteration(ctx, logger, &adjusted_universe, query, &deadline)?;
 
     let mut ranking_rule_scores: Vec<ScoreDetails> = vec![];
 
     let mut ranking_rule_universes: Vec<RoaringBitmap> =
         vec![RoaringBitmap::default(); ranking_rules_len];
-    ranking_rule_universes[0].clone_from(universe);
+    ranking_rule_universes[0].clone_from(&adjusted_universe);
     let mut cur_ranking_rule_index = 0;
 
     /// Finish iterating over the current ranking rule, yielding
@@ -135,7 +196,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
     }
 
-    let mut all_candidates = universe.clone();
+    let mut all_candidates = adjusted_universe.clone();
     let mut valid_docids = vec![];
     let mut valid_scores = vec![];
     let mut cur_offset = 0usize;
@@ -144,8 +205,8 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         ($candidates:expr) => {
             maybe_add_to_results(
                 ctx,
-                from,
-                length,
+                ranked_from,
+                ranked_length,
                 logger,
                 &mut valid_docids,
                 &mut valid_scores,
@@ -164,7 +225,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     let max_len_to_evaluate =
         match (max_total_hits, exhaustive_number_hits && ranking_score_threshold.is_some()) {
             (Some(max_total_hits), true) => max_total_hits,
-            _ => length,
+            _ => ranked_length,
         };
 
     while valid_docids.len() < max_len_to_evaluate {
@@ -211,12 +272,18 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                         ranking_rule_scores.pop();
 
                         if cur_ranking_rule_index == 0 {
-                            return Ok(BucketSortOutput {
-                                scores: valid_scores,
-                                docids: valid_docids,
-                                all_candidates,
-                                degraded: true,
-                            });
+                            return Ok(inject_pins(
+                                pins,
+                                from,
+                                length,
+                                &pinned_bitmap,
+                                BucketSortOutput {
+                                    scores: valid_scores,
+                                    docids: valid_docids,
+                                    all_candidates,
+                                    degraded: true,
+                                },
+                            ));
                         }
 
                         // This is a copy/paste/adapted of the ugly back!() macro
@@ -271,7 +338,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
         if cur_ranking_rule_index == ranking_rules_len - 1
             || (scoring_strategy == ScoringStrategy::Skip && next_bucket.candidates.len() <= 1)
-            || cur_offset + (next_bucket.candidates.len() as usize) < from
+            || cur_offset + (next_bucket.candidates.len() as usize) < ranked_from
             || is_below_threshold
         {
             if is_below_threshold {
@@ -301,12 +368,49 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         )?;
     }
 
-    Ok(BucketSortOutput {
-        docids: valid_docids,
-        scores: valid_scores,
-        all_candidates,
-        degraded: false,
-    })
+    Ok(inject_pins(
+        pins,
+        from,
+        length,
+        &pinned_bitmap,
+        BucketSortOutput {
+            docids: valid_docids,
+            scores: valid_scores,
+            all_candidates,
+            degraded: false,
+        },
+    ))
+}
+
+/// Inject pinned documents into the ranked output. For each pin whose absolute position falls on the
+/// current page [from, from+length), insert the document at the corresponding page-relative offset.
+/// Truncate to `length` in case the insertions "push" over and add pinned docids back into
+/// `all_candidates` so that `estimatedTotalHits` accounts for them.
+fn inject_pins(
+    pins: &[(u32, u32)],
+    from: usize,
+    length: usize,
+    pinned_bitmap: &RoaringBitmap,
+    mut output: BucketSortOutput,
+) -> BucketSortOutput {
+    if pins.is_empty() {
+        return output;
+    }
+
+    for &(pos, doc_id) in pins {
+        let pos = pos as usize;
+        if pos >= from && pos < from + length {
+            let insert_at = (pos - from).min(output.docids.len());
+            output.docids.insert(insert_at, doc_id);
+            output.scores.insert(insert_at, vec![]);
+        }
+    }
+
+    output.docids.truncate(length);
+    output.scores.truncate(length);
+    output.all_candidates |= pinned_bitmap;
+
+    output
 }
 
 /// Add the candidates to the results. Take `distinct`, `from`, `length`, and `cur_offset`

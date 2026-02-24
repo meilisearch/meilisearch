@@ -223,6 +223,7 @@ impl Search<'_> {
             ranking_score_threshold: self.ranking_score_threshold,
             locales: self.locales.clone(),
             progress: self.progress,
+            pins: self.pins.clone(),
         };
 
         let semantic = search.semantic.take();

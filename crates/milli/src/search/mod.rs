@@ -64,6 +64,7 @@ pub struct Search<'a> {
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
     progress: &'a Progress,
+    pins: Vec<(u32, u32)>,
 }
 
 impl<'a> Search<'a> {
@@ -90,6 +91,7 @@ impl<'a> Search<'a> {
             deadline: Deadline::never(),
             ranking_score_threshold: None,
             progress,
+            pins: vec![],
         }
     }
 
@@ -199,6 +201,11 @@ impl<'a> Search<'a> {
         self
     }
 
+    pub fn pins(&mut self, pins: Vec<(u32, u32)>) -> &mut Search<'a> {
+        self.pins = pins;
+        self
+    }
+
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
             let ctx = SearchContext::new(self.index, self.rtxn)?;
@@ -281,6 +288,7 @@ impl<'a> Search<'a> {
                     self.deadline.clone(),
                     self.ranking_score_threshold,
                     self.progress,
+                    &self.pins,
                 )?
             }
             _ => execute_search(
@@ -303,6 +311,7 @@ impl<'a> Search<'a> {
                 self.ranking_score_threshold,
                 self.locales.as_ref(),
                 self.progress,
+                &self.pins,
             )?,
         };
 
@@ -354,6 +363,7 @@ impl fmt::Debug for Search<'_> {
             ranking_score_threshold,
             locales,
             progress: _,
+            pins,
         } = self;
         f.debug_struct("Search")
             .field("query", query)
@@ -377,6 +387,7 @@ impl fmt::Debug for Search<'_> {
             .field("deadline", deadline)
             .field("ranking_score_threshold", ranking_score_threshold)
             .field("locales", locales)
+            .field("pins", pins)
             .finish()
     }
 }

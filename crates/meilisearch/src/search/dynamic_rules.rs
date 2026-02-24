@@ -3,6 +3,7 @@ use meilisearch_types::dynamic_search_rules::{
     RuleAction, Selector, TimeCondition,
 };
 use serde_json::Value;
+use std::collections::HashSet;
 use time::OffsetDateTime;
 
 use super::SearchHit;
@@ -35,6 +36,31 @@ impl<'a> ActiveRules<'a> {
         self.actions.is_empty()
     }
 
+    pub fn collect_pins(&self, index_uid: &str) -> Vec<(u32, &'a str)> {
+        let mut result = Vec::new();
+        let mut seen_ids = HashSet::new();
+
+        for ra in &self.actions {
+            if let Action::Pin(pin) = &ra.action {
+                if let Some(sel_uid) = &ra.selector.index_uid {
+                    if sel_uid != index_uid {
+                        continue;
+                    }
+                }
+
+                if let Some(id) = &ra.selector.id {
+                    if !seen_ids.contains(id.as_str()) {
+                        seen_ids.insert(id.as_str());
+                        result.push((pin.position, id.as_str()));
+                    }
+                }
+            }
+        }
+
+        result.sort_by_key(|&(pos, _)| pos);
+        result
+    }
+
     pub fn apply(&self, ctx: &SearchContext<'_>, hits: &mut Vec<SearchHit>) {
         if self.actions.is_empty() || hits.is_empty() {
             return;
@@ -47,7 +73,6 @@ impl<'a> ActiveRules<'a> {
         }
 
         apply_boost_bury(&self.actions, ctx, hits);
-        apply_pin(&self.actions, ctx, hits);
     }
 }
 
@@ -207,56 +232,6 @@ fn apply_boost_bury(actions: &[&RuleAction], ctx: &SearchContext<'_>, hits: &mut
     *hits = reordered;
 }
 
-fn apply_pin(actions: &[&RuleAction], ctx: &SearchContext<'_>, hits: &mut Vec<SearchHit>) {
-    let mut pins: Vec<(u32, usize)> = Vec::new();
-
-    for ra in actions {
-        if let Action::Pin(ref pin) = ra.action {
-            if let Some(idx) = hits.iter().position(|hit| selector_matches(&ra.selector, ctx, hit))
-            {
-                pins.push((pin.position, idx));
-            }
-        }
-    }
-
-    if pins.is_empty() {
-        return;
-    }
-
-    let mut seen_hits: Vec<usize> = Vec::new();
-    pins.retain(|(_, idx)| {
-        if seen_hits.contains(idx) {
-            false
-        } else {
-            seen_hits.push(*idx);
-            true
-        }
-    });
-
-    pins.sort_by_key(|(pos, _)| *pos);
-
-    let mut removed: Vec<(u32, SearchHit)> = Vec::new();
-    let mut indices_to_remove: Vec<usize> = pins.iter().map(|(_, idx)| *idx).collect();
-    indices_to_remove.sort_unstable();
-    indices_to_remove.dedup();
-
-    let pin_map: std::collections::HashMap<usize, u32> =
-        pins.iter().map(|(pos, idx)| (*idx, *pos)).collect();
-
-    for &idx in indices_to_remove.iter().rev() {
-        let hit = hits.remove(idx);
-        if let Some(&pos) = pin_map.get(&idx) {
-            removed.push((pos, hit));
-        }
-    }
-
-    removed.sort_by_key(|(pos, _)| *pos);
-    for (pos, hit) in removed {
-        let insert_at = (pos as usize).min(hits.len());
-        hits.insert(insert_at, hit);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use meilisearch_types::dynamic_search_rules::*;
@@ -325,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn pin_moves_hit_to_position() {
+    fn pins_extracts_pin_actions() {
         let mut rules = DynamicSearchRules::new();
         rules.insert(
             "pin-3".into(),
@@ -340,13 +315,9 @@ mod tests {
 
         let ctx = ctx(false, Some("id"));
         let active = active_rules(&rules, &ctx);
-        let mut hits = vec![make_hit("1", &[]), make_hit("2", &[]), make_hit("3", &[])];
+        let pins = active.collect_pins("movies");
 
-        active.apply(&ctx, &mut hits);
-
-        assert_eq!(hits[0].document["id"], "3");
-        assert_eq!(hits[1].document["id"], "1");
-        assert_eq!(hits[2].document["id"], "2");
+        assert_eq!(pins, vec![(0, "3")]);
     }
 
     #[test]
@@ -508,7 +479,6 @@ mod tests {
     fn priority_1_wins_over_higher_numbers() {
         let mut rules = DynamicSearchRules::new();
 
-        // priority 100 (low) wants to pin "3" to position 2 (the end)
         let mut low_priority = make_rule(
             "pin-low",
             vec![RuleAction {
@@ -519,7 +489,6 @@ mod tests {
         low_priority.priority = Some(100);
         rules.insert("pin-low".into(), low_priority);
 
-        // priority 1 (high) wants to pin "3" to position 0 (the front)
         let mut high_priority = make_rule(
             "pin-high",
             vec![RuleAction {
@@ -532,19 +501,15 @@ mod tests {
 
         let ctx = ctx(false, Some("id"));
         let active = active_rules(&rules, &ctx);
-        let mut hits = vec![make_hit("1", &[]), make_hit("2", &[]), make_hit("3", &[])];
+        let pins = active.collect_pins("movies");
 
-        active.apply(&ctx, &mut hits);
-
-        // priority 1 wins: "3" is pinned to position 0
-        assert_eq!(hits[0].document["id"], "3");
+        assert_eq!(pins, vec![(0, "3")]);
     }
 
     #[test]
     fn no_priority_is_lowest() {
         let mut rules = DynamicSearchRules::new();
 
-        // no priority (lowest) wants to pin "3" to position 2
         let no_priority = make_rule(
             "pin-none",
             vec![RuleAction {
@@ -554,7 +519,6 @@ mod tests {
         );
         rules.insert("pin-none".into(), no_priority);
 
-        // priority 1 (highest) wants to pin "3" to position 0
         let mut with_priority = make_rule(
             "pin-explicit",
             vec![RuleAction {
@@ -567,11 +531,47 @@ mod tests {
 
         let ctx = ctx(false, Some("id"));
         let active = active_rules(&rules, &ctx);
-        let mut hits = vec![make_hit("1", &[]), make_hit("2", &[]), make_hit("3", &[])];
+        let pins = active.collect_pins("movies");
 
-        active.apply(&ctx, &mut hits);
+        assert_eq!(pins, vec![(0, "3")]);
+    }
 
-        // priority 1 wins: "3" is pinned to position 0
-        assert_eq!(hits[0].document["id"], "3");
+    #[test]
+    fn pins_filters_by_index_uid() {
+        let mut rules = DynamicSearchRules::new();
+        rules.insert(
+            "pin-other".into(),
+            make_rule(
+                "pin-other",
+                vec![RuleAction {
+                    selector: Selector {
+                        index_uid: Some("other-index".into()),
+                        id: Some("1".into()),
+                        filter: None,
+                    },
+                    action: Action::Pin(PinArgs { position: 0 }),
+                }],
+            ),
+        );
+        rules.insert(
+            "pin-movies".into(),
+            make_rule(
+                "pin-movies",
+                vec![RuleAction {
+                    selector: Selector {
+                        index_uid: Some("movies".into()),
+                        id: Some("2".into()),
+                        filter: None,
+                    },
+                    action: Action::Pin(PinArgs { position: 1 }),
+                }],
+            ),
+        );
+
+        let ctx = ctx(false, Some("id"));
+        let active = active_rules(&rules, &ctx);
+        let pins = active.collect_pins("movies");
+
+        assert_eq!(pins, vec![(1, "2")]);
     }
 }
