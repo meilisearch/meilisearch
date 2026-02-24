@@ -135,6 +135,36 @@ cd crates/openapi-generator
 cargo run --release -- --pretty
 ```
 
+### Testing the documentation locally
+
+You can run the [documentation](https://github.com/meilisearch/documentation) site locally to preview how the API reference renders.
+
+**Requirements**
+
+- [Node.js](https://nodejs.org/) and npm
+
+
+**1. Generate the OpenAPI file**
+
+```bash
+cargo run -p openapi-generator --release -- --pretty
+```
+
+This generates `meilisearch-openapi.json` in the current directory.
+
+**2. Run the documentation site with the generated file:**
+
+- Clone the [documentation repository](https://github.com/meilisearch/documentation)
+- Copy the generated OpenAPI file into the docs repo at `assets/openapi/meilisearch-openapi-mintlify.json`
+- From the documentation repository root, run:
+
+```bash
+npm install
+npx mint dev
+```
+
+The local docs site will be available (the URL is shown in the terminal).
+
 ### Logging
 
 Meilisearch uses [`tracing`](https://lib.rs/crates/tracing) for logging purposes. Tracing logs are structured and can be displayed as JSON to the end user, so prefer passing arguments as fields rather than interpolating them in the message.
