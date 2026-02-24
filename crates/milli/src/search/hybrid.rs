@@ -22,6 +22,9 @@ struct ScoreWithRatioResult {
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
 
+// NOTE: Pinned documents (ScoreDetails::Pin) are extracted before the score-based merge so they
+// never reach this comparator. The merge-level extraction ensures pins are re-injected at their
+// target positions after the organic merge completes.
 #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
 fn compare_scores(
     &(ref left_scores, left_ratio): &ScoreWithRatio,
@@ -93,14 +96,46 @@ impl ScoreWithRatioResult {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
     fn merge(
-        vector_results: Self,
-        keyword_results: Self,
+        mut vector_results: Self,
+        mut keyword_results: Self,
         from: usize,
         length: usize,
         distinct: Option<&str>,
         index: &Index,
         rtxn: &RoTxn<'_>,
     ) -> Result<(SearchResult, u32)> {
+        // Pinned documents carry ScoreDetails::Pin, which is a placement directive, not a score.
+        // We extract them before the score-based merge, merge organic results normally, then
+        // re-inject pins at their target positions in the final output.
+        let mut pins: Vec<(u32, u32)> = Vec::new();
+        let mut pinned_doc_ids = RoaringBitmap::new();
+
+        for results in [&mut keyword_results.document_scores, &mut vector_results.document_scores] {
+            results.retain(|(doc_id, (scores, _))| {
+                if let Some(ScoreDetails::Pin { position }) = scores.first() {
+                    if pinned_doc_ids.insert(*doc_id) {
+                        pins.push((*position, *doc_id));
+                    }
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        pins.sort_by_key(|(pos, _)| *pos);
+
+        // Adjust pagination to reserve slots for pinned documents like we do in the `bucket_sort`.
+        let pins_before = pins.iter().filter(|&&(pos, _)| (pos as usize) < from).count();
+        let pins_on_page = pins
+            .iter()
+            .filter(|&&(pos, _)| {
+                let pos = pos as usize;
+                pos >= from && pos < from + length
+            })
+            .count();
+        let ranked_from = from.saturating_sub(pins_before);
+        let ranked_length = length.saturating_sub(pins_on_page);
+
         #[derive(Clone, Copy)]
         enum ResultSource {
             Semantic,
@@ -116,7 +151,9 @@ impl ScoreWithRatioResult {
         );
 
         let distinct_fid = distinct_fid(distinct, index, rtxn)?;
-        let mut excluded_documents = RoaringBitmap::new();
+        // Seed excluded_documents with pinned docids so they don't appear as organic results
+        // (they'll be re-injected at their target positions after the merge).
+        let mut excluded_documents = pinned_doc_ids.clone();
         for res in vector_results
             .document_scores
             .into_iter()
@@ -152,10 +189,10 @@ impl ScoreWithRatioResult {
 
                 Some(Ok(item))
             })
-            // start skipping **after** the filter
-            .skip(from)
-            // take **after** skipping
-            .take(length)
+            // start skipping after the filter, adjusted for pin slots
+            .skip(ranked_from)
+            // take after skipping, adjusted for pin slots
+            .take(ranked_length)
         {
             let ((docid, (main_score, _sub_score)), source) = res?;
             if let ResultSource::Semantic = source {
@@ -165,6 +202,19 @@ impl ScoreWithRatioResult {
             // TODO: pass both scores to documents_score in some way?
             document_scores.push(main_score);
         }
+
+        // re-inject pinned documents at their target positions
+        for &(pin_position, doc_id) in &pins {
+            let pos = pin_position as usize;
+            if pos >= from && pos < from + length {
+                let insert_at = (pos - from).min(documents_ids.len());
+                documents_ids.insert(insert_at, doc_id);
+                document_scores
+                    .insert(insert_at, vec![ScoreDetails::Pin { position: pin_position }]);
+            }
+        }
+        documents_ids.truncate(length);
+        document_scores.truncate(length);
 
         // compute the set of candidates from both sets
         let candidates = vector_results.candidates | keyword_results.candidates;

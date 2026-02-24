@@ -397,12 +397,12 @@ fn inject_pins(
         return output;
     }
 
-    for &(pos, doc_id) in pins {
-        let pos = pos as usize;
+    for &(pin_position, doc_id) in pins {
+        let pos = pin_position as usize;
         if pos >= from && pos < from + length {
             let insert_at = (pos - from).min(output.docids.len());
             output.docids.insert(insert_at, doc_id);
-            output.scores.insert(insert_at, vec![]);
+            output.scores.insert(insert_at, vec![ScoreDetails::Pin { position: pin_position }]);
         }
     }
 
