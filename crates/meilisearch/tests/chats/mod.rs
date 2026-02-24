@@ -3,7 +3,7 @@ use meili_snap::snapshot;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::{Server};
+use crate::common::Server;
 use crate::json;
 
 #[actix_rt::test]
@@ -97,4 +97,3 @@ async fn mistral_stream_reference_chunk_does_not_error() {
         "unexpected status code: {chat_code} with body {response}",
     );
 }
-

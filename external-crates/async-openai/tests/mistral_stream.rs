@@ -26,4 +26,3 @@ fn mistral_reference_and_text_parts_deserialize() {
     let delta = &parsed.choices[0].delta;
     assert_eq!(delta.content.as_deref(), Some("{\"index"));
 }
-
