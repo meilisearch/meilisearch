@@ -56,7 +56,7 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
+use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules};
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
@@ -1086,14 +1086,28 @@ impl IndexScheduler {
         self.features.network()
     }
 
-    pub fn put_search_dynamic_rules(&self, rules: DynamicSearchRules) -> Result<()> {
+    pub fn put_dynamic_search_rules(&self, rules: DynamicSearchRules) -> Result<()> {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.dynamic_search_rules.put(wtxn, rules)?;
         Ok(())
     }
 
-    pub fn search_dynamic_rules(&self) -> DynamicSearchRules {
+    pub fn dynamic_search_rules(&self) -> Arc<DynamicSearchRules> {
         self.dynamic_search_rules.get()
+    }
+
+    pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.dynamic_search_rules.put_one(&mut wtxn, rule)?;
+        wtxn.commit()?;
+        Ok(())
+    }
+
+    pub fn delete_dynamic_search_rule(&self, uid: &str) -> Result<bool> {
+        let mut wtxn = self.env.write_txn()?;
+        let deleted = self.dynamic_search_rules.delete_one(&mut wtxn, uid)?;
+        wtxn.commit()?;
+        Ok(deleted)
     }
 
     pub fn update_runtime_webhooks(&self, runtime: RuntimeWebhooks) -> Result<()> {

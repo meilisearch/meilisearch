@@ -568,7 +568,7 @@ fn import_dump(
         dynamic_search_rules.insert(uid, rule);
     }
     if !dynamic_search_rules.is_empty() {
-        index_scheduler.put_search_dynamic_rules(dynamic_search_rules)?;
+        index_scheduler.put_dynamic_search_rules(dynamic_search_rules)?;
     }
 
     // 5.1 Use all cpus to process dump if `max_indexing_threads` not configured
