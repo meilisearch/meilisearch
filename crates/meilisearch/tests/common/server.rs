@@ -205,6 +205,33 @@ impl Server<Owned> {
         self.service.patch(url, value).await
     }
 
+    pub async fn create_dynamic_search_rule(&self, value: Value) -> (Value, StatusCode) {
+        self.service.post("/dynamic-search-rules", value).await
+    }
+
+    pub async fn get_dynamic_search_rule(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.get(url).await
+    }
+
+    pub async fn list_dynamic_search_rules(&self) -> (Value, StatusCode) {
+        self.service.get("/dynamic-search-rules").await
+    }
+
+    pub async fn patch_dynamic_search_rule(
+        &self,
+        uid: impl AsRef<str>,
+        value: Value,
+    ) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.patch(url, value).await
+    }
+
+    pub async fn delete_dynamic_search_rule(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.delete(url).await
+    }
+
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
         self.service.get("/metrics").await
     }

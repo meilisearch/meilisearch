@@ -1,0 +1,26 @@
+---
+source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
+---
+{
+  "uid": "preserve",
+  "description": "updated",
+  "priority": 5,
+  "active": true,
+  "conditions": [
+    {
+      "scope": "query",
+      "isEmpty": true
+    }
+  ],
+  "actions": [
+    {
+      "selector": {
+        "id": "1"
+      },
+      "action": {
+        "type": "pin",
+        "position": 0
+      }
+    }
+  ]
+}

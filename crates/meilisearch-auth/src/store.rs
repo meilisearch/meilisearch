@@ -146,6 +146,14 @@ impl HeedAuthStore {
                         Action::WebhooksCreate,
                     ]);
                 }
+                Action::DynamicSearchRulesAll => {
+                    actions.extend([
+                        Action::DynamicSearchRulesGet,
+                        Action::DynamicSearchRulesCreate,
+                        Action::DynamicSearchRulesUpdate,
+                        Action::DynamicSearchRulesDelete,
+                    ]);
+                }
                 other => {
                     actions.insert(*other);
                 }

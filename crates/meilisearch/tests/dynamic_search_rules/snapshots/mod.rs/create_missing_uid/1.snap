@@ -1,0 +1,9 @@
+---
+source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
+---
+{
+  "message": "Json deserialize error: missing field `uid` at line 1 column 54",
+  "code": "bad_request",
+  "type": "invalid_request",
+  "link": "https://docs.meilisearch.com/errors#bad_request"
+}
