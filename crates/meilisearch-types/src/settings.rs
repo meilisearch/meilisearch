@@ -229,6 +229,13 @@ impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
 /// return a `Settings<Checked>` from a `Settings<Unchecked>`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
 #[serde(
+    // We don't deny unknown fields for backward compatibility with
+    // settings that were previously written in the task queue.
+    // Note that we use serde to store the settings in the task
+    // queue and changing this parameter doesn't impact the HTTP
+    // route as we are using deser there.
+    //
+    // deny_unknown_fields,
     rename_all = "camelCase",
     bound(serialize = "T: Serialize", deserialize = "T: Deserialize<'static>")
 )]
