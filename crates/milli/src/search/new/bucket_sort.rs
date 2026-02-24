@@ -34,6 +34,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ranking_score_threshold: Option<f64>,
     exhaustive_number_hits: bool,
     max_total_hits: Option<usize>,
+    pins: &[(u32, u32)],
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -41,20 +42,45 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
     let distinct_fid = distinct_fid(distinct, ctx.index, ctx.txn)?;
 
-    if universe.len() < from as u64 {
-        return Ok(BucketSortOutput {
-            docids: vec![],
-            scores: vec![],
-            all_candidates: universe.clone(),
-            degraded: false,
-        });
+    // Only pins that survived the query universe (query + filters) are kept.
+    // They are excluded from the ranking process so they do not appear twice
+    // and injected back once the organic prefix has been collected.
+    let valid_pins =
+        pins.iter().copied().filter(|&(_, docid)| universe.contains(docid)).collect::<Vec<_>>();
+
+    let mut pinned_bitmap = RoaringBitmap::new();
+    for &(_, docid) in &valid_pins {
+        pinned_bitmap.insert(docid);
+    }
+    let adjusted_universe = universe - &pinned_bitmap;
+
+    // When pins are present we need the organic prefix up to the end of the
+    // requested page. Injecting the surviving pins into that prefix and slicing
+    // afterwards preserves the target positions and naturally "pumps" pins
+    // forward when there are fewer organic results than the requested limit.
+    let (ranked_from, ranked_length) =
+        if valid_pins.is_empty() { (from, length) } else { (0, from.saturating_add(length)) };
+
+    if adjusted_universe.len() < ranked_from as u64 {
+        return Ok(inject_pins(
+            &valid_pins,
+            from,
+            length,
+            &pinned_bitmap,
+            BucketSortOutput {
+                docids: vec![],
+                scores: vec![],
+                all_candidates: adjusted_universe,
+                degraded: false,
+            },
+        ));
     }
     if ranking_rules.is_empty() {
         if let Some(distinct_fid) = distinct_fid {
             let mut excluded = RoaringBitmap::new();
             let mut results = vec![];
-            for docid in universe.iter() {
-                if results.len() >= from + length {
+            for docid in adjusted_universe.iter() {
+                if results.len() >= ranked_from + ranked_length {
                     break;
                 }
                 if excluded.contains(docid) {
@@ -65,45 +91,58 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 results.push(docid);
             }
 
-            let mut all_candidates = universe - excluded;
+            let mut all_candidates = &adjusted_universe - &excluded;
             all_candidates.extend(results.iter().copied());
             // drain the results of the skipped elements
             // this **must** be done **after** writing the entire results in `all_candidates` to ensure
             // e.g. estimatedTotalHits is correct.
-            if results.len() >= from {
-                results.drain(..from);
+            if results.len() >= ranked_from {
+                results.drain(..ranked_from);
             } else {
                 results.clear();
             }
 
-            return Ok(BucketSortOutput {
-                scores: vec![Default::default(); results.len()],
-                docids: results,
-                all_candidates,
-                degraded: false,
-            });
+            return Ok(inject_pins(
+                &valid_pins,
+                from,
+                length,
+                &pinned_bitmap,
+                BucketSortOutput {
+                    scores: vec![Default::default(); results.len()],
+                    docids: results,
+                    all_candidates,
+                    degraded: false,
+                },
+            ));
         } else {
-            let docids: Vec<u32> = universe.iter().skip(from).take(length).collect();
-            return Ok(BucketSortOutput {
-                scores: vec![Default::default(); docids.len()],
-                docids,
-                all_candidates: universe.clone(),
-                degraded: false,
-            });
+            let docids: Vec<u32> =
+                adjusted_universe.iter().skip(ranked_from).take(ranked_length).collect();
+            return Ok(inject_pins(
+                &valid_pins,
+                from,
+                length,
+                &pinned_bitmap,
+                BucketSortOutput {
+                    scores: vec![Default::default(); docids.len()],
+                    docids,
+                    all_candidates: adjusted_universe.clone(),
+                    degraded: false,
+                },
+            ));
         };
     }
 
     let ranking_rules_len = ranking_rules.len();
 
-    logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query, universe);
+    logger.start_iteration_ranking_rule(0, ranking_rules[0].as_ref(), query, &adjusted_universe);
 
-    ranking_rules[0].start_iteration(ctx, logger, universe, query, &deadline)?;
+    ranking_rules[0].start_iteration(ctx, logger, &adjusted_universe, query, &deadline)?;
 
     let mut ranking_rule_scores: Vec<ScoreDetails> = vec![];
 
     let mut ranking_rule_universes: Vec<RoaringBitmap> =
         vec![RoaringBitmap::default(); ranking_rules_len];
-    ranking_rule_universes[0].clone_from(universe);
+    ranking_rule_universes[0].clone_from(&adjusted_universe);
     let mut cur_ranking_rule_index = 0;
 
     /// Finish iterating over the current ranking rule, yielding
@@ -135,7 +174,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         };
     }
 
-    let mut all_candidates = universe.clone();
+    let mut all_candidates = adjusted_universe.clone();
     let mut valid_docids = vec![];
     let mut valid_scores = vec![];
     let mut cur_offset = 0usize;
@@ -144,8 +183,8 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         ($candidates:expr) => {
             maybe_add_to_results(
                 ctx,
-                from,
-                length,
+                ranked_from,
+                ranked_length,
                 logger,
                 &mut valid_docids,
                 &mut valid_scores,
@@ -164,7 +203,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     let max_len_to_evaluate =
         match (max_total_hits, exhaustive_number_hits && ranking_score_threshold.is_some()) {
             (Some(max_total_hits), true) => max_total_hits,
-            _ => length,
+            _ => ranked_length,
         };
 
     while valid_docids.len() < max_len_to_evaluate {
@@ -211,12 +250,18 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                         ranking_rule_scores.pop();
 
                         if cur_ranking_rule_index == 0 {
-                            return Ok(BucketSortOutput {
-                                scores: valid_scores,
-                                docids: valid_docids,
-                                all_candidates,
-                                degraded: true,
-                            });
+                            return Ok(inject_pins(
+                                &valid_pins,
+                                from,
+                                length,
+                                &pinned_bitmap,
+                                BucketSortOutput {
+                                    scores: valid_scores,
+                                    docids: valid_docids,
+                                    all_candidates,
+                                    degraded: true,
+                                },
+                            ));
                         }
 
                         // This is a copy/paste/adapted of the ugly back!() macro
@@ -271,7 +316,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 
         if cur_ranking_rule_index == ranking_rules_len - 1
             || (scoring_strategy == ScoringStrategy::Skip && next_bucket.candidates.len() <= 1)
-            || cur_offset + (next_bucket.candidates.len() as usize) < from
+            || cur_offset + (next_bucket.candidates.len() as usize) < ranked_from
             || is_below_threshold
         {
             if is_below_threshold {
@@ -301,12 +346,52 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         )?;
     }
 
-    Ok(BucketSortOutput {
-        docids: valid_docids,
-        scores: valid_scores,
-        all_candidates,
-        degraded: false,
-    })
+    Ok(inject_pins(
+        &valid_pins,
+        from,
+        length,
+        &pinned_bitmap,
+        BucketSortOutput {
+            docids: valid_docids,
+            scores: valid_scores,
+            all_candidates,
+            degraded: false,
+        },
+    ))
+}
+
+/// Inject all surviving pins into the organic prefix, then slice the requested
+/// page out of the combined list. This naturally pumps pins forward when there
+/// are fewer organic results than the requested limit.
+fn inject_pins(
+    pins: &[(u32, u32)],
+    from: usize,
+    length: usize,
+    pinned_bitmap: &RoaringBitmap,
+    mut output: BucketSortOutput,
+) -> BucketSortOutput {
+    if pins.is_empty() {
+        return output;
+    }
+
+    for &(pin_position, doc_id) in pins {
+        // We insert the pinned document at the right position or at the end if there are not enough hits.
+        let insert_at = (pin_position as usize).min(output.docids.len());
+        output.docids.insert(insert_at, doc_id);
+        output.scores.insert(insert_at, vec![ScoreDetails::Pin { position: pin_position }]);
+    }
+
+    // We remove all the organic prefix to match the pagination requirement. If there is not at last `from` documents,
+    // it means the page is empty.
+    let skip = from.min(output.docids.len());
+    output.docids.drain(..skip);
+    output.scores.drain(..skip);
+
+    output.docids.truncate(length);
+    output.scores.truncate(length);
+    output.all_candidates |= pinned_bitmap;
+
+    output
 }
 
 /// Add the candidates to the results. Take `distinct`, `from`, `length`, and `cur_offset`
