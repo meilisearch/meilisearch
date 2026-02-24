@@ -1688,14 +1688,12 @@ struct AttributesFormat {
 pub enum RetrieveVectors {
     /// Remove the `_vectors` field
     ///
-    /// this is the behavior when the vectorStore feature is enabled, and
-    /// `retrieveVectors` is `false`
+    /// this is the behavior when the `retrieveVectors` is `false`
     Hide,
     /// Retrieve vectors from the DB and merge them into the `_vectors`
     /// field
     ///
-    /// this is the behavior when the vectorStore feature is enabled, and
-    /// `retrieveVectors` is `true`
+    /// this is the behavior when the `retrieveVectors` is `true`
     Retrieve,
 }
 
