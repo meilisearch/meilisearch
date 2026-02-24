@@ -59,6 +59,7 @@ mod api_key;
 pub mod batches;
 pub mod chats;
 mod dump;
+mod dynamic_search_rules;
 mod export;
 mod export_analytics;
 pub mod features;
@@ -97,6 +98,7 @@ mod webhooks;
         "/export"=> sub(export::ExportApi),
         "/network"=> sub(network::NetworkApi),
         "/webhooks"=> sub(webhooks::WebhooksApi),
+        "/dynamic-search-rules"=> sub(dynamic_search_rules::DynamicSearchRulesApi),
     ),
     tag = "Root",
     tags(

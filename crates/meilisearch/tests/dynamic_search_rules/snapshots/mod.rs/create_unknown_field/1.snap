@@ -1,0 +1,9 @@
+---
+source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
+---
+{
+  "message": "Json deserialize error: unknown field `unknownField`, expected one of `uid`, `description`, `priority`, `active`, `conditions`, `actions` at line 1 column 83",
+  "code": "bad_request",
+  "type": "invalid_request",
+  "link": "https://docs.meilisearch.com/errors#bad_request"
+}

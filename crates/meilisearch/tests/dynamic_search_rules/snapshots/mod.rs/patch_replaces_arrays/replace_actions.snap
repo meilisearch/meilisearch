@@ -1,0 +1,16 @@
+---
+source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
+---
+{
+  "uid": "arrays",
+  "active": false,
+  "conditions": [],
+  "actions": [
+    {
+      "selector": {},
+      "action": {
+        "type": "hide"
+      }
+    }
+  ]
+}

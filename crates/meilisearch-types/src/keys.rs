@@ -401,6 +401,21 @@ pub enum Action {
     #[serde(rename = "fields.post")]
     #[deserr(rename = "fields.post")]
     FieldsPost,
+    #[serde(rename = "dynamicSearchRules.get")]
+    #[deserr(rename = "dynamicSearchRules.get")]
+    DynamicSearchRulesGet,
+    #[serde(rename = "dynamicSearchRules.create")]
+    #[deserr(rename = "dynamicSearchRules.create")]
+    DynamicSearchRulesCreate,
+    #[serde(rename = "dynamicSearchRules.update")]
+    #[deserr(rename = "dynamicSearchRules.update")]
+    DynamicSearchRulesUpdate,
+    #[serde(rename = "dynamicSearchRules.delete")]
+    #[deserr(rename = "dynamicSearchRules.delete")]
+    DynamicSearchRulesDelete,
+    #[serde(rename = "dynamicSearchRules.*")]
+    #[deserr(rename = "dynamicSearchRules.*")]
+    DynamicSearchRulesAll,
 }
 
 impl Action {
@@ -459,6 +474,11 @@ impl Action {
             WEBHOOKS_CREATE => Some(Self::WebhooksCreate),
             WEBHOOKS_ALL => Some(Self::WebhooksAll),
             FIELDS_POST => Some(Self::FieldsPost),
+            DYNAMIC_SEARCH_RULES_GET => Some(Self::DynamicSearchRulesGet),
+            DYNAMIC_SEARCH_RULES_CREATE => Some(Self::DynamicSearchRulesCreate),
+            DYNAMIC_SEARCH_RULES_UPDATE => Some(Self::DynamicSearchRulesUpdate),
+            DYNAMIC_SEARCH_RULES_DELETE => Some(Self::DynamicSearchRulesDelete),
+            DYNAMIC_SEARCH_RULES_ALL => Some(Self::DynamicSearchRulesAll),
             _otherwise => None,
         }
     }
@@ -470,10 +490,20 @@ impl Action {
         // It's using an exhaustive match to force the addition of new actions.
         match self {
             // Any action that expands to others must return false, as it wouldn't be able to expand recursively.
-            All | AllGet | DocumentsAll | IndexesAll | ChatsAll | TasksAll | SettingsAll
-            | StatsAll | MetricsAll | DumpsAll | SnapshotsAll | ChatsSettingsAll | WebhooksAll => {
-                false
-            }
+            All
+            | AllGet
+            | DocumentsAll
+            | IndexesAll
+            | ChatsAll
+            | TasksAll
+            | SettingsAll
+            | StatsAll
+            | MetricsAll
+            | DumpsAll
+            | SnapshotsAll
+            | ChatsSettingsAll
+            | WebhooksAll
+            | DynamicSearchRulesAll => false,
 
             Search => true,
             DocumentsAdd => false,
@@ -514,6 +544,10 @@ impl Action {
             WebhooksDelete => false,
             WebhooksCreate => false,
             FieldsPost => true,
+            DynamicSearchRulesGet => true,
+            DynamicSearchRulesCreate => false,
+            DynamicSearchRulesUpdate => false,
+            DynamicSearchRulesDelete => false,
         }
     }
 
@@ -581,6 +615,12 @@ pub mod actions {
     pub const WEBHOOKS_DELETE: u8 = WebhooksDelete.repr();
     pub const WEBHOOKS_CREATE: u8 = WebhooksCreate.repr();
     pub const WEBHOOKS_ALL: u8 = WebhooksAll.repr();
+
+    pub const DYNAMIC_SEARCH_RULES_GET: u8 = DynamicSearchRulesGet.repr();
+    pub const DYNAMIC_SEARCH_RULES_CREATE: u8 = DynamicSearchRulesCreate.repr();
+    pub const DYNAMIC_SEARCH_RULES_UPDATE: u8 = DynamicSearchRulesUpdate.repr();
+    pub const DYNAMIC_SEARCH_RULES_DELETE: u8 = DynamicSearchRulesDelete.repr();
+    pub const DYNAMIC_SEARCH_RULES_ALL: u8 = DynamicSearchRulesAll.repr();
 }
 
 #[cfg(test)]
@@ -642,6 +682,12 @@ pub(crate) mod test {
         assert!(WebhooksCreate.repr() == 48 && WEBHOOKS_CREATE == 48);
         assert!(WebhooksAll.repr() == 49 && WEBHOOKS_ALL == 49);
         assert!(IndexesCompact.repr() == 50 && INDEXES_COMPACT == 50);
+        assert!(FieldsPost.repr() == 51 && FIELDS_POST == 51);
+        assert!(DynamicSearchRulesGet.repr() == 52 && DYNAMIC_SEARCH_RULES_GET == 52);
+        assert!(DynamicSearchRulesCreate.repr() == 53 && DYNAMIC_SEARCH_RULES_CREATE == 53);
+        assert!(DynamicSearchRulesUpdate.repr() == 54 && DYNAMIC_SEARCH_RULES_UPDATE == 54);
+        assert!(DynamicSearchRulesDelete.repr() == 55 && DYNAMIC_SEARCH_RULES_DELETE == 55);
+        assert!(DynamicSearchRulesAll.repr() == 56 && DYNAMIC_SEARCH_RULES_ALL == 56);
     }
 
     #[test]
