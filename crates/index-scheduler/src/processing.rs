@@ -112,6 +112,7 @@ make_enum_progress! {
         DumpTheIndexes,
         DumpTheExperimentalFeatures,
         DumpTheWebhooks,
+        DumpDynamicSearchRules,
         CompressTheDump,
     }
 }

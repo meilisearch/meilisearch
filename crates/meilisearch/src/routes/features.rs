@@ -39,6 +39,7 @@ pub struct ExperimentalFeaturesApi;
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
+            dynamic_search_rules: Some(false),
             network: Some(false),
             get_task_documents_route: Some(false),
             task_queue_compaction_route: Some(false),
@@ -89,6 +90,9 @@ pub struct RuntimeTogglableFeatures {
     /// Enable the CONTAINS filter operator
     #[deserr(default)]
     pub contains_filter: Option<bool>,
+    /// Enable dynamic search rules and the `/dynamic-search-rules` routes
+    #[deserr(default)]
+    pub dynamic_search_rules: Option<bool>,
     /// Enable network features for distributed search
     #[deserr(default)]
     pub network: Option<bool>,
@@ -119,6 +123,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            dynamic_search_rules,
             network,
             get_task_documents_route,
             task_queue_compaction_route,
@@ -133,6 +138,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             logs_route: Some(logs_route),
             edit_documents_by_function: Some(edit_documents_by_function),
             contains_filter: Some(contains_filter),
+            dynamic_search_rules: Some(dynamic_search_rules),
             network: Some(network),
             get_task_documents_route: Some(get_task_documents_route),
             task_queue_compaction_route: Some(task_queue_compaction_route),
@@ -150,6 +156,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     logs_route: bool,
     edit_documents_by_function: bool,
     contains_filter: bool,
+    dynamic_search_rules: bool,
     network: bool,
     get_task_documents_route: bool,
     task_queue_compaction_route: bool,
@@ -170,6 +177,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             logs_route: new.logs_route,
             edit_documents_by_function: new.edit_documents_by_function,
             contains_filter: new.contains_filter,
+            dynamic_search_rules: new.dynamic_search_rules,
             network: new.network,
             get_task_documents_route: new.get_task_documents_route,
             task_queue_compaction_route: new.task_queue_compaction_route,
@@ -196,6 +204,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             logs_route: Some(false),
             edit_documents_by_function: Some(false),
             contains_filter: Some(false),
+            dynamic_search_rules: Some(false),
             network: Some(false),
             get_task_documents_route: Some(false),
             task_queue_compaction_route: Some(false),
@@ -235,6 +244,10 @@ async fn patch_features(
             .edit_documents_by_function
             .unwrap_or(old_features.edit_documents_by_function),
         contains_filter: new_features.0.contains_filter.unwrap_or(old_features.contains_filter),
+        dynamic_search_rules: new_features
+            .0
+            .dynamic_search_rules
+            .unwrap_or(old_features.dynamic_search_rules),
         network: new_features.0.network.unwrap_or(old_features.network),
         get_task_documents_route: new_features
             .0
@@ -261,6 +274,7 @@ async fn patch_features(
         logs_route,
         edit_documents_by_function,
         contains_filter,
+        dynamic_search_rules,
         network,
         get_task_documents_route,
         task_queue_compaction_route,
@@ -276,6 +290,7 @@ async fn patch_features(
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            dynamic_search_rules,
             network,
             get_task_documents_route,
             task_queue_compaction_route,

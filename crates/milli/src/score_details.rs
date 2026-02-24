@@ -20,6 +20,15 @@ pub enum ScoreDetails {
 
     /// Returned when we don't have the time to finish applying all the subsequent ranking-rules
     Skipped,
+
+    /// A document that has been explicitly pinned to a specific position in the results.
+    /// Pinned documents are placed at their target position regardless of their ranking score.
+    /// This variant acts as a marker: it does not participate in score-based comparisons but
+    /// carries the target position so downstream consumers like federated merge can detect and
+    /// handle pinned documents appropriately.
+    Pin {
+        position: u32,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -63,6 +72,7 @@ impl ScoreDetails {
             ScoreDetails::GeoSort(_) => None,
             ScoreDetails::Vector(_) => None,
             ScoreDetails::Skipped => Some(Rank { rank: 0, max_rank: 1 }),
+            ScoreDetails::Pin { .. } => None,
         }
     }
 
@@ -73,17 +83,21 @@ impl ScoreDetails {
     ///
     /// note: this function expects a maximum of one semantic score, otherwise only the last one will be used.
     pub fn global_score<'a>(details: impl Iterator<Item = &'a Self> + 'a) -> f64 {
-        // Filter out only the ranking scores (Rank values) and exclude sort/geo sort
+        // Filter out only the ranking scores (Rank values) and exclude sort/geo sort.
+        // Pin is a placement directive, not a score — it is filtered out upfront.
         let mut semantic_score = None;
-        let ranking_ranks = details.filter_map(|detail| match detail.rank_or_value() {
-            RankOrValue::Rank(rank) => Some(rank),
-            RankOrValue::Score(score) => {
-                semantic_score = Some(score);
-                None
-            }
-            RankOrValue::Sort(_) => None,
-            RankOrValue::GeoSort(_) => None,
-        });
+        let ranking_ranks =
+            details.filter_map(ScoreDetails::rank_or_value).filter_map(|rank_or_value| {
+                match rank_or_value {
+                    RankOrValue::Rank(rank) => Some(rank),
+                    RankOrValue::Score(score) => {
+                        semantic_score = Some(score);
+                        None
+                    }
+                    RankOrValue::Sort(_) => None,
+                    RankOrValue::GeoSort(_) => None,
+                }
+            });
 
         let ranking_score = Rank::global_score(ranking_ranks);
 
@@ -94,8 +108,10 @@ impl ScoreDetails {
     pub fn score_values<'a>(
         details: impl Iterator<Item = &'a Self> + 'a,
     ) -> impl Iterator<Item = ScoreValue<'a>> + 'a {
+        // Pin is a placement directive, not a score — filter it out before entering
+        // the rank_or_value pipeline.
         details
-            .map(ScoreDetails::rank_or_value)
+            .filter_map(ScoreDetails::rank_or_value)
             .coalesce(|left, right| match (left, right) {
                 (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
                     Ok(RankOrValue::Rank(Rank::merge(left, right)))
@@ -115,7 +131,7 @@ impl ScoreDetails {
         weight: f64,
     ) -> impl Iterator<Item = WeightedScoreValue> + 'a {
         details
-            .map(ScoreDetails::rank_or_value)
+            .filter_map(ScoreDetails::rank_or_value)
             .coalesce(|left, right| match (left, right) {
                 (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
                     Ok(RankOrValue::Rank(Rank::merge(left, right)))
@@ -134,21 +150,24 @@ impl ScoreDetails {
             })
     }
 
-    fn rank_or_value(&self) -> RankOrValue<'_> {
+    fn rank_or_value(&self) -> Option<RankOrValue<'_>> {
         match self {
-            ScoreDetails::Words(w) => RankOrValue::Rank(w.rank()),
-            ScoreDetails::Typo(t) => RankOrValue::Rank(t.rank()),
-            ScoreDetails::Proximity(p) => RankOrValue::Rank(*p),
-            ScoreDetails::Fid(f) => RankOrValue::Rank(*f),
-            ScoreDetails::Position(p) => RankOrValue::Rank(*p),
-            ScoreDetails::ExactAttribute(e) => RankOrValue::Rank(e.rank()),
-            ScoreDetails::ExactWords(e) => RankOrValue::Rank(e.rank()),
-            ScoreDetails::Sort(sort) => RankOrValue::Sort(sort),
-            ScoreDetails::GeoSort(geosort) => RankOrValue::GeoSort(geosort),
-            ScoreDetails::Vector(vector) => {
-                RankOrValue::Score(vector.similarity.as_ref().map(|s| *s as f64).unwrap_or(0.0f64))
-            }
-            ScoreDetails::Skipped => RankOrValue::Rank(Rank { rank: 0, max_rank: 1 }),
+            ScoreDetails::Words(w) => Some(RankOrValue::Rank(w.rank())),
+            ScoreDetails::Typo(t) => Some(RankOrValue::Rank(t.rank())),
+            ScoreDetails::Proximity(p) => Some(RankOrValue::Rank(*p)),
+            ScoreDetails::Fid(f) => Some(RankOrValue::Rank(*f)),
+            ScoreDetails::Position(p) => Some(RankOrValue::Rank(*p)),
+            ScoreDetails::ExactAttribute(e) => Some(RankOrValue::Rank(e.rank())),
+            ScoreDetails::ExactWords(e) => Some(RankOrValue::Rank(e.rank())),
+            ScoreDetails::Sort(sort) => Some(RankOrValue::Sort(sort)),
+            ScoreDetails::GeoSort(geosort) => Some(RankOrValue::GeoSort(geosort)),
+            ScoreDetails::Vector(vector) => Some(RankOrValue::Score(
+                vector.similarity.as_ref().map(|s| *s as f64).unwrap_or(0.0f64),
+            )),
+            ScoreDetails::Skipped => Some(RankOrValue::Rank(Rank { rank: 0, max_rank: 1 })),
+            // Pin is filtered out before reaching rank_or_value() — see global_score(),
+            // score_values(), and weighted_score_values().
+            ScoreDetails::Pin { .. } => None,
         }
     }
 
@@ -336,6 +355,14 @@ impl ScoreDetails {
                 ScoreDetails::Skipped => {
                     details_map
                         .insert("skipped".to_string(), serde_json::json!({ "order": order }));
+                    order += 1;
+                }
+                ScoreDetails::Pin { position } => {
+                    let pin_details = serde_json::json!({
+                        "order": order,
+                        "position": position,
+                    });
+                    details_map.insert("pin".into(), pin_details);
                     order += 1;
                 }
             }
