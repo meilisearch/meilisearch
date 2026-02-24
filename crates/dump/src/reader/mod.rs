@@ -145,6 +145,15 @@ impl DumpReader {
             DumpReader::Compat(compat) => compat.webhooks(),
         }
     }
+
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, v6::DynamicSearchRule)>> + '_>> {
+        match self {
+            DumpReader::Current(current) => current.dynamic_search_rules(),
+            DumpReader::Compat(_compat) => Ok(Box::new(std::iter::empty())),
+        }
+    }
 }
 
 impl From<V6Reader> for DumpReader {

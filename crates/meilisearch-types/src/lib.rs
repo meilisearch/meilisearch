@@ -14,6 +14,7 @@ pub use community_edition as current_edition;
 #[cfg(feature = "enterprise")]
 pub use enterprise_edition as current_edition;
 pub mod archive_ext;
+pub mod dynamic_search_rules;
 pub mod error;
 pub mod facet_values_sort;
 pub mod features;
