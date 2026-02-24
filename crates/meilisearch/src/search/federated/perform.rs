@@ -199,9 +199,38 @@ pub async fn perform_federated_search(
     };
 
     // 3.3. merge hits
-    let merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
-        .skip(skip)
-        .take(take)
+    // pinned documents are extracted before the score-based merge so
+    // they don't compete with organic results. The merge adjusts pagination to reserve
+    // slots for pins, then re-injects them at their target positions afterward.
+    let mut pins = Vec::new();
+    for result_by_index in &mut results_by_index {
+        let prev_hits = std::mem::take(&mut result_by_index.hits);
+        for hit in prev_hits {
+            if let Some(ScoreDetails::Pin { position }) = hit.score.first() {
+                pins.push((*position, hit.hit));
+            } else {
+                result_by_index.hits.push(hit);
+            }
+        }
+    }
+    pins.sort_by_key(|&(pos, _)| pos);
+
+    // adjust pagination to reserve slots for pinned documents like we do in bucket_sort
+    // and hybrid merge.
+    let pins_before = pins.iter().filter(|(pos, _)| (*pos as usize) < skip).count();
+    let pins_on_page = pins
+        .iter()
+        .filter(|(pos, _)| {
+            let pos = *pos as usize;
+            pos >= skip && pos < skip + take
+        })
+        .count();
+    let ranked_skip = skip.saturating_sub(pins_before);
+    let ranked_take = take.saturating_sub(pins_on_page);
+
+    let mut merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
+        .skip(ranked_skip)
+        .take(ranked_take)
         .inspect(|hit| {
             if let Some(semantic_hit_count) = &mut semantic_hit_count {
                 if hit.to_score().0.any(|score| matches!(&score, WeightedScoreValue::VectorSort(_)))
@@ -212,6 +241,16 @@ pub async fn perform_federated_search(
         })
         .map(|hit| hit.hit())
         .collect();
+
+    // re-inject pinned documents at their target positions
+    for (pin_position, hit) in pins {
+        let pos = pin_position as usize;
+        if pos >= skip && pos < skip + take {
+            let insert_at = (pos - skip).min(merged_hits.len());
+            merged_hits.insert(insert_at, hit);
+        }
+    }
+    merged_hits.truncate(take);
 
     // 3.4. merge query vectors
     let query_vectors = if retrieve_vectors {
@@ -352,6 +391,9 @@ fn merge_index_local_results(
     )
 }
 
+// NOTE: Pinned documents (ScoreDetails::Pin) are extracted by the caller before invoking this
+// function, so they never reach the score-based comparator. The caller re-injects pins at their
+// target positions after this merge completes.
 fn merge_index_global_results(
     results_by_index: Vec<SearchResultByIndex>,
     remote_results: &mut [FederatedSearchResult],

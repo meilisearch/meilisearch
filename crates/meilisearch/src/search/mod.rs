@@ -47,6 +47,11 @@ pub use federated::{
     Federation, FederationOptions, MergeFacets, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
+mod dynamic_rules;
+pub use dynamic_rules::{
+    collect_active_rules, expand_query_with_relevance_tuning, ActiveRules, DynamicSearchContext,
+};
+
 mod ranking_rules;
 
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
@@ -1411,6 +1416,7 @@ pub struct SearchParams {
     pub features: RoFeatures,
     pub request_uid: Uuid,
     pub include_metadata: bool,
+    pub pins: Vec<(u32, u32)>,
 }
 
 pub fn perform_search(
@@ -1426,14 +1432,19 @@ pub fn perform_search(
         features,
         request_uid,
         include_metadata,
+        pins,
     } = params;
     let before_search = Instant::now();
     let index_uid_for_metadata = index_uid.clone();
     let rtxn = index.read_txn()?;
     let deadline = index.search_deadline(&rtxn)?;
 
-    let (search, is_finite_pagination, max_total_hits, offset) =
+    let (mut search, is_finite_pagination, max_total_hits, offset) =
         prepare_search(index, &rtxn, &query, &search_kind, deadline.clone(), features, progress)?;
+
+    if !pins.is_empty() {
+        search.pins(pins);
+    }
 
     let (
         milli::SearchResult {

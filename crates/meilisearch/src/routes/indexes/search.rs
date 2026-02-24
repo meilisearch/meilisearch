@@ -25,9 +25,11 @@ use crate::extractors::sequential_extractor::SeqHandler;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
+
 use crate::search::{
-    add_search_rules, network_partition, perform_federated_search, perform_search, Federation,
-    HybridQuery, MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
+    add_search_rules, collect_active_rules, expand_query_with_relevance_tuning, network_partition,
+    perform_federated_search, perform_search, DynamicSearchContext, Federation, HybridQuery,
+    MatchingStrategy, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
     SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
     DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
     DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
@@ -492,6 +494,27 @@ pub(crate) async fn search(
         features.check_network("passing `useNetwork` in a search query")?
     }
 
+    let rules = index_scheduler.dynamic_search_rules();
+
+    // Track whether boost/bury was handled via federated sub-queries so
+    // the post-processing step only applies hide (not boost/bury again).
+    let boost_bury_handled;
+    let index = index_scheduler.index(&index_uid)?;
+    let primary_key = {
+        let rtxn = index.read_txn()?;
+        index.primary_key(&rtxn)?.map(|pk| pk.to_owned())
+    };
+
+    let primary_key_ref = primary_key.as_deref();
+
+    let single_query_index_uid = index_uid.clone();
+    let single_query_dyn_search_ctx = DynamicSearchContext {
+        query_is_empty: query.q.as_ref().is_none_or(|s| s.trim().is_empty()),
+        index_uid: &single_query_index_uid,
+        primary_key: primary_key_ref,
+    };
+    let single_query_active_rules = collect_active_rules(&rules, &single_query_dyn_search_ctx);
+
     let (mut search_result, deadline) = if query
         .use_network
         // avoid accidental recursion
@@ -501,8 +524,32 @@ pub(crate) async fn search(
     {
         let network = index_scheduler.network();
         let mut federation = Federation::default();
-        let queries =
+        let mut queries: Vec<_> =
             network_partition(&mut federation, &query, None, &index_uid, network).collect();
+
+        let mut tuned_queries = Vec::new();
+        for query in &mut queries {
+            // Expand with boost/bury sub-queries when rules exist.
+            let index = index_scheduler.index(&index_uid)?;
+            let rtxn = index.read_txn()?;
+
+            let dyn_search_ctx = DynamicSearchContext {
+                query_is_empty: query.q.as_ref().is_none_or(|s| s.trim().is_empty()),
+                index_uid: &index_uid,
+                primary_key: index.primary_key(&rtxn)?,
+            };
+            let active_rules = collect_active_rules(&rules, &dyn_search_ctx);
+            let sub_queries = expand_query_with_relevance_tuning(
+                query,
+                &active_rules,
+                dyn_search_ctx.primary_key,
+            );
+            tuned_queries.extend(sub_queries);
+        }
+
+        boost_bury_handled = !tuned_queries.is_empty();
+        queries.extend(tuned_queries);
+
         let search_result = perform_federated_search(
             &index_scheduler,
             queries,
@@ -521,6 +568,10 @@ pub(crate) async fn search(
 
         (search_result, deadline)
     } else {
+        // Non-network path: regular local search with pin support.
+        // Boost/bury is applied as post-processing after the search.
+        boost_bury_handled = false;
+
         let index = index_scheduler.index(&index_uid).map_err(|err| match &err {
             index_scheduler::Error::IndexNotFound(_) => {
                 let mut err = ResponseError::from(err);
@@ -529,6 +580,22 @@ pub(crate) async fn search(
             }
             _ => ResponseError::from(err),
         })?;
+
+        let mut resolved_pins = Vec::new();
+
+        if !single_query_active_rules.is_empty() {
+            let pin_actions = single_query_active_rules.positioning_rules_for_index_uid(&index_uid);
+            if !pin_actions.is_empty() {
+                let external_ids = index.external_documents_ids();
+                let rtxn = index.read_txn()?;
+                for action in pin_actions {
+                    if let Ok(Some(internal_id)) = external_ids.get(&rtxn, action.doc_id) {
+                        resolved_pins.push((action.position, internal_id));
+                    }
+                }
+                resolved_pins.sort_by_key(|&(pos, _)| pos);
+            }
+        }
 
         let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
@@ -544,6 +611,7 @@ pub(crate) async fn search(
                     features,
                     request_uid,
                     include_metadata,
+                    pins: resolved_pins,
                 },
                 &index,
                 &progress_clone,
@@ -551,8 +619,19 @@ pub(crate) async fn search(
         })
         .await;
 
-        search_result??
+        let (result, deadline) = search_result??;
+        (result, deadline)
     };
+
+    if !single_query_active_rules.is_empty() {
+        if boost_bury_handled {
+            // boost/bury already applied via federated sub-queries
+            single_query_active_rules
+                .apply_hide(&single_query_dyn_search_ctx, &mut search_result.hits);
+        } else {
+            single_query_active_rules.apply(&single_query_dyn_search_ctx, &mut search_result.hits);
+        }
+    }
 
     // Apply personalization if requested
     if let Some(personalize) = personalize {

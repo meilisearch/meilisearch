@@ -21,7 +21,8 @@ use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
+    add_search_rules, collect_active_rules, expand_query_with_relevance_tuning,
+    perform_federated_search, DynamicSearchContext, FederatedSearch, FederatedSearchResult,
     SearchQueryWithIndex, SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
@@ -206,6 +207,33 @@ pub async fn multi_search_with_post(
                 "Federated-search"
             );
 
+            // resolve dynamic search rules (boost/bury/hide) before the search
+            // so boost/bury can be implemented as weighted federated sub-queries.
+            let rules = index_scheduler.dynamic_search_rules();
+            let mut tuned_queries = Vec::new();
+
+            // resolve primary keys for affected indexes so we can build
+            // document-id filters for boost/bury selectors.
+            for query in &mut queries {
+                let index = index_scheduler.index(query.index_uid.as_str())?;
+                let rtxn = index.read_txn()?;
+                let primary_key = index.primary_key(&rtxn)?;
+
+                let dyn_search_ctx = DynamicSearchContext {
+                    // TODO - support other type of query context like filter
+                    query_is_empty: query.q.as_ref().is_none_or(|s| s.trim().is_empty()),
+                    index_uid: query.index_uid.as_str(),
+                    primary_key,
+                };
+
+                let active_rules = collect_active_rules(&rules, &dyn_search_ctx);
+                let sub_queries =
+                    expand_query_with_relevance_tuning(query, &active_rules, primary_key);
+                tuned_queries.extend(sub_queries);
+            }
+
+            queries.extend(tuned_queries);
+
             // check remote header
             let is_proxy = req
                 .headers()
@@ -237,7 +265,13 @@ pub async fn multi_search_with_post(
                 "Federated-search"
             );
 
-            let (search_result, _) = search_result?;
+            let (mut search_result, _) = search_result?;
+
+            // Apply only hide rules as post-processing; boost/bury was already
+            // handled through the weighted sub-queries above.
+            let global_dyn_search_ctx = DynamicSearchContext::default();
+            let global_active_rules = collect_active_rules(&rules, &global_dyn_search_ctx);
+            global_active_rules.apply_hide(&global_dyn_search_ctx, &mut search_result.hits);
 
             HttpResponse::Ok().json(search_result)
         }
