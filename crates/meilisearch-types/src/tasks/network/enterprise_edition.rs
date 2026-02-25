@@ -365,16 +365,13 @@ impl NetworkTopologyChange {
         .filter_map(move |eob| {
             let this = this?;
             match eob {
-                EitherOrBoth::Both((shard_name, old), (_, new)) => {
-                    let was_removed = old.remotes.contains(this) && !new.remotes.contains(this);
-                    was_removed.then_some(shard_name.as_str())
+                EitherOrBoth::Both(_, (shard_name, new))
+                | EitherOrBoth::Right((shard_name, new)) => {
+                    (!new.remotes.contains(this)).then_some(shard_name.as_str())
                 }
                 EitherOrBoth::Left(_) => {
                     // removed shards have already been accounted for
                     None
-                }
-                EitherOrBoth::Right((shard_name, new)) => {
-                    (!new.remotes.contains(this)).then_some(shard_name.as_str())
                 }
             }
         })
