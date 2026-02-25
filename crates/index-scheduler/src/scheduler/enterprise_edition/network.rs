@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use bumpalo::Bump;
 use hashbrown::hash_map::EntryRef;
+use http_client::reqwest::header::AUTHORIZATION;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::documents::PrimaryKey;
 use meilisearch_types::milli::heed::RwTxn;
@@ -448,7 +449,7 @@ impl IndexScheduler {
                 .prepare(|mut request| {
                     request = request.header("Content-Type", "application/json");
                     if let Some(bearer) = &bearer {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
                     request.json(&body)
                 })

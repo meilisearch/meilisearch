@@ -8,6 +8,7 @@ use backoff::ExponentialBackoff;
 use byte_unit::Byte;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use http_client::ureq::http::header::AUTHORIZATION;
 use meilisearch_types::error::Code;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
@@ -136,7 +137,7 @@ impl IndexScheduler {
         let response = retry(ctx.must_stop_processing, || {
             let mut request = ctx.agent.get(&url);
             if let Some(bearer) = &bearer {
-                request = request.header("Authorization", bearer);
+                request = request.header(AUTHORIZATION, bearer);
             }
 
             request.call()
@@ -164,7 +165,7 @@ impl IndexScheduler {
                     }
 
                     if let Some(bearer) = bearer.as_ref() {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
                     let index_param =
                         json!({ "uid": options.index_uid, "primaryKey": primary_key });
@@ -182,7 +183,7 @@ impl IndexScheduler {
                         request = set_network_ureq_headers(request, import_data, origin, metadata);
                     }
                     if let Some(bearer) = &bearer {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
                     let index_param = json!({ "primaryKey": primary_key });
                     request.send_json(&index_param)
@@ -214,7 +215,7 @@ impl IndexScheduler {
                     }
 
                     if let Some(bearer) = bearer.as_ref() {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
                     request.send_json(settings.clone())
                 }),
@@ -417,6 +418,8 @@ impl IndexScheduler {
             let _ = handle_response(
                 target.remote_name,
                 retry(must_stop_processing, || {
+                    use http_client::ureq::http::header::CONTENT_TYPE;
+
                     let mut request = agent.post(url.to_string());
                     let body = route::NetworkChange {
                         origin: network_change_origin.clone(),
@@ -425,9 +428,9 @@ impl IndexScheduler {
                         },
                     };
 
-                    request = request.header("Content-Type", "application/json");
+                    request = request.header(CONTENT_TYPE, "application/json");
                     if let Some(bearer) = &bearer {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
                     request.send_json(body)
                 }),
@@ -496,7 +499,7 @@ fn send_buffer<'a>(
         request = request.header("Content-Type", "application/x-ndjson");
         request = request.header("Content-Encoding", "gzip");
         if let Some(bearer) = bearer {
-            request = request.header("Authorization", bearer);
+            request = request.header(AUTHORIZATION, bearer);
         }
         if let Some((import_data, origin, metadata)) = task_network {
             request = set_network_ureq_headers(request, import_data, origin, metadata);
