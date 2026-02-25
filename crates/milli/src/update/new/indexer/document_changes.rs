@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 
 use bumpalo::Bump;
 use rayon::iter::IndexedParallelIterator;
+use roaring::RoaringBitmap;
 
 use super::super::document_change::DocumentChange;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
@@ -47,6 +48,14 @@ pub trait DocumentChanges<'pl // lifetime of the underlying payload
         item: &'doc Self::Item,
     ) -> Result<Option<DocumentChange<'doc>>> where 'pl: 'doc // the payload must survive the process calls
     ;
+
+    /// Update the docids associated with a shard.
+    ///
+    /// Returns `false` if `docids` were definitely not modified.
+    ///
+    /// For example, add newly added documents to a shard, remove deleted documents from a shard, or
+    /// leave the docids unchanged.
+    fn shard_docids(&self, shard: &str, docids: &mut RoaringBitmap) -> bool;
 }
 
 pub struct IndexingContext<

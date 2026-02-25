@@ -31,6 +31,7 @@ use crate::order_by_map::OrderByMap;
 use crate::progress::Progress;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
+use crate::sharding::{DbShardDocids, Shards};
 use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
 use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};
@@ -116,11 +117,12 @@ pub mod db_name {
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
+    pub const SHARD_DOCIDS: &str = "shard-docids";
     pub const VECTOR_STORE: &str = "vector-arroy";
-    pub const CELLULITE: &str = "cellulite";
+    pub const CELLULITE: &str = "cellulite"; // used as a prefix, counted as `Cellulite::nb_dbs`
     pub const DOCUMENTS: &str = "documents";
 }
-const NUMBER_OF_DBS: u32 = 25 + Cellulite::nb_dbs();
+const NUMBER_OF_DBS: u32 = 26 + Cellulite::nb_dbs();
 
 #[derive(Clone)]
 pub struct Index {
@@ -186,11 +188,25 @@ pub struct Index {
     /// Vector store based on hannoy™.
     pub vector_store: hannoy::Database<Unspecified>,
 
+    /// Maps a shard name to the docids belonging to this shard
+    pub shard_docids: Database<Str, CboRoaringBitmapCodec>,
+
     /// Geo store based on cellulite™.
     pub cellulite: Cellulite,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
+}
+
+pub enum CreateOrOpen {
+    Open,
+    Create { shards: Option<Shards> },
+}
+
+impl CreateOrOpen {
+    pub fn create_without_shards() -> Self {
+        CreateOrOpen::Create { shards: None }
+    }
 }
 
 impl Index {
@@ -199,7 +215,7 @@ impl Index {
         path: P,
         created_at: time::OffsetDateTime,
         updated_at: time::OffsetDateTime,
-        creation: bool,
+        create_or_open: CreateOrOpen,
     ) -> Result<Index> {
         use db_name::*;
 
@@ -245,6 +261,11 @@ impl Index {
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
         let vector_store = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
+
+        // sharding
+        let shard_docids = env.create_database(&mut wtxn, Some(SHARD_DOCIDS))?;
+
+        // geo
         let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn, CELLULITE)?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
@@ -274,18 +295,30 @@ impl Index {
             field_id_docid_facet_strings,
             vector_store,
             embedder_category_id,
+            shard_docids,
             cellulite,
             documents,
         };
-        if this.get_version(&wtxn)?.is_none() && creation {
-            this.put_version(
-                &mut wtxn,
-                (constants::VERSION_MAJOR, constants::VERSION_MINOR, constants::VERSION_PATCH),
-            )?;
-            // The database before v1.29 defaulted to using arroy, so we
-            // need to set it explicitly because the new default is hannoy.
-            this.put_vector_store(&mut wtxn, VectorStoreBackend::Hannoy)?;
+
+        if let CreateOrOpen::Create { shards } = create_or_open {
+            if this.get_version(&wtxn)?.is_none() {
+                this.put_version(
+                    &mut wtxn,
+                    (constants::VERSION_MAJOR, constants::VERSION_MINOR, constants::VERSION_PATCH),
+                )?;
+                // The database before v1.29 defaulted to using arroy, so we
+                // need to set it explicitly because the new default is hannoy.
+                this.put_vector_store(&mut wtxn, VectorStoreBackend::Hannoy)?;
+            }
+
+            if let Some(shards) = shards {
+                let shard_docids = this.shard_docids();
+                for shard in shards.as_sorted_slice() {
+                    shard_docids.add_shard(&mut wtxn, &shard.name)?;
+                }
+            }
         }
+
         wtxn.commit()?;
 
         Index::set_creation_dates(&this.env, this.main, created_at, updated_at)?;
@@ -296,10 +329,10 @@ impl Index {
     pub fn new<P: AsRef<Path>>(
         options: heed::EnvOpenOptions<WithoutTls>,
         path: P,
-        creation: bool,
+        create_or_open: CreateOrOpen,
     ) -> Result<Index> {
         let now = time::OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(options, path, now, now, creation)
+        Self::new_with_creation_dates(options, path, now, now, create_or_open)
     }
 
     /// Attempts to rollback the index at `path` to the version specified by `requested_version`.
@@ -1871,6 +1904,11 @@ impl Index {
         Ok(stats)
     }
 
+    /// A view of the list of docids per shard.
+    pub fn shard_docids(&self) -> DbShardDocids {
+        DbShardDocids::from_index(self)
+    }
+
     /// Check if the word is indexed in the index.
     ///
     /// This function checks if the word is indexed in the index by looking at the word_docids and exact_word_docids.
@@ -1911,6 +1949,7 @@ impl Index {
             field_id_docid_facet_strings,
             vector_store,
             embedder_category_id,
+            shard_docids,
             cellulite,
             documents,
         } = self;
@@ -1983,6 +2022,7 @@ impl Index {
         );
         sizes.insert("vector_store", vector_store.stat(rtxn).map(compute_size)?);
         sizes.insert("embedder_category_id", embedder_category_id.stat(rtxn).map(compute_size)?);
+        sizes.insert("shard_docids", shard_docids.stat(rtxn).map(compute_size)?);
         sizes.insert("documents", documents.stat(rtxn).map(compute_size)?);
 
         // Cellulite

@@ -207,6 +207,10 @@ and can not be more than 511 bytes.", .document_id.to_string()
         operator: String,
         rule_index: usize,
     },
+    #[error("Filter operator `{operator} is not allowed for the special attribute `_shard`.\n  - Note: allowed operators: =, !=, IN. \n  - Note: other operators are not allowed for the special attribute `_shard`.")]
+    FilterShardOperatorNotAllowed { operator: String },
+    #[error("Shard `{shard}` does not exist")]
+    FilterShardNotExist { shard: String },
     #[error("Attribute `{}` is not sortable. {}",
         .field,
         match .valid_fields.is_empty() {

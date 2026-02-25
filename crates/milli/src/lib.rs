@@ -28,6 +28,7 @@ pub mod prompt;
 pub mod proximity;
 pub mod score_details;
 mod search;
+pub mod sharding;
 mod thread_pool_no_abort;
 pub mod update;
 pub mod vector;
@@ -80,9 +81,9 @@ pub use self::heed_codec::{
     RoaringBitmapCodec, RoaringBitmapLenCodec, StrBEU32Codec, U8StrStrCodec,
     UncheckedU8StrStrCodec,
 };
-pub use self::index::Index;
+pub use self::index::{CreateOrOpen, Index};
 pub use self::localized_attributes_rules::LocalizedAttributesRule;
-pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
+pub use self::search::facet::{FacetValueHit, SearchForFacetValues, SHARD_FIELD};
 pub use self::search::similar::Similar;
 pub use self::search::steps::{FederatingResultsStep, SearchStep, TotalProcessingTimeStep};
 pub use self::search::{

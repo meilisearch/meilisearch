@@ -28,6 +28,8 @@ use crate::{
 
 /// The maximum number of filters the filter AST can process.
 const MAX_FILTER_DEPTH: usize = 2000;
+/// magic field name to use filter on shards
+pub const SHARD_FIELD: &str = "_shard";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Filter<'a> {
@@ -242,6 +244,10 @@ impl<'a> Filter<'a> {
     pub fn use_vector_filter(&self) -> Option<&Token<'_>> {
         self.condition.use_vector_filter()
     }
+
+    pub fn use_shard_filter(&self) -> Option<&Token<'_>> {
+        self.condition.use_field(SHARD_FIELD)
+    }
 }
 
 impl<'a> Filter<'a> {
@@ -255,6 +261,7 @@ impl<'a> Filter<'a> {
             if matching_features(attribute, &filterable_attributes_rules)
                 .is_some_and(|(_, features)| features.is_filterable())
                 || attribute == RESERVED_VECTORS_FIELD_NAME
+                || attribute == SHARD_FIELD
             {
                 continue;
             }
@@ -276,7 +283,7 @@ impl<'a> Filter<'a> {
         rtxn: &heed::RoTxn<'_>,
         index: &Index,
         field_id: FieldId,
-        universe: Option<&RoaringBitmap>,
+        universe_hint: Option<&RoaringBitmap>,
         operator: &Condition<'a>,
         features: &FilterableAttributesFeatures,
         rule_index: usize,
@@ -479,7 +486,7 @@ impl<'a> Filter<'a> {
                     field_id,
                     &Included(value.as_bytes()),
                     &Excluded(value2.as_slice()),
-                    universe,
+                    universe_hint,
                     &mut docids,
                 )?;
 
@@ -496,7 +503,7 @@ impl<'a> Filter<'a> {
                 field_id,
                 &left_number,
                 &right_number,
-                universe,
+                universe_hint,
                 &mut output,
             )?;
         }
@@ -507,11 +514,53 @@ impl<'a> Filter<'a> {
             field_id,
             &left_str,
             &right_str,
-            universe,
+            universe_hint,
             &mut output,
         )?;
 
         Ok(output)
+    }
+
+    fn evaluate_shard_operator(
+        rtxn: &heed::RoTxn<'_>,
+        index: &Index,
+        universe_hint: Option<&RoaringBitmap>,
+        operator: &Condition<'a>,
+    ) -> Result<RoaringBitmap> {
+        Ok(match operator {
+            Condition::Equal(token) => {
+                let shard_name = token.value();
+                let shard_docids = index.shard_docids();
+                let docids = if let Some(universe_hint) = universe_hint {
+                    shard_docids.docids_intersection(rtxn, shard_name, universe_hint)?
+                } else {
+                    shard_docids.docids(rtxn, shard_name)?
+                };
+                docids.ok_or_else(|| {
+                    Error::UserError(UserError::FilterShardNotExist {
+                        shard: shard_name.to_owned(),
+                    })
+                })?
+            }
+            Condition::NotEqual(token) => {
+                let to_remove = Self::evaluate_shard_operator(
+                    rtxn,
+                    index,
+                    universe_hint,
+                    &Condition::Equal(token.clone()),
+                )?;
+
+                match universe_hint {
+                    Some(universe_hint) => universe_hint - to_remove,
+                    None => index.documents_ids(rtxn)? - to_remove,
+                }
+            }
+            unsupported => {
+                return Err(Error::UserError(UserError::FilterShardOperatorNotAllowed {
+                    operator: unsupported.operator().to_string(),
+                }))
+            }
+        })
     }
 
     /// Aggregates the documents ids that are part of the specified range automatically
@@ -522,7 +571,7 @@ impl<'a> Filter<'a> {
         field_id: FieldId,
         left: &'data Bound<<BoundCodec as heed::BytesEncode<'data>>::EItem>,
         right: &'data Bound<<BoundCodec as heed::BytesEncode<'data>>::EItem>,
-        universe: Option<&RoaringBitmap>,
+        universe_hint: Option<&RoaringBitmap>,
         output: &mut RoaringBitmap,
     ) -> Result<()>
     where
@@ -538,7 +587,13 @@ impl<'a> Filter<'a> {
             (_, _) => (),
         }
         facet_range_search::find_docids_of_facet_within_bounds::<BoundCodec>(
-            rtxn, db, field_id, left, right, universe, output,
+            rtxn,
+            db,
+            field_id,
+            left,
+            right,
+            universe_hint,
+            output,
         )?;
 
         Ok(())
@@ -550,9 +605,9 @@ impl<'a> Filter<'a> {
         index: &Index,
         field_ids_map: &FieldsIdsMap,
         filterable_attribute_rules: &[FilterableAttributesRule],
-        universe: Option<&RoaringBitmap>,
+        universe_hint: Option<&RoaringBitmap>,
     ) -> Result<RoaringBitmap> {
-        if universe.is_some_and(|u| u.is_empty()) {
+        if universe_hint.is_some_and(|u| u.is_empty()) {
             return Ok(RoaringBitmap::new());
         }
 
@@ -564,16 +619,21 @@ impl<'a> Filter<'a> {
                     index,
                     field_ids_map,
                     filterable_attribute_rules,
-                    universe,
+                    universe_hint,
                 )?;
-                match universe {
-                    Some(universe) => Ok(universe - selected),
+                match universe_hint {
+                    Some(universe_hint) => Ok(universe_hint - selected),
                     None => {
                         let all_ids = index.documents_ids(rtxn)?;
                         Ok(all_ids - selected)
                     }
                 }
             }
+            FilterCondition::In { fid, els } if fid.value() == SHARD_FIELD => els
+                .iter()
+                .map(|el| Condition::Equal(el.clone()))
+                .map(|op| Self::evaluate_shard_operator(rtxn, index, universe_hint, &op))
+                .union(),
             FilterCondition::In { fid, els } => {
                 let Some(field_id) = field_ids_map.id(fid.value()) else {
                     return Ok(RoaringBitmap::new());
@@ -588,10 +648,19 @@ impl<'a> Filter<'a> {
                     .map(|el| Condition::Equal(el.clone()))
                     .map(|op| {
                         Self::evaluate_operator(
-                            rtxn, index, field_id, universe, &op, &features, rule_index,
+                            rtxn,
+                            index,
+                            field_id,
+                            universe_hint,
+                            &op,
+                            &features,
+                            rule_index,
                         )
                     })
                     .union()
+            }
+            FilterCondition::Condition { fid, op } if fid.value() == SHARD_FIELD => {
+                Self::evaluate_shard_operator(rtxn, index, universe_hint, op)
             }
             FilterCondition::Condition { fid, op } => {
                 let value = fid.value();
@@ -604,7 +673,15 @@ impl<'a> Filter<'a> {
                     return Ok(RoaringBitmap::new());
                 };
 
-                Self::evaluate_operator(rtxn, index, field_id, universe, op, &features, rule_index)
+                Self::evaluate_operator(
+                    rtxn,
+                    index,
+                    field_id,
+                    universe_hint,
+                    op,
+                    &features,
+                    rule_index,
+                )
             }
             FilterCondition::Or(subfilters) => subfilters
                 .iter()
@@ -616,7 +693,7 @@ impl<'a> Filter<'a> {
                         index,
                         field_ids_map,
                         filterable_attribute_rules,
-                        universe,
+                        universe_hint,
                     )
                 })
                 .union(),
@@ -632,7 +709,7 @@ impl<'a> Filter<'a> {
                     index,
                     field_ids_map,
                     filterable_attribute_rules,
-                    universe,
+                    universe_hint,
                 )?;
                 for f in subfilters_iter {
                     if bitmap.is_empty() {
@@ -653,7 +730,7 @@ impl<'a> Filter<'a> {
                 Ok(bitmap)
             }
             FilterCondition::VectorExists { fid: _, embedder, filter } => {
-                super::filter_vector::evaluate(rtxn, index, universe, embedder.clone(), filter)
+                super::filter_vector::evaluate(rtxn, index, universe_hint, embedder.clone(), filter)
             }
             FilterCondition::GeoLowerThan { point, radius, resolution: res_token } => {
                 let base_point: [f64; 2] =
@@ -782,7 +859,7 @@ impl<'a> Filter<'a> {
                         index,
                         field_ids_map,
                         filterable_attribute_rules,
-                        universe,
+                        universe_hint,
                     )?;
 
                     let geo_lng_token = Token::new(
@@ -816,7 +893,7 @@ impl<'a> Filter<'a> {
                             index,
                             field_ids_map,
                             filterable_attribute_rules,
-                            universe,
+                            universe_hint,
                         )?;
 
                         let condition_right = FilterCondition::Condition {
@@ -831,7 +908,7 @@ impl<'a> Filter<'a> {
                             index,
                             field_ids_map,
                             filterable_attribute_rules,
-                            universe,
+                            universe_hint,
                         )?;
 
                         left | right
@@ -848,7 +925,7 @@ impl<'a> Filter<'a> {
                             index,
                             field_ids_map,
                             filterable_attribute_rules,
-                            universe,
+                            universe_hint,
                         )?
                     };
 

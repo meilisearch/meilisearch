@@ -211,6 +211,22 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
+    pub fn use_field(&self, field: &str) -> Option<&Token<'a>> {
+        match self {
+            FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
+                (fid.value() == field).then_some(fid)
+            }
+            FilterCondition::Not(this) => this.use_field(field),
+            FilterCondition::Or(seq) | FilterCondition::And(seq) => {
+                seq.iter().find_map(|filter| filter.use_field(field))
+            }
+            FilterCondition::GeoLowerThan { .. }
+            | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::GeoPolygon { .. }
+            | FilterCondition::VectorExists { .. } => None,
+        }
+    }
+
     pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token<'a>> + '_> {
         if depth == 0 {
             return Box::new(std::iter::empty());

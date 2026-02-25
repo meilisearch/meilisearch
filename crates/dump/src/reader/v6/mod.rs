@@ -108,6 +108,8 @@ impl V6Reader {
                 },
             };
 
+        // Sharding is removed at dump import time.
+        // This property is relied upon by <crates/milli/src/update/new/indexer/partial_dump.rs> in function `shard_docids`
         if let Some(network) = &mut network {
             // as dumps are typically imported in a different machine as the emitter (otherwise dumpless upgrade would be used),
             // we decide to remove the self to avoid alias issues

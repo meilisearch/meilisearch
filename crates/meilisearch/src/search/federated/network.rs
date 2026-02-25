@@ -1,15 +1,89 @@
+use std::collections::BTreeMap;
+
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::network::Network;
+use meilisearch_types::network::{Network, Remote};
 
 use crate::search::{Federation, FederationOptions, SearchQuery, SearchQueryWithIndex};
 
-pub fn network_partition<'a>(
+#[cfg(not(feature = "enterprise"))]
+mod community_edition;
+#[cfg(feature = "enterprise")]
+mod enterprise_edition;
+#[cfg(not(feature = "enterprise"))]
+use community_edition as current_edition;
+#[cfg(feature = "enterprise")]
+use enterprise_edition as current_edition;
+
+#[derive(Clone)]
+pub enum Partition {
+    ByRemote { remotes: BTreeMap<String, Remote> },
+    ByShard { remote_for_shard: BTreeMap<String, String> },
+}
+
+impl Partition {
+    pub fn new(network: Network) -> Self {
+        if network.leader.is_some() {
+            Partition::ByShard { remote_for_shard: current_edition::remote_for_shard(network) }
+        } else {
+            Partition::ByRemote { remotes: network.remotes }
+        }
+    }
+
+    pub fn to_query_partition(
+        &self,
+        federation: &mut Federation,
+        query: &SearchQuery,
+        federation_options: Option<FederationOptions>,
+        index_uid: &IndexUid,
+    ) -> Result<impl Iterator<Item = SearchQueryWithIndex> + '_, ResponseError> {
+        let query = fixup_query_federation(federation, query, federation_options, index_uid);
+
+        Ok(match self {
+            Partition::ByRemote { remotes } => either::Left(remotes.keys().map(move |remote| {
+                let mut query = query.clone();
+                query.federation_options.get_or_insert_default().remote = Some(remote.clone());
+                query
+            })),
+            Partition::ByShard { remote_for_shard } => {
+                either::Right(current_edition::partition_shards(
+                    query,
+                    remote_for_shard.iter().map(|(shard, remote)| (shard, remote.clone())),
+                )?)
+            }
+        })
+    }
+
+    pub fn into_query_partition(
+        self,
+        federation: &mut Federation,
+        query: &SearchQuery,
+        federation_options: Option<FederationOptions>,
+        index_uid: &IndexUid,
+    ) -> Result<impl Iterator<Item = SearchQueryWithIndex>, ResponseError> {
+        let query = fixup_query_federation(federation, query, federation_options, index_uid);
+
+        Ok(match self {
+            Partition::ByRemote { remotes } => {
+                either::Left(remotes.into_keys().map(move |remote| {
+                    let mut query = query.clone();
+                    query.federation_options.get_or_insert_default().remote = Some(remote);
+                    query
+                }))
+            }
+            Partition::ByShard { remote_for_shard } => either::Right(
+                current_edition::partition_shards(query, remote_for_shard.into_iter())?,
+            ),
+        })
+    }
+}
+
+fn fixup_query_federation(
     federation: &mut Federation,
-    query: &'a SearchQuery,
+    query: &SearchQuery,
     federation_options: Option<FederationOptions>,
-    index_uid: &'a IndexUid,
-    network: Network,
-) -> impl Iterator<Item = SearchQueryWithIndex> + 'a {
+    index_uid: &IndexUid,
+) -> SearchQueryWithIndex {
     let federation_options = federation_options.unwrap_or_default();
     let mut query = SearchQueryWithIndex::from_index_query_federation(
         index_uid.clone(),
@@ -91,9 +165,5 @@ pub fn network_partition<'a>(
         }
     }
 
-    network.remotes.into_keys().map(move |remote| {
-        let mut query = query.clone();
-        query.federation_options.get_or_insert_default().remote = Some(remote);
-        query
-    })
+    query
 }

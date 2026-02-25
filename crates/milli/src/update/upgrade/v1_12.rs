@@ -1,8 +1,7 @@
 use heed::RwTxn;
 
-use super::UpgradeIndex;
-use crate::progress::Progress;
-use crate::{make_enum_progress, Index, MustStopProcessing, Result};
+use super::{UpgradeIndex, UpgradeParams};
+use crate::{make_enum_progress, Index, Result};
 
 pub(super) struct FixFieldDistribution {}
 
@@ -11,8 +10,7 @@ impl UpgradeIndex for FixFieldDistribution {
         &self,
         wtxn: &mut RwTxn,
         index: &Index,
-        _must_stop_processing: &MustStopProcessing,
-        progress: Progress,
+        UpgradeParams { progress, .. }: UpgradeParams<'_>,
     ) -> Result<bool> {
         make_enum_progress! {
             enum FieldDistribution {
@@ -20,7 +18,7 @@ impl UpgradeIndex for FixFieldDistribution {
             }
         };
         progress.update_progress(FieldDistribution::RebuildingFieldDistribution);
-        crate::update::new::reindex::field_distribution(index, wtxn, &progress)?;
+        crate::update::new::reindex::field_distribution(index, wtxn, progress)?;
         Ok(true)
     }
 
@@ -40,8 +38,7 @@ impl UpgradeIndex for RecomputeStats {
         &self,
         _wtxn: &mut RwTxn,
         _index: &Index,
-        _must_stop_processing: &MustStopProcessing,
-        _progress: Progress,
+        _params: UpgradeParams<'_>,
     ) -> Result<bool> {
         // recompute the indexes stats
         Ok(true)

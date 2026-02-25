@@ -8,6 +8,7 @@ use backoff::ExponentialBackoff;
 use byte_unit::Byte;
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use http_client::ureq::http::header::AUTHORIZATION;
 use meilisearch_types::error::Code;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli::constants::RESERVED_VECTORS_FIELD_NAME;
@@ -18,7 +19,7 @@ use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOr
 use meilisearch_types::milli::{self, obkv_to_json, Filter, InternalError};
 use meilisearch_types::settings::{self, SecretPolicy};
 use meilisearch_types::tasks::network::headers::SetHeader as _;
-use meilisearch_types::tasks::network::{headers, ImportData, ImportMetadata, Origin};
+use meilisearch_types::tasks::network::{ImportData, ImportMetadata, Origin};
 use meilisearch_types::tasks::{DetailsExportIndexSettings, ExportIndexSettings};
 use roaring::RoaringBitmap;
 use serde::Deserialize;
@@ -26,6 +27,7 @@ use serde_json::json;
 
 use super::MustStopProcessing;
 use crate::processing::AtomicDocumentStep;
+use crate::utils::UreqRequestWrapper;
 use crate::{Error, IndexScheduler, Result};
 
 type Response = http_client::ureq::http::Response<http_client::ureq::Body>;
@@ -135,7 +137,7 @@ impl IndexScheduler {
         let response = retry(ctx.must_stop_processing, || {
             let mut request = ctx.agent.get(&url);
             if let Some(bearer) = &bearer {
-                request = request.header("Authorization", bearer);
+                request = request.header(AUTHORIZATION, bearer);
             }
 
             request.call()
@@ -163,7 +165,7 @@ impl IndexScheduler {
                     }
 
                     if let Some(bearer) = bearer.as_ref() {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
                     let index_param =
                         json!({ "uid": options.index_uid, "primaryKey": primary_key });
@@ -181,7 +183,7 @@ impl IndexScheduler {
                         request = set_network_ureq_headers(request, import_data, origin, metadata);
                     }
                     if let Some(bearer) = &bearer {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
                     let index_param = json!({ "primaryKey": primary_key });
                     request.send_json(&index_param)
@@ -213,7 +215,7 @@ impl IndexScheduler {
                     }
 
                     if let Some(bearer) = bearer.as_ref() {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
                     request.send_json(settings.clone())
                 }),
@@ -403,36 +405,34 @@ impl IndexScheduler {
         agent: &http_client::ureq::Agent,
         must_stop_processing: &MustStopProcessing,
     ) -> Result<(), Error> {
+        use meilisearch_types::network::route;
+
         let bearer = target.api_key.map(|api_key| format!("Bearer {api_key}"));
-        let url = format!("{base_url}/network", base_url = target.base_url,);
+        let url = route::url_from_base_and_route(target.base_url, route::network_control_path())
+            .map_err(|error| Error::InvalidRemoteUrl {
+                url: target.base_url.to_owned(),
+                cause: error.to_string(),
+            })?;
 
         {
             let _ = handle_response(
                 target.remote_name,
                 retry(must_stop_processing, || {
-                    let request = agent.patch(&url);
-                    let mut request = set_network_ureq_headers(
-                        request,
-                        &ImportData {
-                            remote_name: export_old_remote_name.to_string(),
-                            index_name: None,
-                            document_count: 0,
+                    use http_client::ureq::http::header::CONTENT_TYPE;
+
+                    let mut request = agent.post(url.to_string());
+                    let body = route::NetworkChange {
+                        origin: network_change_origin.clone(),
+                        message: route::Message::ExportNoIndexForRemote {
+                            remote: export_old_remote_name.to_string(),
                         },
-                        network_change_origin,
-                        &ImportMetadata {
-                            index_count: 0,
-                            task_key: None,
-                            total_index_documents: 0,
-                        },
-                    );
-                    request = request.header("Content-Type", "application/json");
+                    };
+
+                    request = request.header(CONTENT_TYPE, "application/json");
                     if let Some(bearer) = &bearer {
-                        request = request.header("Authorization", bearer);
+                        request = request.header(AUTHORIZATION, bearer);
                     }
-                    request.send_json(
-                        // empty payload that will be disregarded
-                        serde_json::Value::Object(Default::default()),
-                    )
+                    request.send_json(body)
                 }),
             )?;
         }
@@ -447,7 +447,7 @@ fn set_network_ureq_headers<P>(
     origin: &Origin,
     metadata: &ImportMetadata,
 ) -> http_client::ureq::RequestBuilder<P> {
-    let request = RequestWrapper(request);
+    let request = UreqRequestWrapper(request);
 
     let ImportMetadata { index_count, task_key, total_index_documents } = metadata;
     let Origin { remote_name: origin_remote, task_uid, network_version } = origin;
@@ -467,20 +467,13 @@ fn set_network_ureq_headers<P>(
     } else {
         request
     };
-    let RequestWrapper(request) = if let Some(task_key) = task_key {
+    let UreqRequestWrapper(request) = if let Some(task_key) = task_key {
         request.set_import_task_key(*task_key)
     } else {
         request
     };
 
     request
-}
-
-struct RequestWrapper<P>(http_client::ureq::RequestBuilder<P>);
-impl<P> headers::SetHeader for RequestWrapper<P> {
-    fn set_header(self, name: &str, value: &str) -> Self {
-        Self(self.0.header(name, value))
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -506,7 +499,7 @@ fn send_buffer<'a>(
         request = request.header("Content-Type", "application/x-ndjson");
         request = request.header("Content-Encoding", "gzip");
         if let Some(bearer) = bearer {
-            request = request.header("Authorization", bearer);
+            request = request.header(AUTHORIZATION, bearer);
         }
         if let Some((import_data, origin, metadata)) = task_network {
             request = set_network_ureq_headers(request, import_data, origin, metadata);

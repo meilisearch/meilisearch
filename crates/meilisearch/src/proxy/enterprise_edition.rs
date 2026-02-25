@@ -5,13 +5,14 @@
 
 use std::collections::BTreeMap;
 
+use actix_http::uri::PathAndQuery;
 use actix_web::http::header::CONTENT_TYPE;
 use actix_web::HttpRequest;
 use bytes::Bytes;
-use http_client::reqwest::{ClientBuilder, RequestBuilder, StatusCode};
-use index_scheduler::IndexScheduler;
+use http_client::reqwest::{ClientBuilder, StatusCode};
+use index_scheduler::{IndexScheduler, ReqwestRequestWrapper};
 use meilisearch_types::error::ResponseError;
-use meilisearch_types::network::Remote;
+use meilisearch_types::network::{route, Remote};
 use meilisearch_types::tasks::network::headers::{GetHeader, SetHeader};
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, ImportData, ImportMetadata, Origin, TaskNetwork,
@@ -236,12 +237,21 @@ where
             let this = this.clone();
             let task_uid = task.uid;
             let method = method.clone();
-            let path_and_query = req.uri().path_and_query().map(|paq| paq.as_str()).unwrap_or("/");
+            let path_and_query = req
+                .uri()
+                .path_and_query()
+                .cloned()
+                .unwrap_or_else(|| PathAndQuery::from_static("/"));
 
             in_flight_remote_queries.insert(
                 node_name,
                 tokio::spawn({
-                    let url = format!("{}{}", node.url, path_and_query);
+                    let url = route::url_from_base_and_route(&node.url, path_and_query.clone())
+                        .map_err(|err| index_scheduler::Error::InvalidRemoteUrl {
+                            url: node.url.clone(),
+                            cause: err.to_string(),
+                        })?
+                        .to_string();
 
                     let content_type = content_type.map(|b| b.to_owned());
 
@@ -321,7 +331,7 @@ where
 }
 
 pub async fn send_request<T, F, U>(
-    path_and_query: &str,
+    path_and_query: PathAndQuery,
     method: http_client::reqwest::Method,
     content_type: Option<String>,
     body: Body<T, F>,
@@ -350,7 +360,14 @@ where
         .build_with_policies(ip_policy, Default::default())
         .unwrap();
 
-    let url = format!("{}{}", remote.url, path_and_query);
+    let url = route::url_from_base_and_route(&remote.url, path_and_query).map_err(|err| {
+        Box::new(index_scheduler::Error::InvalidRemoteUrl {
+            url: remote.url.clone(),
+            cause: err.to_string(),
+        })
+    })?;
+
+    let url = url.to_string();
 
     // send payload to remote
     tracing::trace!(remote_name, "sending request to remote");
@@ -487,7 +504,7 @@ async fn try_proxy(
         };
         request
     });
-    let RequestWrapper(request) = RequestWrapper(request)
+    let ReqwestRequestWrapper(request) = ReqwestRequestWrapper(request)
         .set_origin_task_uid(task_uid)
         .set_origin_network_version(network_version)
         .set_origin_remote(this);
@@ -506,13 +523,6 @@ async fn try_proxy(
     };
 
     handle_response(response).await
-}
-
-struct RequestWrapper(RequestBuilder);
-impl meilisearch_types::tasks::network::headers::SetHeader for RequestWrapper {
-    fn set_header(self, name: &str, value: &str) -> Self {
-        Self(self.0.prepare(|request| request.header(name, value)))
-    }
 }
 
 async fn parse_error(

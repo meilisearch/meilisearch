@@ -50,6 +50,7 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
             embedder_category_id: _,
             cellulite,
             documents,
+            shard_docids: _,
         } = self.index;
 
         let empty_roaring = RoaringBitmap::default();
@@ -67,6 +68,9 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
 
         // Remove all user-provided bits from the configs
         self.index.embedding_configs().clear_embedder_info_docids(self.wtxn)?;
+
+        let shard_docids = self.index.shard_docids();
+        shard_docids.clear_documents(self.wtxn)?;
 
         // Clear the other databases.
         external_documents_ids.clear(self.wtxn)?;

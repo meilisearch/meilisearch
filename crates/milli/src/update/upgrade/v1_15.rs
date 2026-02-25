@@ -2,10 +2,9 @@ use heed::RwTxn;
 use roaring::RoaringBitmap;
 use serde::Deserialize;
 
-use super::UpgradeIndex;
-use crate::progress::Progress;
+use super::{UpgradeIndex, UpgradeParams};
 use crate::update::new::indexer::recompute_word_fst_from_word_docids_database;
-use crate::{Index, MustStopProcessing, Result};
+use crate::{Index, Result};
 
 pub(super) struct RecomputeWordFst();
 
@@ -14,11 +13,10 @@ impl UpgradeIndex for RecomputeWordFst {
         &self,
         wtxn: &mut RwTxn,
         index: &Index,
-        _must_stop_processing: &MustStopProcessing,
-        progress: Progress,
+        UpgradeParams { progress, .. }: UpgradeParams<'_>,
     ) -> Result<bool> {
         // Recompute the word FST from the word docids database.
-        recompute_word_fst_from_word_docids_database(index, wtxn, &progress)?;
+        recompute_word_fst_from_word_docids_database(index, wtxn, progress)?;
 
         Ok(false)
     }

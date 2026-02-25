@@ -5,7 +5,7 @@ use heed::{BytesDecode, RoTxn};
 use roaring::RoaringBitmap;
 
 pub use self::facet_distribution::{FacetDistribution, OrderBy, DEFAULT_VALUES_PER_FACET};
-pub use self::filter::{BadGeoError, Filter};
+pub use self::filter::{BadGeoError, Filter, SHARD_FIELD};
 pub use self::search::{FacetValueHit, SearchForFacetValues};
 use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::BytesRefCodec;

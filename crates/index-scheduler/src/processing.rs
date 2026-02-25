@@ -196,6 +196,47 @@ make_enum_progress! {
     }
 }
 
+pub mod network {
+    use meilisearch_types::milli::make_enum_progress;
+    use meilisearch_types::tasks::network::NetworkTopologyState as DbNetworkTopologyState;
+
+    make_enum_progress! {
+            pub enum NetworkTopologyState {
+                WaitingForOlderTasks,
+                ExportingDocuments,
+                ImportingDocuments,
+                WaitingForOthers,
+                DeletingDocuments,
+                Finished,
+        }
+    }
+
+    impl From<DbNetworkTopologyState> for self::NetworkTopologyState {
+        fn from(value: DbNetworkTopologyState) -> Self {
+            match value {
+                DbNetworkTopologyState::WaitingForOlderTasks => Self::WaitingForOlderTasks,
+                DbNetworkTopologyState::ExportingDocuments => Self::ExportingDocuments,
+                DbNetworkTopologyState::ImportingDocuments => Self::ImportingDocuments,
+                DbNetworkTopologyState::WaitingForOthers => Self::WaitingForOthers,
+                DbNetworkTopologyState::DeletingDocuments => Self::DeletingDocuments,
+                DbNetworkTopologyState::Finished => Self::Finished,
+            }
+        }
+    }
+
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
+    /// used in VariableNamedStep while ExportingDocuments
+    pub enum ExportIndex {}
+
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
+    /// used in VariableNamedStep while deleting documents
+    pub enum DeleteDocumentsFromIndex {}
+
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
+    /// used in VariableNamedStep while waiting for other remotes to finish importing
+    pub enum ImportRemotes {}
+}
+
 make_atomic_progress!(Task alias AtomicTaskStep => "task" );
 make_atomic_progress!(Document alias AtomicDocumentStep => "document" );
 make_atomic_progress!(Index alias AtomicIndexStep => "index" );
