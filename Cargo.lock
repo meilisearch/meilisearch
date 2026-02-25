@@ -3042,12 +3042,13 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.1.6-nested-rtxns"
+version = "0.1.7-nested-rtxns"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d590bd07da2aeeb4cac61805323b895d3841bc1750e71714d248767953483fb"
+checksum = "887aa70bc3aecc9b5c4652752820e3b37a1fb95d62520efbd18acd377cc26e95"
 dependencies = [
  "bytemuck",
  "byteorder",
+ "crossbeam-channel",
  "hashbrown 0.15.5",
  "heed",
  "madvise",
@@ -3060,6 +3061,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "steppe",
  "thiserror 2.0.17",
+ "thread_local",
  "tinyvec",
  "tracing",
 ]
@@ -3133,9 +3135,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heed"
-version = "0.22.1-nested-rtxns-6"
+version = "0.22.1-nested-rtxns-7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c69e07cd539834bedcfa938f3d7d8520cce1ad2b0776c122b5ccdf8fd5bafe12"
+checksum = "d4679efe3143dcb1b7d82023d532c42445f840bd5156efb4d5fb1a2258f06cbc"
 dependencies = [
  "bitflags 2.10.0",
  "byteorder",
