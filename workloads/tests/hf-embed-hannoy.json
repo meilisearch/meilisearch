@@ -154,17 +154,6 @@
       }
     },
     {
-      "route": "experimental-features",
-      "method": "PATCH",
-      "body": {
-        "inline": {
-          "vectorStoreSetting": true
-        }
-      },
-      "expectedStatus": 200,
-      "synchronous": "WaitForResponse"
-    },
-    {
       "route": "indexes/movies/search",
       "method": "POST",
       "body": {
@@ -231,14 +220,6 @@
       "synchronous": "WaitForResponse"
     },
     {
-      "route": "indexes/movies/settings/vector-store",
-      "method": "GET",
-      "body": null,
-      "expectedStatus": 200,
-      "expectedResponse": "experimental",
-      "synchronous": "WaitForResponse"
-    },
-    {
       "binary": {
         "source": "build",
         "edition": "community",
@@ -254,14 +235,6 @@
         "status": "available"
       },
       "synchronous": "WaitForTask"
-    },
-    {
-      "route": "indexes/movies/settings/vector-store",
-      "method": "GET",
-      "body": null,
-      "expectedStatus": 200,
-      "expectedResponse": "experimental",
-      "synchronous": "WaitForResponse"
     },
     {
       "route": "indexes/movies/search",
@@ -399,8 +372,7 @@
             "details": {
               "filterableAttributes": ["genres", "release_date"],
               "searchableAttributes": ["title", "overview"],
-              "sortableAttributes": ["release_date"],
-              "vectorStore": "experimental"
+              "sortableAttributes": ["release_date"]
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",

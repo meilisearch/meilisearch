@@ -6,9 +6,9 @@ use crate::vector::{VectorStore, VectorStoreBackend};
 use crate::{Index, MustStopProcessing, Result};
 
 /// Convert old Annoy vector stores to Hannoy ones
-pub(super) struct ConvertAnnoyToHannoy();
+pub(super) struct ConvertArroyToHannoy();
 
-impl UpgradeIndex for ConvertAnnoyToHannoy {
+impl UpgradeIndex for ConvertArroyToHannoy {
     fn upgrade(
         &self,
         wtxn: &mut RwTxn,
@@ -48,10 +48,10 @@ impl UpgradeIndex for ConvertAnnoyToHannoy {
     }
 
     fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
-        initial_version < (1, 36, 0)
+        initial_version < (1, 37, 0)
     }
 
     fn description(&self) -> &'static str {
-        "Migrates Annoy vector storage to Hannoy format"
+        "Migrates Arroy vector storage to Hannoy format"
     }
 }
