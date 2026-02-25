@@ -7,7 +7,7 @@ use crate::score_details::{self, ScoreDetails};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::ExactTerm;
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{CboRoaringBitmapCodec, Deadline, Result, SearchContext, SearchLogger};
+use crate::{DeCboRoaringBitmapCodec, Deadline, Result, SearchContext, SearchLogger};
 
 /// A ranking rule that produces 3 disjoint buckets:
 ///
@@ -220,7 +220,7 @@ impl State {
 
                     match bitmap_bytes {
                         Some(bytes) => {
-                            CboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)?
+                            DeCboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)?
                         }
                         None => RoaringBitmap::default(),
                     }

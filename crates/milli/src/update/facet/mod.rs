@@ -90,7 +90,7 @@ use tracing::debug;
 
 use self::incremental::FacetsUpdateIncremental;
 use super::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
-use super::{FacetsUpdateBulk, MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps};
+use super::{FacetsUpdateBulk, MergeDeladdBtreesetString, MergeDeladdDeCboRoaringBitmaps};
 use crate::facet::FacetType;
 use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec,
@@ -112,7 +112,7 @@ pub struct FacetsUpdate<'i> {
     index: &'i Index,
     database: heed::Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     facet_type: FacetType,
-    delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
+    delta_data: Merger<BufReader<File>, MergeDeladdDeCboRoaringBitmaps>,
     normalized_delta_data: Option<Merger<BufReader<File>, MergeDeladdBtreesetString>>,
     group_size: u8,
     max_group_size: u8,
@@ -124,7 +124,7 @@ impl<'i> FacetsUpdate<'i> {
     pub fn new(
         index: &'i Index,
         facet_type: FacetType,
-        delta_data: Merger<BufReader<File>, MergeDeladdCboRoaringBitmaps>,
+        delta_data: Merger<BufReader<File>, MergeDeladdDeCboRoaringBitmaps>,
         normalized_delta_data: Option<Merger<BufReader<File>, MergeDeladdBtreesetString>>,
         data_size: u64,
     ) -> Self {
@@ -364,9 +364,9 @@ pub(crate) mod test_helpers {
     use crate::search::facet::get_highest_level;
     use crate::snapshot_tests::display_bitmap;
     use crate::update::del_add::{DelAdd, KvWriterDelAdd};
-    use crate::update::index_documents::MergeDeladdCboRoaringBitmaps;
+    use crate::update::index_documents::MergeDeladdDeCboRoaringBitmaps;
     use crate::update::FacetsUpdateIncrementalInner;
-    use crate::CboRoaringBitmapCodec;
+    use crate::DeCboRoaringBitmapCodec;
 
     /// Utility function to generate a string whose position in a lexicographically
     /// ordered list is `i`.
@@ -496,13 +496,13 @@ pub(crate) mod test_helpers {
                     FacetGroupKey { field_id: *field_id, level: 0, left_bound: &left_bound_bytes };
                 let key = FacetGroupKeyCodec::<BytesRefCodec>::bytes_encode(&key).unwrap();
                 let mut inner_writer = KvWriterDelAdd::memory();
-                let value = CboRoaringBitmapCodec::bytes_encode(docids).unwrap();
+                let value = DeCboRoaringBitmapCodec::bytes_encode(docids).unwrap();
                 inner_writer.insert(DelAdd::Addition, value).unwrap();
                 writer.insert(&key, inner_writer.into_inner().unwrap()).unwrap();
             }
             writer.finish().unwrap();
             let reader = grenad::Reader::new(std::io::Cursor::new(new_data)).unwrap();
-            let mut builder = MergerBuilder::new(MergeDeladdCboRoaringBitmaps);
+            let mut builder = MergerBuilder::new(MergeDeladdDeCboRoaringBitmaps);
             builder.push(reader.into_cursor().unwrap());
             let merger = builder.build();
 

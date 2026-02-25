@@ -2244,6 +2244,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_logger"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
+dependencies = [
+ "log",
+ "regex",
+]
+
+[[package]]
 name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4557,12 +4567,14 @@ name = "meilitool"
 version = "1.37.0"
 dependencies = [
  "anyhow",
+ "bstr",
  "clap",
  "dump",
  "file-store",
  "indexmap",
  "meilisearch-auth",
  "meilisearch-types",
+ "rayon",
  "serde",
  "serde_json",
  "tempfile",
@@ -4595,6 +4607,7 @@ dependencies = [
  "big_s",
  "bimap",
  "bincode 1.3.3",
+ "bitpacking",
  "bstr",
  "bumpalo",
  "bumparaw-collections",
@@ -4642,6 +4655,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "ordered-float 5.1.0",
+ "quickcheck",
  "rand 0.8.5",
  "rayon",
  "rhai",
@@ -5713,6 +5727,17 @@ checksum = "b66c2058c55a409d601666cffe35f04333cf1013010882cec174a7467cd4e21c"
 dependencies = [
  "memchr",
  "serde",
+]
+
+[[package]]
+name = "quickcheck"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "588f6378e4dd99458b60ec275b4477add41ce4fa9f64dcba6f15adccb19b50d6"
+dependencies = [
+ "env_logger",
+ "log",
+ "rand 0.8.5",
 ]
 
 [[package]]

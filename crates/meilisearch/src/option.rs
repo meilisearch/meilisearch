@@ -57,6 +57,7 @@ const MEILI_EXPERIMENTAL_ENABLE_LOGS_ROUTE: &str = "MEILI_EXPERIMENTAL_ENABLE_LO
 const MEILI_EXPERIMENTAL_CONTAINS_FILTER: &str = "MEILI_EXPERIMENTAL_CONTAINS_FILTER";
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS";
+const MEILI_EXPERIMENTAL_DISABLE_DELTA_ENCODING: &str = "MEILI_EXPERIMENTAL_DISABLE_DELTA_ENCODING";
 const MEILI_EXPERIMENTAL_ENABLE_METRICS: &str = "MEILI_EXPERIMENTAL_ENABLE_METRICS";
 const MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE: &str = "MEILI_EXPERIMENTAL_SEARCH_QUEUE_SIZE";
 const MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER: &str = "MEILI_EXPERIMENTAL_DROP_SEARCH_AFTER";
@@ -851,6 +852,14 @@ pub struct IndexerOpts {
     #[clap(long, env = MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS)]
     #[serde(default)]
     pub experimental_no_edition_2024_for_dumps: bool,
+
+    /// Experimental disable delta-encoding for bitmaps. For more information,
+    /// see: <https://github.com/orgs/meilisearch/discussions/875>
+    ///
+    /// Enables the experimental disable delta-encoding for bitmaps feature.
+    #[clap(long, env = MEILI_EXPERIMENTAL_DISABLE_DELTA_ENCODING)]
+    #[serde(default)]
+    pub experimental_disable_delta_encoding: bool,
 }
 
 impl IndexerOpts {
@@ -862,6 +871,7 @@ impl IndexerOpts {
             skip_index_budget: _,
             experimental_no_edition_2024_for_settings,
             experimental_no_edition_2024_for_dumps,
+            experimental_disable_delta_encoding,
         } = self;
         if let Some(max_indexing_memory) = max_indexing_memory.0 {
             export_to_env_if_not_present(
@@ -887,6 +897,12 @@ impl IndexerOpts {
                 experimental_no_edition_2024_for_dumps.to_string(),
             );
         }
+        if experimental_disable_delta_encoding {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_DISABLE_DELTA_ENCODING,
+                experimental_disable_delta_encoding.to_string(),
+            );
+        }
     }
 }
 
@@ -900,6 +916,7 @@ impl TryFrom<&IndexerOpts> for IndexerConfig {
             skip_index_budget,
             experimental_no_edition_2024_for_settings,
             experimental_no_edition_2024_for_dumps,
+            experimental_disable_delta_encoding: _, // managed in try_main
         } = other;
 
         let thread_pool = ThreadPoolNoAbortBuilder::new_for_indexing()
@@ -1275,7 +1292,7 @@ where
     T: AsRef<OsStr>,
 {
     if let Err(VarError::NotPresent) = std::env::var(key) {
-        std::env::set_var(key, value);
+        unsafe { std::env::set_var(key, value) }
     }
 }
 

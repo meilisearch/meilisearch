@@ -5,7 +5,7 @@ use obkv::KvReaderU16;
 
 use super::helpers::{
     create_sorter, sorter_into_reader, try_split_array_at, GrenadParameters,
-    MergeDeladdCboRoaringBitmaps,
+    MergeDeladdDeCboRoaringBitmaps,
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -30,7 +30,7 @@ pub fn extract_fid_word_count_docids<R: io::Read + io::Seek>(
 
     let mut fid_word_count_docids_sorter = create_sorter(
         grenad::SortAlgorithm::Unstable,
-        MergeDeladdCboRoaringBitmaps,
+        MergeDeladdDeCboRoaringBitmaps,
         indexer.chunk_compression_type,
         indexer.chunk_compression_level,
         indexer.max_nb_chunks,

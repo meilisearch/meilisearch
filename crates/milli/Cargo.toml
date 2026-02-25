@@ -123,14 +123,16 @@ twox-hash = { version = "2.1.2", default-features = false, features = [
 ] }
 geo-types = "=0.7.17" # fixed version: see <https://github.com/meilisearch/meilisearch/pull/6118>
 zerometry = "0.3.0"
+bitpacking = "0.9.2"
 
 [dev-dependencies]
-mimalloc = { version = "0.1.48", default-features = false }
 # fixed version due to format breakages in v1.40
 insta = "=1.39.0"
+mimalloc = { version = "0.1.48", default-features = false }
 maplit = "1.0.2"
 md5 = "0.8.0"
 meili-snap = { path = "../meili-snap" }
+quickcheck = "1.0.3"
 rand = { version = "0.8.5", features = ["small_rng"] }
 
 [features]
