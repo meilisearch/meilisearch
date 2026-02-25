@@ -357,23 +357,11 @@ impl NetworkTopologyChange {
     /// Iterates over the names of shards that still exist but are no longer owned by this remote
     pub fn removed_shard_names(&self) -> impl Iterator<Item = &str> + Clone + '_ {
         let this = self.name_for_export();
-        itertools::merge_join_by(
-            self.old_network.shards.iter(),
-            self.new_network.shards.iter(),
-            |(left, _), (right, _)| left.cmp(right),
-        )
-        .filter_map(move |eob| {
+
+        self.new_network.shards.iter().filter_map(move |(shard_name, shard)| {
             let this = this?;
-            match eob {
-                EitherOrBoth::Both(_, (shard_name, new))
-                | EitherOrBoth::Right((shard_name, new)) => {
-                    (!new.remotes.contains(this)).then_some(shard_name.as_str())
-                }
-                EitherOrBoth::Left(_) => {
-                    // removed shards have already been accounted for
-                    None
-                }
-            }
+
+            (!shard.remotes.contains(this)).then_some(shard_name.as_str())
         })
     }
 }
