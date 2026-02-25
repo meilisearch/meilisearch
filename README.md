@@ -59,7 +59,7 @@ See the list of all our example apps in our [demos repository](https://github.co
 - **[Multi-Tenancy](https://www.meilisearch.com/docs/learn/security/multitenancy_tenant_tokens?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** personalize search results for any number of application tenants
 - **Highly Customizable:** customize Meilisearch to your specific needs or use our out-of-the-box and hassle-free presets
 - **[RESTful API](https://www.meilisearch.com/docs/reference/api/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** integrate Meilisearch in your technical stack with our plugins and SDKs
-- **AI-ready:** works out of the box with [langchain](https://www.meilisearch.com/with/langchain) and the [model context protocol](https://github.com/meilisearch/meilisearch-mcp)
+- **AI-ready:** works out of the box with [LangChain](https://www.meilisearch.com/with/LangChain) and the [Model Context Protocol (MCP)](https://github.com/meilisearch/meilisearch-mcp)
 - **Easy to install, deploy, and maintain**
 
 ## 📖 Documentation
