@@ -432,6 +432,8 @@ impl IndexScheduler {
         };
 
         for (remote_name, remote) in remotes {
+            let bearer = remote.write_api_key.as_deref().map(|api_key| format!("Bearer {api_key}"));
+
             let url =
                 match route::url_from_base_and_route(&remote.url, route::network_control_path()) {
                     Ok(url) => url,
@@ -440,8 +442,17 @@ impl IndexScheduler {
                         continue;
                     }
                 };
-            let request =
-                client.post(url.to_string()).prepare(|request| request.json(&body)).send();
+
+            let request = client
+                .post(url.to_string())
+                .prepare(|mut request| {
+                    request = request.header("Content-Type", "application/json");
+                    if let Some(bearer) = &bearer {
+                        request = request.header("Authorization", bearer);
+                    }
+                    request.json(&body)
+                })
+                .send();
 
             // we don't really care when this task finishes so we can detach it and let it live.
             tokio::spawn(request);
