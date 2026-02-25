@@ -59,6 +59,7 @@ mod api_key;
 pub mod batches;
 pub mod chats;
 mod dump;
+mod dynamic_search_rules;
 mod export;
 mod export_analytics;
 pub mod features;
@@ -132,7 +133,8 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
         .service(web::scope("/network").configure(network::configure))
         .service(web::scope("/export").configure(export::configure))
         .service(web::scope("/chats").configure(chats::configure))
-        .service(web::scope("/webhooks").configure(webhooks::configure));
+        .service(web::scope("/webhooks").configure(webhooks::configure))
+        .service(web::scope("/dynamic-search-rules").configure(dynamic_search_rules::configure));
 
     #[cfg(feature = "swagger")]
     {

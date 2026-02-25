@@ -1,0 +1,8 @@
+---
+source: crates/meilisearch-types/src/dynamic_search_rules.rs
+expression: condition
+---
+{
+  "scope": "time",
+  "start": "2025-01-01T00:00:00Z"
+}

@@ -41,6 +41,7 @@ use http_client::policy::IpPolicy;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
+use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
@@ -560,6 +561,15 @@ fn import_dump(
 
     let network = dump_reader.network()?.cloned().unwrap_or_default();
     index_scheduler.put_network(network)?;
+
+    let mut dynamic_search_rules = DynamicSearchRules::new();
+    for result in dump_reader.dynamic_search_rules()? {
+        let (uid, rule) = result?;
+        dynamic_search_rules.insert(uid, rule);
+    }
+    if !dynamic_search_rules.is_empty() {
+        index_scheduler.put_dynamic_search_rules(dynamic_search_rules)?;
+    }
 
     // 5.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;

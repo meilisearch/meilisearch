@@ -1,0 +1,23 @@
+---
+source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
+---
+{
+  "results": [
+    {
+      "uid": "rule-b",
+      "active": false,
+      "conditions": [],
+      "actions": [
+        {
+          "selector": {
+            "id": "1"
+          },
+          "action": {
+            "type": "pin",
+            "position": 0
+          }
+        }
+      ]
+    }
+  ]
+}

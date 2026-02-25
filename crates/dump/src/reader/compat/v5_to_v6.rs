@@ -210,6 +210,12 @@ impl CompatV5ToV6 {
     pub fn webhooks(&self) -> Option<&v6::Webhooks> {
         None
     }
+
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, v6::DynamicSearchRule)>> + '_>> {
+        Ok(Box::new(std::iter::empty()))
+    }
 }
 
 pub enum CompatIndexV5ToV6 {
