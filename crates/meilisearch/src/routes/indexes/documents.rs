@@ -1161,7 +1161,6 @@ async fn document_addition(
                 })?;
 
                 let update_file = file_store::File::from_parts(path, file);
-                let update_file = update_file.persist()?;
 
                 Ok((documents_count, update_file))
             })
@@ -1186,15 +1185,14 @@ async fn document_addition(
                         unreachable!("We already wrote the user content into the update file")
                     }
                 };
-                // we NEED to persist the file here because we moved the `update_file` in another task.
-                let file = update_file.persist()?;
-                Ok((documents_count, file))
+
+                Ok((documents_count, update_file))
             })
             .await
         }
     };
 
-    let (documents_count, file) = match res {
+    let (documents_count, update_file) = match res {
         Ok(Ok((documents_count, file))) => (documents_count, file),
         // in this case the file has not possibly be persisted.
         Ok(Err(e)) => return Err(e),
@@ -1251,8 +1249,11 @@ async fn document_addition(
         }
     };
 
+    //Persisting the file here after transaction commits.
+    let persisted_file = update_file.persist()?;
+
     if let Some(task_network) = task.network.take() {
-        if let Some(file) = file {
+        if let Some(file) = persisted_file {
             proxy(
                 &index_scheduler,
                 Some(&index_uid),
