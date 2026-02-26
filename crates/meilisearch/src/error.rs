@@ -1,3 +1,19 @@
+///added documentation
+//! Error types and handling for Meilisearch.
+//!
+//! This module defines all error types used throughout Meilisearch,
+//! including HTTP response errors, index errors, and internal errors.
+//! All errors implement proper conversion to HTTP responses with
+//! appropriate status codes and error messages.
+//!
+//! # Error Categories
+//!
+//! - **Index Errors**: Problems with index operations
+//! - **Document Errors**: Issues with document operations
+//! - **Authentication Errors**: API key and permission problems
+//! - **Internal Errors**: System-level failures
+
+
 use actix_web as aweb;
 use aweb::error::{JsonPayloadError, QueryPayloadError};
 use byte_unit::{Byte, UnitType};
@@ -15,6 +31,11 @@ use serde_json::Value;
 use tokio::task::JoinError;
 use uuid::Uuid;
 
+/// The main error type for Meilisearch operations.
+///
+/// This enum covers all possible errors that can occur during
+/// Meilisearch operations, from HTTP errors to internal failures.
+/// Each variant includes context about what went wrong.
 #[derive(Debug, thiserror::Error)]
 #[allow(clippy::large_enum_variant)]
 pub enum MeilisearchHttpError {
