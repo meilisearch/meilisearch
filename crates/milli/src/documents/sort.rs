@@ -242,10 +242,17 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
 
         // Get documents that have this facet field
         let faceted_candidates = index.exists_faceted_documents_ids(rtxn, field_id)?;
-        // Documents that don't have this facet field should be returned at the end
+        // Get documents with null or empty values - these should be treated as "not having" the field for sorting
+        let null_candidates = index.null_faceted_documents_ids(rtxn, field_id)?;
+        let empty_candidates = index.empty_faceted_documents_ids(rtxn, field_id)?;
+        let null_or_empty_candidates = &null_candidates | &empty_candidates;
+
+        // Documents that don't have this facet field (or have null/empty values) should be returned at the end
         let not_faceted_candidates = &candidates - &faceted_candidates;
-        // Only sort candidates that have the facet field
-        let faceted_candidates = candidates & faceted_candidates;
+        let not_faceted_candidates = &not_faceted_candidates | &(&candidates & &null_or_empty_candidates);
+        // Only sort candidates that have actual (non-null, non-empty) values for the facet field
+        let faceted_candidates = &candidates & &faceted_candidates;
+        let faceted_candidates = &faceted_candidates - &null_or_empty_candidates;
         let mut not_faceted_candidates = Some(not_faceted_candidates);
 
         // Perform the sort on the first field
