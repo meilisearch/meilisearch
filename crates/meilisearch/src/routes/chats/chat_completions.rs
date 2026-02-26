@@ -519,7 +519,7 @@ async fn streamed_chat(
     let start_time = std::time::Instant::now();
 
     let config = Config::new(&chat_settings);
-    let auth_token = extract_token_from_request(&req)?.unwrap().to_string();
+    let auth_token = extract_token_from_request(&req)?.unwrap_or_default().to_string();
     let system_role = chat_settings.source.system_role(&chat_completion.model);
     let function_support = setup_search_tool(
         &index_scheduler,

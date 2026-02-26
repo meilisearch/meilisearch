@@ -1,5 +1,6 @@
 mod auth;
 mod batches;
+mod chats;
 mod common;
 mod dashboard;
 mod documents;
