@@ -39,6 +39,7 @@ license = "MIT"
 
 [profile.release]
 codegen-units = 1
+lto = true
 
 # We now compile heed without the NDEBUG define for better performance.
 # However, we still enable debug assertions for a better detection of
