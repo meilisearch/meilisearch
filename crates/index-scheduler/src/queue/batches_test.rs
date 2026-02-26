@@ -32,21 +32,21 @@ fn query_batches_from_and_limit() {
 
     let proc = index_scheduler.processing_tasks.read().unwrap().clone();
     let rtxn = index_scheduler.env.read_txn().unwrap();
-    let query = Query { limit: Some(0), ..Default::default() };
+    let query = Query { limit: 0, ..Default::default() };
     let (batches, _) = index_scheduler
         .queue
         .get_batch_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default(), &proc)
         .unwrap();
     snapshot!(snapshot_bitmap(&batches), @"[]");
 
-    let query = Query { limit: Some(1), ..Default::default() };
+    let query = Query { limit: 1, ..Default::default() };
     let (batches, _) = index_scheduler
         .queue
         .get_batch_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default(), &proc)
         .unwrap();
     snapshot!(snapshot_bitmap(&batches), @"[2,]");
 
-    let query = Query { limit: Some(2), ..Default::default() };
+    let query = Query { limit: 2, ..Default::default() };
     let (batches, _) = index_scheduler
         .queue
         .get_batch_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default(), &proc)
@@ -67,14 +67,14 @@ fn query_batches_from_and_limit() {
         .unwrap();
     snapshot!(snapshot_bitmap(&batches), @"[0,1,2,]");
 
-    let query = Query { from: Some(1), limit: Some(1), ..Default::default() };
+    let query = Query { from: Some(1), limit: 1, ..Default::default() };
     let (batches, _) = index_scheduler
         .queue
         .get_batch_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default(), &proc)
         .unwrap();
     snapshot!(snapshot_bitmap(&batches), @"[1,]");
 
-    let query = Query { from: Some(1), limit: Some(2), ..Default::default() };
+    let query = Query { from: Some(1), limit: 2, ..Default::default() };
     let (batches, _) = index_scheduler
         .queue
         .get_batch_ids_from_authorized_indexes(&rtxn, &query, &AuthFilter::default(), &proc)
