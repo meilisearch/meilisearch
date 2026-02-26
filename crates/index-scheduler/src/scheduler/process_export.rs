@@ -79,7 +79,10 @@ impl IndexScheduler {
                 indexes.len() as u32,
             ));
 
-            let ExportIndexSettings { filter, override_settings } = export_settings;
+            let ExportIndexSettings { name, filter, override_settings } = export_settings;
+
+            // Resolve target index name: apply $name substitution or use original
+            let target_uid = resolve_target_index_name(name.as_deref(), uid);
 
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
@@ -99,7 +102,7 @@ impl IndexScheduler {
                 must_stop_processing: &must_stop_processing,
             };
             let options = ExportOptions {
-                index_uid: uid,
+                index_uid: &target_uid,
                 payload_size,
                 override_settings: *override_settings,
                 export_mode: ExportMode::ExportRoute,
@@ -609,6 +612,82 @@ fn response_error_into_error(error: ResponseError) -> Error {
             Err(e) => io::Error::other(e.into_io()).into(),
         },
         ResponseError::Transport(error) => io::Error::other(error.into_io()).into(),
+    }
+}
+
+/// Resolves the target index name based on the optional name template.
+///
+/// If `name` is None, returns the original index uid.
+/// If `name` contains `$name`, replaces it with the original index uid.
+/// Otherwise, returns the name as-is (static target name).
+///
+/// This works together with wildcard patterns (e.g. `super-*`). When a pattern
+/// matches an index, the matched index uid is passed as `original_uid`, so
+/// `$name` correctly expands to the full matched name.
+///
+/// # Examples
+///
+/// - Pattern `super-*` matches `super-toto`, name template `mega-$name`
+///   → target index is `mega-super-toto`
+/// - Pattern `super-*` matches `super-boby`, name is `everyone`
+///   → target index is `everyone` (static, no substitution)
+/// - Pattern `super-*` matches `super-toto`, name is `None`
+///   → target index is `super-toto` (original name preserved)
+fn resolve_target_index_name(name: Option<&str>, original_uid: &str) -> String {
+    match name {
+        None => original_uid.to_string(),
+        Some(template) => template.replace("$name", original_uid),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_target_index_name_none() {
+        // No name template — use original uid
+        assert_eq!(resolve_target_index_name(None, "movies"), "movies");
+    }
+
+    #[test]
+    fn test_resolve_target_index_name_static() {
+        // Static name — no $name variable, use as-is
+        assert_eq!(resolve_target_index_name(Some("everyone"), "super-toto"), "everyone");
+    }
+
+    #[test]
+    fn test_resolve_target_index_name_with_substitution() {
+        // $name is replaced with the original uid
+        assert_eq!(
+            resolve_target_index_name(Some("mega-$name"), "super-toto"),
+            "mega-super-toto"
+        );
+    }
+
+    #[test]
+    fn test_resolve_target_index_name_multiple_substitutions() {
+        // Multiple $name occurrences are all replaced
+        assert_eq!(
+            resolve_target_index_name(Some("$name-backup-$name"), "movies"),
+            "movies-backup-movies"
+        );
+    }
+
+    #[test]
+    fn test_resolve_target_index_name_only_variable() {
+        // Template is just $name — equivalent to None
+        assert_eq!(resolve_target_index_name(Some("$name"), "movies"), "movies");
+    }
+
+    #[test]
+    fn test_resolve_target_index_name_wildcard_matched_index() {
+        // Simulates wildcard pattern `prod-*` matching `prod-movies`
+        // with name template `staging-$name`
+        assert_eq!(
+            resolve_target_index_name(Some("staging-$name"), "prod-movies"),
+            "staging-prod-movies"
+        );
     }
 }
 
