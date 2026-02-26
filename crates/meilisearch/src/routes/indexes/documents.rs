@@ -22,7 +22,7 @@ use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::{AscDesc, DocumentId};
+use meilisearch_types::milli::{AscDesc, DocumentId, Member};
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
@@ -1895,9 +1895,9 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
-    let (it, number_of_documents) = if let Some(sort) = sort_criteria {
+    let (it, number_of_documents) = if let Some(ref sort) = sort_criteria {
         let number_of_documents = candidates.len();
-        let facet_sort = recursive_sort(index, &rtxn, sort, &candidates)?;
+        let facet_sort = recursive_sort(index, &rtxn, sort.to_vec(), &candidates)?;
         let iter = facet_sort.iter()?;
         let mut documents = Vec::with_capacity(limit);
         for result in iter.skip(offset).take(limit) {
@@ -1927,15 +1927,22 @@ fn retrieve_documents<S: AsRef<str>>(
 
     let documents: Vec<_> = it
         .map(|document| {
-            Ok(match &attributes_to_retrieve {
+            let document = document?;
+            let mut document = match &attributes_to_retrieve {
                 Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    &document?,
+                    &document,
                     attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
                         (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
                     ),
                 ),
-                None => document?,
-            })
+                None => document,
+            };
+
+            if let Some(sorts) = &sort_criteria {
+                insert_geo_distance(sorts, &mut document);
+            }
+
+            Ok(document)
         })
         .collect::<Result<_, ResponseError>>()?;
 
@@ -1971,4 +1978,32 @@ fn retrieve_document<S: AsRef<str>>(
     };
 
     Ok(document)
+}
+
+fn insert_geo_distance(sorts: &[AscDesc], document: &mut Document) {
+    for sort in sorts {
+        if let AscDesc::Asc(Member::Geo(base)) | AscDesc::Desc(Member::Geo(base)) = sort {
+            if let Some(geo_point) = document.get("_geo") {
+                if let Some((lat, lng)) =
+                    extract_geo_value(&geo_point["lat"]).zip(extract_geo_value(&geo_point["lng"]))
+                {
+                    let distance =
+                        meilisearch_types::milli::distance_between_two_points(base, &[lat, lng]);
+                    document.insert(
+                        "_geoDistance".to_string(),
+                        serde_json::json!(distance.round() as usize),
+                    );
+                }
+            }
+            return;
+        }
+    }
+}
+
+fn extract_geo_value(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(n) => n.as_f64(),
+        Value::String(s) => s.parse().ok(),
+        _ => None,
+    }
 }
