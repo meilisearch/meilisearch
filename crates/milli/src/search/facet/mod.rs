@@ -17,6 +17,8 @@ mod facet_range_search;
 mod facet_sort_ascending;
 mod facet_sort_descending;
 mod filter;
+#[cfg(test)]
+mod filter_tests;
 mod filter_vector;
 mod search;
 
