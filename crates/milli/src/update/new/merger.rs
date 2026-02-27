@@ -30,6 +30,9 @@ where
     let mut rtree = index.geo_rtree(rtxn)?.unwrap_or_default();
     let mut faceted = index.geo_faceted_documents_ids(rtxn)?;
 
+    let mut removed_docids = RoaringBitmap::new();
+    let mut inserted_docids = RoaringBitmap::new();
+
     for data in datastore {
         if must_stop_processing() {
             return Err(InternalError::AbortedIndexation.into());
@@ -38,19 +41,21 @@ where
         let mut frozen = data.into_inner().freeze()?;
         for result in frozen.iter_and_clear_removed()? {
             let extracted_geo_point = result?;
-            let removed = rtree.remove(&GeoPoint::from(extracted_geo_point));
-            debug_assert!(removed.is_some());
-            let removed = faceted.remove(extracted_geo_point.docid);
-            debug_assert!(removed);
+            rtree.remove(&GeoPoint::from(extracted_geo_point));
+            removed_docids.insert(extracted_geo_point.docid);
         }
 
         for result in frozen.iter_and_clear_inserted()? {
             let extracted_geo_point = result?;
             rtree.insert(GeoPoint::from(extracted_geo_point));
-            let inserted = faceted.insert(extracted_geo_point.docid);
-            debug_assert!(inserted);
+            inserted_docids.insert(extracted_geo_point.docid);
         }
     }
+
+    // Only remove docids from faceted if they were removed but not re-inserted
+    // (a document can have both _geo and _geo_list, so a docid may still have points)
+    faceted -= &removed_docids - &inserted_docids;
+    faceted |= &inserted_docids;
 
     let mut file = tempfile::tempfile()?;
     bincode::serialize_into(&mut file, &rtree).map_err(InternalError::BincodeError)?;
