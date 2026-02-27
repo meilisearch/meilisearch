@@ -13,7 +13,8 @@ use serde_json::Value;
 
 use super::facet_range_search;
 use crate::constants::{
-    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME,
+    RESERVED_VECTORS_FIELD_NAME,
 };
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
@@ -753,7 +754,9 @@ impl<'a> Filter<'a> {
                 }
 
                 let mut r1 = None;
-                if index.is_geo_filtering_enabled(rtxn)? {
+                if index.is_geo_filtering_enabled(rtxn)?
+                    || index.is_geo_list_filtering_enabled(rtxn)?
+                {
                     let rtree = match index.geo_rtree(rtxn)? {
                         Some(rtree) => rtree,
                         None => return Ok(RoaringBitmap::new()),
@@ -788,7 +791,7 @@ impl<'a> Filter<'a> {
                     (None, None) => {
                         Err(point[0].as_external_error(FilterError::AttributeNotFilterable {
                             attribute: &format!(
-                                "{RESERVED_GEO_FIELD_NAME}/{RESERVED_GEOJSON_FIELD_NAME}"
+                                "{RESERVED_GEO_FIELD_NAME}/{RESERVED_GEOJSON_FIELD_NAME}/{RESERVED_GEO_LIST_FIELD_NAME}"
                             ),
                             filterable_patterns: filtered_matching_patterns(
                                 filterable_attribute_rules,
@@ -932,6 +935,33 @@ impl<'a> Filter<'a> {
                     r1 = Some(selected_lat & selected_lng);
                 }
 
+                // For _geo_list, use RTree-based bounding box to avoid false positives
+                // (independent lat/lng facet ranges could pair lat from point A with lng from point B)
+                if index.is_geo_list_filtering_enabled(rtxn)? {
+                    if let Some(rtree) = index.geo_rtree(rtxn)? {
+                        let is_lng_wrapping = top_right[1] < bottom_left[1];
+                        let geo_list_result: RoaringBitmap = rtree
+                            .iter()
+                            .filter(|point| {
+                                let [lat, lng] = point.data.1;
+                                let lat_ok =
+                                    lat >= bottom_left[0] && lat <= top_right[0];
+                                let lng_ok = if is_lng_wrapping {
+                                    lng >= bottom_left[1] || lng <= top_right[1]
+                                } else {
+                                    lng >= bottom_left[1] && lng <= top_right[1]
+                                };
+                                lat_ok && lng_ok
+                            })
+                            .map(|point| point.data.0)
+                            .collect();
+                        r1 = Some(match r1 {
+                            Some(existing) => existing | geo_list_result,
+                            None => geo_list_result,
+                        });
+                    }
+                }
+
                 let mut r2 = None;
                 if index.is_geojson_filtering_enabled(rtxn)? {
                     let polygon = geo_types::Polygon::new(
@@ -956,7 +986,7 @@ impl<'a> Filter<'a> {
                     (None, None) => Err(top_right_point[0].as_external_error(
                         FilterError::AttributeNotFilterable {
                             attribute: &format!(
-                                "{RESERVED_GEO_FIELD_NAME}/{RESERVED_GEOJSON_FIELD_NAME}"
+                                "{RESERVED_GEO_FIELD_NAME}/{RESERVED_GEOJSON_FIELD_NAME}/{RESERVED_GEO_LIST_FIELD_NAME}"
                             ),
                             filterable_patterns: filtered_matching_patterns(
                                 filterable_attribute_rules,
