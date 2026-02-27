@@ -52,7 +52,7 @@ use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
 use self::vector_sort::VectorSort;
 use crate::attribute_patterns::{match_pattern, PatternMatch};
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME};
 use crate::documents::GeoSortParameter;
 use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
@@ -634,11 +634,13 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
                     continue;
                 }
                 let geo_faceted_docids = ctx.index.geo_faceted_documents_ids(ctx.txn)?;
+                let has_geo_list = ctx.index.is_geo_list_sorting_enabled(ctx.txn)?;
                 ranking_rules.push(Box::new(GeoSort::new(
                     geo_param,
                     geo_faceted_docids,
                     point,
                     true,
+                    has_geo_list,
                 )?));
             }
             AscDesc::Desc(Member::Geo(point)) => {
@@ -646,11 +648,13 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
                     continue;
                 }
                 let geo_faceted_docids = ctx.index.geo_faceted_documents_ids(ctx.txn)?;
+                let has_geo_list = ctx.index.is_geo_list_sorting_enabled(ctx.txn)?;
                 ranking_rules.push(Box::new(GeoSort::new(
                     geo_param,
                     geo_faceted_docids,
                     point,
                     false,
+                    has_geo_list,
                 )?));
             }
         };
@@ -982,7 +986,10 @@ pub(crate) fn check_sort_criteria(
                 }
                 .into());
             }
-            Member::Geo(_) if !sortable_fields.contains(RESERVED_GEO_FIELD_NAME) => {
+            Member::Geo(_)
+                if !sortable_fields.contains(RESERVED_GEO_FIELD_NAME)
+                    && !sortable_fields.contains(RESERVED_GEO_LIST_FIELD_NAME) =>
+            {
                 let (valid_fields, hidden_fields) =
                     ctx.index.remove_hidden_fields(ctx.txn, sortable_fields)?;
 

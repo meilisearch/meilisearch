@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use heed::types::{Bytes, Unit};
 use heed::{RoPrefix, RoTxn};
@@ -73,11 +73,18 @@ pub fn fill_cache(
     rtree: &mut Option<RTree<GeoPoint>>,
     geo_candidates: &RoaringBitmap,
     cached_sorted_docids: &mut VecDeque<(u32, [f64; 2])>,
+    has_geo_list: bool,
 ) -> crate::Result<()> {
     debug_assert!(cached_sorted_docids.is_empty());
 
+    // When _geo_list is involved, force the RTree strategy because the iterative
+    // path reads independent lat/lng facet values that can't be correctly paired
+    // for multi-point documents.
+    let use_rtree =
+        has_geo_list || strategy.use_rtree(geo_candidates.len() as usize);
+
     // lazily initialize the rtree if needed by the strategy, and cache it in `self.rtree`
-    let rtree = if strategy.use_rtree(geo_candidates.len() as usize) {
+    let rtree = if use_rtree {
         if let Some(rtree) = rtree.as_ref() {
             // get rtree from cache
             Some(rtree)
@@ -95,8 +102,11 @@ pub fn fill_cache(
     if let Some(rtree) = rtree {
         if ascending {
             let point = lat_lng_to_xyz(&target_point);
+            // Deduplicate by docid: for documents with multiple geo points (e.g. _geo_list),
+            // the first encountered point is the closest due to nearest-neighbor ordering
+            let mut seen = HashSet::new();
             for point in rtree.nearest_neighbor_iter(&point) {
-                if geo_candidates.contains(point.data.0) {
+                if geo_candidates.contains(point.data.0) && seen.insert(point.data.0) {
                     cached_sorted_docids.push_back(point.data);
                     if cached_sorted_docids.len() >= cache_size {
                         break;
@@ -107,8 +117,9 @@ pub fn fill_cache(
             // in the case of the desc geo sort we look for the closest point to the opposite of the queried point
             // and we insert the points in reverse order they get reversed when emptying the cache later on
             let point = lat_lng_to_xyz(&opposite_of(target_point));
+            let mut seen = HashSet::new();
             for point in rtree.nearest_neighbor_iter(&point) {
-                if geo_candidates.contains(point.data.0) {
+                if geo_candidates.contains(point.data.0) && seen.insert(point.data.0) {
                     cached_sorted_docids.push_front(point.data);
                     if cached_sorted_docids.len() >= cache_size {
                         break;
@@ -117,7 +128,7 @@ pub fn fill_cache(
             }
         }
     } else {
-        // the iterative version
+        // the iterative version (only used when _geo_list is not involved)
         let [lat, lng] = field_ids.expect("fill_buffer can't be called without the lat&lng");
 
         let mut documents = geo_candidates
@@ -145,6 +156,7 @@ pub fn next_bucket(
     cached_sorted_docids: &mut VecDeque<(u32, [f64; 2])>,
     geo_candidates: &RoaringBitmap,
     parameter: GeoSortParameter,
+    has_geo_list: bool,
 ) -> crate::Result<Option<(RoaringBitmap, Option<[f64; 2]>)>> {
     let mut geo_candidates = geo_candidates & universe;
 
@@ -213,6 +225,7 @@ pub fn next_bucket(
                 rtree,
                 &geo_candidates,
                 cached_sorted_docids,
+                has_geo_list,
             )?;
 
             if cached_sorted_docids.is_empty() {
