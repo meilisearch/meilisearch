@@ -944,8 +944,7 @@ impl<'a> Filter<'a> {
                             .iter()
                             .filter(|point| {
                                 let [lat, lng] = point.data.1;
-                                let lat_ok =
-                                    lat >= bottom_left[0] && lat <= top_right[0];
+                                let lat_ok = lat >= bottom_left[0] && lat <= top_right[0];
                                 let lng_ok = if is_lng_wrapping {
                                     lng >= bottom_left[1] || lng <= top_right[1]
                                 } else {
@@ -1168,14 +1167,14 @@ mod tests {
         let filter = Filter::from_str("_geoRadius(42, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r"
-        Attribute `_geo/_geojson` is not filterable. This index does not have configured filterable attributes.
+        Attribute `_geo/_geojson/_geo_list` is not filterable. This index does not have configured filterable attributes.
         12:14 _geoRadius(42, 150, 10)
         ");
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r"
-        Attribute `_geo/_geojson` is not filterable. This index does not have configured filterable attributes.
+        Attribute `_geo/_geojson/_geo_list` is not filterable. This index does not have configured filterable attributes.
         18:20 _geoBoundingBox([42, 150], [30, 10])
         ");
 
@@ -1201,14 +1200,14 @@ mod tests {
         let filter = Filter::from_str("_geoRadius(-90, 150, 10)").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r"
-        Attribute `_geo/_geojson` is not filterable. Available filterable attribute patterns are: `title`.
+        Attribute `_geo/_geojson/_geo_list` is not filterable. Available filterable attribute patterns are: `title`.
         12:15 _geoRadius(-90, 150, 10)
         ");
 
         let filter = Filter::from_str("_geoBoundingBox([42, 150], [30, 10])").unwrap().unwrap();
         let error = filter.evaluate(&rtxn, &index).unwrap_err();
         snapshot!(error.to_string(), @r"
-        Attribute `_geo/_geojson` is not filterable. Available filterable attribute patterns are: `title`.
+        Attribute `_geo/_geojson/_geo_list` is not filterable. Available filterable attribute patterns are: `title`.
         18:20 _geoBoundingBox([42, 150], [30, 10])
         ");
 

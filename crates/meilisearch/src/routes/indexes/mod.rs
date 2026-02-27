@@ -5,6 +5,7 @@ use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
+use fields::post_index_fields;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{immutable_field_error, DeserrJsonError, DeserrQueryParamError};

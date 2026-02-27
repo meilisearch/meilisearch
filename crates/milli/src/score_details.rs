@@ -3,7 +3,8 @@ use std::cmp::Ordering;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{criterion::AttributeState, distance_between_two_points};
+use crate::criterion::AttributeState;
+use crate::distance_between_two_points;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreDetails {
