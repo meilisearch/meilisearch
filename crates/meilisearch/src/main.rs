@@ -196,12 +196,34 @@ async fn run_http(
             .keep_alive(KeepAlive::Os);
 
     if let Some(config) = opt_clone.get_ssl_config()? {
-        http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
+        let s = http_server.bind_rustls_0_23(opt_clone.http_addr, config)?;
+        if let Some(addr) = s.addrs().get(0) {
+            create_address_file(&opt_clone.db_path, *addr)?;
+        }
+        s.run().await?;
     } else {
-        http_server.bind(&opt_clone.http_addr)?.run().await?;
+        let s = http_server.bind(&opt_clone.http_addr)?;
+        if let Some(addr) = s.addrs().get(0) {
+            create_address_file(&opt_clone.db_path, *addr)?;
+        }
+        s.run().await?;
     }
+
     Ok(())
 }
+
+pub fn create_address_file(
+    db_path: &std::path::Path,
+    addr: core::net::SocketAddr,
+) -> anyhow::Result<()> {
+    let address_path = db_path.join("HTTP_ADDR");
+    // In order to persist the file later we must create it in the `data.ms` and not in `/tmp`
+    let mut file = tempfile::NamedTempFile::new_in(db_path)?;
+    file.write_all(format!("{addr}").as_bytes())?;
+    file.persist(address_path)?;
+    Ok(())
+}
+
 
 pub fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Option<PathBuf>) {
     let build_info = build_info::BuildInfo::from_build();
