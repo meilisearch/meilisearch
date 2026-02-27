@@ -533,9 +533,9 @@ impl ErrorCode for milli::Error {
                 UserError::CriterionError(_) | UserError::MixedAttributeRankingRulesUsage => {
                     Code::InvalidSettingsRankingRules
                 }
-                UserError::InvalidGeoField { .. } | UserError::GeoJsonError(_) => {
-                    Code::InvalidDocumentGeoField
-                }
+                UserError::InvalidGeoField { .. }
+                | UserError::InvalidGeoListField { .. }
+                | UserError::GeoJsonError(_) => Code::InvalidDocumentGeoField,
                 UserError::InvalidVectorDimensions { .. }
                 | UserError::InvalidIndexingVectorDimensions { .. } => {
                     Code::InvalidVectorDimensions

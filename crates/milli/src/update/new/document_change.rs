@@ -223,14 +223,34 @@ impl<'doc> Update<'doc> {
         mapper: &'t Mapper,
     ) -> Result<bool> {
         let current = self.current(rtxn, index, mapper)?;
+
+        // Check _geo
         let current_geo = current.geo_field()?;
         let updated_geo = self.only_changed_fields().geo_field()?;
-        match (current_geo, updated_geo) {
+        let geo_changed = match (current_geo, updated_geo) {
             (Some(current_geo), Some(updated_geo)) => {
                 let current: Value =
                     serde_json::from_str(current_geo.get()).map_err(InternalError::SerdeJson)?;
                 let updated: Value =
                     serde_json::from_str(updated_geo.get()).map_err(InternalError::SerdeJson)?;
+                current != updated
+            }
+            (None, None) => false,
+            _ => true,
+        };
+        if geo_changed {
+            return Ok(true);
+        }
+
+        // Check _geo_list
+        let current_geo_list = current.geo_list_field()?;
+        let updated_geo_list = self.only_changed_fields().geo_list_field()?;
+        match (current_geo_list, updated_geo_list) {
+            (Some(current_gl), Some(updated_gl)) => {
+                let current: Value =
+                    serde_json::from_str(current_gl.get()).map_err(InternalError::SerdeJson)?;
+                let updated: Value =
+                    serde_json::from_str(updated_gl.get()).map_err(InternalError::SerdeJson)?;
                 Ok(current != updated)
             }
             (None, None) => Ok(false),
