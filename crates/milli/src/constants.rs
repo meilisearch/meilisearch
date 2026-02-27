@@ -12,3 +12,4 @@ const fn parse_u32(s: &str) -> u32 {
 pub const RESERVED_VECTORS_FIELD_NAME: &str = "_vectors";
 pub const RESERVED_GEO_FIELD_NAME: &str = "_geo";
 pub const RESERVED_GEOJSON_FIELD_NAME: &str = "_geojson";
+pub const RESERVED_GEO_LIST_FIELD_NAME: &str = "_geo_list";

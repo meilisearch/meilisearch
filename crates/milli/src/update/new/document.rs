@@ -11,7 +11,8 @@ use serde_json::value::RawValue;
 use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::constants::{
-    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME,
+    RESERVED_VECTORS_FIELD_NAME,
 };
 use crate::documents::FieldIdMapper;
 use crate::update::del_add::KvReaderDelAdd;
@@ -31,15 +32,15 @@ pub trait Document<'doc> {
     /// Iterate over all **top-level** fields of the document, returning their name and raw JSON value.
     ///
     /// - The returned values *may* contain nested fields.
-    /// - The `_vectors`, `_geo` and `_geojson` fields are **ignored** by this method, meaning  they are **not returned** by this method.
+    /// - The `_vectors`, `_geo`, `_geojson` and `_geo_list` fields are **ignored** by this method, meaning  they are **not returned** by this method.
     fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>>;
 
-    /// Number of top level fields, **excluding** `_vectors`, `_geo` and `_geojson`.
+    /// Number of top level fields, **excluding** `_vectors`, `_geo`, `_geojson` and `_geo_list`.
     fn top_level_fields_count(&self) -> usize;
 
     /// Get the **top-level** with the specified name, if exists.
     ///
-    /// - The `_vectors` and `_geo` fields are **ignored** by this method, meaning e.g. `top_level_field("_vectors")` will return `Ok(None)`
+    /// - The `_vectors`, `_geo`, `_geojson` and `_geo_list` fields are **ignored** by this method, meaning e.g. `top_level_field("_vectors")` will return `Ok(None)`
     fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>>;
 
     /// Returns the unparsed value of the `_vectors` field from the document data.
@@ -59,6 +60,9 @@ pub trait Document<'doc> {
     ///
     /// This method is meant as a convenience for implementors of [`super::geo_document::GeoDocument`].
     fn geojson_field(&self) -> Result<Option<&'doc RawValue>>;
+
+    /// Returns the unparsed value of the `_geo_list` field from the document data.
+    fn geo_list_field(&self) -> Result<Option<&'doc RawValue>>;
 }
 
 #[derive(Debug)]
@@ -97,6 +101,7 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
             if name == RESERVED_VECTORS_FIELD_NAME
                 || name == RESERVED_GEO_FIELD_NAME
                 || name == RESERVED_GEOJSON_FIELD_NAME
+                || name == RESERVED_GEO_LIST_FIELD_NAME
             {
                 continue;
             }
@@ -124,19 +129,29 @@ impl<'t, Mapper: FieldIdMapper> Document<'t> for DocumentFromDb<'t, Mapper> {
         self.field(RESERVED_GEOJSON_FIELD_NAME)
     }
 
+    fn geo_list_field(&self) -> Result<Option<&'t RawValue>> {
+        self.field(RESERVED_GEO_LIST_FIELD_NAME)
+    }
+
     fn top_level_fields_count(&self) -> usize {
         let has_vectors_field = self.vectors_field().unwrap_or(None).is_some();
         let has_geo_field = self.geo_field().unwrap_or(None).is_some();
         let has_geojson_field = self.geojson_field().unwrap_or(None).is_some();
+        let has_geo_list_field = self.geo_list_field().unwrap_or(None).is_some();
         let count = self.content.iter().count();
 
-        count - has_vectors_field as usize - has_geo_field as usize - has_geojson_field as usize
+        count
+            - has_vectors_field as usize
+            - has_geo_field as usize
+            - has_geojson_field as usize
+            - has_geo_list_field as usize
     }
 
     fn top_level_field(&self, k: &str) -> Result<Option<&'t RawValue>> {
         if k == RESERVED_VECTORS_FIELD_NAME
             || k == RESERVED_GEO_FIELD_NAME
             || k == RESERVED_GEOJSON_FIELD_NAME
+            || k == RESERVED_GEO_LIST_FIELD_NAME
         {
             return Ok(None);
         }
@@ -193,12 +208,21 @@ impl<'doc> Document<'doc> for DocumentFromVersions<'_, 'doc> {
         Ok(self.versions.geojson_field())
     }
 
+    fn geo_list_field(&self) -> Result<Option<&'doc RawValue>> {
+        Ok(self.versions.geo_list_field())
+    }
+
     fn top_level_fields_count(&self) -> usize {
         let has_vectors_field = self.vectors_field().unwrap_or(None).is_some();
         let has_geo_field = self.geo_field().unwrap_or(None).is_some();
         let has_geojson_field = self.geojson_field().unwrap_or(None).is_some();
+        let has_geo_list_field = self.geo_list_field().unwrap_or(None).is_some();
         let count = self.versions.len();
-        count - has_vectors_field as usize - has_geo_field as usize - has_geojson_field as usize
+        count
+            - has_vectors_field as usize
+            - has_geo_field as usize
+            - has_geojson_field as usize
+            - has_geo_list_field as usize
     }
 
     fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>> {
@@ -288,6 +312,16 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
         db.geojson_field()
     }
 
+    fn geo_list_field(&self) -> Result<Option<&'d RawValue>> {
+        if let Some(geo_list) = self.new_doc.geo_list_field()? {
+            return Ok(Some(geo_list));
+        }
+
+        let Some(db) = self.db else { return Ok(None) };
+
+        db.geo_list_field()
+    }
+
     fn top_level_fields_count(&self) -> usize {
         self.iter_top_level_fields().count()
     }
@@ -321,6 +355,10 @@ where
 
     fn geojson_field(&self) -> Result<Option<&'doc RawValue>> {
         D::geojson_field(self)
+    }
+
+    fn geo_list_field(&self) -> Result<Option<&'doc RawValue>> {
+        D::geo_list_field(self)
     }
 
     fn top_level_fields_count(&self) -> usize {
@@ -439,6 +477,15 @@ where
         unordered_field_buffer.push((fid, geojson_value));
     }
 
+    if let Some(geo_list_value) = document.geo_list_field()? {
+        let fid = fields_ids_map
+            .id_or_insert(RESERVED_GEO_LIST_FIELD_NAME)
+            .ok_or(UserError::AttributeLimitReached)?;
+        fields_ids_map.id_or_insert("_geo_list.lat").ok_or(UserError::AttributeLimitReached)?;
+        fields_ids_map.id_or_insert("_geo_list.lng").ok_or(UserError::AttributeLimitReached)?;
+        unordered_field_buffer.push((fid, geo_list_value));
+    }
+
     unordered_field_buffer.sort_by_key(|(fid, _)| *fid);
     for (fid, value) in unordered_field_buffer.iter() {
         writer.insert(*fid, value.get().as_bytes()).unwrap();
@@ -479,6 +526,7 @@ impl<'doc> Versions<'doc> {
             *k != RESERVED_VECTORS_FIELD_NAME
                 && *k != RESERVED_GEO_FIELD_NAME
                 && *k != RESERVED_GEOJSON_FIELD_NAME
+                && *k != RESERVED_GEO_LIST_FIELD_NAME
         })
     }
 
@@ -494,6 +542,10 @@ impl<'doc> Versions<'doc> {
         self.data.get(RESERVED_GEOJSON_FIELD_NAME)
     }
 
+    pub fn geo_list_field(&self) -> Option<&'doc RawValue> {
+        self.data.get(RESERVED_GEO_LIST_FIELD_NAME)
+    }
+
     pub fn len(&self) -> usize {
         self.data.len()
     }
@@ -506,6 +558,7 @@ impl<'doc> Versions<'doc> {
         if k == RESERVED_VECTORS_FIELD_NAME
             || k == RESERVED_GEO_FIELD_NAME
             || k == RESERVED_GEOJSON_FIELD_NAME
+            || k == RESERVED_GEO_LIST_FIELD_NAME
         {
             return None;
         }
@@ -562,6 +615,7 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
             if name == RESERVED_VECTORS_FIELD_NAME
                 || name == RESERVED_GEO_FIELD_NAME
                 || name == RESERVED_GEOJSON_FIELD_NAME
+                || name == RESERVED_GEO_LIST_FIELD_NAME
             {
                 continue;
             }
@@ -598,6 +652,7 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
             if name == RESERVED_VECTORS_FIELD_NAME
                 || name == RESERVED_GEO_FIELD_NAME
                 || name == RESERVED_GEOJSON_FIELD_NAME
+                || name == RESERVED_GEO_LIST_FIELD_NAME
             {
                 continue;
             }
@@ -611,6 +666,7 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
         if k == RESERVED_VECTORS_FIELD_NAME
             || k == RESERVED_GEO_FIELD_NAME
             || k == RESERVED_GEOJSON_FIELD_NAME
+            || k == RESERVED_GEO_LIST_FIELD_NAME
         {
             return Ok(None);
         }
@@ -627,6 +683,10 @@ impl<'a, Mapper: FieldIdMapper> Document<'a> for KvDelAddDocument<'a, Mapper> {
 
     fn geojson_field(&self) -> Result<Option<&'a RawValue>> {
         self.get(RESERVED_GEOJSON_FIELD_NAME)
+    }
+
+    fn geo_list_field(&self) -> Result<Option<&'a RawValue>> {
+        self.get(RESERVED_GEO_LIST_FIELD_NAME)
     }
 }
 

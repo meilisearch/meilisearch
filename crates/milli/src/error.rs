@@ -10,7 +10,9 @@ use rhai::EvalAltResult;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME,
+};
 use crate::documents::{self, DocumentsBatchCursorError};
 use crate::thread_pool_no_abort::PanicCatched;
 use crate::vector::settings::EmbeddingSettings;
@@ -20,6 +22,7 @@ pub fn is_reserved_keyword(keyword: &str) -> bool {
     [
         RESERVED_GEO_FIELD_NAME,
         RESERVED_GEOJSON_FIELD_NAME,
+        RESERVED_GEO_LIST_FIELD_NAME,
         "_geoDistance",
         "_geoPoint",
         "_geoRadius",
@@ -175,6 +178,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     },
     #[error(transparent)]
     InvalidGeoField(#[from] Box<GeoError>),
+    #[error(transparent)]
+    InvalidGeoListField(#[from] Box<GeoListError>),
     #[error(transparent)]
     GeoJsonError(#[from] geojson::Error),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
@@ -517,6 +522,28 @@ pub enum GeoError {
     BadLongitude { document_id: Value, value: Value },
 }
 
+#[derive(Error, Debug)]
+pub enum GeoListError {
+    #[error("The `_geo_list` field in the document with the id: `{document_id}` is not an array. Was expecting an array of objects with `lat` and `lng` fields but instead got `{value}`.")]
+    NotAnArray { document_id: Value, value: Value },
+    #[error("The `_geo_list` field in the document with the id: `{document_id}` contains an empty array. Was expecting a non-empty array of objects with `lat` and `lng` fields.")]
+    EmptyArray { document_id: Value },
+    #[error("An element of the `_geo_list` field in the document with the id: `{document_id}` is not an object. Was expecting an object with `lat` and `lng` fields but instead got `{value}`.")]
+    ElementNotAnObject { document_id: Value, value: Value },
+    #[error("Could not find latitude nor longitude in an element of the `_geo_list` field in the document with the id: `{document_id}`. Was expecting `lat` and `lng` fields.")]
+    ElementMissingLatitudeAndLongitude { document_id: Value },
+    #[error("Could not find latitude in an element of the `_geo_list` field in the document with the id: `{document_id}`. Was expecting a `lat` field.")]
+    ElementMissingLatitude { document_id: Value },
+    #[error("Could not find longitude in an element of the `_geo_list` field in the document with the id: `{document_id}`. Was expecting a `lng` field.")]
+    ElementMissingLongitude { document_id: Value },
+    #[error("Could not parse latitude in an element of the `_geo_list` field in the document with the id: `{document_id}`. Was expecting a finite number but instead got `{value}`.")]
+    ElementBadLatitude { document_id: Value, value: Value },
+    #[error("Could not parse longitude in an element of the `_geo_list` field in the document with the id: `{document_id}`. Was expecting a finite number but instead got `{value}`.")]
+    ElementBadLongitude { document_id: Value, value: Value },
+    #[error("Could not parse latitude nor longitude in an element of the `_geo_list` field in the document with the id: `{document_id}`. Was expecting finite numbers but instead got `{lat}` and `{lng}`.")]
+    ElementBadLatitudeAndLongitude { document_id: Value, lat: Value, lng: Value },
+}
+
 #[allow(dead_code)]
 fn format_invalid_filter_distribution(
     invalid_facets_name: &BTreeSet<String>,
@@ -601,6 +628,7 @@ error_from_sub_error! {
     ThreadPoolBuildError => InternalError,
     SerializationError => InternalError,
     Box<GeoError> => UserError,
+    Box<GeoListError> => UserError,
     CriterionError => UserError,
 }
 
