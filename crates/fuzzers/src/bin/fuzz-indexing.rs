@@ -19,6 +19,12 @@ use milli::{CreateOrOpen, Index};
 use serde_json::Value;
 use tempfile::TempDir;
 
+#[cfg(target_pointer_width = "64")]
+const DEFAULT_MAP_SIZE: usize = 1024 * 1024 * 1024 * 1024; // 1 TiB
+
+#[cfg(target_pointer_width = "32")]
+const DEFAULT_MAP_SIZE: usize = 512 * 1024 * 1024; // 512 MiB
+
 #[derive(Debug, Arbitrary)]
 struct Batch([Operation; 5]);
 
@@ -60,7 +66,7 @@ fn main() {
         let handle = std::thread::spawn(move || {
             let options = EnvOpenOptions::new();
             let mut options = options.read_txn_without_tls();
-            options.map_size(1024 * 1024 * 1024 * 1024);
+            options.map_size(DEFAULT_MAP_SIZE);
             let tempdir = match opt.path {
                 Some(path) => TempDir::new_in(path).unwrap(),
                 None => TempDir::new().unwrap(),
