@@ -1,6 +1,7 @@
-use crate::types::OpenAIError;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
+
+use crate::types::OpenAIError;
 
 /// Represents an individual user in a project.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]

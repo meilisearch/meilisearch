@@ -3,9 +3,8 @@ use std::collections::HashMap;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
-use crate::error::OpenAIError;
-
 use super::StaticChunkingStrategy;
+use crate::error::OpenAIError;
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone, Builder, PartialEq)]
 #[builder(name = "CreateVectorStoreRequestArgs")]

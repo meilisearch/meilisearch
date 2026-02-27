@@ -130,9 +130,7 @@ pub fn extract_geo_list_document<'doc>(
     facet_fn: &mut impl FnMut(FieldId, Metadata, perm_json_p::Depth, &Value) -> Result<()>,
 ) -> Result<()> {
     if let Some(geo_list_value) = document.geo_list_field()? {
-        if let Some(points) =
-            extract_geo_list_coordinates(external_document_id, geo_list_value)?
-        {
+        if let Some(points) = extract_geo_list_coordinates(external_document_id, geo_list_value)? {
             let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
                 .id_with_metadata_or_insert("_geo_list.lat")
                 .zip(field_id_map.id_with_metadata_or_insert("_geo_list.lng"))

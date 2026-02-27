@@ -1,13 +1,13 @@
-use std::{pin::Pin, time::Duration};
+use std::pin::Pin;
+use std::time::Duration;
 
 use futures::Stream;
 use serde::Deserialize;
 
-use crate::error::{map_deserialization_error, ApiError, OpenAIError};
-
 use super::{
     MessageDeltaObject, MessageObject, RunObject, RunStepDeltaObject, RunStepObject, ThreadObject,
 };
+use crate::error::{map_deserialization_error, ApiError, OpenAIError};
 
 /// Represents an event emitted when streaming a Run.
 ///

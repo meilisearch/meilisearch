@@ -80,8 +80,7 @@ pub fn fill_cache(
     // When _geo_list is involved, force the RTree strategy because the iterative
     // path reads independent lat/lng facet values that can't be correctly paired
     // for multi-point documents.
-    let use_rtree =
-        has_geo_list || strategy.use_rtree(geo_candidates.len() as usize);
+    let use_rtree = has_geo_list || strategy.use_rtree(geo_candidates.len() as usize);
 
     // lazily initialize the rtree if needed by the strategy, and cache it in `self.rtree`
     let rtree = if use_rtree {

@@ -386,8 +386,7 @@ pub fn extract_geo_list_coordinates(
     external_id: &str,
     raw_value: &RawValue,
 ) -> Result<Option<Vec<[f64; 2]>>> {
-    let value: Value =
-        serde_json::from_str(raw_value.get()).map_err(InternalError::SerdeJson)?;
+    let value: Value = serde_json::from_str(raw_value.get()).map_err(InternalError::SerdeJson)?;
 
     match value {
         Value::Null => Ok(None),
@@ -430,11 +429,9 @@ pub fn extract_geo_list_coordinates(
                         .into());
                     }
                     (None, None) => {
-                        return Err(Box::new(
-                            GeoListError::ElementMissingLatitudeAndLongitude {
-                                document_id: Value::from(external_id),
-                            },
-                        )
+                        return Err(Box::new(GeoListError::ElementMissingLatitudeAndLongitude {
+                            document_id: Value::from(external_id),
+                        })
                         .into());
                     }
                 };

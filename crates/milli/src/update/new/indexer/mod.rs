@@ -824,8 +824,8 @@ pub fn rebuild_geo_rtree(index: &Index, wtxn: &mut RwTxn<'_>) -> Result<()> {
 
         if let Some(fid) = geo_fid {
             if let Some(value) = doc.get(fid) {
-                let raw_value: &RawValue = serde_json::from_slice(value)
-                    .map_err(crate::InternalError::SerdeJson)?;
+                let raw_value: &RawValue =
+                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
                 if let Some(point) = extract_geo_coordinates("", raw_value)? {
                     let xyz = lat_lng_to_xyz(&point);
                     rtree.insert(GeoPoint::new(xyz, (docid, point)));
@@ -836,8 +836,8 @@ pub fn rebuild_geo_rtree(index: &Index, wtxn: &mut RwTxn<'_>) -> Result<()> {
 
         if let Some(fid) = geo_list_fid {
             if let Some(value) = doc.get(fid) {
-                let raw_value: &RawValue = serde_json::from_slice(value)
-                    .map_err(crate::InternalError::SerdeJson)?;
+                let raw_value: &RawValue =
+                    serde_json::from_slice(value).map_err(crate::InternalError::SerdeJson)?;
                 if let Some(points) = extract_geo_list_coordinates("", raw_value)? {
                     for point in points {
                         let xyz = lat_lng_to_xyz(&point);

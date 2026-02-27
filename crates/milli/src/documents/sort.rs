@@ -451,13 +451,18 @@ pub fn recursive_sort<'ctx>(
             let has_geo_list = sortable_fields.contains(RESERVED_GEO_LIST_FIELD_NAME);
             if has_geo || has_geo_list {
                 // Use _geo field IDs if available, otherwise fall back to _geo_list
-                let lat = fields_ids_map.id("_geo.lat")
-                    .or_else(|| fields_ids_map.id("_geo_list.lat"));
-                let lng = fields_ids_map.id("_geo.lng")
-                    .or_else(|| fields_ids_map.id("_geo_list.lng"));
+                let lat =
+                    fields_ids_map.id("_geo.lat").or_else(|| fields_ids_map.id("_geo_list.lat"));
+                let lng =
+                    fields_ids_map.id("_geo.lng").or_else(|| fields_ids_map.id("_geo_list.lng"));
                 if let (Some(lat), Some(lng)) = (lat, lng) {
                     need_geo_candidates = true;
-                    fields.push(AscDescId::Geo { field_ids: [lat, lng], target_point, ascending, has_geo_list });
+                    fields.push(AscDescId::Geo {
+                        field_ids: [lat, lng],
+                        target_point,
+                        ascending,
+                        has_geo_list,
+                    });
                     continue;
                 }
             }

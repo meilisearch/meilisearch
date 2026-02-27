@@ -5,8 +5,9 @@
 
 use std::collections::BTreeMap;
 
+use meilisearch_types::error::ResponseError;
 use meilisearch_types::milli::SHARD_FIELD;
-use meilisearch_types::{error::ResponseError, network::Network};
+use meilisearch_types::network::Network;
 use rand::seq::IteratorRandom as _;
 
 use crate::search::{fuse_filters, SearchQueryWithIndex};

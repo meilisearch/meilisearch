@@ -1,7 +1,5 @@
 use meili_snap::{json_string, snapshot};
-use meilisearch_types::milli::constants::{
-    RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME,
-};
+use meilisearch_types::milli::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME};
 
 use super::test_settings_documents_indexing_swapping_and_search;
 use crate::common::{shared_index_with_geo_documents, Server};
@@ -734,13 +732,10 @@ async fn geo_list_document_deletion() {
 
     // Both docs match initially
     index
-        .search(
-            json!({ "filter": "_geoRadius(48.8566, 2.3522, 100)" }),
-            |response, code| {
-                assert_eq!(code, 200, "{response}");
-                assert_eq!(response["hits"].as_array().unwrap().len(), 2);
-            },
-        )
+        .search(json!({ "filter": "_geoRadius(48.8566, 2.3522, 100)" }), |response, code| {
+            assert_eq!(code, 200, "{response}");
+            assert_eq!(response["hits"].as_array().unwrap().len(), 2);
+        })
         .await;
 
     // Delete doc 1
@@ -749,15 +744,12 @@ async fn geo_list_document_deletion() {
 
     // Only doc 2 should remain
     index
-        .search(
-            json!({ "filter": "_geoRadius(48.8566, 2.3522, 100)" }),
-            |response, code| {
-                assert_eq!(code, 200, "{response}");
-                let hits = &response["hits"];
-                assert_eq!(hits.as_array().unwrap().len(), 1);
-                assert_eq!(hits[0]["id"], 2);
-            },
-        )
+        .search(json!({ "filter": "_geoRadius(48.8566, 2.3522, 100)" }), |response, code| {
+            assert_eq!(code, 200, "{response}");
+            let hits = &response["hits"];
+            assert_eq!(hits.as_array().unwrap().len(), 1);
+            assert_eq!(hits[0]["id"], 2);
+        })
         .await;
 }
 
@@ -1014,22 +1006,16 @@ async fn geo_list_only_in_filterable_not_sortable() {
 
     // Filtering should work
     index
-        .search(
-            json!({ "filter": "_geoRadius(48.8566, 2.3522, 100)" }),
-            |response, code| {
-                assert_eq!(code, 200, "{response}");
-                assert_eq!(response["hits"].as_array().unwrap().len(), 1);
-            },
-        )
+        .search(json!({ "filter": "_geoRadius(48.8566, 2.3522, 100)" }), |response, code| {
+            assert_eq!(code, 200, "{response}");
+            assert_eq!(response["hits"].as_array().unwrap().len(), 1);
+        })
         .await;
 
     // Sorting should fail (not in sortableAttributes)
     index
-        .search(
-            json!({ "sort": ["_geoPoint(48.8566, 2.3522):asc"] }),
-            |response, code| {
-                assert_eq!(code, 400, "{response}");
-            },
-        )
+        .search(json!({ "sort": ["_geoPoint(48.8566, 2.3522):asc"] }), |response, code| {
+            assert_eq!(code, 400, "{response}");
+        })
         .await;
 }

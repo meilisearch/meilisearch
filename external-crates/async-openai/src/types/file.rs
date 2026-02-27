@@ -1,9 +1,8 @@
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
-use crate::error::OpenAIError;
-
 use super::InputSource;
+use crate::error::OpenAIError;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct FileInput {
