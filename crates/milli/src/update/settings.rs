@@ -1495,6 +1495,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         );
 
         if inner_settings_diff.any_reindexing_needed() {
+            let needs_geo_rebuild = inner_settings_diff.run_geo_indexing();
+
             self.reindex(
                 &progress_callback,
                 &should_abort,
@@ -1502,15 +1504,13 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 ip_policy,
                 &embedder_stats,
             )?;
-        }
 
-        // Rebuild geo RTree if geo or geo_list is enabled.
-        // The legacy extraction pipeline only handles _geo, not _geo_list,
-        // so we rebuild from scratch to include all geo points.
-        let is_geo_enabled = self.index.is_geo_enabled(self.wtxn)?
-            || self.index.is_geo_list_enabled(self.wtxn)?;
-        if is_geo_enabled {
-            rebuild_geo_rtree(self.index, self.wtxn)?;
+            // Rebuild geo RTree when geo settings changed.
+            // The legacy extraction pipeline only handles _geo, not _geo_list,
+            // so we rebuild from scratch to include all geo points.
+            if needs_geo_rebuild {
+                rebuild_geo_rtree(self.index, self.wtxn)?;
+            }
         }
 
         Ok(())

@@ -373,17 +373,6 @@ where
         })
         .unwrap()?;
 
-        // Rebuild geo RTree when settings change enables geo or geo_list.
-        // The extract_all_settings_changes path does not run the GeoExtractor,
-        // so we rebuild the RTree from scratch by reading all documents.
-        {
-            let is_geo_enabled =
-                index.is_geo_enabled(wtxn)? || index.is_geo_list_enabled(wtxn)?;
-            if is_geo_enabled {
-                rebuild_geo_rtree(index, wtxn)?;
-            }
-        }
-
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
         index.cellulite.build(
             wtxn,
@@ -837,7 +826,7 @@ pub fn rebuild_geo_rtree(index: &Index, wtxn: &mut RwTxn<'_>) -> Result<()> {
             if let Some(value) = doc.get(fid) {
                 let raw_value: &RawValue = serde_json::from_slice(value)
                     .map_err(crate::InternalError::SerdeJson)?;
-                if let Ok(Some(point)) = extract_geo_coordinates("", raw_value) {
+                if let Some(point) = extract_geo_coordinates("", raw_value)? {
                     let xyz = lat_lng_to_xyz(&point);
                     rtree.insert(GeoPoint::new(xyz, (docid, point)));
                     has_geo = true;
@@ -849,7 +838,7 @@ pub fn rebuild_geo_rtree(index: &Index, wtxn: &mut RwTxn<'_>) -> Result<()> {
             if let Some(value) = doc.get(fid) {
                 let raw_value: &RawValue = serde_json::from_slice(value)
                     .map_err(crate::InternalError::SerdeJson)?;
-                if let Ok(Some(points)) = extract_geo_list_coordinates("", raw_value) {
+                if let Some(points) = extract_geo_list_coordinates("", raw_value)? {
                     for point in points {
                         let xyz = lat_lng_to_xyz(&point);
                         rtree.insert(GeoPoint::new(xyz, (docid, point)));

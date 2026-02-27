@@ -54,7 +54,8 @@ where
 
     // Only remove docids from faceted if they were removed but not re-inserted
     // (a document can have both _geo and _geo_list, so a docid may still have points)
-    faceted -= &removed_docids - &inserted_docids;
+    let only_removed = &removed_docids - &inserted_docids;
+    faceted -= only_removed;
     faceted |= &inserted_docids;
 
     let mut file = tempfile::tempfile()?;
