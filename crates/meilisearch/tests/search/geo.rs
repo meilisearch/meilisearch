@@ -1019,3 +1019,206 @@ async fn geo_list_only_in_filterable_not_sortable() {
         })
         .await;
 }
+
+#[actix_rt::test]
+async fn geo_list_error_empty_array() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let (task, _) = index
+        .update_settings(json!({
+            "filterableAttributes": ["_geo_list"],
+            "sortableAttributes": ["_geo_list"]
+        }))
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _) = index
+        .add_documents(
+            json!([
+                {
+                    "id": "1",
+                    "_geo_list": []
+                }
+            ]),
+            None,
+        )
+        .await;
+    let response = server.wait_task(task.uid()).await;
+    response.failed();
+    let (response, _) = index.get_task(task.uid()).await;
+    snapshot!(response["error"]["code"], @r###""invalid_document_geo_field""###);
+}
+
+#[actix_rt::test]
+async fn geo_list_error_element_missing_lng() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let (task, _) = index
+        .update_settings(json!({
+            "filterableAttributes": ["_geo_list"],
+            "sortableAttributes": ["_geo_list"]
+        }))
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _) = index
+        .add_documents(
+            json!([
+                {
+                    "id": "1",
+                    "_geo_list": [{ "lat": 1.0 }]
+                }
+            ]),
+            None,
+        )
+        .await;
+    let response = server.wait_task(task.uid()).await;
+    response.failed();
+    let (response, _) = index.get_task(task.uid()).await;
+    snapshot!(response["error"]["code"], @r###""invalid_document_geo_field""###);
+}
+
+#[actix_rt::test]
+async fn geo_list_error_element_missing_lat() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let (task, _) = index
+        .update_settings(json!({
+            "filterableAttributes": ["_geo_list"],
+            "sortableAttributes": ["_geo_list"]
+        }))
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _) = index
+        .add_documents(
+            json!([
+                {
+                    "id": "1",
+                    "_geo_list": [{ "lng": 1.0 }]
+                }
+            ]),
+            None,
+        )
+        .await;
+    let response = server.wait_task(task.uid()).await;
+    response.failed();
+    let (response, _) = index.get_task(task.uid()).await;
+    snapshot!(response["error"]["code"], @r###""invalid_document_geo_field""###);
+}
+
+#[actix_rt::test]
+async fn geo_list_error_bad_longitude() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let (task, _) = index
+        .update_settings(json!({
+            "filterableAttributes": ["_geo_list"],
+            "sortableAttributes": ["_geo_list"]
+        }))
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _) = index
+        .add_documents(
+            json!([
+                {
+                    "id": "1",
+                    "_geo_list": [{ "lat": 1.0, "lng": true }]
+                }
+            ]),
+            None,
+        )
+        .await;
+    let response = server.wait_task(task.uid()).await;
+    response.failed();
+    let (response, _) = index.get_task(task.uid()).await;
+    snapshot!(response["error"]["code"], @r###""invalid_document_geo_field""###);
+}
+
+#[actix_rt::test]
+async fn geo_list_error_bad_lat_and_lng() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    let (task, _) = index
+        .update_settings(json!({
+            "filterableAttributes": ["_geo_list"],
+            "sortableAttributes": ["_geo_list"]
+        }))
+        .await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _) = index
+        .add_documents(
+            json!([
+                {
+                    "id": "1",
+                    "_geo_list": [{ "lat": "abc", "lng": true }]
+                }
+            ]),
+            None,
+        )
+        .await;
+    let response = server.wait_task(task.uid()).await;
+    response.failed();
+    let (response, _) = index.get_task(task.uid()).await;
+    snapshot!(response["error"]["code"], @r###""invalid_document_geo_field""###);
+}
+
+#[actix_rt::test]
+async fn geo_list_mixed_with_geo_filtering() {
+    // Doc 1: _geo only at (48.85, 2.35) — Paris
+    // Doc 2: _geo_list only at (48.86, 2.36) and (40.71, -74.01) — near Paris + NYC
+    // Doc 3: both _geo at (35.68, 139.69) — Tokyo, and _geo_list at (48.87, 2.37) — near Paris
+    let documents = json!([
+        {
+            "id": 1,
+            "name": "Geo Only Paris",
+            RESERVED_GEO_FIELD_NAME: { "lat": 48.85, "lng": 2.35 }
+        },
+        {
+            "id": 2,
+            "name": "GeoList Paris+NYC",
+            RESERVED_GEO_LIST_FIELD_NAME: [
+                { "lat": 48.86, "lng": 2.36 },
+                { "lat": 40.71, "lng": -74.01 }
+            ]
+        },
+        {
+            "id": 3,
+            "name": "Both Tokyo+Paris",
+            RESERVED_GEO_FIELD_NAME: { "lat": 35.68, "lng": 139.69 },
+            RESERVED_GEO_LIST_FIELD_NAME: [
+                { "lat": 48.87, "lng": 2.37 }
+            ]
+        }
+    ]);
+
+    // Filter with a 5km radius around central Paris (48.856, 2.352)
+    // Should match: Doc 1 (_geo at ~0.7km), Doc 2 (_geo_list point at ~1km), Doc 3 (_geo_list point at ~2.2km)
+    // Should NOT exclude any since all have a point within 5km of Paris
+    test_settings_documents_indexing_swapping_and_search(
+        &documents,
+        &json!({
+            "filterableAttributes": [RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME],
+            "sortableAttributes": [RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME]
+        }),
+        &json!({
+            "filter": "_geoRadius(48.856, 2.352, 5000)"
+        }),
+        |response, code| {
+            assert_eq!(code, 200, "{response}");
+            let hits = &response["hits"];
+            let mut ids: Vec<i64> =
+                hits.as_array().unwrap().iter().map(|h| h["id"].as_i64().unwrap()).collect();
+            ids.sort();
+            assert_eq!(ids, vec![1, 2, 3]);
+        },
+    )
+    .await;
+}

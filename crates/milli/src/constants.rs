@@ -10,6 +10,9 @@ const fn parse_u32(s: &str) -> u32 {
 }
 
 pub const RESERVED_VECTORS_FIELD_NAME: &str = "_vectors";
+/// A single geographic point as an object with `lat` and `lng` fields.
 pub const RESERVED_GEO_FIELD_NAME: &str = "_geo";
+/// A GeoJSON geometry object (Point, Polygon, MultiPolygon, etc.).
 pub const RESERVED_GEOJSON_FIELD_NAME: &str = "_geojson";
+/// An array of geographic points, each an object with `lat` and `lng` fields.
 pub const RESERVED_GEO_LIST_FIELD_NAME: &str = "_geo_list";
