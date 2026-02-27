@@ -15,7 +15,9 @@ use rstar::RTree;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::constants::{self, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::constants::{
+    self, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+};
 use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
 use crate::error::{InternalError, UserError};
@@ -1105,6 +1107,21 @@ impl Index {
         let geojson_filter =
             self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geojson());
         Ok(geojson_filter)
+    }
+
+    /// Returns true if the geo_list feature is enabled (filtering OR sorting).
+    pub fn is_geo_list_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        Ok(self.is_geo_list_filtering_enabled(rtxn)? || self.is_geo_list_sorting_enabled(rtxn)?)
+    }
+
+    /// Returns true if the geo_list filtering feature is enabled.
+    pub fn is_geo_list_filtering_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        Ok(self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geo_list()))
+    }
+
+    /// Returns true if the geo_list sorting feature is enabled.
+    pub fn is_geo_list_sorting_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        Ok(self.sortable_fields(rtxn)?.contains(RESERVED_GEO_LIST_FIELD_NAME))
     }
 
     pub fn asc_desc_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
