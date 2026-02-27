@@ -350,6 +350,8 @@ pub(crate) mod test {
         .
         ├---- batches/
         │    └---- queue.jsonl
+        ├---- chat-completions-settings/
+        │    └---- default.json
         ├---- indexes/
         │    └---- doggos/
         │    │    ├---- documents.jsonl
