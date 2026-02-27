@@ -373,6 +373,17 @@ where
         })
         .unwrap()?;
 
+        // Rebuild geo RTree when settings change enables geo or geo_list.
+        // The extract_all_settings_changes path does not run the GeoExtractor,
+        // so we rebuild the RTree from scratch by reading all documents.
+        {
+            let is_geo_enabled =
+                index.is_geo_enabled(wtxn)? || index.is_geo_list_enabled(wtxn)?;
+            if is_geo_enabled {
+                rebuild_geo_rtree(index, wtxn)?;
+            }
+        }
+
         indexing_context.progress.update_progress(IndexingStep::BuildingGeoJson);
         index.cellulite.build(
             wtxn,
@@ -792,4 +803,69 @@ fn indexer_memory_settings(
     });
 
     (grenad_parameters, total_bbbuffer_capacity)
+}
+
+/// Rebuild the geo RTree from scratch by reading all documents.
+/// Used during settings-triggered reindex because `extract_all_settings_changes`
+/// does not run the GeoExtractor.
+pub fn rebuild_geo_rtree(index: &Index, wtxn: &mut RwTxn<'_>) -> Result<()> {
+    use roaring::RoaringBitmap;
+    use rstar::RTree;
+    use serde_json::value::RawValue;
+
+    use crate::update::new::extract::{extract_geo_coordinates, extract_geo_list_coordinates};
+    use crate::{lat_lng_to_xyz, GeoPoint};
+
+    let fields_ids_map = index.fields_ids_map(wtxn)?;
+    let geo_fid = fields_ids_map.id("_geo");
+    let geo_list_fid = fields_ids_map.id("_geo_list");
+
+    // If neither _geo nor _geo_list fields exist in the field map, nothing to do
+    if geo_fid.is_none() && geo_list_fid.is_none() {
+        return Ok(());
+    }
+
+    let mut rtree = RTree::new();
+    let mut faceted = RoaringBitmap::new();
+
+    let all_docids = index.documents_ids(wtxn)?;
+    for docid in all_docids {
+        let doc = index.document(wtxn, docid)?;
+        let mut has_geo = false;
+
+        if let Some(fid) = geo_fid {
+            if let Some(value) = doc.get(fid) {
+                let raw_value: &RawValue = serde_json::from_slice(value)
+                    .map_err(crate::InternalError::SerdeJson)?;
+                if let Ok(Some(point)) = extract_geo_coordinates("", raw_value) {
+                    let xyz = lat_lng_to_xyz(&point);
+                    rtree.insert(GeoPoint::new(xyz, (docid, point)));
+                    has_geo = true;
+                }
+            }
+        }
+
+        if let Some(fid) = geo_list_fid {
+            if let Some(value) = doc.get(fid) {
+                let raw_value: &RawValue = serde_json::from_slice(value)
+                    .map_err(crate::InternalError::SerdeJson)?;
+                if let Ok(Some(points)) = extract_geo_list_coordinates("", raw_value) {
+                    for point in points {
+                        let xyz = lat_lng_to_xyz(&point);
+                        rtree.insert(GeoPoint::new(xyz, (docid, point)));
+                    }
+                    has_geo = true;
+                }
+            }
+        }
+
+        if has_geo {
+            faceted.insert(docid);
+        }
+    }
+
+    index.put_geo_rtree(wtxn, &rtree)?;
+    index.put_geo_faceted_documents_ids(wtxn, &faceted)?;
+
+    Ok(())
 }
