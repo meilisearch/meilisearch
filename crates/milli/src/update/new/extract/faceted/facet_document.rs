@@ -6,7 +6,7 @@ use crate::attribute_patterns::PatternMatch;
 use crate::fields_ids_map::metadata::Metadata;
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::update::new::document::Document;
-use crate::update::new::extract::geo::extract_geo_coordinates;
+use crate::update::new::extract::geo::{extract_geo_coordinates, extract_geo_list_coordinates};
 use crate::update::new::extract::perm_json_p;
 use crate::{
     FieldId, FilterableAttributesRule, GlobalFieldsIdsMap, InternalError, Result, UserError,
@@ -117,6 +117,29 @@ pub fn extract_geo_document<'doc>(
 
             facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
             facet_fn(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn extract_geo_list_document<'doc>(
+    document: impl Document<'doc>,
+    external_document_id: &str,
+    field_id_map: &mut GlobalFieldsIdsMap,
+    facet_fn: &mut impl FnMut(FieldId, Metadata, perm_json_p::Depth, &Value) -> Result<()>,
+) -> Result<()> {
+    if let Some(geo_list_value) = document.geo_list_field()? {
+        if let Some(points) = extract_geo_list_coordinates(external_document_id, geo_list_value)? {
+            let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
+                .id_with_metadata_or_insert("_geo_list.lat")
+                .zip(field_id_map.id_with_metadata_or_insert("_geo_list.lng"))
+                .ok_or(UserError::AttributeLimitReached)?;
+
+            for [lat, lng] in points {
+                facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
+                facet_fn(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
+            }
         }
     }
 

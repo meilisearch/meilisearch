@@ -7,7 +7,8 @@ use heed::RoTxn;
 use super::FieldsIdsMap;
 use crate::attribute_patterns::{match_field_legacy, PatternMatch};
 use crate::constants::{
-    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME,
+    RESERVED_VECTORS_FIELD_NAME,
 };
 use crate::order_by_map::OrderByMap;
 use crate::{
@@ -31,6 +32,8 @@ pub struct Metadata {
     pub geo: bool,
     /// The field is a geo json field (`_geojson`).
     pub geo_json: bool,
+    /// The field is a geo list field (`_geo_list`, `_geo_list.lat`, `_geo_list.lng`).
+    pub geo_list: bool,
     /// The field is defined as a field that can be displayed.
     pub displayed: bool,
     /// The id of the localized attributes rule if the field is localized.
@@ -330,6 +333,7 @@ impl MetadataBuilder {
                 asc_desc: None,
                 geo: false,
                 geo_json: false,
+                geo_list: false,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id: None,
                 displayed: self.is_field_displayed(field),
@@ -360,6 +364,7 @@ impl MetadataBuilder {
                 asc_desc: None,
                 geo: true,
                 geo_json: false,
+                geo_list: false,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id,
                 displayed: self.is_field_displayed(field),
@@ -376,6 +381,23 @@ impl MetadataBuilder {
                 asc_desc: None,
                 geo: false,
                 geo_json: true,
+                geo_list: false,
+                localized_attributes_rule_id: None,
+                filterable_attributes_rule_id,
+                displayed: self.is_field_displayed(field),
+                sort_by: self.order_by_map.get(field),
+            };
+        }
+        if match_field_legacy(RESERVED_GEO_LIST_FIELD_NAME, field) == PatternMatch::Match {
+            return Metadata {
+                searchable: None,
+                exact: false,
+                sortable,
+                distinct: false,
+                asc_desc: None,
+                geo: false,
+                geo_json: false,
+                geo_list: true,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id,
                 displayed: self.is_field_displayed(field),
@@ -415,6 +437,7 @@ impl MetadataBuilder {
             asc_desc,
             geo: false,
             geo_json: false,
+            geo_list: false,
             localized_attributes_rule_id,
             filterable_attributes_rule_id,
             displayed: self.is_field_displayed(field),

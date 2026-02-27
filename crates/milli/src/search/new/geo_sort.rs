@@ -18,6 +18,7 @@ pub struct GeoSort<Q: RankingRuleQueryTrait> {
     point: [f64; 2],
     field_ids: Option<[u16; 2]>,
     rtree: Option<RTree<GeoPoint>>,
+    has_geo_list: bool,
 
     cached_sorted_docids: VecDeque<(u32, [f64; 2])>,
     geo_candidates: RoaringBitmap,
@@ -34,6 +35,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
         geo_faceted_docids: RoaringBitmap,
         point: [f64; 2],
         ascending: bool,
+        has_geo_list: bool,
     ) -> Result<Self> {
         let GeoSortParameter { strategy, max_bucket_size, distance_error_margin } = parameter;
         Ok(Self {
@@ -44,6 +46,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             geo_candidates: geo_faceted_docids,
             field_ids: None,
             rtree: None,
+            has_geo_list,
             cached_sorted_docids: VecDeque::new(),
             max_bucket_size,
             distance_error_margin,
@@ -67,6 +70,7 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             &mut self.rtree,
             geo_candidates,
             &mut self.cached_sorted_docids,
+            self.has_geo_list,
         )?;
 
         Ok(())
@@ -98,8 +102,15 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         }
 
         let fid_map = ctx.index.fields_ids_map(ctx.txn)?;
-        let lat = fid_map.id("_geo.lat").expect("geo candidates but no fid for lat");
-        let lng = fid_map.id("_geo.lng").expect("geo candidates but no fid for lng");
+        // Try _geo first, fall back to _geo_list
+        let lat = fid_map
+            .id("_geo.lat")
+            .or_else(|| fid_map.id("_geo_list.lat"))
+            .expect("geo candidates but no fid for lat");
+        let lng = fid_map
+            .id("_geo.lng")
+            .or_else(|| fid_map.id("_geo_list.lng"))
+            .expect("geo candidates but no fid for lng");
         self.field_ids = Some([lat, lng]);
         self.fill_buffer(ctx, &geo_candidates)?;
         Ok(())
@@ -131,6 +142,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
                 max_bucket_size: self.max_bucket_size,
                 distance_error_margin: self.distance_error_margin,
             },
+            self.has_geo_list,
         )
         .map(|o| {
             o.map(|(candidates, point)| RankingRuleOutput {

@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, VecDeque};
 use heed::Database;
 use roaring::RoaringBitmap;
 
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LIST_FIELD_NAME};
 use crate::documents::geo_sort::next_bucket;
 use crate::documents::GeoSortParameter;
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
@@ -14,7 +14,7 @@ use crate::{is_faceted, AscDesc, DocumentId, Member, UserError};
 #[derive(Debug, Clone, Copy)]
 enum AscDescId {
     Facet { field_id: u16, ascending: bool },
-    Geo { field_ids: [u16; 2], target_point: [f64; 2], ascending: bool },
+    Geo { field_ids: [u16; 2], target_point: [f64; 2], ascending: bool, has_geo_list: bool },
 }
 
 /// A [`SortedDocumentsIterator`] allows efficient access to a continuous range of sorted documents.
@@ -208,7 +208,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                     *ascending,
                 )
             }
-            [AscDescId::Geo { field_ids, target_point, ascending }, next_fields @ ..] => {
+            [AscDescId::Geo { field_ids, target_point, ascending, has_geo_list }, next_fields @ ..] => {
                 SortedDocumentsIteratorBuilder::build_geo(
                     self.index,
                     self.rtxn,
@@ -220,6 +220,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                     *field_ids,
                     *target_point,
                     *ascending,
+                    *has_geo_list,
                 )
             }
         }
@@ -318,6 +319,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         field_ids: [u16; 2],
         target_point: [f64; 2],
         ascending: bool,
+        has_geo_list: bool,
     ) -> crate::Result<SortedDocumentsIterator<'ctx>> {
         let mut cache = VecDeque::new();
         let mut rtree = None;
@@ -341,6 +343,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                     &mut cache,
                     geo_candidates,
                     GeoSortParameter::default(),
+                    has_geo_list,
                 ) {
                     geo_remaining -= docids.len() as usize;
                     return Some(Ok(SortedDocumentsIteratorBuilder {
@@ -444,12 +447,22 @@ pub fn recursive_sort<'ctx>(
             .into());
         }
         if let Some((target_point, ascending)) = geofield {
-            if sortable_fields.contains(RESERVED_GEO_FIELD_NAME) {
-                if let (Some(lat), Some(lng)) =
-                    (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
-                {
+            let has_geo = sortable_fields.contains(RESERVED_GEO_FIELD_NAME);
+            let has_geo_list = sortable_fields.contains(RESERVED_GEO_LIST_FIELD_NAME);
+            if has_geo || has_geo_list {
+                // Use _geo field IDs if available, otherwise fall back to _geo_list
+                let lat =
+                    fields_ids_map.id("_geo.lat").or_else(|| fields_ids_map.id("_geo_list.lat"));
+                let lng =
+                    fields_ids_map.id("_geo.lng").or_else(|| fields_ids_map.id("_geo_list.lng"));
+                if let (Some(lat), Some(lng)) = (lat, lng) {
                     need_geo_candidates = true;
-                    fields.push(AscDescId::Geo { field_ids: [lat, lng], target_point, ascending });
+                    fields.push(AscDescId::Geo {
+                        field_ids: [lat, lng],
+                        target_point,
+                        ascending,
+                        has_geo_list,
+                    });
                     continue;
                 }
             }

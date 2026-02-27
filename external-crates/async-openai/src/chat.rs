@@ -1,11 +1,9 @@
-use crate::{
-    config::Config,
-    error::OpenAIError,
-    types::{
-        ChatCompletionResponseStream, CreateChatCompletionRequest, CreateChatCompletionResponse,
-    },
-    Client,
+use crate::config::Config;
+use crate::error::OpenAIError;
+use crate::types::{
+    ChatCompletionResponseStream, CreateChatCompletionRequest, CreateChatCompletionResponse,
 };
+use crate::Client;
 
 /// Given a list of messages comprising a conversation, the model will return a response.
 ///

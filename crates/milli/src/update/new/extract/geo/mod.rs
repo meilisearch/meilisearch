@@ -9,7 +9,7 @@ use heed::RoTxn;
 use serde_json::value::RawValue;
 use serde_json::Value;
 
-use crate::error::GeoError;
+use crate::error::{GeoError, GeoListError};
 use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::indexer::document_changes::Extractor;
 use crate::update::new::ref_cell_ext::RefCellExt as _;
@@ -30,7 +30,7 @@ impl GeoExtractor {
         index: &Index,
         grenad_parameters: GrenadParameters,
     ) -> Result<Option<Self>> {
-        if index.is_geo_enabled(rtxn)? {
+        if index.is_geo_enabled(rtxn)? || index.is_geo_list_enabled(rtxn)? {
             Ok(Some(GeoExtractor { grenad_parameters }))
         } else {
             Ok(None)
@@ -186,6 +186,21 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                             None => data_ref.removed.push(geopoint),
                         }
                     }
+
+                    // Also remove _geo_list points
+                    let current_geo_list = current
+                        .geo_list_field()?
+                        .map(|gl| extract_geo_list_coordinates(external_id, gl))
+                        .transpose()?;
+                    if let Some(points) = current_geo_list.flatten() {
+                        for lat_lng in points {
+                            let geopoint = ExtractedGeoPoint { docid, lat_lng };
+                            match &mut data_ref.spilled_removed {
+                                Some(file) => file.write_all(bytes_of(&geopoint))?,
+                                None => data_ref.removed.push(geopoint),
+                            }
+                        }
+                    }
                 }
                 DocumentChange::Update(update) => {
                     let current = update.current(rtxn, index, db_fields_ids_map)?;
@@ -204,9 +219,6 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                         .transpose()?;
 
                     if current_geo != updated_geo {
-                        // If the current and new geo points are different it means that
-                        // we need to replace the current by the new point and therefore
-                        // delete the current point from the RTree.
                         if let Some(lat_lng) = current_geo.flatten() {
                             let geopoint = ExtractedGeoPoint { docid, lat_lng };
                             match &mut data_ref.spilled_removed {
@@ -220,6 +232,38 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                             match &mut data_ref.spilled_inserted {
                                 Some(file) => file.write_all(bytes_of(&geopoint))?,
                                 None => data_ref.inserted.push(geopoint),
+                            }
+                        }
+                    }
+
+                    // Handle _geo_list update
+                    let current_geo_list = current
+                        .geo_list_field()?
+                        .map(|gl| extract_geo_list_coordinates(external_id, gl))
+                        .transpose()?;
+                    let updated_geo_list = update
+                        .merged(rtxn, index, db_fields_ids_map)?
+                        .geo_list_field()?
+                        .map(|gl| extract_geo_list_coordinates(external_id, gl))
+                        .transpose()?;
+
+                    if current_geo_list != updated_geo_list {
+                        if let Some(points) = current_geo_list.flatten() {
+                            for lat_lng in points {
+                                let geopoint = ExtractedGeoPoint { docid, lat_lng };
+                                match &mut data_ref.spilled_removed {
+                                    Some(file) => file.write_all(bytes_of(&geopoint))?,
+                                    None => data_ref.removed.push(geopoint),
+                                }
+                            }
+                        }
+                        if let Some(points) = updated_geo_list.flatten() {
+                            for lat_lng in points {
+                                let geopoint = ExtractedGeoPoint { docid, lat_lng };
+                                match &mut data_ref.spilled_inserted {
+                                    Some(file) => file.write_all(bytes_of(&geopoint))?,
+                                    None => data_ref.inserted.push(geopoint),
+                                }
                             }
                         }
                     }
@@ -239,6 +283,22 @@ impl<'extractor> Extractor<'extractor> for GeoExtractor {
                         match &mut data_ref.spilled_inserted {
                             Some(file) => file.write_all(bytes_of(&geopoint))?,
                             None => data_ref.inserted.push(geopoint),
+                        }
+                    }
+
+                    // Also insert _geo_list points
+                    let inserted_geo_list = insertion
+                        .inserted()
+                        .geo_list_field()?
+                        .map(|gl| extract_geo_list_coordinates(external_id, gl))
+                        .transpose()?;
+                    if let Some(points) = inserted_geo_list.flatten() {
+                        for lat_lng in points {
+                            let geopoint = ExtractedGeoPoint { docid, lat_lng };
+                            match &mut data_ref.spilled_inserted {
+                                Some(file) => file.write_all(bytes_of(&geopoint))?,
+                                None => data_ref.inserted.push(geopoint),
+                            }
                         }
                     }
                 }
@@ -314,6 +374,103 @@ pub fn extract_geo_coordinates(
             document_id: Value::from(external_id),
             lat,
             lng,
+        })
+        .into()),
+    }
+}
+
+/// Extracts and validates an array of `{lat, lng}` objects from a `_geo_list` field.
+///
+/// Returns `Ok(None)` if the value is `null`, `Ok(Some(vec))` for a valid non-empty array.
+pub fn extract_geo_list_coordinates(
+    external_id: &str,
+    raw_value: &RawValue,
+) -> Result<Option<Vec<[f64; 2]>>> {
+    let value: Value = serde_json::from_str(raw_value.get()).map_err(InternalError::SerdeJson)?;
+
+    match value {
+        Value::Null => Ok(None),
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                return Err(Box::new(GeoListError::EmptyArray {
+                    document_id: Value::from(external_id),
+                })
+                .into());
+            }
+
+            let mut points = Vec::with_capacity(arr.len());
+            for element in arr {
+                let obj = match element {
+                    Value::Object(obj) => obj,
+                    other => {
+                        return Err(Box::new(GeoListError::ElementNotAnObject {
+                            document_id: Value::from(external_id),
+                            value: other,
+                        })
+                        .into());
+                    }
+                };
+
+                let lat = obj.get("lat");
+                let lng = obj.get("lng");
+
+                let [lat_val, lng_val] = match (lat, lng) {
+                    (Some(lat), Some(lng)) => [lat.clone(), lng.clone()],
+                    (Some(_), None) => {
+                        return Err(Box::new(GeoListError::ElementMissingLongitude {
+                            document_id: Value::from(external_id),
+                        })
+                        .into());
+                    }
+                    (None, Some(_)) => {
+                        return Err(Box::new(GeoListError::ElementMissingLatitude {
+                            document_id: Value::from(external_id),
+                        })
+                        .into());
+                    }
+                    (None, None) => {
+                        return Err(Box::new(GeoListError::ElementMissingLatitudeAndLongitude {
+                            document_id: Value::from(external_id),
+                        })
+                        .into());
+                    }
+                };
+
+                match (
+                    extract_finite_float_from_value(lat_val),
+                    extract_finite_float_from_value(lng_val),
+                ) {
+                    (Ok(lat), Ok(lng)) => points.push([lat, lng]),
+                    (Ok(_), Err(value)) => {
+                        return Err(Box::new(GeoListError::ElementBadLongitude {
+                            document_id: Value::from(external_id),
+                            value,
+                        })
+                        .into());
+                    }
+                    (Err(value), Ok(_)) => {
+                        return Err(Box::new(GeoListError::ElementBadLatitude {
+                            document_id: Value::from(external_id),
+                            value,
+                        })
+                        .into());
+                    }
+                    (Err(lat), Err(lng)) => {
+                        return Err(Box::new(GeoListError::ElementBadLatitudeAndLongitude {
+                            document_id: Value::from(external_id),
+                            lat,
+                            lng,
+                        })
+                        .into());
+                    }
+                }
+            }
+
+            Ok(Some(points))
+        }
+        other => Err(Box::new(GeoListError::NotAnArray {
+            document_id: Value::from(external_id),
+            value: other,
         })
         .into()),
     }

@@ -8,7 +8,9 @@ use hashbrown::HashMap;
 use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
-use super::facet_document::{extract_document_facets, extract_geo_document};
+use super::facet_document::{
+    extract_document_facets, extract_geo_document, extract_geo_list_document,
+};
 use super::FacetKind;
 use crate::fields_ids_map::metadata::Metadata;
 use crate::filterable_attributes_rules::match_faceted_field;
@@ -36,6 +38,7 @@ pub struct FacetedExtractorData<'a, 'b> {
     asc_desc_fields: &'a HashSet<String>,
     distinct_field: &'a Option<String>,
     is_geo_enabled: bool,
+    is_geo_list_enabled: bool,
 }
 
 impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_, '_> {
@@ -63,6 +66,7 @@ impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_, '_> {
                 self.asc_desc_fields,
                 self.distinct_field,
                 self.is_geo_enabled,
+                self.is_geo_list_enabled,
                 change,
                 self.sender,
             )?
@@ -82,6 +86,7 @@ impl FacetedDocidsExtractor {
         asc_desc_fields: &HashSet<String>,
         distinct_field: &Option<String>,
         is_geo_enabled: bool,
+        is_geo_list_enabled: bool,
         document_change: DocumentChange,
         sender: &FieldIdDocidFacetSender,
     ) -> Result<()> {
@@ -153,6 +158,15 @@ impl FacetedDocidsExtractor {
                         &mut del,
                     )?;
                 }
+
+                if is_geo_list_enabled {
+                    extract_geo_list_document(
+                        inner.current(rtxn, index, context.db_fields_ids_map)?,
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut del,
+                    )?;
+                }
             }
             DocumentChange::Update(inner) => {
                 let has_changed_for_facets = inner.has_changed_for_fields(
@@ -193,22 +207,39 @@ impl FacetedDocidsExtractor {
                     )?;
                 }
 
-                // 2. Maybe update geo
-                if is_geo_enabled
+                // 2. Maybe update geo / geo_list
+                if (is_geo_enabled || is_geo_list_enabled)
                     && inner.has_changed_for_geo_fields(rtxn, index, context.db_fields_ids_map)?
                 {
-                    extract_geo_document(
-                        inner.current(rtxn, index, context.db_fields_ids_map)?,
-                        inner.external_document_id(),
-                        new_fields_ids_map.deref_mut(),
-                        &mut facet_fn!(del),
-                    )?;
-                    extract_geo_document(
-                        inner.merged(rtxn, index, context.db_fields_ids_map)?,
-                        inner.external_document_id(),
-                        new_fields_ids_map.deref_mut(),
-                        &mut facet_fn!(add),
-                    )?;
+                    if is_geo_enabled {
+                        extract_geo_document(
+                            inner.current(rtxn, index, context.db_fields_ids_map)?,
+                            inner.external_document_id(),
+                            new_fields_ids_map.deref_mut(),
+                            &mut facet_fn!(del),
+                        )?;
+                        extract_geo_document(
+                            inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                            inner.external_document_id(),
+                            new_fields_ids_map.deref_mut(),
+                            &mut facet_fn!(add),
+                        )?;
+                    }
+
+                    if is_geo_list_enabled {
+                        extract_geo_list_document(
+                            inner.current(rtxn, index, context.db_fields_ids_map)?,
+                            inner.external_document_id(),
+                            new_fields_ids_map.deref_mut(),
+                            &mut facet_fn!(del),
+                        )?;
+                        extract_geo_list_document(
+                            inner.merged(rtxn, index, context.db_fields_ids_map)?,
+                            inner.external_document_id(),
+                            new_fields_ids_map.deref_mut(),
+                            &mut facet_fn!(add),
+                        )?;
+                    }
                 }
             }
             DocumentChange::Insertion(inner) => {
@@ -226,6 +257,15 @@ impl FacetedDocidsExtractor {
 
                 if is_geo_enabled {
                     extract_geo_document(
+                        inner.inserted(),
+                        inner.external_document_id(),
+                        new_fields_ids_map.deref_mut(),
+                        &mut add,
+                    )?;
+                }
+
+                if is_geo_list_enabled {
+                    extract_geo_list_document(
                         inner.inserted(),
                         inner.external_document_id(),
                         new_fields_ids_map.deref_mut(),
@@ -489,6 +529,7 @@ impl FacetedDocidsExtractor {
         let asc_desc_fields = index.asc_desc_fields(&rtxn)?;
         let distinct_field = index.distinct_field(&rtxn)?.map(|s| s.to_string());
         let is_geo_enabled = index.is_geo_enabled(&rtxn)?;
+        let is_geo_list_enabled = index.is_geo_list_enabled(&rtxn)?;
         let datastore = ThreadLocal::new();
 
         {
@@ -505,6 +546,7 @@ impl FacetedDocidsExtractor {
                 asc_desc_fields: &asc_desc_fields,
                 distinct_field: &distinct_field,
                 is_geo_enabled,
+                is_geo_list_enabled,
             };
             extract(
                 document_changes,

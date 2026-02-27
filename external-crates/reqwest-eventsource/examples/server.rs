@@ -1,11 +1,11 @@
+use std::time::SystemTime;
+
 use rocket::http::Status;
-use rocket::request::Outcome;
-use rocket::request::Request;
+use rocket::request::{Outcome, Request};
 use rocket::response::content::RawHtml;
 use rocket::response::stream::{Event, EventStream};
 use rocket::tokio::time::{self, Duration};
 use rocket::{get, launch, routes};
-use std::time::SystemTime;
 
 pub struct LastEventId(pub usize);
 
