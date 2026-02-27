@@ -2168,11 +2168,33 @@ pub fn insert_geo_distance(sorts: &[String], document: &mut Document) {
     if let Some(capture_group) = sorts.iter().find_map(|sort| GEO_REGEX.captures(sort)) {
         // TODO: TAMO: milli encountered an internal error, what do we want to do?
         let base = [capture_group[1].parse().unwrap(), capture_group[2].parse().unwrap()];
+        let mut min_distance: Option<f64> = None;
+
+        // Check _geo
         let geo_point = &document.get("_geo").unwrap_or(&json!(null));
         if let Some((lat, lng)) =
             extract_geo_value(&geo_point["lat"]).zip(extract_geo_value(&geo_point["lng"]))
         {
             let distance = milli::distance_between_two_points(&base, &[lat, lng]);
+            min_distance = Some(distance);
+        }
+
+        // Check _geo_list
+        if let Some(Value::Array(geo_list)) = document.get("_geo_list") {
+            for point in geo_list {
+                if let Some((lat, lng)) =
+                    extract_geo_value(&point["lat"]).zip(extract_geo_value(&point["lng"]))
+                {
+                    let distance = milli::distance_between_two_points(&base, &[lat, lng]);
+                    min_distance = Some(match min_distance {
+                        Some(current_min) => current_min.min(distance),
+                        None => distance,
+                    });
+                }
+            }
+        }
+
+        if let Some(distance) = min_distance {
             document.insert("_geoDistance".to_string(), json!(distance.round() as usize));
         }
     }
