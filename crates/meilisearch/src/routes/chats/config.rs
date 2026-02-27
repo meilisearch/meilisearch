@@ -24,8 +24,9 @@ impl Config {
                 if let Some(api_key) = chat_settings.api_key.as_ref() {
                     config = config.with_api_key(api_key);
                 }
+                // config base url always overrides the one from the source
                 let base_url = chat_settings.base_url.as_deref();
-                if let Some(base_url) = chat_settings.source.base_url().or(base_url) {
+                if let Some(base_url) = base_url.or(chat_settings.source.base_url()) {
                     config = config.with_api_base(base_url);
                 }
                 Self::OpenAiCompatible(config)
