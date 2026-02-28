@@ -509,6 +509,8 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
         match rr {
             crate::Criterion::Typo
             | crate::Criterion::Attribute
+            | crate::Criterion::AttributeRank
+            | crate::Criterion::WordPosition
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness => {
                 if !words {
