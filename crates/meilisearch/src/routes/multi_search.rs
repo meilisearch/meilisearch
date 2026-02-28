@@ -269,7 +269,7 @@ pub async fn multi_search_with_post(
                         ));
                     }
 
-                    let search_result = crate::routes::indexes::search::search(
+                    let (res, _deadline) = crate::routes::indexes::search::search(
                         query,
                         index_scheduler.clone(),
                         index_uid.clone(),
@@ -281,6 +281,11 @@ pub async fn multi_search_with_post(
                     )
                     .await
                     .with_index(query_index)?;
+
+                    let search_result =
+                        crate::routes::indexes::search::search_to_full_result(res, &progress)
+                            .await
+                            .with_index(query_index)?;
 
                     search_results.push(SearchResultWithIndex {
                         index_uid: index_uid.into_inner(),
