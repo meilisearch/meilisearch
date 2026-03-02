@@ -194,8 +194,8 @@ impl Embedder {
         let config = http_client::ureq::config::Config::builder()
             .prepare(|config| {
                 config
-                    .max_idle_connections(REQUEST_PARALLELISM * 2)
-                    .max_idle_connections_per_host(REQUEST_PARALLELISM * 2)
+                    .max_idle_connections(0)
+                    .max_idle_connections_per_host(0)
                     .timeout_global(Some(std::time::Duration::from_secs(timeout)))
                     // important in ureq 3: to be able to retrieve the response for HTTP 400
                     .http_status_as_error(false)
