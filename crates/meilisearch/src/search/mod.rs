@@ -261,7 +261,7 @@ pub struct SearchQuery {
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
-    /// Personalize results from user context. Object with `userContext`: a string
+    /// User context for personalized search. Object with `userContext`: a string
     /// describing the user (preferences, behavior). Requires personalization to be
     /// enabled (e.g. Cohere key for self-hosted).
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
@@ -1077,86 +1077,86 @@ impl From<FacetValuesSort> for OrderBy {
     }
 }
 
-/// A single search result hit
+/// A single search result hit.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchHit {
-    /// The document data
+    /// Document fields as stored in the index.
     #[serde(flatten)]
     #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
-    /// The formatted document with highlighted and cropped attributes
+    /// Document with highlighted and cropped attributes when requested.
     #[serde(default, rename = "_formatted", skip_serializing_if = "Document::is_empty")]
     #[schema(additional_properties, value_type = HashMap<String, Value>)]
     pub formatted: Document,
-    /// Location of matching terms in the document
+    /// Byte offsets of matching terms per attribute when showMatchesPosition is true.
     #[serde(default, rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<BTreeMap<String, Vec<MatchBounds>>>)]
     pub matches_position: Option<MatchesPosition>,
-    /// Global ranking score of the document
+    /// Relevance score from 0.0 to 1.0 when showRankingScore is true.
     #[serde(default, rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
     pub ranking_score: Option<f64>,
-    /// Detailed breakdown of the ranking score
+    /// Per-rule score breakdown when showRankingScoreDetails is true.
     #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-/// Metadata about a search query
+/// Metadata about a search query (included when requested via header).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchMetadata {
-    /// Unique identifier for the query
+    /// Unique identifier for the query.
     pub query_uid: Uuid,
-    /// Identifier of the queried index
+    /// UID of the index that was searched.
     pub index_uid: String,
-    /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the queried index
+    /// [Primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub primary_key: Option<String>,
-    /// Remote server that processed the query
+    /// Remote that processed the query (federated search only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub remote: Option<String>,
 }
 
-/// Search response containing matching documents and metadata
+/// Search response containing matching documents and metadata.
 #[derive(Serialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchResult {
-    /// Results of the query
+    /// Matching documents (and optional formatted/ranking fields).
     pub hits: Vec<SearchHit>,
-    /// Query originating the response
+    /// Query string that produced this response.
     pub query: String,
-    /// Vector representation of the query
+    /// Query embedding when vector/hybrid search was used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_vector: Option<Vec<f32>>,
-    /// Processing time of the query in milliseconds
+    /// Time taken to process the query, in milliseconds.
     pub processing_time_ms: u128,
-    /// Pagination information for the search results
+    /// Pagination: either offset/limit with estimated total or page/hitsPerPage with exact total.
     #[serde(flatten)]
     pub hits_info: HitsInfo,
-    /// Distribution of the given facets
+    /// Count of matches per facet value when facets were requested.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<BTreeMap<String, Value>>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
-    /// The numeric min and max values per facet
+    /// Min and max numeric values per facet when facets were requested.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
-    /// A UUID v7 identifying the search request
+    /// UUID v7 identifying this search request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_uid: Option<Uuid>,
-    /// Metadata about the search query
+    /// Query/index metadata when requested via header.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<SearchMetadata>,
-    /// Performance details of the search query
+    /// Timing breakdown when showPerformanceDetails was true.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<Value>)]
     pub performance_details: Option<IndexMap<String, String>>,
 
+    /// Errors from remote shards (federated search only).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_errors: Option<BTreeMap<String, ResponseError>>,
 
-    /// Exhaustive number of semantic search matches (only present in
-    /// AI-powered searches)
+    /// Exhaustive count of semantic matches (AI-powered searches only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
 
@@ -1255,42 +1255,42 @@ pub struct SearchResultWithIndex {
     pub result: SearchResult,
 }
 
-/// Pagination information for search results
+/// Pagination information for search results.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
-    /// Finite pagination with exact counts
+    /// Page-based pagination with exact total (when page/hitsPerPage was used).
     #[serde(rename_all = "camelCase")]
     #[schema(rename_all = "camelCase")]
     Pagination {
-        /// Number of results on each page
+        /// Number of results per page.
         hits_per_page: usize,
-        /// Current search results page
+        /// Current page index (1-based).
         page: usize,
-        /// Exhaustive total number of search result pages
+        /// Total number of pages.
         total_pages: usize,
-        /// Exhaustive total number of matches
+        /// Total number of matching documents.
         total_hits: usize,
     },
-    /// Offset-based pagination with estimated counts
+    /// Offset-based pagination with estimated total (when offset/limit was used).
     #[serde(rename_all = "camelCase")]
     #[schema(rename_all = "camelCase")]
     OffsetLimit {
-        /// Number of documents to take
+        /// Maximum number of documents returned.
         limit: usize,
-        /// Number of documents skipped
+        /// Number of documents skipped.
         offset: usize,
-        /// Estimated total number of matches
+        /// Estimated total number of matches (not exhaustive).
         estimated_total_hits: usize,
     },
 }
 
-/// The numeric min and max values for a facet
+/// Min and max numeric values for a facet (when facets include numeric attributes).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct FacetStats {
-    /// Minimum value of the numeric facet
+    /// Minimum value among matching documents.
     pub min: f64,
-    /// Maximum value of the numeric facet
+    /// Maximum value among matching documents.
     pub max: f64,
 }
 
