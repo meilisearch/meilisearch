@@ -14,7 +14,6 @@ members = [
     "crates/filter-parser",
     "crates/flatten-serde-json",
     "crates/json-depth-checker",
-    "crates/benchmarks",
     "crates/fuzzers",
     "crates/tracing-trace",
     "crates/xtask",
@@ -24,6 +23,7 @@ members = [
     "external-crates/async-openai",
     "external-crates/async-openai-macros",
 ]
+exclude = ["crates/benchmarks"]
 
 [workspace.package]
 version = "1.37.0"

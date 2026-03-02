@@ -1,14 +1,8 @@
 [package]
 name = "benchmarks"
 publish = false
-
-version.workspace = true
-authors.workspace = true
-description.workspace = true
-homepage.workspace = true
-readme.workspace = true
-edition.workspace = true
-license.workspace = true
+edition = "2021"
+license = "MIT"
 
 [dependencies]
 anyhow = "1.0.100"
@@ -36,6 +30,7 @@ reqwest = { version = "0.12.24", features = [
     "blocking",
     "rustls-tls",
 ], default-features = false }
+rusty-s3 = "0.8.1"
 
 [features]
 default = ["milli/all-tokenizations"]

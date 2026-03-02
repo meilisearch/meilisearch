@@ -42,6 +42,9 @@ jobs:
 
       # Run benchmarks
       - name: Run benchmarks - Dataset ${BENCH_NAME} - Branch ${{ steps.current_branch.outputs.name }} - Commit ${{ steps.commit_sha.outputs.short }}
+        env:
+          S3_ACCESS_KEY: ${{ secrets.DO_SPACES_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.DO_SPACES_SECRET_KEY }}
         run: |
           cd crates/benchmarks
           cargo bench --bench ${BENCH_NAME} -- --save-baseline ${{ steps.file.outputs.basename }}

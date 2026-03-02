@@ -628,29 +628,6 @@ version = "0.5.1"
 source = "git+https://github.com/meilisearch/bbqueue#e8af4a4bccc8eb36b2b0442c4a9c5cb839d1cea2"
 
 [[package]]
-name = "benchmarks"
-version = "1.37.0"
-dependencies = [
- "anyhow",
- "bumpalo",
- "bytes",
- "convert_case 0.9.0",
- "criterion",
- "csv",
- "flate2",
- "http-client",
- "memmap2",
- "milli",
- "mimalloc",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "reqwest",
- "roaring 0.10.12",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "big_s"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
