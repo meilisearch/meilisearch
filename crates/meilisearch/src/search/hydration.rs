@@ -111,3 +111,163 @@ impl<'a> IndexDocumentMaker<'a> {
         make_document(&self.displayed_ids, &self.fields_ids_map, obkv).map_err(ResponseError::from)
     }
 }
+
+pub type ForeignIndexUid = String;
+pub type SourceIndexUid = String;
+pub type ForeignExternalDocumentId = ExternalDocumentId;
+pub struct HydrationCache {
+    // list of indexes in the order of the queries
+    index_by_query_index: Vec<SourceIndexUid>,
+    // map from index uid to foreign keys
+    hydration_settings: BTreeMap<SourceIndexUid, Vec<ForeignKey>>,
+    // map from foreign index uid to foreign document ids
+    // TODO Document join: add remote name to the key when implementing network support
+    hydration_docids: BTreeMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
+}
+
+impl HydrationCache {
+    pub fn new(index_by_query_index: impl IntoIterator<Item = SourceIndexUid>) -> Self {
+        let index_by_query_index = index_by_query_index.into_iter().collect();
+        Self {
+            index_by_query_index,
+            hydration_settings: BTreeMap::new(),
+            hydration_docids: BTreeMap::new(),
+        }
+    }
+
+    pub fn register_foreign_settings(
+        &mut self,
+        index_uid: &ForeignIndexUid,
+        foreign_keys: &[ForeignKey],
+    ) {
+        self.hydration_settings.insert(index_uid.to_string(), foreign_keys.to_vec());
+    }
+
+    pub fn register_foreign_docids(&mut self, hit: &SearchHit, query_index: usize) {
+        let index_uid = &self.index_by_query_index[query_index];
+        let Some(foreign_keys) = self.hydration_settings.get(index_uid) else {
+            // TODO Document join: when implementing network support, fallback on seeking the foreign keys in the index settings
+            return;
+        };
+
+        for ForeignKey { foreign_index_uid, field_name } in foreign_keys {
+            match select_values(&hit.document, [field_name.as_str()]).get(field_name.as_str()) {
+                Some(Value::Array(values)) => {
+                    for value in values {
+                        let Ok(external_document_id) = ExternalDocumentId::try_from(value.clone())
+                        else {
+                            tracing::warn!(
+                                "Foreign key value `{value:?}` is not a valid document id in `{field_name}`"
+                            );
+                            return;
+                        };
+                        self.hydration_docids
+                            .entry(foreign_index_uid.clone())
+                            .or_insert_with(Vec::new)
+                            .push(external_document_id);
+                    }
+                }
+                Some(value) => {
+                    let Ok(external_document_id) = ExternalDocumentId::try_from(value.clone())
+                    else {
+                        tracing::warn!(
+                            "Foreign key value `{value:?}` is not a valid document id in `{field_name}`"
+                        );
+                        return;
+                    };
+                    self.hydration_docids
+                        .entry(foreign_index_uid.clone())
+                        .or_insert_with(Vec::new)
+                        .push(external_document_id);
+                }
+                None => {}
+            }
+        }
+    }
+}
+
+pub struct FederatedHydrationFormatter {
+    // list of indexes in the order of the queries
+    index_by_query_index: Vec<SourceIndexUid>,
+    // map from index uid to foreign keys
+    hydration_settings: BTreeMap<SourceIndexUid, Vec<ForeignKey>>,
+    // map from foreign index uid and foreign document id to document
+    hydration_documents: HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>,
+}
+
+impl FederatedHydrationFormatter {
+    pub fn new(
+        hydration_cache: HydrationCache,
+        index_scheduler: &IndexScheduler,
+    ) -> Result<Self, ResponseError> {
+        let HydrationCache { index_by_query_index, hydration_settings, hydration_docids } =
+            hydration_cache;
+
+        // Fetch the documents from the foreign indexes
+        let mut hydration_documents = HashMap::new();
+        for (index_uid, docids) in hydration_docids {
+            let index = index_scheduler.index(&index_uid)?;
+            let rtxn = index.read_txn()?;
+            let document_maker = IndexDocumentMaker::new(&index, &rtxn)?;
+            for docid in docids {
+                let document = document_maker.make_document(&docid)?;
+                hydration_documents.insert((index_uid.clone(), docid), document);
+            }
+        }
+
+        Ok(Self { index_by_query_index, hydration_settings, hydration_documents })
+    }
+
+    pub fn hydrate_documents(
+        &self,
+        documents: &mut Vec<(usize, SearchHit)>,
+    ) -> Result<(), ResponseError> {
+        for (query_index, document) in documents.iter_mut() {
+            let index_uid = &self.index_by_query_index[*query_index];
+            let Some(foreign_keys) = self.hydration_settings.get(index_uid) else {
+                // No foreign keys for this index, skip
+                continue;
+            };
+
+            // Hydrate the document
+            for ForeignKey { foreign_index_uid, field_name } in foreign_keys {
+                map_leaf_values(
+                    &mut document.document,
+                    [field_name.as_str()],
+                    |key, _array_indices, value| {
+                        self.hydrate_document_value(key, value, foreign_index_uid);
+                    },
+                );
+            }
+
+            // Hydrate the formatted document
+            for ForeignKey { foreign_index_uid, field_name } in foreign_keys {
+                map_leaf_values(
+                    &mut document.formatted,
+                    [field_name.as_str()],
+                    |key, _array_indices, value| {
+                        self.hydrate_document_value(key, value, foreign_index_uid);
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// Replace the foreign key value with the full document from the cache.
+    fn hydrate_document_value(&self, key: &str, value: &mut Value, index_uid: &ForeignIndexUid) {
+        let Ok(external_document_id) = ExternalDocumentId::try_from(value.clone()) else {
+            tracing::warn!("Foreign key value `{value:?}` is not a valid document id in `{key}`");
+            return;
+        };
+        let Some(document) =
+            self.hydration_documents.get(&(index_uid.clone(), external_document_id))
+        else {
+            tracing::warn!(
+                "Foreign key value `{value:?}` in `{key}` does not match any document in index `{index_uid}`"
+            );
+            return;
+        };
+        *value = Value::Object(document.clone());
+    }
+}

@@ -15,7 +15,7 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, Deadline, DocumentId, FederatingResultsStep, OrderBy, SearchStep,
+    self, Deadline, DocumentId, FederatingResultsStep, ForeignKey, OrderBy, SearchStep,
     DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
@@ -39,6 +39,7 @@ use super::weighted_scores;
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE};
+use crate::search::hydration::{FederatedHydrationFormatter, HydrationCache};
 use crate::search::DEFAULT_SEARCH_LIMIT;
 
 #[allow(clippy::too_many_arguments)]
@@ -93,6 +94,13 @@ pub async fn perform_federated_search(
             })
             .collect()
     });
+
+    // Document join: list of indexes in the order of the queries
+    // only create the hydration cache if the foreign keys feature is enabled
+    let mut hydration_cache = features
+        .runtime_features()
+        .foreign_keys
+        .then(|| HydrationCache::new(queries.iter().map(|q| q.index_uid.to_string())));
 
     // this implementation partition the queries by index to guarantee an important property:
     // - all the queries to a particular index use the same read transaction.
@@ -182,6 +190,14 @@ pub async fn perform_federated_search(
         )
     });
 
+    // Document join: register foreign settings for each index
+    if let Some(hydration_cache) = hydration_cache.as_mut() {
+        for result_by_index in results_by_index.iter() {
+            hydration_cache
+                .register_foreign_settings(&result_by_index.index, &result_by_index.foreign_keys);
+        }
+    }
+
     // 3.2. merge federation metadata
     let (hit_number, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
@@ -199,10 +215,15 @@ pub async fn perform_federated_search(
     };
 
     // 3.3. merge hits
-    let merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
+    let mut merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
         .skip(skip)
         .take(take)
         .inspect(|hit| {
+            if let Some(hydration_cache) = hydration_cache.as_mut() {
+                let query_index = hit.query_index();
+                hydration_cache.register_foreign_docids(hit.hit_ref(), query_index);
+            }
+
             if let Some(semantic_hit_count) = &mut semantic_hit_count {
                 if hit.to_score().0.any(|score| matches!(&score, WeightedScoreValue::VectorSort(_)))
                 {
@@ -210,8 +231,17 @@ pub async fn perform_federated_search(
                 }
             }
         })
-        .map(|hit| hit.hit())
+        .map(|hit| (hit.query_index(), hit.hit()))
         .collect();
+
+    // 3.3.1. hydrate documents based on the hydration points
+    if let Some(hydration_cache) = hydration_cache {
+        let hydration_formatter =
+            FederatedHydrationFormatter::new(hydration_cache, index_scheduler)?;
+        hydration_formatter.hydrate_documents(&mut merged_hits)?;
+    }
+
+    let merged_hits = merged_hits.into_iter().map(|(_, hit)| hit).collect();
 
     // 3.4. merge query vectors
     let query_vectors = if retrieve_vectors {
@@ -449,6 +479,13 @@ impl MergedSearchHit {
         }
     }
 
+    fn hit_ref(&self) -> &SearchHit {
+        match self {
+            MergedSearchHit::Local(search_hit_by_index) => &search_hit_by_index.hit,
+            MergedSearchHit::Remote { hit, .. } => hit,
+        }
+    }
+
     fn to_score(&self) -> (impl Iterator<Item = WeightedScoreValue> + '_, f64, usize) {
         match self {
             MergedSearchHit::Local(search_hit_by_index) => (
@@ -465,6 +502,13 @@ impl MergedSearchHit {
                 let query_index = *query_index;
                 (either::Right(score.iter().cloned()), global_weighted_score, query_index)
             }
+        }
+    }
+
+    fn query_index(&self) -> usize {
+        match self {
+            MergedSearchHit::Local(search_hit_by_index) => search_hit_by_index.query_index,
+            MergedSearchHit::Remote { query_index, .. } => *query_index,
         }
     }
 }
@@ -512,6 +556,7 @@ struct SearchResultByIndex {
     degraded: bool,
     used_negative_operator: bool,
     facets: Option<ComputedFacets>,
+    foreign_keys: Vec<ForeignKey>,
 }
 
 /// Builds query metadata for federated search results.
@@ -586,6 +631,7 @@ fn merge_metadata(
         facets: facets_by_index,
         degraded: degraded_by_index,
         used_negative_operator: used_negative_operator_by_index,
+        foreign_keys: _,
     } in results_by_index
     {
         estimated_total_hits += *estimated_total_hits_by_index;
@@ -1237,6 +1283,8 @@ impl SearchByIndex {
                 );
                 error
             })?;
+
+        let foreign_keys = index.foreign_keys(&rtxn)?;
         self.results_by_index.push(SearchResultByIndex {
             index: index_uid,
             primary_key,
@@ -1245,6 +1293,7 @@ impl SearchByIndex {
             degraded,
             used_negative_operator,
             facets,
+            foreign_keys,
         });
         Ok(deadline)
     }

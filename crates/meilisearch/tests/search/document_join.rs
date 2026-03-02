@@ -198,3 +198,65 @@ async fn multi_search_hydration_with_attributes_to_highlight() {
     ]
     "###);
 }
+
+#[actix_rt::test]
+async fn federated_search_hydration_with_attributes_to_highlight() {
+    let server = Server::new().await;
+    server.set_features(json!({ "foreignKeys": true })).await;
+
+    let (_authors_index, books_index) = setup_indexes_with_foreign_key(&server).await;
+
+    let federated_params = json!({
+        "federation": {},
+        "queries": [
+            {
+                "indexUid": books_index.uid,
+                "q": "Captain",
+                "attributesToRetrieve": ["title", "author_id"],
+                "attributesToHighlight": ["title"]
+            }
+        ]
+    });
+
+    // With feature enabled: hydration in federated (multi-search with federation) results
+    let (response, code) = server.multi_search(federated_params.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["hits"], { ".**._rankingScore" => "[score]", ".**._federation" => "[federation]" }), @r###"
+    [
+      {
+        "title": "Captain Marvel story",
+        "author_id": {
+          "id": "a2",
+          "name": "Bob"
+        },
+        "_federation": "[federation]",
+        "_formatted": {
+          "title": "<em>Captain</em> Marvel story",
+          "author_id": {
+            "id": "a2",
+            "name": "Bob"
+          }
+        }
+      }
+    ]
+    "###);
+
+    // Disable feature: no hydration
+    server.set_features(json!({ "foreignKeys": false })).await;
+
+    let (response, code) = server.multi_search(federated_params).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["hits"], { ".**._rankingScore" => "[score]", ".**._federation" => "[federation]" }), @r###"
+    [
+      {
+        "title": "Captain Marvel story",
+        "author_id": "a2",
+        "_federation": "[federation]",
+        "_formatted": {
+          "title": "<em>Captain</em> Marvel story",
+          "author_id": "a2"
+        }
+      }
+    ]
+    "###);
+}

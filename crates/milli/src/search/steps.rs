@@ -18,6 +18,7 @@ make_enum_progress! {
 
 make_enum_progress! {
     pub enum FederatingResultsStep {
+        HydrateDocuments,
         WaitForRemoteResults,
         MergeFacets,
         MergeResults,
