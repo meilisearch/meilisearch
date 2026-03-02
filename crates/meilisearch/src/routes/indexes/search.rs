@@ -68,18 +68,6 @@ pub struct SearchQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
     q: Option<String>,
-    /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
-    ///
-    /// The array length must match the dimensions of the embedder configured in the index.
-    ///
-    /// This parameter is mandatory when using a [user-provided embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/search_with_user_provided_embeddings).
-    ///
-    /// When used with `hybrid`, documents are ranked by vector similarity.
-    ///
-    /// You can also use it to override an embedder's automatic vector generation.
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchVector>)]
-    #[param(required = false, value_type = Vec<f32>, explode = false)]
-    vector: Option<CS<f32>>,
     /// Number of documents to skip at the start of the results.
     ///
     /// Use together with `limit` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination) (e.g. offset=20 and limit=20 returns results 21–40).
@@ -126,12 +114,6 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     attributes_to_retrieve: Option<CS<String>>,
-    /// When true, the response includes document and query embeddings in each hit's `_vectors` field.
-    ///
-    /// The `_vectors` field must be listed in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) for it to appear.
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchRetrieveVectors>)]
-    #[param(required = false, value_type = bool, default)]
-    retrieve_vectors: Param<bool>,
     /// Attributes whose values should be cropped to a short excerpt.
     ///
     /// The cropped text appears in each hit's `_formatted` object.
@@ -152,6 +134,14 @@ pub struct SearchQueryGet {
     #[deserr(default = Param(DEFAULT_CROP_LENGTH()), error = DeserrQueryParamError<InvalidSearchCropLength>)]
     #[param(required = false, value_type = usize, default = DEFAULT_CROP_LENGTH)]
     crop_length: Param<usize>,
+    /// String used to mark crop boundaries in cropped text.
+    ///
+    /// If null or empty, no markers are inserted.
+    ///
+    /// Markers are only added where content was actually removed.
+    #[deserr(default = DEFAULT_CROP_MARKER(), error = DeserrQueryParamError<InvalidSearchCropMarker>)]
+    #[param(required = false, default = DEFAULT_CROP_MARKER)]
+    crop_marker: String,
     /// Attributes in which matching query terms should be highlighted.
     ///
     /// The highlighted text appears in each hit's `_formatted` object.
@@ -166,6 +156,28 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     attributes_to_highlight: Option<CS<String>>,
+    /// String to insert before each highlighted term.
+    ///
+    /// Can be any string (e.g. `<strong>`, `*`).
+    ///
+    /// If null or empty, nothing is inserted at the start of a match.
+    #[deserr(default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
+    #[param(required = false, default = DEFAULT_HIGHLIGHT_PRE_TAG)]
+    highlight_pre_tag: String,
+    /// String to insert after each highlighted term.
+    ///
+    /// Should be used together with `highlightPreTag` to avoid malformed output (e.g. unclosed HTML tags).
+    #[deserr(default = DEFAULT_HIGHLIGHT_POST_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPostTag>)]
+    #[param(required = false, default = DEFAULT_HIGHLIGHT_POST_TAG)]
+    highlight_post_tag: String,
+    /// When true, each hit includes a `_matchesPosition` object with the byte offset (`start` and `length`) of each matched term.
+    ///
+    /// This is useful when you need custom highlighting.
+    ///
+    /// Note that positions are given in bytes, not characters.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
+    #[param(required = false, value_type = bool)]
+    show_matches_position: Param<bool>,
     /// A [filter](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) expression to narrow results.
     ///
     /// All attributes used in the expression must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
@@ -200,32 +212,6 @@ pub struct SearchQueryGet {
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchDistinct>)]
     distinct: Option<String>,
-    /// When true, each hit includes a `_matchesPosition` object with the byte offset (`start` and `length`) of each matched term.
-    ///
-    /// This is useful when you need custom highlighting.
-    ///
-    /// Note that positions are given in bytes, not characters.
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
-    #[param(required = false, value_type = bool)]
-    show_matches_position: Param<bool>,
-    /// When true, each document includes a `_rankingScore` between 0.0 and 1.0; a higher value means the document is more relevant.
-    ///
-    /// See [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score).
-    ///
-    /// The `sort` ranking rule does not affect the value of `_rankingScore`.
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScore>)]
-    #[param(required = false, value_type = bool)]
-    show_ranking_score: Param<bool>,
-    /// When true, each document includes `_rankingScoreDetails`, which breaks down the score contribution of each [ranking rule](https://www.meilisearch.com/docs/learn/relevancy/ranking_rules).
-    ///
-    /// Useful for debugging relevancy.
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScoreDetails>)]
-    #[param(required = false, value_type = bool)]
-    show_ranking_score_details: Param<bool>,
-    /// When true, the response includes a `performanceDetails` object with a timing breakdown of the query processing.
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowPerformanceDetails>)]
-    #[param(required = false, value_type = bool)]
-    show_performance_details: Param<bool>,
     /// Return the count of matches per facet value for the listed attributes.
     ///
     /// The response includes `facetDistribution` and, for numeric facets, `facetStats` (min/max).
@@ -238,28 +224,6 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     facets: Option<CS<String>>,
-    /// String to insert before each highlighted term.
-    ///
-    /// Can be any string (e.g. `<strong>`, `*`).
-    ///
-    /// If null or empty, nothing is inserted at the start of a match.
-    #[deserr(default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
-    #[param(required = false, default = DEFAULT_HIGHLIGHT_PRE_TAG)]
-    highlight_pre_tag: String,
-    /// String to insert after each highlighted term.
-    ///
-    /// Should be used together with `highlightPreTag` to avoid malformed output (e.g. unclosed HTML tags).
-    #[deserr(default = DEFAULT_HIGHLIGHT_POST_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPostTag>)]
-    #[param(required = false, default = DEFAULT_HIGHLIGHT_POST_TAG)]
-    highlight_post_tag: String,
-    /// String used to mark crop boundaries in cropped text.
-    ///
-    /// If null or empty, no markers are inserted.
-    ///
-    /// Markers are only added where content was actually removed.
-    #[deserr(default = DEFAULT_CROP_MARKER(), error = DeserrQueryParamError<InvalidSearchCropMarker>)]
-    #[param(required = false, default = DEFAULT_CROP_MARKER)]
-    crop_marker: String,
     /// How to match query terms when there are not enough results to satisfy `limit`.
     ///
     /// **`last`**: Returns documents containing all query terms first. If there are not enough such results, Meilisearch removes one query term at a time, starting from the end of the query (e.g. for "big fat cat", then "big fat", then "big").
@@ -280,22 +244,6 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     pub attributes_to_search_on: Option<CS<String>>,
-    /// Name of the embedder for [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search), which combines keyword and semantic search.
-    ///
-    /// Must match an embedder configured in the index settings.
-    ///
-    /// Required when `vector` or `hybridSemanticRatio` is set.
-    #[param(required = false)]
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchEmbedder>)]
-    pub hybrid_embedder: Option<String>,
-    /// Balance between keyword and semantic search: 0.0 means keyword-only results, 1.0 means semantic-only.
-    ///
-    /// When `q` is empty and this value is greater than 0, Meilisearch performs a pure semantic search.
-    ///
-    /// Requires `hybridEmbedder` when set.
-    #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
-    #[param(required = false, value_type = f32)]
-    pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
     /// Exclude from the results any document whose [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) is below this value (between 0.0 and 1.0).
     ///
     /// Excluded hits do not count toward `estimatedTotalHits`, `totalHits`, or facet distribution.
@@ -314,6 +262,40 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
     #[param(required = false, value_type = Vec<Locale>, explode = false)]
     pub locales: Option<CS<Locale>>,
+    /// Name of the embedder for [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search), which combines keyword and semantic search.
+    ///
+    /// Must match an embedder configured in the index settings.
+    ///
+    /// Required when `vector` or `hybridSemanticRatio` is set.
+    #[param(required = false)]
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchEmbedder>)]
+    pub hybrid_embedder: Option<String>,
+    /// Balance between keyword and semantic search: 0.0 means keyword-only results, 1.0 means semantic-only.
+    ///
+    /// When `q` is empty and this value is greater than 0, Meilisearch performs a pure semantic search.
+    ///
+    /// Requires `hybridEmbedder` when set.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
+    #[param(required = false, value_type = f32)]
+    pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
+    /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
+    ///
+    /// The array length must match the dimensions of the embedder configured in the index.
+    ///
+    /// This parameter is mandatory when using a [user-provided embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/search_with_user_provided_embeddings).
+    ///
+    /// When used with `hybrid`, documents are ranked by vector similarity.
+    ///
+    /// You can also use it to override an embedder's automatic vector generation.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchVector>)]
+    #[param(required = false, value_type = Vec<f32>, explode = false)]
+    vector: Option<CS<f32>>,
+    /// When true, the response includes document and query embeddings in each hit's `_vectors` field.
+    ///
+    /// The `_vectors` field must be listed in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) for it to appear.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchRetrieveVectors>)]
+    #[param(required = false, value_type = bool, default)]
+    retrieve_vectors: Param<bool>,
     /// For [personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries): a string describing the user (e.g. preferences or behavior).
     ///
     /// Results are then tailored to that profile.
@@ -338,6 +320,24 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchUseNetwork>)]
     #[param(required = false, value_type = Option<bool>)]
     use_network: Option<Param<bool>>,
+    /// When true, each document includes a `_rankingScore` between 0.0 and 1.0; a higher value means the document is more relevant.
+    ///
+    /// See [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score).
+    ///
+    /// The `sort` ranking rule does not affect the value of `_rankingScore`.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScore>)]
+    #[param(required = false, value_type = bool)]
+    show_ranking_score: Param<bool>,
+    /// When true, each document includes `_rankingScoreDetails`, which breaks down the score contribution of each [ranking rule](https://www.meilisearch.com/docs/learn/relevancy/ranking_rules).
+    ///
+    /// Useful for debugging relevancy.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScoreDetails>)]
+    #[param(required = false, value_type = bool)]
+    show_ranking_score_details: Param<bool>,
+    /// When true, the response includes a `performanceDetails` object with a timing breakdown of the query processing.
+    #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowPerformanceDetails>)]
+    #[param(required = false, value_type = bool)]
+    show_performance_details: Param<bool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, deserr::Deserr)]
@@ -416,36 +416,36 @@ impl TryFrom<SearchQueryGet> for SearchQuery {
 
         Ok(Self {
             q: other.q,
-            // `media` not supported for `GET`
-            media: None,
-            vector: other.vector.map(CS::into_inner),
             offset: other.offset.0,
             limit: other.limit.0,
             page: other.page.as_deref().copied(),
             hits_per_page: other.hits_per_page.as_deref().copied(),
             attributes_to_retrieve: other.attributes_to_retrieve.map(|o| o.into_iter().collect()),
-            retrieve_vectors: other.retrieve_vectors.0,
             attributes_to_crop: other.attributes_to_crop.map(|o| o.into_iter().collect()),
             crop_length: other.crop_length.0,
+            crop_marker: other.crop_marker,
             attributes_to_highlight: other.attributes_to_highlight.map(|o| o.into_iter().collect()),
+            show_matches_position: other.show_matches_position.0,
             filter,
             sort: other.sort.map(|attr| fix_sort_query_parameters(&attr)),
             distinct: other.distinct,
-            show_matches_position: other.show_matches_position.0,
-            show_ranking_score: other.show_ranking_score.0,
-            show_ranking_score_details: other.show_ranking_score_details.0,
-            show_performance_details: other.show_performance_details.0,
             facets: other.facets.map(|o| o.into_iter().collect()),
             highlight_pre_tag: other.highlight_pre_tag,
             highlight_post_tag: other.highlight_post_tag,
-            crop_marker: other.crop_marker,
             matching_strategy: other.matching_strategy,
             attributes_to_search_on: other.attributes_to_search_on.map(|o| o.into_iter().collect()),
-            hybrid,
             ranking_score_threshold: other.ranking_score_threshold.map(|o| o.0),
             locales: other.locales.map(|o| o.into_iter().collect()),
+            hybrid,
+            vector: other.vector.map(CS::into_inner),
+            retrieve_vectors: other.retrieve_vectors.0,
+            // `media` not supported for `GET`
+            media: None,
             personalize,
             use_network,
+            show_ranking_score: other.show_ranking_score.0,
+            show_ranking_score_details: other.show_ranking_score_details.0,
+            show_performance_details: other.show_performance_details.0,
         })
     }
 }
