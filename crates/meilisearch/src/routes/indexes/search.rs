@@ -54,29 +54,29 @@ pub struct SearchApi;
 pub struct SearchQueryGet {
     /// Search query string. Meilisearch returns documents that match this query.
     ///
-    /// Supports prefix search and typo tolerance. Only the first ten words of the query are considered. Query terms are normalized (lowercase, accents ignored).
+    /// Supports [prefix search](https://www.meilisearch.com/docs/learn/engine/prefix) and [typo tolerance](https://www.meilisearch.com/docs/learn/relevancy/typo_tolerance_settings). Only the first ten words of the query are considered. Query terms are normalized (lowercase, accents ignored).
     ///
     /// Leave empty for a placeholder search (returns all searchable documents, ordered by ranking rules).
     ///
-    /// Wrap terms in double quotes (`"`) to apply a Phrase Search, e.g. requiring that exact sequence of words in order (e.g. `"Winter Feast"`). Only documents containing that phrase match.
+    /// Wrap terms in double quotes (`"`) for phrase search: that exact sequence of words in order is required (e.g. `"Winter Feast"`). Only documents containing that phrase match.
     ///
     /// Use minus (`-`) before a word or phrase to exclude it from results.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchQ>)]
     q: Option<String>,
-    /// Custom query vector for semantic/vector search. Dimensions must match the embedder.
+    /// Custom query vector for [vector / hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search). Dimensions must match the embedder.
     ///
     /// When provided with `hybrid`, documents are ranked by vector similarity. Mandatory when using a user-provided embedder. Can override an embedder's automatic vector generation.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchVector>)]
     #[param(required = false, value_type = Vec<f32>, explode = false)]
     vector: Option<CS<f32>>,
-    /// Number of documents to skip. Use with `limit` for pagination (e.g. offset=20, limit=20 for results 21–40). Default 0.
+    /// Number of documents to skip. Use with `limit` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination) (e.g. `offset`=20, `limit`=20 for results 21–40).
     ///
-    /// Ignored if `page` or `hitsPerPage` is set. Queries using offset/limit return `estimatedTotalHits` only.
+    /// Ignored if `page` or `hitsPerPage` is set. Queries using `offset`/`limit` return `estimatedTotalHits` only.
     #[deserr(default = Param(DEFAULT_SEARCH_OFFSET()), error = DeserrQueryParamError<InvalidSearchOffset>)]
     #[param(required = false, value_type = usize, default = DEFAULT_SEARCH_OFFSET)]
     offset: Param<usize>,
-    /// Maximum number of documents to return. Default 20. Use with `offset` for pagination.
+    /// Maximum number of documents to return. Use with `offset` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination).
     ///
     /// Ignored if `page` or `hitsPerPage` is set. Cannot exceed the index `maxTotalHits` setting.
     #[deserr(default = Param(DEFAULT_SEARCH_LIMIT()), error = DeserrQueryParamError<InvalidSearchLimit>)]
@@ -84,63 +84,63 @@ pub struct SearchQueryGet {
     limit: Param<usize>,
     /// Request a specific results page (1-indexed). Use with `hitsPerPage`.
     ///
-    /// When set, response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`. Page and hitsPerPage take precedence over offset and limit.
+    /// When set, response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`. `page` and `hitsPerPage` take precedence over `offset` and `limit`.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPage>)]
     #[param(required = false, value_type = Option<usize>)]
     page: Option<Param<usize>>,
-    /// Number of documents per page when using page-based pagination. Determines `totalPages`. Use with `page`.
+    /// Number of documents per page when using page-based [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination). Determines `totalPages`. Use with `page`.
     ///
-    /// When set, response includes `totalHits` and `totalPages`. Set to 0 to get totalHits without documents.
+    /// When set, response includes `totalHits` and `totalPages`. Set to 0 to get `totalHits` without documents.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchHitsPerPage>)]
     #[param(required = false, value_type = Option<usize>)]
     hits_per_page: Option<Param<usize>>,
-    /// Attributes to include in returned documents. Use `["*"]` for all. Defaults to the index `displayedAttributes` list.
+    /// Attributes to include in returned documents. Use `["*"]` for all. Defaults to the index [displayed attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes) list.
     ///
-    /// Attributes not in displayedAttributes are silently omitted.
+    /// Attributes not in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) are silently omitted.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToRetrieve>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     attributes_to_retrieve: Option<CS<String>>,
     /// When true, include document and query vector data in the response (`_vectors` field).
     ///
-    /// Vectors must be in `displayedAttributes` to be returned. Default false.
+    /// Vectors must be in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) to be returned.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchRetrieveVectors>)]
     #[param(required = false, value_type = bool, default)]
     retrieve_vectors: Param<bool>,
-    /// Attributes to crop to a short excerpt. Cropped text is in `_formatted`. Use `cropLength` for max words; optional per-attribute override: `"attribute:length"`.
+    /// Attributes to crop to a short excerpt. Cropped text is in `_formatted`. Use `cropLength` for max words.
     ///
-    /// Use `["*"]` to crop all attributes in attributesToRetrieve. Crop is centered around matching terms when possible.
+    /// Optional per-attribute override: `attribute:length`. Use `["*"]` to crop all attributes in `attributesToRetrieve`. Crop is centered around matching terms when possible.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToCrop>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     attributes_to_crop: Option<CS<String>>,
-    /// Maximum number of words in cropped values. Default 10. Only applies when `attributesToCrop` is set.
+    /// Maximum number of words in cropped values. Only applies when `attributesToCrop` is set.
     ///
-    /// Query terms and stop words count toward this length.
+    /// Query terms and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0) count toward this length.
     #[deserr(default = Param(DEFAULT_CROP_LENGTH()), error = DeserrQueryParamError<InvalidSearchCropLength>)]
     #[param(required = false, value_type = usize, default = DEFAULT_CROP_LENGTH)]
     crop_length: Param<usize>,
-    /// Attributes in which to highlight matching terms. Highlighted text appears in `_formatted`. Use `["*"]` for all attributes in attributesToRetrieve.
+    /// Attributes in which to highlight matching terms. Highlighted text appears in `_formatted`. Use `["*"]` for all attributes in `attributesToRetrieve`.
     ///
-    /// Default tags are `<em>`/`</em>`; override with highlightPreTag and highlightPostTag. Also highlights synonyms and stop words. Works on string, number, array, object.
+    /// Default tags are `<em>`/`</em>`. Override with `highlightPreTag` and `highlightPostTag`. Also highlights [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0). Works on string, number, array, object.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToHighlight>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     attributes_to_highlight: Option<CS<String>>,
-    /// Filter expression to narrow results. Attributes must be in `filterableAttributes`.
+    /// [Filter](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) expression to narrow results. Attributes must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
     ///
     /// String: e.g. `"(genres = horror OR genres = mystery) AND director = 'Jordan Peele'"`. Array: e.g. `[["genres = horror", "genres = mystery"], "director = 'Jordan Peele'"]`.
     ///
-    /// Geo: `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`, `_geoPolygon([lat,lng], ...)` for GeoJSON documents. GET: string only; must be URL-encoded.
+    /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch): `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`, `_geoPolygon([lat,lng], ...)` (GeoJSON documents). GET: string only; must be URL-encoded.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFilter>)]
     filter: Option<String>,
-    /// Sort results by attributes and order. Format: `["attribute:asc", "attribute:desc"]`. Only attributes in `sortableAttributes`.
+    /// [Sort](https://www.meilisearch.com/docs/learn/filtering_and_sorting/sort_search_results) results by attributes and order. Format: `["attribute:asc", "attribute:desc"]`. Only attributes in `sortableAttributes`.
     ///
-    /// For geo: `_geoPoint(lat,lng):asc` or `:desc`; response includes `_geoDistance` in meters. First attribute has precedence.
+    /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch): `_geoPoint(lat,lng):asc` or `:desc`. Response includes `_geoDistance` in meters. First attribute has precedence.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSort>)]
     sort: Option<String>,
-    /// Return only one document per distinct value of this attribute (e.g. deduplicate by product_id).
+    /// Return only one document per distinct value of this attribute (e.g. deduplicate by product_id). See [distinct attribute](https://www.meilisearch.com/docs/learn/relevancy/distinct_attribute).
     ///
-    /// Attribute must be in `filterableAttributes`. Overrides index distinctAttribute at search time.
+    /// Attribute must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0). Overrides index [distinctAttribute](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-distinct-attribute-one-of-0) at search time.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchDistinct>)]
     distinct: Option<String>,
@@ -150,9 +150,9 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowMatchesPosition>)]
     #[param(required = false, value_type = bool)]
     show_matches_position: Param<bool>,
-    /// When true, add `_rankingScore` (0.0–1.0) to each document. Higher means more relevant.
+    /// When true, add `_rankingScore` (0.0–1.0) to each document. Higher means more relevant. See [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score).
     ///
-    /// The sort ranking rule does not affect this score.
+    /// The `sort` ranking rule does not affect this score.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowRankingScore>)]
     #[param(required = false, value_type = bool)]
     show_ranking_score: Param<bool>,
@@ -166,69 +166,69 @@ pub struct SearchQueryGet {
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchShowPerformanceDetails>)]
     #[param(required = false, value_type = bool)]
     show_performance_details: Param<bool>,
-    /// Return facet distribution (count of matches per value) for these attributes. Use `["*"]` for all filterableAttributes.
+    /// [Facets](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters): return facet distribution (count of matches per value) for these attributes. Use `["*"]` for all [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
     ///
-    /// Attributes must be in filterableAttributes. Response includes `facetDistribution` and `facetStats` (min/max for numeric facets). Limited by index `maxValuesPerFacet` (default 100).
+    /// Attributes must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0). Response includes `facetDistribution` and `facetStats` (min/max for numeric facets). Limited by index [maxValuesPerFacet](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-faceting-one-of-1-max-values-per-facet-one-of-0).
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchFacets>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     facets: Option<CS<String>>,
-    /// String inserted before a highlighted term. Default `<em>`. Can be any string (e.g. `<strong>`, `*`).
-    ///
-    /// Null or empty = no start marker.
+    /// String inserted before a highlighted term. Can be any string (e.g. `<strong>`, `*`). If null or empty, no start marker is inserted.
     #[deserr(default = DEFAULT_HIGHLIGHT_PRE_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPreTag>)]
     #[param(required = false, default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     highlight_pre_tag: String,
-    /// String inserted after a highlighted term. Default `</em>`.
-    ///
-    /// Should match highlightPreTag to avoid malformed output (e.g. unclosed tags).
+    /// String inserted after a highlighted term. Should match `highlightPreTag` to avoid malformed output (e.g. unclosed tags).
     #[deserr(default = DEFAULT_HIGHLIGHT_POST_TAG(), error = DeserrQueryParamError<InvalidSearchHighlightPostTag>)]
     #[param(required = false, default = DEFAULT_HIGHLIGHT_POST_TAG)]
     highlight_post_tag: String,
-    /// String marking crop boundaries in cropped text (e.g. `…`). Default `"…"`.
-    ///
-    /// Null or empty = no markers. Only added where content was removed.
+    /// String marking crop boundaries in cropped text (e.g. `…`). If null or empty, no markers are inserted. Markers are only added where content was removed.
     #[deserr(default = DEFAULT_CROP_MARKER(), error = DeserrQueryParamError<InvalidSearchCropMarker>)]
     #[param(required = false, default = DEFAULT_CROP_MARKER)]
     crop_marker: String,
-    /// How to match query terms.
+    /// How to match query terms when there are not enough results to satisfy `limit`.
     ///
-    /// `last` (default): require all terms, drop from the end if not enough results. `all`: only documents with all terms. `frequency`: drop the most frequent term first when relaxing.
+    /// **`last`**: Returns documents containing all query terms first. If there are not enough such results, Meilisearch removes one query term at a time, starting from the end of the query (e.g. for "big fat cat", then "big fat", then "big").
+    ///
+    /// **`all`**: Only returns documents that contain all query terms. Meilisearch does not relax the query even if fewer than `limit` documents match.
+    ///
+    /// **`frequency`**: Returns documents containing all query terms first. If there are not enough, removes one term at a time starting with the word that is most frequent in the dataset, giving more weight to rarer terms (e.g. in "white cotton shirt", prioritizes documents containing "white" if "shirt" is very common).
+    ///
+    /// Default: `last`.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
     matching_strategy: MatchingStrategy,
-    /// Restrict search to these attributes only. Default `["*"]` (all searchableAttributes).
-    ///
-    /// Attributes must be in searchableAttributes. Order does not affect relevancy.
+    /// Restrict search to these attributes only. Attributes must be in the index [searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes) list. Order does not affect relevancy.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchAttributesToSearchOn>)]
     #[param(required = false, value_type = Vec<String>, explode = false)]
     pub attributes_to_search_on: Option<CS<String>>,
-    /// Hybrid search: combine keyword and semantic search. `embedder` (required) must match an embedder in index settings.
+    /// [Hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search): combine keyword and semantic search. `embedder` (required) must match an embedder in index settings.
     ///
     /// Required when `vector` or `hybridSemanticRatio` is set.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchEmbedder>)]
     pub hybrid_embedder: Option<String>,
-    /// Balance between keyword search (0.0) and semantic/vector search (1.0) in hybrid search. A value of 0.5 gives equal weight to both. Defaults to 0.5.
+    /// Between 0.0 (keyword only) and 1.0 (semantic only). When `q` is empty and `hybridSemanticRatio` > 0, performs pure semantic search.
     ///
-    /// Requires hybridEmbedder when set.
+    /// Requires `hybridEmbedder` when set.
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchSemanticRatio>)]
     #[param(required = false, value_type = f32)]
     pub hybrid_semantic_ratio: Option<SemanticRatioGet>,
-    /// Exclude documents with ranking score below this value (0.0–1.0). Excluded hits do not count toward estimatedTotalHits, totalHits, or facet distribution.
+    /// Exclude documents with [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) below this value (0.0–1.0). Excluded hits do not count toward `estimatedTotalHits`, `totalHits`, or facet distribution.
     ///
-    /// With page/hitsPerPage this may impact performance (all matches are scored).
+    /// With `page`/`hitsPerPage` this may impact performance (all matches are scored).
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchRankingScoreThreshold>)]
     #[param(required = false, value_type = f32)]
     pub ranking_score_threshold: Option<RankingScoreThresholdGet>,
     /// Explicit query language(s) for tokenization. Array of ISO-639 locales. Overrides auto-detection.
     ///
-    /// Use when auto-detection is wrong for the query or documents (see also index `localizedAttributes`).
+    /// Use when auto-detection is wrong for the query or documents. See also index [localizedAttributes](https://www.meilisearch.com/docs/reference/api/settings/list-all-settings#response-localized-attributes-one-of-0).
+    ///
+    /// See also [Language](https://www.meilisearch.com/docs/learn/resources/language).
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchLocales>)]
     #[param(required = false, value_type = Vec<Locale>, explode = false)]
     pub locales: Option<CS<Locale>>,
-    /// User context for personalized search: a string describing the user (preferences, behavior).
+    /// User context for [personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries): a string describing the user (preferences, behavior).
     ///
-    /// Requires personalization to be enabled (e.g. Cohere key for self-hosted).
+    /// Requires personalization to be [enabled](http://localhost:3000/reference/api/experimental-features/configure-experimental-features) (e.g. Cohere key for self-hosted).
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchPersonalizeUserContext>)]
     pub personalize_user_context: Option<String>,
@@ -236,7 +236,7 @@ pub struct SearchQueryGet {
     /// deduplicated across remotes). When `false` or omitted, the query runs locally.
     ///
     /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
-    /// It also requires the `network` experimental feature.
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
     /// Values: `true` = use the whole network; `false` or omitted = local (default).
     ///
