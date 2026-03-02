@@ -1,0 +1,91 @@
+{
+  "type": "test",
+  "name": "task_queue_compaction",
+  "binary": {
+    "source": "build"
+  },
+  "commands": [
+    {
+      "route": "indexes/foobar/documents",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "id": 123,
+          "foo": "bar"
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "foobar",
+        "status": "enqueued",
+        "taskUid": "[taskUid]",
+        "type": "documentAdditionOrUpdate"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "maintenance/tasks/compact",
+      "method": "POST",
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": null,
+        "status": "enqueued",
+        "taskUid": 1,
+        "type": "taskQueueCompaction"
+      }
+    },
+    {
+      "route": "batches?limit=1",
+      "method": "GET",
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "$extractor": {
+          "path": "$.results[0].progress.steps[-1].currentStep",
+          "expectedValue": [
+            "wait for the instance to restart"
+          ]
+        }
+      },
+      "retryFor": 5
+    },
+    {
+      "binary": {
+        "source": "build"
+      }
+    },
+    {
+      "route": "tasks/1",
+      "method": "GET",
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "$extractor": {
+          "path": "$.status",
+          "expectedValue": [
+            "succeeded"
+          ]
+        }
+      }
+    },
+    {
+      "route": "indexes/foobar/documents",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "id": 456,
+          "foo": "baz"
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "foobar",
+        "status": "enqueued",
+        "taskUid": "[taskUid]",
+        "type": "documentAdditionOrUpdate"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ]
+}

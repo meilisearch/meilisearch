@@ -166,6 +166,7 @@ pub enum KindDump {
         index_uid: String,
     },
     NetworkTopologyChange(NetworkTopologyChange),
+    TaskQueueCompaction,
 }
 
 impl From<Task> for TaskDump {
@@ -255,6 +256,7 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::NetworkTopologyChange(network_topology_change) => {
                 KindDump::NetworkTopologyChange(network_topology_change)
             }
+            KindWithContent::TaskQueueCompaction => KindDump::TaskQueueCompaction,
         }
     }
 }

@@ -361,7 +361,8 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         | K::Export { .. }
         | K::UpgradeDatabase { .. }
         | K::NetworkTopologyChange(_)
-        | K::SnapshotCreation => (),
+        | K::SnapshotCreation
+        | K::TaskQueueCompaction => (),
     };
     if let Some(Details::IndexSwap { swaps }) = &mut task.details {
         for IndexSwap { indexes: (lhs, rhs), rename: _ } in swaps.iter_mut() {
@@ -437,7 +438,7 @@ pub fn clamp_to_page_size(size: usize) -> usize {
 impl crate::IndexScheduler {
     /// Asserts that the index scheduler's content is internally consistent.
     pub fn assert_internally_consistent(&self) {
-        let rtxn = self.env.read_txn().unwrap();
+        let rtxn = self.read_txn().unwrap();
         for task in self.queue.tasks.all_tasks.iter(&rtxn).unwrap() {
             let (task_id, task) = task.unwrap();
             let task_index_uid = task.index_uid().map(ToOwned::to_owned);
@@ -704,6 +705,12 @@ impl crate::IndexScheduler {
                     }
                     Details::NetworkTopologyChange { moved_documents: _, message: _ } => {
                         assert_eq!(kind.as_kind(), Kind::NetworkTopologyChange);
+                    }
+                    Details::TaskQueueCompaction {
+                        pre_deletion_size: _,
+                        post_deletion_size: _,
+                    } => {
+                        assert_eq!(kind.as_kind(), Kind::TaskQueueCompaction);
                     }
                 }
             }

@@ -3,6 +3,7 @@ use std::fs::{remove_file, File};
 use std::io::{ErrorKind, Seek, SeekFrom};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 
 use byte_unit::Byte;
 use meilisearch_types::batches::BatchId;
@@ -22,7 +23,7 @@ use super::create_batch::Batch;
 use crate::processing::{
     AtomicBatchStep, AtomicTaskStep, CreateIndexProgress, DeleteIndexProgress, FinalizingIndexStep,
     IndexCompaction, InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress,
-    TaskDeletionProgress, UpdateIndexProgress,
+    TaskDeletionProgress, TaskQueueCompactionProgress, UpdateIndexProgress,
 };
 use crate::utils::{consecutive_ranges, swap_index_uid_in_task, ProcessingBatch};
 use crate::{Error, IndexScheduler, Result, TaskId, BEI128};
@@ -473,6 +474,38 @@ impl IndexScheduler {
 
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
+            Batch::TaskQueueCompaction { mut task } => {
+                let ret = catch_unwind(AssertUnwindSafe(|| {
+                    self.apply_task_queue_compaction(&mut task, &progress)
+                }));
+
+                let (pre_size, post_size) = match ret {
+                    Ok(Ok(stats)) => stats,
+                    Ok(Err(Error::AbortedTask)) => return Err(Error::AbortedTask),
+                    Ok(Err(e)) => return Err(e),
+                    Err(e) => {
+                        let msg = match e.downcast_ref::<&'static str>() {
+                            Some(s) => *s,
+                            None => match e.downcast_ref::<String>() {
+                                Some(s) => &s[..],
+                                None => "Box<dyn Any>",
+                            },
+                        };
+                        return Err(Error::ProcessBatchPanicked(msg.to_string()));
+                    }
+                };
+
+                if let Some(Details::TaskQueueCompaction {
+                    pre_deletion_size,
+                    post_deletion_size,
+                }) = task.details.as_mut()
+                {
+                    *pre_deletion_size = Some(Byte::from_u64(pre_size));
+                    *post_deletion_size = Some(Byte::from_u64(post_size));
+                }
+
+                Ok((vec![task], ProcessBatchInfo::default()))
+            }
             Batch::Export { mut task } => {
                 let KindWithContent::Export { url, api_key, payload_size, indexes } = &task.kind
                 else {
@@ -584,7 +617,7 @@ impl IndexScheduler {
         index
             .copy_to_file(file.as_file_mut(), CompactionOption::Enabled)
             .map_err(|error| Error::Milli { error, index_uid: Some(index_uid.to_string()) })?;
-        // ...and reset the file position as specified in the documentation
+        // ...and reset the file position as specified in the heed documentation
         file.seek(SeekFrom::Start(0))?;
 
         // 4. We replace the index data file with the temporary file
@@ -636,6 +669,51 @@ impl IndexScheduler {
         };
 
         Ok((pre_size, post_size))
+    }
+
+    fn apply_task_queue_compaction(
+        &self,
+        task: &mut Task,
+        progress: &Progress,
+    ) -> Result<(u64, u64)> {
+        let tasks_path = self.env.path();
+        let src_path = tasks_path.join("data.mdb");
+        let pre_size = std::fs::metadata(&src_path)?.len();
+
+        let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+
+        // mark the task as succeeded and persist it before compaction,
+        // so the compacted DB already contains the succeeded status.
+        task.status = Status::Succeeded;
+        self.queue.tasks.update_task(&mut wtxn, task)?;
+        // we commit early so the LMDB compaction sees the task was successful and does not try to
+        // run it again once the server get restarted.
+        wtxn.commit().map_err(Error::HeedTransaction)?;
+
+        // we keep an open write transaction to prevent tasks insertion in the queue. We keep
+        // the transaction until the server get restarted.
+        let _wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+
+        progress.update_progress(TaskQueueCompactionProgress::CreateTemporaryFile);
+        let dest_path = TempPath::from_path(tasks_path.join(DATA_MDB_COPY_NAME));
+        let dest_file = File::create(&dest_path)?;
+        let mut dest_file = tempfile::NamedTempFile::from_parts(dest_file, dest_path);
+
+        progress.update_progress(TaskQueueCompactionProgress::CopyAndCompactTaskQueue);
+        self.env.copy_to_file(dest_file.as_file_mut(), CompactionOption::Enabled)?;
+        // reset the file position as specified in the heed documentation
+        dest_file.seek(SeekFrom::Start(0))?;
+
+        progress.update_progress(TaskQueueCompactionProgress::PersistTheCompactedTaskQueue);
+        let file = dest_file.persist(&src_path)?;
+        file.sync_all()?;
+        let post_size = file.metadata()?.len();
+        tracing::info!("Task queue compacted: used size {pre_size} -> {post_size} bytes");
+
+        progress.update_progress(TaskQueueCompactionProgress::WaitForTheInstanceToRestart);
+        loop {
+            std::thread::sleep(Duration::from_millis(500));
+        }
     }
 
     /// Swap the index `lhs` with the index `rhs`.

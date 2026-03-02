@@ -590,6 +590,7 @@ impl From<Details> for DetailsView {
                     ..Default::default()
                 }
             }
+            Details::TaskQueueCompaction { .. } => DetailsView::default(),
             Details::NetworkTopologyChange { moved_documents, message } => DetailsView {
                 moved_documents: Some(moved_documents),
                 message: Some(message),

@@ -60,6 +60,9 @@ pub(crate) enum Batch {
         index_uid: String,
         task: Task,
     },
+    TaskQueueCompaction {
+        task: Task,
+    },
     #[allow(clippy::enum_variant_names)] // warranted because we are executing an inner index batch
     NetworkIndexBatch {
         network_task: Task,
@@ -124,7 +127,8 @@ impl Batch {
             | Batch::IndexCreation { task, .. }
             | Batch::Export { task }
             | Batch::IndexUpdate { task, .. }
-            | Batch::IndexCompaction { task, .. } => {
+            | Batch::IndexCompaction { task, .. }
+            | Batch::TaskQueueCompaction { task } => {
                 RoaringBitmap::from_sorted_iter(std::iter::once(task.uid)).unwrap()
             }
             Batch::SnapshotCreation(tasks)
@@ -171,7 +175,8 @@ impl Batch {
             | Export { .. }
             | UpgradeDatabase { .. }
             | NetworkReady { .. }
-            | IndexSwap { .. } => None,
+            | IndexSwap { .. }
+            | TaskQueueCompaction { .. } => None,
             IndexOperation { op, .. } => Some(op.index_uid()),
             IndexCreation { index_uid, .. }
             | IndexUpdate { index_uid, .. }
@@ -198,6 +203,7 @@ impl fmt::Display for Batch {
             Batch::IndexDeletion { .. } => f.write_str("IndexDeletion")?,
             Batch::IndexSwap { .. } => f.write_str("IndexSwap")?,
             Batch::IndexCompaction { .. } => f.write_str("IndexCompaction")?,
+            Batch::TaskQueueCompaction { .. } => f.write_str("TaskQueueCompaction")?,
             Batch::Export { .. } => f.write_str("Export")?,
             Batch::UpgradeDatabase { .. } => f.write_str("UpgradeDatabase")?,
             Batch::NetworkIndexBatch { .. } => f.write_str("NetworkTopologyChange")?,
@@ -569,7 +575,20 @@ impl IndexScheduler {
             return Ok(Some((Batch::IndexCompaction { index_uid, task }, current_batch)));
         }
 
-        // 5. we batch the export.
+        // 5. we get the next task queue compaction
+        let to_compact = self.queue.tasks.get_kind(rtxn, Kind::TaskQueueCompaction)? & enqueued;
+        if let Some(task_id) = to_compact.min() {
+            let mut task =
+                self.queue.tasks.get_task(rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
+            current_batch.processing(Some(&mut task));
+            current_batch.reason(BatchStopReason::TaskCannotBeBatched {
+                kind: Kind::TaskQueueCompaction,
+                id: task_id,
+            });
+            return Ok(Some((Batch::TaskQueueCompaction { task }, current_batch)));
+        }
+
+        // 6. we batch the export.
         let to_export = self.queue.tasks.get_kind(rtxn, Kind::Export)? & enqueued;
         if !to_export.is_empty() {
             let task_id = to_export.iter().next().expect("There must be at least one export task");

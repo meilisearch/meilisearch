@@ -64,7 +64,8 @@ impl Task {
             | Export { .. }
             | UpgradeDatabase { .. }
             | NetworkTopologyChange { .. }
-            | IndexSwap { .. } => None,
+            | IndexSwap { .. }
+            | TaskQueueCompaction => None,
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
@@ -103,7 +104,8 @@ impl Task {
             | KindWithContent::Export { .. }
             | KindWithContent::UpgradeDatabase { .. }
             | KindWithContent::NetworkTopologyChange { .. }
-            | KindWithContent::IndexCompaction { .. } => None,
+            | KindWithContent::IndexCompaction { .. }
+            | KindWithContent::TaskQueueCompaction => None,
         }
     }
 }
@@ -184,6 +186,7 @@ pub enum KindWithContent {
     IndexCompaction {
         index_uid: String,
     },
+    TaskQueueCompaction,
     NetworkTopologyChange(network::NetworkTopologyChange),
 }
 
@@ -229,6 +232,7 @@ impl KindWithContent {
             KindWithContent::Export { .. } => Kind::Export,
             KindWithContent::UpgradeDatabase { .. } => Kind::UpgradeDatabase,
             KindWithContent::IndexCompaction { .. } => Kind::IndexCompaction,
+            KindWithContent::TaskQueueCompaction => Kind::TaskQueueCompaction,
             KindWithContent::NetworkTopologyChange { .. } => Kind::NetworkTopologyChange,
         }
     }
@@ -243,7 +247,8 @@ impl KindWithContent {
             | TaskDeletion { .. }
             | Export { .. }
             | NetworkTopologyChange { .. }
-            | UpgradeDatabase { .. } => vec![],
+            | UpgradeDatabase { .. }
+            | TaskQueueCompaction => vec![],
             DocumentAdditionOrUpdate { index_uid, .. }
             | DocumentEdition { index_uid, .. }
             | DocumentDeletion { index_uid, .. }
@@ -356,6 +361,10 @@ impl KindWithContent {
                 pre_compaction_size: None,
                 post_compaction_size: None,
             }),
+            KindWithContent::TaskQueueCompaction => Some(Details::TaskQueueCompaction {
+                pre_deletion_size: None,
+                post_deletion_size: None,
+            }),
             KindWithContent::NetworkTopologyChange { .. } => Some(Details::NetworkTopologyChange {
                 moved_documents: 0,
                 message: "processing tasks for previous network versions".into(),
@@ -447,6 +456,10 @@ impl KindWithContent {
                 pre_compaction_size: None,
                 post_compaction_size: None,
             }),
+            KindWithContent::TaskQueueCompaction => Some(Details::TaskQueueCompaction {
+                pre_deletion_size: None,
+                post_deletion_size: None,
+            }),
             KindWithContent::NetworkTopologyChange(network_topology_change) => {
                 Some(network_topology_change.to_details())
             }
@@ -516,6 +529,10 @@ impl From<&KindWithContent> for Option<Details> {
                 index_uid: index_uid.clone(),
                 pre_compaction_size: None,
                 post_compaction_size: None,
+            }),
+            KindWithContent::TaskQueueCompaction => Some(Details::TaskQueueCompaction {
+                pre_deletion_size: None,
+                post_deletion_size: None,
             }),
             KindWithContent::NetworkTopologyChange(network_topology_change) => {
                 Some(network_topology_change.to_details())
@@ -631,6 +648,7 @@ pub enum Kind {
     Export,
     UpgradeDatabase,
     IndexCompaction,
+    TaskQueueCompaction,
     NetworkTopologyChange,
 }
 
@@ -651,6 +669,7 @@ impl Kind {
             | Kind::DumpCreation
             | Kind::Export
             | Kind::UpgradeDatabase
+            | Kind::TaskQueueCompaction
             | Kind::NetworkTopologyChange
             | Kind::SnapshotCreation => false,
         }
@@ -674,6 +693,7 @@ impl Display for Kind {
             Kind::Export => write!(f, "export"),
             Kind::UpgradeDatabase => write!(f, "upgradeDatabase"),
             Kind::IndexCompaction => write!(f, "indexCompaction"),
+            Kind::TaskQueueCompaction => write!(f, "taskQueueCompaction"),
             Kind::NetworkTopologyChange => write!(f, "networkTopologyChange"),
         }
     }
@@ -712,6 +732,8 @@ impl FromStr for Kind {
             Ok(Kind::UpgradeDatabase)
         } else if kind.eq_ignore_ascii_case("indexCompaction") {
             Ok(Kind::IndexCompaction)
+        } else if kind.eq_ignore_ascii_case("taskQueueCompaction") {
+            Ok(Kind::TaskQueueCompaction)
         } else if kind.eq_ignore_ascii_case("networkTopologyChange") {
             Ok(Kind::NetworkTopologyChange)
         } else {
@@ -804,6 +826,10 @@ pub enum Details {
         pre_compaction_size: Option<Byte>,
         post_compaction_size: Option<Byte>,
     },
+    TaskQueueCompaction {
+        pre_deletion_size: Option<Byte>,
+        post_deletion_size: Option<Byte>,
+    },
     NetworkTopologyChange {
         moved_documents: u64,
         message: String,
@@ -843,6 +869,10 @@ impl Details {
             Self::IndexCompaction { pre_compaction_size, post_compaction_size, .. } => {
                 *pre_compaction_size = None;
                 *post_compaction_size = None;
+            }
+            Self::TaskQueueCompaction { pre_deletion_size, post_deletion_size } => {
+                *pre_deletion_size = None;
+                *post_deletion_size = None;
             }
             Self::SettingsUpdate { .. }
             | Self::IndexInfo { .. }
