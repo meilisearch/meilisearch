@@ -659,6 +659,7 @@ pub(crate) async fn search(
                     request_uid,
                     include_metadata,
                 },
+                &index_scheduler,
                 &index,
                 &progress_clone,
             )
