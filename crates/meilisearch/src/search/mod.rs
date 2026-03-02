@@ -82,100 +82,104 @@ pub struct Personalize {
 #[schema(rename_all = "camelCase")]
 pub struct SearchQuery {
     /// Search query string. Meilisearch returns documents that match this query.
-    /// Supports prefix search and typo tolerance. Leave empty for a placeholder search
-    /// (returns all searchable documents, ordered by ranking rules). Only the first
-    /// ten words of the query are considered. Query terms are normalized (lowercase,
-    /// accents ignored). Use double quotes for phrase search; use minus (`-`) before
-    /// a word or phrase to exclude it from results.
+    ///
+    /// Supports prefix search and typo tolerance. Only the first ten words of the query are considered. Query terms are normalized (lowercase, accents ignored).
+    ///
+    /// Leave empty for a placeholder search (returns all searchable documents, ordered by ranking rules).
+    ///
+    /// Wrap terms in double quotes (`"`) to apply a Phrase Search, e.g. requiring that exact sequence of words in order (e.g. `"Winter Feast"`). Only documents containing that phrase match.
+    ///
+    /// Use minus (`-`) before a word or phrase to exclude it from results.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
-    /// Custom query vector for semantic/vector search. Dimensions must match the
-    /// embedder. When provided with `hybrid`, documents are ranked by vector similarity.
-    /// Mandatory when using a user-provided embedder. Can override an embedder's
-    /// automatic vector generation.
+    /// Custom query vector for semantic/vector search. Dimensions must match the embedder.
+    ///
+    /// When provided with `hybrid`, documents are ranked by vector similarity. Mandatory when using a user-provided embedder. Can override an embedder's automatic vector generation.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
-    /// Multimodal search: provide data (e.g. image, text) that matches a search fragment
-    /// configured in index settings. Requires an embedder; incompatible with `vector`.
+    /// Multimodal search: provide data (e.g. image, text) that matches a search fragment configured in index settings.
+    ///
+    /// Requires an embedder; incompatible with `vector`.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
-    /// Hybrid search: combine keyword and semantic search. `embedder` (required) must
-    /// match an embedder in index settings. `semanticRatio` between 0.0 (keyword only)
-    /// and 1.0 (semantic only); default 0.5. When `q` is empty and semanticRatio > 0,
-    /// performs pure semantic search.
+    /// Hybrid search: combine keyword and semantic search. `embedder` (required) must match an embedder in index settings.
+    ///
+    /// `semanticRatio` between 0.0 (keyword only) and 1.0 (semantic only); default 0.5. When `q` is empty and semanticRatio > 0, performs pure semantic search.
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     #[schema(required = false, value_type = Option<HybridQuery>)]
     pub hybrid: Option<HybridQuery>,
-    /// Number of documents to skip. Use with `limit` for pagination (e.g. offset=20,
-    /// limit=20 for results 21–40). Default 0. Ignored if `page` or `hitsPerPage` is set.
-    /// Queries using offset/limit return `estimatedTotalHits` only.
+    /// Number of documents to skip. Use with `limit` for pagination (e.g. offset=20, limit=20 for results 21–40). Default 0.
+    ///
+    /// Ignored if `page` or `hitsPerPage` is set. Queries using offset/limit return `estimatedTotalHits` only.
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     #[schema(required = false, default = DEFAULT_SEARCH_OFFSET)]
     pub offset: usize,
-    /// Maximum number of documents to return. Default 20. Use with `offset` for
-    /// pagination. Ignored if `page` or `hitsPerPage` is set. Cannot exceed the
-    /// index `maxTotalHits` setting.
+    /// Maximum number of documents to return. Default 20. Use with `offset` for pagination.
+    ///
+    /// Ignored if `page` or `hitsPerPage` is set. Cannot exceed the index `maxTotalHits` setting.
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
     #[schema(required = false, default = DEFAULT_SEARCH_LIMIT)]
     pub limit: usize,
-    /// Request a specific results page (1-indexed). Use with `hitsPerPage`. When set,
-    /// response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`.
-    /// Page and hitsPerPage take precedence over offset and limit.
+    /// Request a specific results page (1-indexed). Use with `hitsPerPage`.
+    ///
+    /// When set, response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`. Page and hitsPerPage take precedence over offset and limit.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
-    /// Number of documents per page when using page-based pagination. Determines
-    /// `totalPages`. Use with `page`. When set, response includes `totalHits` and
-    /// `totalPages`. Set to 0 to get totalHits without documents.
+    /// Number of documents per page when using page-based pagination. Determines `totalPages`. Use with `page`.
+    ///
+    /// When set, response includes `totalHits` and `totalPages`. Set to 0 to get totalHits without documents.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
-    /// Attributes to include in returned documents. Use `["*"]` for all. Defaults to
-    /// the index `displayedAttributes` list. Attributes not in displayedAttributes
-    /// are silently omitted.
+    /// Attributes to include in returned documents. Use `["*"]` for all. Defaults to the index `displayedAttributes` list.
+    ///
+    /// Attributes not in displayedAttributes are silently omitted.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
-    /// When true, include document and query vector data in the response (`_vectors`
-    /// field). Vectors must be in `displayedAttributes` to be returned. Default false.
+    /// When true, include document and query vector data in the response (`_vectors` field).
+    ///
+    /// Vectors must be in `displayedAttributes` to be returned. Default false.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
     pub retrieve_vectors: bool,
-    /// Attributes to crop to a short excerpt. Cropped text is in `_formatted`. Use
-    /// `cropLength` for max words; optional per-attribute override: `"attribute:length"`.
-    /// Use `["*"]` to crop all attributes in attributesToRetrieve. Crop is centered
-    /// around matching terms when possible.
+    /// Attributes to crop to a short excerpt. Cropped text is in `_formatted`. Use `cropLength` for max words; optional per-attribute override: `"attribute:length"`.
+    ///
+    /// Use `["*"]` to crop all attributes in attributesToRetrieve. Crop is centered around matching terms when possible.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
-    /// Maximum number of words in cropped values. Default 10. Only applies when
-    /// `attributesToCrop` is set. Query terms and stop words count toward this length.
+    /// Maximum number of words in cropped values. Default 10. Only applies when `attributesToCrop` is set.
+    ///
+    /// Query terms and stop words count toward this length.
     #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     #[schema(required = false, default = DEFAULT_CROP_LENGTH)]
     pub crop_length: usize,
-    /// Attributes in which to highlight matching terms. Highlighted text appears in
-    /// `_formatted`. Use `["*"]` for all attributes in attributesToRetrieve. Default
-    /// tags are `<em>`/`</em>`; override with highlightPreTag and highlightPostTag.
-    /// Also highlights synonyms and stop words. Works on string, number, array, object.
+    /// Attributes in which to highlight matching terms. Highlighted text appears in `_formatted`. Use `["*"]` for all attributes in attributesToRetrieve.
+    ///
+    /// Default tags are `<em>`/`</em>`; override with highlightPreTag and highlightPostTag. Also highlights synonyms and stop words. Works on string, number, array, object.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
-    /// When true, add `_matchesPosition` to each hit with the byte offset (start,
-    /// length) of each matched term. Useful for custom highlighting. Measured in bytes.
+    /// When true, add `_matchesPosition` to each hit with the byte offset (start, length) of each matched term.
+    ///
+    /// Useful for custom highlighting. Measured in bytes.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
-    /// When true, add `_rankingScore` (0.0–1.0) to each document. Higher means more
-    /// relevant. The sort ranking rule does not affect this score.
+    /// When true, add `_rankingScore` (0.0–1.0) to each document. Higher means more relevant.
+    ///
+    /// The sort ranking rule does not affect this score.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
-    /// When true, add `_rankingScoreDetails` with the contribution of each ranking
-    /// rule (words, typo, proximity, attribute, exactness, sort, etc.). Useful for
-    /// debugging relevancy.
+    /// When true, add `_rankingScoreDetails` with the contribution of each ranking rule (words, typo, proximity, attribute, exactness, sort, etc.).
+    ///
+    /// Useful for debugging relevancy.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
@@ -197,73 +201,76 @@ pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
     /// Filter expression to narrow results. Attributes must be in `filterableAttributes`.
-    /// String: e.g. `"(genres = horror OR genres = mystery) AND director = 'Jordan Peele'"`.
-    /// Array: e.g. `[["genres = horror", "genres = mystery"], "director = 'Jordan Peele'"]`.
-    /// Geo: `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`,
-    /// `_geoPolygon([lat,lng], ...)` for GeoJSON documents.
+    ///
+    /// String: e.g. `"(genres = horror OR genres = mystery) AND director = 'Jordan Peele'"`. Array: e.g. `[["genres = horror", "genres = mystery"], "director = 'Jordan Peele'"]`.
+    ///
+    /// Geo: `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`, `_geoPolygon([lat,lng], ...)` for GeoJSON documents.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
-    /// Sort results by attributes and order. Format: `["attribute:asc", "attribute:desc"]`.
-    /// Only attributes in `sortableAttributes`. For geo: `_geoPoint(lat,lng):asc` or `:desc`;
-    /// response includes `_geoDistance` in meters. First attribute has precedence.
+    /// Sort results by attributes and order. Format: `["attribute:asc", "attribute:desc"]`. Only attributes in `sortableAttributes`.
+    ///
+    /// For geo: `_geoPoint(lat,lng):asc` or `:desc`; response includes `_geoDistance` in meters. First attribute has precedence.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
-    /// Return only one document per distinct value of this attribute (e.g. deduplicate by
-    /// product_id). Attribute must be in `filterableAttributes`. Overrides index
-    /// distinctAttribute at search time.
+    /// Return only one document per distinct value of this attribute (e.g. deduplicate by product_id).
+    ///
+    /// Attribute must be in `filterableAttributes`. Overrides index distinctAttribute at search time.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
-    /// Return facet distribution (count of matches per value) for these attributes.
-    /// Use `["*"]` for all filterableAttributes. Attributes must be in filterableAttributes.
-    /// Response includes `facetDistribution` and `facetStats` (min/max for numeric facets).
-    /// Limited by index `maxValuesPerFacet` (default 100).
+    /// Return facet distribution (count of matches per value) for these attributes. Use `["*"]` for all filterableAttributes.
+    ///
+    /// Attributes must be in filterableAttributes. Response includes `facetDistribution` and `facetStats` (min/max for numeric facets). Limited by index `maxValuesPerFacet` (default 100).
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
     /// String inserted before a highlighted term. Default `<em>`. Can be any string (e.g. `<strong>`, `*`).
+    ///
     /// Null or empty = no start marker.
     #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     #[schema(required = false, default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     pub highlight_pre_tag: String,
-    /// String inserted after a highlighted term. Default `</em>`. Should match highlightPreTag
-    /// to avoid malformed output (e.g. unclosed tags).
+    /// String inserted after a highlighted term. Default `</em>`.
+    ///
+    /// Should match highlightPreTag to avoid malformed output (e.g. unclosed tags).
     #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     #[schema(required = false, default = DEFAULT_HIGHLIGHT_POST_TAG)]
     pub highlight_post_tag: String,
-    /// String marking crop boundaries in cropped text (e.g. `…`). Default `"…"`. Null or
-    /// empty = no markers. Only added where content was removed.
+    /// String marking crop boundaries in cropped text (e.g. `…`). Default `"…"`.
+    ///
+    /// Null or empty = no markers. Only added where content was removed.
     #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     #[schema(required = false, default = DEFAULT_CROP_MARKER)]
     pub crop_marker: String,
-    /// How to match query terms. `last` (default): require all terms, drop from the end
-    /// if not enough results. `all`: only documents with all terms. `frequency`: drop
-    /// the most frequent term first when relaxing.
+    /// How to match query terms.
+    ///
+    /// `last` (default): require all terms, drop from the end if not enough results. `all`: only documents with all terms. `frequency`: drop the most frequent term first when relaxing.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
     /// Restrict search to these attributes only. Default `["*"]` (all searchableAttributes).
+    ///
     /// Attributes must be in searchableAttributes. Order does not affect relevancy.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
-    /// Exclude documents with ranking score below this value (0.0–1.0). Excluded hits
-    /// do not count toward estimatedTotalHits, totalHits, or facet distribution. With
-    /// page/hitsPerPage this may impact performance (all matches are scored).
+    /// Exclude documents with ranking score below this value (0.0–1.0). Excluded hits do not count toward estimatedTotalHits, totalHits, or facet distribution.
+    ///
+    /// With page/hitsPerPage this may impact performance (all matches are scored).
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>)]
     #[schema(required = false, value_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
-    /// Explicit query language(s) for tokenization. Array of ISO-639 locales. Overrides
-    /// auto-detection. Use when auto-detection is wrong for the query or documents
-    /// (see also index `localizedAttributes`).
+    /// Explicit query language(s) for tokenization. Array of ISO-639 locales. Overrides auto-detection.
+    ///
+    /// Use when auto-detection is wrong for the query or documents (see also index `localizedAttributes`).
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
-    /// User context for personalized search. Object with `userContext`: a string
-    /// describing the user (preferences, behavior). Requires personalization to be
-    /// enabled (e.g. Cohere key for self-hosted).
+    /// User context for personalized search. Object with `userContext`: a string describing the user (preferences, behavior).
+    ///
+    /// Requires personalization to be enabled (e.g. Cohere key for self-hosted).
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
     #[schema(required = false, value_type = Option<Personalize>)]
     pub personalize: Option<Personalize>,
