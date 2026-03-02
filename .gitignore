@@ -1,6 +1,8 @@
 .idea/
 .vscode/
 /target
+/crates/benchmarks/target
+/crates/benchmarks/Cargo.lock
 **/*.csv
 **/*.json_lines
 **/*.rs.bk
