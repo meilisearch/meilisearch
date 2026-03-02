@@ -61,18 +61,16 @@ pub const DEFAULT_HIGHLIGHT_POST_TAG: fn() -> String = || "</em>".to_string();
 pub const DEFAULT_SEMANTIC_RATIO: fn() -> SemanticRatio = || SemanticRatio(0.5);
 pub const INCLUDE_METADATA_HEADER: &str = "Meili-Include-Metadata";
 
-/// Configuration for personalized search results.
+/// Configuration for [personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries) results.
 ///
-/// When enabled, search results are tailored based on user context,
-/// providing different rankings and results for different user profiles.
+/// When enabled, results are tailored to the user profile described in `userContext`.
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema, Debug)]
 #[deserr(error = DeserrJsonError<InvalidSearchPersonalize>, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct Personalize {
-    /// A string describing the user context for personalization. This is
-    /// passed to the embedder to generate user-specific vectors that
-    /// influence search ranking. Example: user preferences, browsing
-    /// history, or demographic information.
+    /// String describing the user (e.g. preferences, behavior).
+    ///
+    /// Used to return different results for different profiles.
     #[deserr(error = DeserrJsonError<InvalidSearchPersonalizeUserContext>)]
     pub user_context: String,
 }
@@ -81,160 +79,243 @@ pub struct Personalize {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct SearchQuery {
-    /// Search query string. Meilisearch returns documents that match this query.
+    /// Sets the search terms.
     ///
-    /// Supports [prefix search](https://www.meilisearch.com/docs/learn/engine/prefix) and [typo tolerance](https://www.meilisearch.com/docs/learn/relevancy/typo_tolerance_settings). Only the first ten words of the query are considered. Query terms are normalized (lowercase, accents ignored).
+    /// Meilisearch returns documents that match this query.
     ///
-    /// Leave empty for a placeholder search (returns all searchable documents, ordered by ranking rules).
+    /// The query supports [prefix search](https://www.meilisearch.com/docs/learn/engine/prefix) and [typo tolerance](https://www.meilisearch.com/docs/learn/relevancy/typo_tolerance_settings).
     ///
-    /// Wrap terms in double quotes (`"`) for phrase search: that exact sequence of words in order is required (e.g. `"Winter Feast"`). Only documents containing that phrase match.
+    /// Meilisearch only considers the first ten words; terms are normalized (lowercase, accents ignored).
     ///
-    /// Use minus (`-`) before a word or phrase to exclude it from results.
+    /// Omit or leave empty for a placeholder search: no query terms are applied, so Meilisearch returns all searchable documents in the index, ordered by [ranking rules](https://www.meilisearch.com/docs/learn/relevancy/ranking_rules).
+    ///
+    /// Enclose terms in double quotes (`"`) for phrase search: only documents containing that exact sequence of words are returned (e.g. `"Winter Feast"`).
+    ///
+    /// Use a minus sign (`-`) before a word or phrase to exclude it from results.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchQ>)]
     pub q: Option<String>,
-    /// Custom query vector for [vector / hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search). Dimensions must match the embedder.
+    /// Custom query vector for [vector or hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
     ///
-    /// When provided with `hybrid`, documents are ranked by vector similarity. Mandatory when using a user-provided embedder. Can override an embedder's automatic vector generation.
+    /// The array length must match the dimensions of the embedder configured in the index.
+    ///
+    /// This parameter is mandatory when using a [user-provided embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/search_with_user_provided_embeddings).
+    ///
+    /// When used with `hybrid`, documents are ranked by vector similarity.
+    ///
+    /// You can also use it to override an embedder's automatic vector generation.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchVector>)]
     pub vector: Option<Vec<f32>>,
-    /// [Multimodal search](https://www.meilisearch.com/docs/learn/ai_powered_search/image_search_with_multimodal_embeddings): provide data (e.g. image, text) that matches a search fragment configured in index settings.
+    /// For [multimodal search](https://www.meilisearch.com/docs/learn/ai_powered_search/image_search_with_multimodal_embeddings): provide data (e.g. image, text) that populates a single search fragment configured in index settings.
     ///
-    /// Requires an embedder. Incompatible with `vector`.
+    /// A search fragment is a named slot that defines which media or fields are sent to the embedder.
+    ///
+    /// An embedder is required; this parameter is incompatible with `vector`.
+    ///
+    /// POST only.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMedia>)]
     pub media: Option<serde_json::Value>,
-    /// [Hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search): combine keyword and semantic search. `embedder` (required) must match an embedder in index settings.
+    /// [Hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search): combines keyword and semantic search.
     ///
-    /// `semanticRatio` between 0.0 (keyword only) and 1.0 (semantic only). When `q` is empty and `semanticRatio` > 0, performs pure semantic search.
+    /// The `embedder` field (required) must match an embedder name in index settings.
+    ///
+    /// The `semanticRatio` field controls the balance: 0.0 means keyword-only results, 1.0 means semantic-only.
+    ///
+    /// When `q` is empty and `semanticRatio` is greater than 0, Meilisearch performs a pure semantic search.
     #[deserr(default, error = DeserrJsonError<InvalidSearchHybridQuery>)]
     #[schema(required = false, value_type = Option<HybridQuery>)]
     pub hybrid: Option<HybridQuery>,
-    /// Number of documents to skip. Use with `limit` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination) (e.g. `offset`=20, `limit`=20 for results 21–40).
+    /// Number of documents to skip at the start of the results.
     ///
-    /// Ignored if `page` or `hitsPerPage` is set. Queries using `offset`/`limit` return `estimatedTotalHits` only.
+    /// Use together with `limit` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination) (e.g. offset=20 and limit=20 returns results 21–40).
+    ///
+    /// This parameter is ignored when `page` or `hitsPerPage` is set; in that case the response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`.
     #[deserr(default = DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     #[schema(required = false, default = DEFAULT_SEARCH_OFFSET)]
     pub offset: usize,
-    /// Maximum number of documents to return. Use with `offset` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination).
+    /// Maximum number of documents to return in the response.
     ///
-    /// Ignored if `page` or `hitsPerPage` is set. Cannot exceed the index `maxTotalHits` setting.
+    /// Use with `offset` for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination).
+    ///
+    /// This parameter is ignored when `page` or `hitsPerPage` is set. The value cannot exceed the index [maxTotalHits](https://www.meilisearch.com/docs/reference/api/settings/update-pagination#body-max-total-hits-one-of-0) setting.
     #[deserr(default = DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
     #[schema(required = false, default = DEFAULT_SEARCH_LIMIT)]
     pub limit: usize,
-    /// Request a specific results page (1-indexed). Use with `hitsPerPage`.
+    /// Request a specific results page (1-indexed).
     ///
-    /// When set, response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`. `page` and `hitsPerPage` take precedence over `offset` and `limit`.
+    /// Use together with `hitsPerPage`.
+    ///
+    /// When this parameter is set, the response includes `totalHits` and `totalPages` instead of `estimatedTotalHits`.
+    ///
+    /// `page` and `hitsPerPage` take precedence over `offset` and `limit`.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
     pub page: Option<usize>,
-    /// Number of documents per page when using page-based [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination). Determines `totalPages`. Use with `page`.
+    /// Maximum number of documents per page for [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination).
     ///
-    /// When set, response includes `totalHits` and `totalPages`. Set to 0 to get `totalHits` without documents.
+    /// This value determines `totalPages`; use it together with `page`.
+    ///
+    /// When set, the response includes `totalHits` and `totalPages`.
+    ///
+    /// Set to 0 to obtain the exhaustive `totalHits` count without returning any documents.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
     pub hits_per_page: Option<usize>,
-    /// Attributes to include in returned documents. Use `["*"]` for all. Defaults to the index [displayed attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes) list.
+    /// List of attributes to include in each returned document.
     ///
-    /// Attributes not in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) are silently omitted.
+    /// Use `["*"]` to return all attributes; if not set, the index [displayed attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes) list is used.
+    ///
+    /// Attributes that are not in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) are omitted from the response.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToRetrieve>)]
     pub attributes_to_retrieve: Option<BTreeSet<String>>,
-    /// When true, include document and query vector data in the response (`_vectors` field).
+    /// When true, the response includes document and query embeddings in each hit's `_vectors` field.
     ///
-    /// Vectors must be in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) to be returned.
+    /// The `_vectors` field must be listed in [displayedAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-displayed-attributes-one-of-0) for it to appear.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchRetrieveVectors>)]
     pub retrieve_vectors: bool,
-    /// Attributes to crop to a short excerpt. Cropped text is in `_formatted`. Use `cropLength` for max words.
+    /// Attributes whose values should be cropped to a short excerpt.
     ///
-    /// Optional per-attribute override: `attribute:length`. Use `["*"]` to crop all attributes in `attributesToRetrieve`. Crop is centered around matching terms when possible.
+    /// The cropped text appears in each hit's `_formatted` object.
+    ///
+    /// Length is controlled by `cropLength`, or you can override it per attribute with the `attribute:length` syntax.
+    ///
+    /// Use `["*"]` to crop all attributes in `attributesToRetrieve`.
+    ///
+    /// When possible, the crop is centered around the matching terms.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToCrop>)]
     pub attributes_to_crop: Option<Vec<String>>,
-    /// Maximum number of words in cropped values. Only applies when `attributesToCrop` is set.
+    /// Maximum number of words to include in cropped values.
     ///
-    /// Query terms and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0) count toward this length.
+    /// This parameter only applies when `attributesToCrop` is set.
+    ///
+    /// Both query terms and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0) count toward this length.
     #[deserr(error = DeserrJsonError<InvalidSearchCropLength>, default = DEFAULT_CROP_LENGTH())]
     #[schema(required = false, default = DEFAULT_CROP_LENGTH)]
     pub crop_length: usize,
-    /// Attributes in which to highlight matching terms. Highlighted text appears in `_formatted`. Use `["*"]` for all attributes in `attributesToRetrieve`.
+    /// Attributes in which matching query terms should be highlighted.
     ///
-    /// Default tags are `<em>`/`</em>`. Override with `highlightPreTag` and `highlightPostTag`. Also highlights [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0). Works on string, number, array, object.
+    /// The highlighted text appears in each hit's `_formatted` object.
+    ///
+    /// Use `["*"]` to highlight in all attributes from `attributesToRetrieve`.
+    ///
+    /// By default, matches are wrapped in `<em>` and `</em>`; you can override this with `highlightPreTag` and `highlightPostTag`.
+    ///
+    /// Highlighting also applies to [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms) and [stop words](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-stop-words-one-of-0).
+    ///
+    /// Supported value types are string, number, array, and object.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToHighlight>)]
     pub attributes_to_highlight: Option<HashSet<String>>,
-    /// When true, add `_matchesPosition` to each hit with the byte offset (start, length) of each matched term.
+    /// When true, each hit includes a `_matchesPosition` object with the byte offset (`start` and `length`) of each matched term.
     ///
-    /// Useful for custom highlighting. Measured in bytes.
+    /// This is useful when you need custom highlighting.
+    ///
+    /// Note that positions are given in bytes, not characters.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowMatchesPosition>)]
     pub show_matches_position: bool,
-    /// When true, add `_rankingScore` (0.0–1.0) to each document. Higher means more relevant. See [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score).
+    /// When true, each document includes a `_rankingScore` between 0.0 and 1.0; a higher value means the document is more relevant.
     ///
-    /// The `sort` ranking rule does not affect this score.
+    /// See [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score).
+    ///
+    /// The `sort` ranking rule does not affect the value of `_rankingScore`.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>)]
     pub show_ranking_score: bool,
-    /// When true, add `_rankingScoreDetails` with the contribution of each ranking rule (words, typo, proximity, attribute, exactness, sort, etc.).
+    /// When true, each document includes `_rankingScoreDetails`, which breaks down the score contribution of each [ranking rule](https://www.meilisearch.com/docs/learn/relevancy/ranking_rules).
     ///
     /// Useful for debugging relevancy.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScoreDetails>)]
     pub show_ranking_score_details: bool,
-    /// When true, add performance timing details to the response.
+    /// When true, the response includes a `performanceDetails` object with a timing breakdown of the query processing.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
-    /// When `true`, runs the query on the whole network (all shards covered, documents
-    /// deduplicated across remotes). When `false` or omitted, the query runs locally.
+    /// When `true`, runs the query on the whole network (all shards covered, documents deduplicated across remotes).
+    ///
+    /// When `false` or omitted, the query runs locally.
     ///
     /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
+    ///
     /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
     /// Values: `true` = use the whole network; `false` or omitted = local (default).
     ///
-    /// When using the network, the index must exist with compatible settings on all remotes;
-    /// documents with the same id are assumed identical for deduplication.
+    /// When using the network, the index must exist with compatible settings on all remotes.
+    ///
+    /// Documents with the same id are assumed identical for deduplication.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
-    /// [Filter](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) expression to narrow results. Attributes must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
+    /// A [filter](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) expression to narrow results.
     ///
-    /// String: e.g. `"(genres = horror OR genres = mystery) AND director = 'Jordan Peele'"`. Array: e.g. `[["genres = horror", "genres = mystery"], "director = 'Jordan Peele'"]`.
+    /// All attributes used in the expression must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
     ///
-    /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch): `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`, `_geoPolygon([lat,lng], ...)` (GeoJSON documents).
+    /// You can pass a string (e.g. `"(genres = horror OR genres = mystery) AND director = 'Jordan Peele'"`) or an array (e.g. `[["genres = horror", "genres = mystery"], "director = 'Jordan Peele'"]`).
+    ///
+    /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch), use `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`, or `_geoPolygon([lat,lng], ...)` (GeoJSON only for polygon).
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
     pub filter: Option<Value>,
-    /// [Sort](https://www.meilisearch.com/docs/learn/filtering_and_sorting/sort_search_results) results by attributes and order. Format: `["attribute:asc", "attribute:desc"]`. Only attributes in `sortableAttributes`.
+    /// Sort results by one or more attributes and their order.
     ///
-    /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch): `_geoPoint(lat,lng):asc` or `:desc`. Response includes `_geoDistance` in meters. First attribute has precedence.
+    /// Use the format `["attribute:asc", "attribute:desc"]`; only attributes in [sortableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-sortable-attributes-one-of-0) can be used.
+    ///
+    /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch), use `_geoPoint(lat,lng):asc` or `:desc`; the response then includes `_geoDistance` in meters.
+    ///
+    /// The first attribute in the list has precedence.
+    ///
+    /// See [sorting search results](https://www.meilisearch.com/docs/learn/filtering_and_sorting/sort_search_results).
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchSort>)]
     pub sort: Option<Vec<String>>,
-    /// Return only one document per distinct value of this attribute (e.g. deduplicate by product_id). See [distinct attribute](https://www.meilisearch.com/docs/learn/relevancy/distinct_attribute).
+    /// Return only one document per distinct value of the given attribute (e.g. deduplicate by product_id).
     ///
-    /// Attribute must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0). Overrides index [distinctAttribute](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-distinct-attribute-one-of-0) at search time.
+    /// The attribute must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
+    ///
+    /// This overrides the index [distinctAttribute](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-distinct-attribute-one-of-0) setting for this request.
+    ///
+    /// See [distinct attribute](https://www.meilisearch.com/docs/learn/relevancy/distinct_attribute).
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
     pub distinct: Option<String>,
-    /// [Facets](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters): return facet distribution (count of matches per value) for these attributes. Use `["*"]` for all [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
+    /// Return the count of matches per facet value for the listed attributes.
     ///
-    /// Attributes must be in [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0). Response includes `facetDistribution` and `facetStats` (min/max for numeric facets). Limited by index [maxValuesPerFacet](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-faceting-one-of-1-max-values-per-facet-one-of-0).
+    /// The response includes `facetDistribution` and, for numeric facets, `facetStats` (min/max).
+    ///
+    /// Use `["*"]` to request counts for all [filterableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-filterable-attributes-one-of-0).
+    ///
+    /// The number of values returned per facet is limited by the index [maxValuesPerFacet](https://www.meilisearch.com/docs/reference/api/settings/update-faceting#body-max-values-per-facet-one-of-0) setting; attributes not in filterableAttributes are ignored.
+    ///
+    /// More info: [faceting](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters).
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFacets>)]
     pub facets: Option<Vec<String>>,
-    /// String inserted before a highlighted term. Can be any string (e.g. `<strong>`, `*`). If null or empty, no start marker is inserted.
+    /// String to insert before each highlighted term.
+    ///
+    /// Can be any string (e.g. `<strong>`, `*`).
+    ///
+    /// If null or empty, nothing is inserted at the start of a match.
     #[deserr(error = DeserrJsonError<InvalidSearchHighlightPreTag>, default = DEFAULT_HIGHLIGHT_PRE_TAG())]
     #[schema(required = false, default = DEFAULT_HIGHLIGHT_PRE_TAG)]
     pub highlight_pre_tag: String,
-    /// String inserted after a highlighted term. Should match `highlightPreTag` to avoid malformed output (e.g. unclosed tags).
+    /// String to insert after each highlighted term.
+    ///
+    /// Should be used together with `highlightPreTag` to avoid malformed output (e.g. unclosed HTML tags).
     #[deserr(error = DeserrJsonError<InvalidSearchHighlightPostTag>, default = DEFAULT_HIGHLIGHT_POST_TAG())]
     #[schema(required = false, default = DEFAULT_HIGHLIGHT_POST_TAG)]
     pub highlight_post_tag: String,
-    /// String marking crop boundaries in cropped text (e.g. `…`). If null or empty, no markers are inserted. Markers are only added where content was removed.
+    /// String used to mark crop boundaries in cropped text.
+    ///
+    /// If null or empty, no markers are inserted.
+    ///
+    /// Markers are only added where content was actually removed.
     #[deserr(error = DeserrJsonError<InvalidSearchCropMarker>, default = DEFAULT_CROP_MARKER())]
     #[schema(required = false, default = DEFAULT_CROP_MARKER)]
     pub crop_marker: String,
@@ -250,27 +331,37 @@ pub struct SearchQuery {
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchMatchingStrategy>)]
     pub matching_strategy: MatchingStrategy,
-    /// Restrict search to these attributes only. Attributes must be in the index [searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes) list. Order does not affect relevancy.
+    /// Restrict the search to the listed attributes only.
+    ///
+    /// Each attribute must be in the index [searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes) list.
+    ///
+    /// The order of attributes in this parameter does not affect relevancy.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchAttributesToSearchOn>)]
     pub attributes_to_search_on: Option<Vec<String>>,
-    /// Exclude documents with [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) below this value (0.0–1.0). Excluded hits do not count toward `estimatedTotalHits`, `totalHits`, or facet distribution.
+    /// Exclude from the results any document whose [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) is below this value (between 0.0 and 1.0).
     ///
-    /// With `page`/`hitsPerPage` this may impact performance (all matches are scored).
+    /// Excluded hits do not count toward `estimatedTotalHits`, `totalHits`, or facet distribution.
+    ///
+    /// When used together with `page` and `hitsPerPage`, this parameter may reduce performance because Meilisearch must score all matching documents.
     #[deserr(default, error = DeserrJsonError<InvalidSearchRankingScoreThreshold>)]
     #[schema(required = false, value_type = Option<f64>)]
     pub ranking_score_threshold: Option<RankingScoreThreshold>,
-    /// Explicit query language(s) for tokenization. Array of ISO-639 locales. Overrides auto-detection.
+    /// Explicitly specify the language(s) of the query.
     ///
-    /// Use when auto-detection is wrong for the query or documents. See also index [localizedAttributes](https://www.meilisearch.com/docs/reference/api/settings/list-all-settings#response-localized-attributes-one-of-0).
+    /// Pass an array of [supported ISO-639 locales](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-localized-attributes-one-of-0).
     ///
-    /// See also [Language](https://www.meilisearch.com/docs/learn/resources/language).
+    /// This overrides auto-detection; use it when auto-detection is wrong for the query or the documents.
+    ///
+    /// See also the [localizedAttributes](https://www.meilisearch.com/docs/reference/api/settings/list-all-settings#response-localized-attributes-one-of-0) settings and [Language](https://www.meilisearch.com/docs/learn/resources/language).
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchLocales>)]
     pub locales: Option<Vec<Locale>>,
-    /// User context for [personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries). Object with `userContext`: a string describing the user (preferences, behavior).
+    /// [Personalized search](https://www.meilisearch.com/docs/learn/personalization/making_personalized_search_queries): provide an object with a `userContext` field (a string describing the user, e.g. preferences or behavior).
     ///
-    /// Requires personalization to be [enabled](http://localhost:3000/reference/api/experimental-features/configure-experimental-features) (e.g. Cohere key for self-hosted).
+    /// Results are then tailored to that profile.
+    ///
+    /// Personalization must be [enabled](https://www.meilisearch.com/docs/reference/api/experimental-features/configure-experimental-features) (e.g. Cohere key for self-hosted instances).
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
     #[schema(required = false, value_type = Option<Personalize>)]
     pub personalize: Option<Personalize>,
@@ -518,12 +609,14 @@ impl fmt::Debug for SearchQuery {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct HybridQuery {
-    /// Balance between keyword search (0.0) and semantic search (1.0)
+    /// Balance between keyword search (0.0) and semantic search (1.0). Defaults to 0.5.
     #[deserr(default, error = DeserrJsonError<InvalidSearchSemanticRatio>)]
     #[schema(default, value_type = f32)]
     #[serde(default)]
     pub semantic_ratio: SemanticRatio,
-    /// Name of the embedder to use for semantic search
+    /// Name of the embedder configured in index settings.
+    ///
+    /// Used for semantic part of the search.
     #[deserr(error = DeserrJsonError<InvalidSearchEmbedder>)]
     pub embedder: String,
 }
@@ -1088,21 +1181,31 @@ impl From<FacetValuesSort> for OrderBy {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct SearchHit {
     /// Document fields as stored in the index.
+    ///
+    /// According to `attributesToRetrieve`.
     #[serde(flatten)]
     #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
-    /// Document with highlighted and cropped attributes when requested.
+    /// Document with highlighted and cropped attributes.
+    ///
+    /// Present when `attributesToHighlight` or `attributesToCrop` was set.
     #[serde(default, rename = "_formatted", skip_serializing_if = "Document::is_empty")]
     #[schema(additional_properties, value_type = HashMap<String, Value>)]
     pub formatted: Document,
-    /// Byte offsets of matching terms per attribute when showMatchesPosition is true.
+    /// Byte offsets (`start`, `length`) of each matched term per attribute.
+    ///
+    /// Present when `showMatchesPosition` was true.
     #[serde(default, rename = "_matchesPosition", skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<BTreeMap<String, Vec<MatchBounds>>>)]
     pub matches_position: Option<MatchesPosition>,
-    /// Relevance score from 0.0 to 1.0 when showRankingScore is true.
+    /// Global [ranking score](https://www.meilisearch.com/docs/learn/relevancy/ranking_score) from 0.0 to 1.0.
+    ///
+    /// Present when `showRankingScore` was true.
     #[serde(default, rename = "_rankingScore", skip_serializing_if = "Option::is_none")]
     pub ranking_score: Option<f64>,
-    /// Per-rule score breakdown when showRankingScoreDetails is true.
+    /// Per-rule score breakdown (words, typo, proximity, etc.).
+    ///
+    /// Present when `showRankingScoreDetails` was true.
     #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
@@ -1129,41 +1232,57 @@ pub struct SearchMetadata {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchResult {
-    /// Matching documents (and optional formatted/ranking fields).
+    /// Matching documents.
+    ///
+    /// Each hit contains document fields and, when requested, `_formatted`, `_matchesPosition`, `_rankingScore`, `_rankingScoreDetails`, `_geoDistance`.
     pub hits: Vec<SearchHit>,
     /// Query string that produced this response.
     pub query: String,
-    /// Query embedding when vector/hybrid search was used.
+    /// Query embedding used for the search.
+    ///
+    /// Present when vector or hybrid search was used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_vector: Option<Vec<f32>>,
     /// Time taken to process the query, in milliseconds.
     pub processing_time_ms: u128,
-    /// Pagination: either offset/limit with estimated total or page/hitsPerPage with exact total.
+    /// Pagination info.
+    ///
+    /// Either offset/limit with `estimatedTotalHits`, or page/hitsPerPage with `totalHits` and `totalPages`.
     #[serde(flatten)]
     pub hits_info: HitsInfo,
-    /// Count of matches per facet value when facets were requested.
+    /// Count of matching documents per facet value for each requested facet.
+    ///
+    /// Present when `facets` was set.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<BTreeMap<String, Value>>)]
     pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
-    /// Min and max numeric values per facet when facets were requested.
+    /// Minimum and maximum numeric values per facet.
+    ///
+    /// Present for numeric facets when `facets` was set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub facet_stats: Option<BTreeMap<String, FacetStats>>,
     /// UUID v7 identifying this search request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_uid: Option<Uuid>,
-    /// Query/index metadata when requested via header.
+    /// Query and index metadata.
+    ///
+    /// Present when requested via the `Meili-Include-Metadata` header.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<SearchMetadata>,
-    /// Timing breakdown when showPerformanceDetails was true.
+    /// Timing breakdown per processing step.
+    ///
+    /// Present when `showPerformanceDetails` was true.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<Value>)]
     pub performance_details: Option<IndexMap<String, String>>,
 
-    /// Errors from remote shards (federated search only).
+    /// Errors from remote shards. Federated search only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_errors: Option<BTreeMap<String, ResponseError>>,
 
-    /// Exhaustive count of semantic matches (AI-powered searches only).
+    /// Exhaustive number of semantic search matches.
+    ///
+    /// AI-powered (hybrid/semantic) searches only.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
 
@@ -1266,7 +1385,9 @@ pub struct SearchResultWithIndex {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum HitsInfo {
-    /// Page-based pagination with exact total (when page/hitsPerPage was used).
+    /// Page-based pagination with exact totals.
+    ///
+    /// Used when `page` or `hitsPerPage` was set in the request.
     #[serde(rename_all = "camelCase")]
     #[schema(rename_all = "camelCase")]
     Pagination {
@@ -1274,12 +1395,14 @@ pub enum HitsInfo {
         hits_per_page: usize,
         /// Current page index (1-based).
         page: usize,
-        /// Total number of pages.
+        /// Exhaustive total number of result pages.
         total_pages: usize,
-        /// Total number of matching documents.
+        /// Exhaustive total number of matching documents.
         total_hits: usize,
     },
-    /// Offset-based pagination with estimated total (when offset/limit was used).
+    /// Offset-based pagination with estimated total.
+    ///
+    /// Used when only `offset` and `limit` were set.
     #[serde(rename_all = "camelCase")]
     #[schema(rename_all = "camelCase")]
     OffsetLimit {
@@ -1288,16 +1411,20 @@ pub enum HitsInfo {
         /// Number of documents skipped.
         offset: usize,
         /// Estimated total number of matches (not exhaustive).
+        ///
+        /// Prioritizes relevancy and performance.
         estimated_total_hits: usize,
     },
 }
 
-/// Min and max numeric values for a facet (when facets include numeric attributes).
+/// Minimum and maximum numeric values for a facet.
+///
+/// Present when the facet attribute has numeric values among matching documents.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 pub struct FacetStats {
-    /// Minimum value among matching documents.
+    /// Lowest numeric value for this facet among matching documents.
     pub min: f64,
-    /// Maximum value among matching documents.
+    /// Highest numeric value for this facet among matching documents.
     pub max: f64,
 }
 
