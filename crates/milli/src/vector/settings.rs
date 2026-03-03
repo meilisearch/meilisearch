@@ -83,13 +83,13 @@ pub struct EmbeddingSettings {
     /// Fragments (with Liquid) sent to the embedder at indexing time. For `rest` with multimodal; key is fragment name, value the payload.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>)]
+    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}), example = json!({}))]
     pub indexing_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
     /// Fragments sent to the embedder at search time. For `rest` with multimodal.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>)]
+    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}), example = json!({}))]
     pub search_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
     /// Request body template for `rest` embedder. Use `"{{text}}"` for the input. Mandatory for `rest`.
@@ -110,280 +110,112 @@ pub struct EmbeddingSettings {
     #[schema(value_type = Option<BTreeMap<String, String>>)]
     pub headers: Setting<BTreeMap<String, String>>,
 
-    /// Embedder used at search time (for composite embedders).
+    /// Embedder used at search time when using a composite embedder. Same sub-parameters as a top-level embedder (`source`, `model`, `url`, etc.); no `documentTemplate`/`documentTemplateMaxBytes`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<SubEmbeddingSettings>)]
     pub search_embedder: Setting<SubEmbeddingSettings>,
 
-    /// Embedder used at indexing time (for composite embedders).
+    /// Embedder used at indexing time when using a composite embedder. Same sub-parameters as a top-level embedder (`source`, `model`, `documentTemplate`, `url`, etc.).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<SubEmbeddingSettings>)]
     pub indexing_embedder: Setting<SubEmbeddingSettings>,
 
-    /// Affine transform (mean, sigma) for semantic score so it aligns with ranking score. Example: `{"mean": 0.7, "sigma": 0.3}`.
+    /// Affine transform (mean, sigma) for semantic score so it aligns with ranking score.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<DistributionShift>)]
+    #[schema(value_type = Option<DistributionShift>, example = json!({ "mean": 0.7, "sigma": 0.3 }))]
     pub distribution: Setting<DistributionShift>,
 }
 
+/// Sub-embedder config for composite embedders. Used by `indexingEmbedder` (vectorize documents at index time) and `searchEmbedder` (vectorize queries at search time). Same fields as a top-level embedder, except no `binaryQuantized`, `distribution`, `documentTemplate`/`documentTemplateMaxBytes` for searchEmbedder.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct SubEmbeddingSettings {
+    /// Embedding provider: `openAi`, `huggingFace`, `ollama`, or `rest`. Determines which other fields are required or allowed.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<EmbedderSource>)]
-    /// The source used to provide the embeddings.
-    ///
-    /// Which embedder parameters are available and mandatory is determined by the value of this setting.
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ Changing the value of this parameter always regenerates embeddings.
-    ///
-    /// # Defaults
-    ///
-    /// - Defaults to `openAi`
+    #[schema(value_type = Option<EmbedderSource>, default = json!("openAi"), example = json!("openAi"))]
     pub source: Setting<EmbedderSource>,
+
+    /// Model name. Mandatory for `ollama`. For `openAi`/`huggingFace` optional with defaults.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<String>)]
-    /// The name of the model to use.
-    ///
-    /// # Mandatory
-    ///
-    /// - This parameter is mandatory for source `ollama`
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for sources `openAi`, `huggingFace`, `ollama`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ Changing the value of this parameter always regenerates embeddings.
-    ///
-    /// # Defaults
-    ///
-    /// - For source `openAi`, defaults to `text-embedding-3-small`
-    /// - For source `huggingFace`, defaults to `BAAI/bge-base-en-v1.5`
+    #[schema(value_type = Option<String>, example = json!("text-embedding-3-small"))]
     pub model: Setting<String>,
+
+    /// Model revision (e.g. Hugging Face commit SHA). Only for `huggingFace`. If unset, latest is used.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<String>)]
-    /// The revision (commit SHA1) of the model to use.
-    ///
-    /// If unspecified, Meilisearch picks the latest revision of the model.
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `huggingFace`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
-    ///
-    /// # Defaults
-    ///
-    /// - When `model` is set to default, defaults to `617ca489d9e86b49b8167676d8220688b99db36e`
-    /// - Otherwise, defaults to `null`
+    #[schema(value_type = Option<String>, example = json!("617ca489d9e86b49b8167676d8220688b99db36e"))]
     pub revision: Setting<String>,
+
+    /// Pooling method for Hugging Face: `useModel`, `forceMean`, or `forceCls`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<OverridePooling>)]
-    /// The pooling method to use.
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `huggingFace`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
-    ///
-    /// # Defaults
-    ///
-    /// - Defaults to `useModel`
-    ///
-    /// # Compatibility Note
-    ///
-    /// - Embedders created before this parameter was available default to `forceMean` to preserve the existing behavior.
+    #[schema(value_type = Option<OverridePooling>, default = json!("useModel"), example = json!("useModel"))]
     pub pooling: Setting<OverridePooling>,
+
+    /// API key sent to the embedder. For `openAi` can be read from `OPENAI_API_KEY`. Returned value is redacted.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<String>)]
-    /// The API key to pass to the remote embedder while making requests.
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `openAi`, `ollama`, `rest`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🌱 Changing the value of this parameter never regenerates embeddings
-    ///
-    /// # Defaults
-    ///
-    /// - For source `openAi`, the key is read from `OPENAI_API_KEY`, then `MEILI_OPENAI_API_KEY`.
-    /// - For other sources, no bearer token is sent if this parameter is not set.
-    ///
-    /// # Note
-    ///
-    /// - This setting is partially hidden when returned by the settings
+    #[schema(value_type = Option<String>, example = json!("your-api-key"))]
     pub api_key: Setting<String>,
+
+    /// Number of dimensions of the embedding vectors. Mandatory for `userProvided`. For other sources inferred if omitted.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<String>)]
-    /// The expected dimensions of the embeddings produced by this embedder.
-    ///
-    /// # Mandatory
-    ///
-    /// - This parameter is mandatory for source `userProvided`
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `openAi`, `ollama`, `rest`, `userProvided`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ When the source is `openAi`, changing the value of this parameter always regenerates embeddings
-    /// - 🌱 For other sources, changing the value of this parameter never regenerates embeddings
-    ///
-    /// # Defaults
-    ///
-    /// - For source `openAi`, the dimensions is the maximum allowed by the model.
-    /// - For sources `ollama` and `rest`, the dimensions are inferred by embedding a sample text.
+    #[schema(value_type = Option<usize>, example = json!(1536))]
     pub dimensions: Setting<usize>,
+
+    /// Liquid template to build the text sent to the embedder for each document. Required for `indexingEmbedder`; not used for `searchEmbedder`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<bool>)]
-    /// A liquid template used to render documents to a text that can be embedded.
-    ///
-    /// Meillisearch interpolates the template for each document and sends the resulting text to the embedder.
-    /// The embedder then generates document vectors based on this text.
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `openAi`, `huggingFace`, `ollama` and `rest
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ When modified, embeddings are regenerated for documents whose rendering through the template produces a different text.
+    #[schema(value_type = Option<String>, example = json!("{{doc.title}}: {{doc.overview}}"))]
     pub document_template: Setting<String>,
+
+    /// Max size in bytes of the rendered document template. Longer output is truncated. Only for `indexingEmbedder`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<usize>)]
-    /// Rendered texts are truncated to this size.
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `openAi`, `huggingFace`, `ollama` and `rest`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ When increased, embeddings are regenerated for documents whose rendering through the template produces a different text.
-    /// - 🌱 When decreased, embeddings are never regenerated
-    ///
-    /// # Default
-    ///
-    /// - Defaults to 400
+    #[schema(value_type = Option<usize>, default = 400, example = json!(400))]
     pub document_template_max_bytes: Setting<usize>,
+
+    /// URL of the embedder API. Mandatory for `rest`. Optional for `openAi` and `ollama`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<String>)]
-    /// URL to reach the remote embedder.
-    ///
-    /// # Mandatory
-    ///
-    /// - This parameter is mandatory for source `rest`
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `openAi`, `ollama` and `rest`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🌱 When modified for source `openAi`, embeddings are never regenerated
-    /// - 🏗️ When modified for sources `ollama` and `rest`, embeddings are always regenerated
+    #[schema(value_type = Option<String>, example = json!("http://localhost:11434/api/embeddings"))]
     pub url: Setting<String>,
 
-    /// Template fragments that will be reassembled and sent to the remote embedder at indexing time.
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for sources `rest`.
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ When a fragment is deleted by passing `null` to its name, the corresponding embeddings are removed from documents.
-    /// - 🏗️ When a fragment is modified, the corresponding embeddings are regenerated if their rendered version changes.
+    /// Fragments (with Liquid) sent to the embedder at indexing time. For `rest` with multimodal; key is fragment name, value the payload.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>)]
+    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}), example = json!({}))]
     pub indexing_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
-    /// Template fragments that will be reassembled and sent to the remote embedder at search time.
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for sources `rest`.
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🌱 Changing the value of this parameter never regenerates embeddings
+    /// Fragments sent to the embedder at search time. For `rest` with multimodal.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>)]
+    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}), example = json!({}))]
     pub search_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
+    /// Request body template for `rest` embedder. Use `"{{text}}"` for the input. Mandatory for `rest`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<serde_json::Value>)]
-    /// Template request to send to the remote embedder.
-    ///
-    /// # Mandatory
-    ///
-    /// - This parameter is mandatory for source `rest`
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `rest`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     pub request: Setting<serde_json::Value>,
+
+    /// Response template for `rest` embedder. Use `"{{embedding}}"` where the embedding array is. Mandatory for `rest`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<serde_json::Value>)]
-    /// Template response indicating how to find the embeddings in the response from the remote embedder.
-    ///
-    /// # Mandatory
-    ///
-    /// - This parameter is mandatory for source `rest`
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `rest`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     pub response: Setting<serde_json::Value>,
+
+    /// Extra HTTP headers sent to the embedder. For `rest`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, String>>)]
-    /// Additional headers to send to the remote embedder.
-    ///
-    /// # Availability
-    ///
-    /// - This parameter is available for source `rest`
-    ///
-    /// # 🔄 Reindexing
-    ///
-    /// - 🌱 Changing the value of this parameter never regenerates embeddings
     pub headers: Setting<BTreeMap<String, String>>,
 
     // The following fields are provided for the sake of improving error handling
