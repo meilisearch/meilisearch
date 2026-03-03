@@ -657,9 +657,35 @@ async fn register_new_settings(
     security(("Bearer" = ["settings.get", "settings.*", "*"])),
     params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Returns all settings with their current or default values.", body = Settings<Unchecked>, content_type = "application/json", example = json!(
-            Settings::<Unchecked>::default()
-        )),
+        (status = 200, description = "Returns all settings with their current or default values.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
+            "displayedAttributes": ["*"],
+            "searchableAttributes": ["*"],
+            "filterableAttributes": [],
+            "sortableAttributes": [],
+            "rankingRules": ["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"],
+            "stopWords": [],
+            "nonSeparatorTokens": [],
+            "separatorTokens": [],
+            "dictionary": [],
+            "synonyms": {},
+            "distinctAttribute": null,
+            "typoTolerance": {
+                "enabled": true,
+                "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 },
+                "disableOnWords": [],
+                "disableOnAttributes": [],
+                "disableOnNumbers": false
+            },
+            "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } },
+            "pagination": { "maxTotalHits": 1000 },
+            "proximityPrecision": "byWord",
+            "facetSearch": true,
+            "prefixSearch": "indexingTime",
+            "searchCutoffMs": null,
+            "embedders": {},
+            "localizedAttributes": [],
+            "chat": {}
+        })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",

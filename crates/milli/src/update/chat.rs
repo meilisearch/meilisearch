@@ -15,7 +15,7 @@ use crate::update::Setting;
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = JsonError, deny_unknown_fields, rename_all = camelCase)]
 pub struct ChatSettings {
-    /// Index description shown to the LLM so it can decide when and how to query this index.
+    /// Index description shown to the LLM so it can decide when and how to query this index. Example: "Contains product catalog with prices and descriptions".
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>)]
@@ -99,7 +99,7 @@ pub struct ChatSearchParams {
     #[schema(value_type = Option<usize>)]
     pub limit: Setting<usize>,
 
-    /// Sort order: array of strings like attribute:asc or attribute:desc.
+    /// Sort order: array of strings like attribute:asc or attribute:desc. Example: `["price:asc", "rating:desc"]`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<Vec<String>>)]
@@ -117,7 +117,7 @@ pub struct ChatSearchParams {
     #[schema(value_type = Option<MatchingStrategy>)]
     pub matching_strategy: Setting<MatchingStrategy>,
 
-    /// Attributes on which to run the search. If unset, all searchable attributes are used.
+    /// Attributes on which to run the search. If unset, all searchable attributes are used. Example: `["title", "description"]` searches only these two fields.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<Vec<String>>)]
