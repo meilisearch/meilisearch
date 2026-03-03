@@ -16,6 +16,7 @@ use crate::vector::embedder::{manual, ollama, openai, rest, EmbedderOptions};
 use crate::vector::{DistributionShift, EmbeddingConfig};
 use crate::UserError;
 
+/// Embedder configuration for [AI-powered / hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
@@ -83,13 +84,13 @@ pub struct EmbeddingSettings {
     /// Fragments (with Liquid) sent to the embedder at indexing time. For `rest` with multimodal; key is fragment name, value the payload.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}), example = json!({}))]
+    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
     pub indexing_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
     /// Fragments sent to the embedder at search time. For `rest` with multimodal.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}), example = json!({}))]
+    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
     pub search_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
     /// Request body template for `rest` embedder. Use `"{{text}}"` for the input. Mandatory for `rest`.
@@ -191,13 +192,13 @@ pub struct SubEmbeddingSettings {
     /// Fragments (with Liquid) sent to the embedder at indexing time. For `rest` with multimodal; key is fragment name, value the payload.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}), example = json!({}))]
+    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
     pub indexing_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
     /// Fragments sent to the embedder at search time. For `rest` with multimodal.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}), example = json!({}))]
+    #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
     pub search_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
     /// Request body template for `rest` embedder. Use `"{{text}}"` for the input. Mandatory for `rest`.

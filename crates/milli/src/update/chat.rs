@@ -10,7 +10,7 @@ use crate::index::{self, ChatConfig, MatchingStrategy, RankingScoreThreshold, Se
 use crate::prompt::{default_max_bytes, PromptData};
 use crate::update::Setting;
 
-/// Chat (conversation) settings: how the index is described to the LLM and how it is queried.
+/// [Chat (conversation)](https://www.meilisearch.com/docs/learn/chat/getting_started_with_chat) settings: how the index is described to the LLM and how it is queried.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = JsonError, deny_unknown_fields, rename_all = camelCase)]

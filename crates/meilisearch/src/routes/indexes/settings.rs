@@ -496,7 +496,7 @@ make_setting_routes!(
 
 #[routes::path(
     summary = "Update all settings",
-    description = "Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created.",
+    description = "Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created. See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
     params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body(content = Settings<Unchecked>),
@@ -535,6 +535,8 @@ make_setting_routes!(
 /// Passing `null` for a setting will reset it to its default.
 ///
 /// If the index does not exist, it will be created.
+///
+/// See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
 pub async fn update_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,

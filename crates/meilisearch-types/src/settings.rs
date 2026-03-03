@@ -168,7 +168,7 @@ impl MergeWithError<milli::CriterionError> for DeserrJsonError<InvalidSettingsRa
 #[derive(Default, Serialize, Deserialize, PartialEq, Eq, Clone, ToSchema)]
 #[repr(transparent)]
 #[serde(transparent)]
-/// Configuration for one embedder used for semantic search.
+/// Configuration for one [embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search) used for semantic and hybrid search.
 ///
 /// Set `source` (`openAi`, `huggingFace`, `ollama`, `rest`, `userProvided`), then the options that apply: `model`, `apiKey`, `documentTemplate`, `dimensions`, `url`, etc.
 pub struct SettingEmbeddingSettings {
@@ -197,6 +197,8 @@ impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
 /// Index settings: every option you can configure for search and index behavior.
 ///
 /// Used as the request body for PATCH settings. Only the fields you send are updated; pass `null` to reset a setting to its default.
+///
+/// See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
 #[serde(
     // We don't deny unknown fields for backward compatibility with
@@ -212,31 +214,31 @@ impl<E: DeserializeError> Deserr<E> for SettingEmbeddingSettings {
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct Settings<T> {
-    /// Fields returned in search results. Affects only search endpoints, not get-document endpoints.
+    /// Fields returned in search results. Affects only search endpoints, not get-document endpoints. See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDisplayedAttributes>)]
     #[schema(value_type = Option<Vec<String>>, default = json!(["*"]), example = json!(["id", "title", "description", "url"]))]
     pub displayed_attributes: WildcardSetting,
 
-    /// Fields searched for query words, in order of importance. Defines attribute ranking.
+    /// Fields searched for query words, in order of importance. Defines [attribute ranking order](https://www.meilisearch.com/docs/learn/relevancy/attribute_ranking_order). See [displayed and searchable attributes](https://www.meilisearch.com/docs/learn/relevancy/displayed_searchable_attributes).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSearchableAttributes>)]
     #[schema(value_type = Option<Vec<String>>, default = json!(["*"]), example = json!(["title", "description"]))]
     pub searchable_attributes: WildcardSetting,
 
-    /// Attributes that can be used as filters and facets. Strings or objects with attributePatterns and features.
+    /// Attributes that can be used as [filters](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_search_results) and [facets](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters). Strings or objects with `attributePatterns` and `features`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFilterableAttributes>)]
     #[schema(value_type = Option<Vec<FilterableAttributesRule>>, default = json!([]), example = json!(["release_date", "genre"]))]
     pub filterable_attributes: Setting<Vec<FilterableAttributesRule>>,
 
-    /// Attributes that can be used to sort search results.
+    /// Attributes that can be used to [sort search results](https://www.meilisearch.com/docs/learn/filtering_and_sorting/sort_search_results).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSortableAttributes>)]
     #[schema(value_type = Option<Vec<String>>, default = json!([]), example = json!(["release_date"]))]
     pub sortable_attributes: Setting<BTreeSet<String>>,
 
-    /// Ranking rules in order of importance. Built-in rules and custom sort rules (`attribute:asc` or `attribute:desc`).
+    /// [Ranking rules](https://www.meilisearch.com/docs/learn/relevancy/ranking_rules) in order of importance. Built-in rules and custom sort rules (`attribute:asc` or `attribute:desc`).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsRankingRules>)]
     #[schema(value_type = Option<Vec<String>>, default = json!(["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"]), example = json!(["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"]))]
@@ -266,13 +268,13 @@ pub struct Settings<T> {
     #[schema(value_type = Option<Vec<String>>, default = json!([]), example = json!(["J. R. R."]))]
     pub dictionary: Setting<BTreeSet<String>>,
 
-    /// Pairs of words or phrases treated as equivalent for search. Key maps to an array of synonyms.
+    /// Pairs of words or phrases treated as equivalent for search. Key maps to an array of [synonyms](https://www.meilisearch.com/docs/learn/relevancy/synonyms).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsSynonyms>)]
     #[schema(value_type = Option<BTreeMap<String, Vec<String>>>, default = json!({}), example = json!({ "phone": ["iPhone"] }))]
     pub synonyms: Setting<BTreeMap<String, Vec<String>>>,
 
-    /// Field whose value must be unique in the returned documents. One document per distinct value.
+    /// Field whose value must be unique in the returned documents. One document per distinct value. See [distinct attribute](https://www.meilisearch.com/docs/learn/relevancy/distinct_attribute).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsDistinctAttribute>)]
     #[schema(value_type = Option<String>, example = json!("sku"))]
@@ -284,13 +286,13 @@ pub struct Settings<T> {
     #[schema(value_type = Option<String>, default = json!("byWord"), example = json!(ProximityPrecisionView::ByWord))]
     pub proximity_precision: Setting<ProximityPrecisionView>,
 
-    /// Typo tolerance: enable/disable, minimum word length for typos, and where to disable it.
+    /// [Typo tolerance](https://www.meilisearch.com/docs/learn/relevancy/typo_tolerance_settings): enable/disable, minimum word length for typos, and where to disable it.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsTypoTolerance>)]
     #[schema(value_type = Option<TypoSettings>, default = json!({ "enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [], "disableOnNumbers": false }), example = json!({ "enabled": true, "disableOnAttributes": ["title"] }))]
     pub typo_tolerance: Setting<TypoSettings>,
 
-    /// Faceting: max facet values per facet and how facet values are sorted.
+    /// [Faceting](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters): max facet values per facet and how facet values are sorted.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFaceting>)]
     #[schema(value_type = Option<FacetingSettings>, default = json!({ "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }), example = json!({ "maxValuesPerFacet": 100, "sortFacetValuesBy": { "genre": "count" } }))]
@@ -302,7 +304,7 @@ pub struct Settings<T> {
     #[schema(value_type = Option<PaginationSettings>, default = json!({ "maxTotalHits": 1000 }), example = json!({ "maxTotalHits": 1000 }))]
     pub pagination: Setting<PaginationSettings>,
 
-    /// Embedders used for semantic search. Map of embedder name to config (`source`, `model`, `documentTemplate`, etc.).
+    /// [Embedders](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search) used for semantic and [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search). Map of embedder name to config (`source`, `model`, `documentTemplate`, etc.).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
     #[schema(value_type = Option<BTreeMap<String, SettingEmbeddingSettings>>, default = json!({}), example = json!({ "default": { "source": "openAi", "model": "text-embedding-3-small", "documentTemplate": "{{doc.title}}: {{doc.overview}}" } }))]
@@ -314,13 +316,13 @@ pub struct Settings<T> {
     #[schema(value_type = Option<u64>, example = json!(1500))]
     pub search_cutoff_ms: Setting<u64>,
 
-    /// Locales and attribute patterns for language-specific tokenization. Affects searchable, filterable, and sortable attributes.
+    /// Locales and attribute patterns for [language-specific tokenization](https://www.meilisearch.com/docs/learn/resources/language). Affects searchable, filterable, and sortable attributes.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsLocalizedAttributes>)]
     #[schema(value_type = Option<Vec<LocalizedAttributesRuleView>>, default = json!([]), example = json!([{"locales": ["jpn"], "attributePatterns": ["*_ja"]}]))]
     pub localized_attributes: Setting<Vec<LocalizedAttributesRuleView>>,
 
-    /// When true, facet search is enabled. When false, the facet-search endpoint is disabled.
+    /// When true, [facet search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters) is enabled. When false, the facet-search endpoint is disabled.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFacetSearch>)]
     #[schema(value_type = Option<bool>, default = true, example = json!(true))]
@@ -332,7 +334,7 @@ pub struct Settings<T> {
     #[schema(value_type = Option<PrefixSearchSettings>, default = json!("indexingTime"), example = json!(PrefixSearchSettings::IndexingTime))]
     pub prefix_search: Setting<PrefixSearchSettings>,
 
-    /// Chat (conversation) settings: index description, document template, and search parameters used when the LLM queries this index.
+    /// [Chat (conversation)](https://www.meilisearch.com/docs/learn/chat/getting_started_with_chat) settings: index description, document template, and search parameters used when the LLM queries this index.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsIndexChat>)]
     #[schema(value_type = Option<ChatSettings>, default = json!({}), example = json!({ "description": "A comprehensive movie database", "documentTemplateMaxBytes": 400, "searchParameters": { "limit": 20 } }))]
