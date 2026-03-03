@@ -20,7 +20,6 @@ failed [3,]
 ### Kind:
 "indexCreation" [1,2,3,4,]
 "taskDeletion" [5,]
-"upgradeDatabase" []
 ----------------------------------------------------------------------
 ### Index Tasks:
 catto [1,]
