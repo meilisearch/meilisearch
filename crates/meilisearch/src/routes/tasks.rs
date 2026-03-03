@@ -422,6 +422,7 @@ async fn cancel_tasks(
             .await??;
     let task: SummarizedTaskView = task.into();
 
+    // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
     Ok(HttpResponse::Ok().json(task))
 }
 
@@ -515,6 +516,7 @@ async fn delete_tasks(
         .await??;
     let task: SummarizedTaskView = task.into();
 
+    // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
     Ok(HttpResponse::Ok().json(task))
 }
 
