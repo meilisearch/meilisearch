@@ -146,7 +146,7 @@ You can run the [documentation](https://github.com/meilisearch/documentation) si
 **1. Generate the OpenAPI file**
 
 ```bash
-cargo run -p openapi-generator --release -- --pretty
+cargo run -p openapi-generator -- --pretty
 ```
 
 This generates `meilisearch-openapi.json` in the current directory.
