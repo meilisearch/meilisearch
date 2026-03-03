@@ -1,7 +1,7 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
 use std::collections::{BTreeSet, HashSet};
-use std::ops::Bound;
+use std::ops::{Bound, RangeInclusive};
 use std::sync::Arc;
 
 use convert_case::{Case, Casing as _};

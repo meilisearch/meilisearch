@@ -5,6 +5,7 @@ use std::path::Path;
 
 pub use meilisearch_types::milli;
 use meilisearch_types::milli::vector::embedder::hf::OverridePooling;
+use roaring::RoaringBitmap;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use tracing::debug;

@@ -283,6 +283,7 @@ pub(crate) mod test {
     use uuid::Uuid;
 
     use crate::reader::Document;
+    use crate::writer::BatchWriter;
     use crate::{DumpReader, DumpWriter, IndexMetadata, KindDump, TaskDump, Version};
 
     pub fn create_test_instance_uid() -> Uuid {

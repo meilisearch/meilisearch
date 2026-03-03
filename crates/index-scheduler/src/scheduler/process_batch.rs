@@ -5,16 +5,16 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::Ordering;
 
 use byte_unit::Byte;
-use meilisearch_types::batches::{BatchEnqueuedAt, BatchId};
-use meilisearch_types::heed::{RoTxn, RwTxn};
+use meilisearch_types::batches::BatchId;
+use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
-use meilisearch_types::milli::{self, ChannelCongestion};
+use meilisearch_types::milli::{self, CboRoaringBitmapCodec, ChannelCongestion};
 use meilisearch_types::network::Network;
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use milli::update::Settings as MilliSettings;
-use roaring::RoaringBitmap;
+use roaring::{MultiOps, RoaringBitmap};
 use tempfile::{PersistError, TempPath};
 use time::OffsetDateTime;
 
@@ -24,11 +24,8 @@ use crate::processing::{
     IndexCompaction, InnerSwappingTwoIndexes, SwappingTheIndexes, TaskCancelationProgress,
     TaskDeletionProgress, UpdateIndexProgress,
 };
-use crate::utils::{
-    self, remove_n_tasks_datetime_earlier_than, remove_task_datetime, swap_index_uid_in_task,
-    ProcessingBatch,
-};
-use crate::{Error, IndexScheduler, Result, TaskId};
+use crate::utils::{consecutive_ranges, swap_index_uid_in_task, ProcessingBatch};
+use crate::{Error, IndexScheduler, Result, TaskId, BEI128};
 
 /// The name of the copy of the data.mdb file used during compaction.
 const DATA_MDB_COPY_NAME: &str = "data.mdb.cpy";
