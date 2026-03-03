@@ -496,7 +496,7 @@ make_setting_routes!(
 
 #[routes::path(
     summary = "Update all settings",
-    description = "Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created. See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).",
+    description = "Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created.\n\nSee also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
     params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body(content = Settings<Unchecked>),
@@ -659,34 +659,34 @@ async fn register_new_settings(
     security(("Bearer" = ["settings.get", "settings.*", "*"])),
     params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Returns all settings with their current or default values.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
-            "displayedAttributes": ["*"],
-            "searchableAttributes": ["*"],
-            "filterableAttributes": [],
-            "sortableAttributes": [],
+        (status = 200, description = "Returns all settings with their current or default values. Same structure as the PATCH request body.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
+            "displayedAttributes": ["id", "title", "description", "url"],
+            "searchableAttributes": ["title", "description"],
+            "filterableAttributes": ["release_date", "genre"],
+            "sortableAttributes": ["release_date"],
             "rankingRules": ["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"],
-            "stopWords": [],
-            "nonSeparatorTokens": [],
-            "separatorTokens": [],
-            "dictionary": [],
-            "synonyms": {},
+            "stopWords": ["the", "a"],
+            "nonSeparatorTokens": ["@", "#"],
+            "separatorTokens": ["|"],
+            "dictionary": ["J. R. R."],
+            "synonyms": { "phone": ["iPhone"] },
             "distinctAttribute": null,
             "typoTolerance": {
                 "enabled": true,
                 "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 },
                 "disableOnWords": [],
-                "disableOnAttributes": [],
+                "disableOnAttributes": ["title"],
                 "disableOnNumbers": false
             },
-            "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } },
+            "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "genre": "count" } },
             "pagination": { "maxTotalHits": 1000 },
             "proximityPrecision": "byWord",
+            "embedders": { "default": { "source": "openAi", "model": "text-embedding-3-small", "documentTemplate": "{{doc.title}}: {{doc.overview}}" } },
+            "searchCutoffMs": null,
+            "localizedAttributes": [{ "locales": ["jpn"], "attributePatterns": ["*_ja"] }],
             "facetSearch": true,
             "prefixSearch": "indexingTime",
-            "searchCutoffMs": null,
-            "embedders": {},
-            "localizedAttributes": [],
-            "chat": {}
+            "chat": { "description": "A comprehensive movie database", "documentTemplateMaxBytes": 400, "searchParameters": { "limit": 20 } }
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {

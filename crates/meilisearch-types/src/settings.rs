@@ -74,6 +74,8 @@ fn validate_min_word_size_for_typo_setting<E: DeserializeError>(
 }
 
 /// Minimum word length required before typos are allowed.
+///
+/// This helps prevent matching very short words with typos, which can lead to irrelevant results.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(deny_unknown_fields, rename_all = camelCase, validate = validate_min_word_size_for_typo_setting -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
@@ -292,13 +294,13 @@ pub struct Settings<T> {
     #[schema(value_type = Option<TypoSettings>, default = json!({ "enabled": true, "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 }, "disableOnWords": [], "disableOnAttributes": [], "disableOnNumbers": false }), example = json!({ "enabled": true, "disableOnAttributes": ["title"] }))]
     pub typo_tolerance: Setting<TypoSettings>,
 
-    /// [Faceting](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters): max facet values per facet and how facet values are sorted.
+    /// Related to [faceting](https://www.meilisearch.com/docs/learn/filtering_and_sorting/search_with_facet_filters): max facet values per facet and how facet values are sorted.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsFaceting>)]
     #[schema(value_type = Option<FacetingSettings>, default = json!({ "maxValuesPerFacet": 100, "sortFacetValuesBy": { "*": "alpha" } }), example = json!({ "maxValuesPerFacet": 100, "sortFacetValuesBy": { "genre": "count" } }))]
     pub faceting: Setting<FacetingSettings>,
 
-    /// Pagination: maximum number of results a search can return.
+    /// Related to [pagination](https://www.meilisearch.com/docs/guides/front_end/pagination): maximum number of results a search can return.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsPagination>)]
     #[schema(value_type = Option<PaginationSettings>, default = json!({ "maxTotalHits": 1000 }), example = json!({ "maxTotalHits": 1000 }))]
