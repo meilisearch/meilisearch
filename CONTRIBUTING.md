@@ -135,6 +135,21 @@ cd crates/openapi-generator
 cargo run --release -- --pretty
 ```
 
+#### Update the mini-dashboard (local interface)
+
+To update the [mini-dashboard](https://github.com/meilisearch/mini-dashboard) (the local web interface served by Meilisearch):
+
+1. Download the `build.zip` of the mini-dashboard attached to the [release](https://github.com/meilisearch/mini-dashboard/releases) you want to use.
+
+2. Compute the SHA-1 checksum of the downloaded file:
+```bash
+shasum -a 1 ~/Downloads/build.zip
+```
+
+3. In `crates/meilisearch/Cargo.toml`, update the `[package.metadata.mini-dashboard]` section with the new `assets-url` (pointing to the mini-dashboard release URL) and the `sha1` checksum.
+
+See [this example PR](https://github.com/meilisearch/meilisearch/pull/6091/changes) for a concrete example of the changes to apply.
+
 ### Logging
 
 Meilisearch uses [`tracing`](https://lib.rs/crates/tracing) for logging purposes. Tracing logs are structured and can be displayed as JSON to the end user, so prefer passing arguments as fields rather than interpolating them in the message.
