@@ -52,7 +52,7 @@ lazy_static = "1.5.0"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 memmap2 = "0.9.9"
-mimalloc = { version = "0.1.48", default-features = false }
+mimalloc = { version = "0.1.48", default-features = false, features = ["v3"] }
 mime = "0.3.17"
 num_cpus = "1.17.0"
 obkv = "0.3.0"
