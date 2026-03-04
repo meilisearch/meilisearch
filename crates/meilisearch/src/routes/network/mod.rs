@@ -37,9 +37,12 @@ use community_edition as current_edition;
 #[cfg(feature = "enterprise")]
 use enterprise_edition as current_edition;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_network, patch_network),
+#[routes::routes(
+    routes(
+        "" => [get(get_network), patch(patch_network)],
+        "/control" => post(post_network_change),
+    ),
+    tag = "Experimental features",
     tags((
         name = "Network",
         description = "The `/network` route allows you to describe the topology of a network of Meilisearch instances.
@@ -335,6 +338,26 @@ async fn patch_network(
     current_edition::patch_network(index_scheduler, new_network, req, analytics).await
 }
 
+/// Network control
+///
+/// Send messages to control the progress of a network topology change task.
+///
+/// The route is mostly used internally when sending a PATCH to the network, but is accessible for manual control as well.
+#[routes::path(
+    request_body = route::NetworkChange,
+    security(("Bearer" = ["network.update", "*"])),
+    responses(
+        (status = OK, description = "Empty response."),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 async fn post_network_change(
     index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
     payload: Json<route::NetworkChange>,

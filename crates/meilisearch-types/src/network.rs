@@ -39,6 +39,7 @@ pub mod route {
     use actix_web::http::uri::PathAndQuery;
     use actix_web::http::Uri;
     use serde::{Deserialize, Serialize};
+    use utoipa::ToSchema;
 
     use crate::tasks::network::Origin;
 
@@ -56,15 +57,17 @@ pub mod route {
         Ok(Uri::from_parts(base_url_parts)?)
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, ToSchema)]
     #[serde(rename_all = "camelCase", tag = "type")]
+    #[schema(rename_all = "camelCase")]
     pub enum Message {
         ExportNoIndexForRemote { remote: String },
         ImportFinishedForRemote { remote: String, successful: bool },
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, ToSchema)]
     #[serde(rename_all = "camelCase")]
+    #[schema(rename_all = "camelCase")]
     pub struct NetworkChange {
         /// The origin of this message
         pub origin: Origin,
