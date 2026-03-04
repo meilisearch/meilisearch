@@ -750,7 +750,6 @@ fn documents_by_query(
 
     let ret = PaginationView::new(offset, limit, total as usize, documents);
 
-    debug!(returns = ?ret, "Get documents");
     Ok(HttpResponse::Ok().json(ret))
 }
 
