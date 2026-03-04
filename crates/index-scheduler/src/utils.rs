@@ -1,7 +1,7 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
 use std::collections::{BTreeSet, HashSet};
-use std::ops::Bound;
+use std::ops::{Bound, RangeInclusive};
 use std::sync::Arc;
 
 use convert_case::{Case, Casing as _};
@@ -209,6 +209,30 @@ impl ProcessingBatch {
     }
 }
 
+/// Given a **sorted** iterator of `u32`, return an iterator of the ranges of consecutive values it contains.
+pub fn consecutive_ranges<'a>(
+    it: impl IntoIterator<Item = u32> + 'a,
+) -> impl Iterator<Item = RangeInclusive<u32>> + 'a {
+    let mut it = it.into_iter();
+    let mut current_range = it.next().map(|s| (s, s));
+    std::iter::from_fn(move || {
+        for current in it.by_ref() {
+            match current_range {
+                Some((start, end)) => {
+                    if current == end + 1 {
+                        current_range = Some((start, end + 1));
+                    } else {
+                        current_range = Some((current, current));
+                        return Some(start..=end);
+                    }
+                }
+                None => return None,
+            }
+        }
+        current_range.take().map(|(s, e)| s..=e)
+    })
+}
+
 pub(crate) fn insert_task_datetime(
     wtxn: &mut RwTxn,
     database: Database<BEI128, CboRoaringBitmapCodec>,
@@ -218,7 +242,7 @@ pub(crate) fn insert_task_datetime(
     let timestamp = time.unix_timestamp_nanos();
     let mut task_ids = database.get(wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
-    database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(task_ids))?;
+    database.put(wtxn, &timestamp, &task_ids)?;
     Ok(())
 }
 
@@ -234,7 +258,7 @@ pub(crate) fn remove_task_datetime(
         if existing.is_empty() {
             database.delete(wtxn, &timestamp)?;
         } else {
-            database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(existing))?;
+            database.put(wtxn, &timestamp, &existing)?;
         }
     }
 
