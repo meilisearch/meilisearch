@@ -142,6 +142,7 @@ pub struct SearchQueryGet {
     #[deserr(default = DEFAULT_CROP_MARKER(), error = DeserrQueryParamError<InvalidSearchCropMarker>)]
     #[param(required = false, default = DEFAULT_CROP_MARKER)]
     crop_marker: String,
+<<<<<<< HEAD
     /// Attributes in which matching query terms should be highlighted.
     ///
     /// The highlighted text appears in each hit's `_formatted` object.
