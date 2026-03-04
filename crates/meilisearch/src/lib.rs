@@ -150,6 +150,14 @@ pub fn create_app(
         .configure(routes::configure)
         .configure(|s| dashboard(s, enable_dashboard));
 
+    #[cfg(feature = "swagger")]
+    let app = app.configure(|cfg| {
+        use utoipa::OpenApi;
+        use utoipa_scalar::{Scalar, Servable as ScalarServable};
+        let openapi = routes::MeilisearchApi::openapi();
+        cfg.service(Scalar::with_url("/scalar", openapi.clone()));
+    });
+
     let app = app.wrap(middleware::RouteMetrics);
     app.wrap(
         Cors::default()
