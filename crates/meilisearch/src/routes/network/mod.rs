@@ -19,13 +19,12 @@ use meilisearch_types::network::{
 };
 use serde::Serialize;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 
 #[cfg(not(feature = "enterprise"))]
 mod community_edition;
@@ -52,25 +51,10 @@ This route is **synchronous**. This means that no task object will be returned, 
 )]
 pub struct NetworkApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(get_network))
-            .route(web::patch().to(SeqHandler(patch_network))),
-    )
-    .service(
-        web::resource(route::NETWORK_CONTROL_PATH_SUFFIX)
-            .route(web::post().to(SeqHandler(post_network_change))),
-    );
-}
-
 /// Get network topology
 ///
 /// Return the list of Meilisearch instances currently known to this node (self and remotes).
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Experimental features",
+#[routes::path(
     security(("Bearer" = ["network.get", "*"])),
     responses(
         (status = OK, description = "Known nodes are returned.", body = Network, content_type = "application/json", example = json!(
@@ -302,10 +286,7 @@ impl Aggregate for PatchNetworkAnalytics {
 /// Configure network topology
 ///
 /// Add or remove remote nodes from the network. Changes apply to the current instance’s view of the cluster.
-#[utoipa::path(
-    patch,
-    path = "",
-    tag = "Experimental features",
+#[routes::path(
     request_body = Network,
     security(("Bearer" = ["network.update", "*"])),
     responses(

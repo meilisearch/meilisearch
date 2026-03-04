@@ -4,32 +4,27 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
-use utoipa::OpenApi;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
-#[derive(OpenApi)]
-#[openapi(paths(create_snapshot))]
+#[routes::routes(
+    routes(
+        "" => post(create_snapshot),
+    ),
+    tag = "Backups",
+)]
 pub struct SnapshotApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(create_snapshot))));
-}
 
 crate::empty_analytics!(SnapshotAnalytics, "Snapshot Created");
 
 /// Create snapshot
 ///
 /// Trigger a snapshot creation process. When complete, a snapshot file is written to the snapshot directory. The directory is created if it does not exist.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Backups",
+#[routes::path(
     security(("Bearer" = ["snapshots.create", "snapshots.*", "*"])),
     responses(
         (status = 202, description = "Snapshot is being created.", body = SummarizedTaskView, content_type = "application/json", example = json!(

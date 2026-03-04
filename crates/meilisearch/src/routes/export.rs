@@ -17,7 +17,7 @@ use meilisearch_types::tasks::{ExportIndexSettings as DbExportIndexSettings, Kin
 use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -26,21 +26,18 @@ use crate::routes::export_analytics::ExportAnalytics;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
-#[derive(OpenApi)]
-#[openapi(paths(export))]
+#[routes::routes(
+    routes(
+        "" => post(export),
+    ),
+    tag = "Export",
+)]
 pub struct ExportApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(export)));
-}
 
 /// Export to a remote Meilisearch
 ///
 /// Trigger an export that sends documents and settings from this instance to a remote Meilisearch server. Configure the remote URL and optional API key in the request body.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Export",
+#[routes::path(
     request_body = Export,
     security(("Bearer" = ["export", "*"])),
     responses(

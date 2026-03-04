@@ -6,31 +6,24 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
-use utoipa::OpenApi;
 
 use super::ActionPolicy;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::SummarizedTaskView;
 
-#[derive(OpenApi)]
-#[openapi(paths(compact))]
+#[routes::routes(
+    routes(""=>post(compact)),
+    tag = "Indexes",
+)]
 pub struct CompactApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(compact))));
-}
 
 /// Compact index
 ///
 /// Trigger a compaction process on the specified index.
 ///
 /// Compaction reorganizes the index database to reclaim space and improve read performance.
-#[utoipa::path(
-    post,
-    path = "{indexUid}/compact",
-    tag = "Indexes",
+#[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(

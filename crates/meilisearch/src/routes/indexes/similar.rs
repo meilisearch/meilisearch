@@ -13,21 +13,20 @@ use meilisearch_types::milli::TotalProcessingTimeStep;
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::{IntoParams, OpenApi};
+use utoipa::IntoParams;
 
 use super::ActionPolicy;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
 use crate::search::{
     add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, Route,
     SearchKind, SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(similar_get, similar_post),
+#[routes::routes(
+    routes(""=>[get(similar_get), post(similar_post)]),
+    tag = "Similar documents",
     tags(
         (
             name = "Similar documents",
@@ -39,23 +38,12 @@ Meilisearch exposes two routes for retrieving similar documents: POST and GET. I
 )]
 pub struct SimilarApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(SeqHandler(similar_get)))
-            .route(web::post().to(SeqHandler(similar_post))),
-    );
-}
-
 /// Get similar documents with GET
 ///
 /// Retrieve documents similar to a reference document identified by its id.
 ///
 /// > Useful for “more like this” or recommendations.
-#[utoipa::path(
-    get,
-    path = "{indexUid}/similar",
-    tag = "Similar documents",
+#[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
         ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
@@ -138,10 +126,7 @@ pub async fn similar_get(
 /// Retrieve documents similar to a reference document identified by its id.
 ///
 /// > Useful for “more like this” or recommendations.
-#[utoipa::path(
-    post,
-    path = "{indexUid}/similar",
-    tag = "Similar documents",
+#[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = SimilarQuery,

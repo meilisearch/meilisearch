@@ -14,14 +14,13 @@ use meilisearch_types::milli::{self, TotalProcessingTimeStep};
 use meilisearch_types::serde_cs::vec::CS;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::{IntoParams, OpenApi};
+use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
@@ -34,9 +33,9 @@ use crate::search::{
 };
 use crate::search_queue::SearchQueue;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(search_with_url_query, search_with_post),
+#[routes::routes(
+    routes(""=>[get(search_with_url_query), post(search_with_post)]),
+    tag = "Search",
     tags(
         (
             name = "Search",
@@ -48,14 +47,6 @@ use crate::search_queue::SearchQueue;
     ),
 )]
 pub struct SearchApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(SeqHandler(search_with_url_query)))
-            .route(web::post().to(SeqHandler(search_with_post))),
-    );
-}
 
 #[derive(Debug, deserr::Deserr, IntoParams)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
@@ -382,10 +373,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 /// Search for documents matching a query in the given index.
 ///
 /// > Equivalent to the [search with POST route](/reference/api/search/search-with-post) in the Meilisearch API.
-#[utoipa::path(
-    get,
-    path = "/{indexUid}/search",
-    tags = ["Search"],
+#[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
         ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
@@ -594,13 +582,10 @@ pub(crate) async fn search(
 /// Search for documents matching a query in the given index.
 ///
 /// > Equivalent to the [search with GET route](/reference/api/search/search-with-get) in the Meilisearch API.
-#[utoipa::path(
-    post,
-    path = "/{indexUid}/search",
-    tags = ["Search"],
+#[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = SearchQuery,
     responses(

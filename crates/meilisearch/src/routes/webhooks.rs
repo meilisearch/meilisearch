@@ -22,38 +22,26 @@ use meilisearch_types::webhooks::Webhook;
 use serde::Serialize;
 use tracing::debug;
 use url::Url;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 use uuid::Uuid;
 use WebhooksError::*;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_webhooks, get_webhook, post_webhook, patch_webhook, delete_webhook),
+#[routes::routes(
+    routes(
+        "" => [get(get_webhooks), post(post_webhook)],
+        "/{uuid}" => [get(get_webhook), patch(patch_webhook), delete(delete_webhook)],
+    ),
+    tag = "Webhooks",
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
     )),
 )]
 pub struct WebhooksApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(get_webhooks))
-            .route(web::post().to(SeqHandler(post_webhook))),
-    )
-    .service(
-        web::resource("/{uuid}")
-            .route(web::get().to(get_webhook))
-            .route(web::patch().to(SeqHandler(patch_webhook)))
-            .route(web::delete().to(SeqHandler(delete_webhook))),
-    );
-}
 
 /// Configuration for a webhook endpoint
 #[derive(Debug, Deserr, ToSchema)]
@@ -122,10 +110,7 @@ pub(super) struct WebhookResults {
 /// List webhooks
 ///
 /// Return all webhooks registered on the instance. Each webhook is returned with its URL, optional headers, and UUID (the key value is never returned).
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Webhooks",
+#[routes::path(
     security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
         (status = OK, description = "Webhooks are returned.", body = WebhookResults, content_type = "application/json", example = json!({
@@ -310,10 +295,7 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
 /// Get webhook
 ///
 /// Retrieve a single webhook by its UUID.
-#[utoipa::path(
-    get,
-    path = "/{uuid}",
-    tag = "Webhooks",
+#[routes::path(
     security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
         (status = 200, description = "Webhook found.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
@@ -358,10 +340,7 @@ async fn get_webhook(
 /// Create webhook
 ///
 /// Register a new webhook to receive task completion notifications. You can optionally set custom headers (e.g. for authentication) and configure the callback URL.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Webhooks",
+#[routes::path(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.create", "webhooks.*", "*"])),
     responses(
@@ -429,10 +408,7 @@ async fn post_webhook(
 /// Update webhook
 ///
 /// Update the URL or headers of an existing webhook identified by its UUID.
-#[utoipa::path(
-    patch,
-    path = "/{uuid}",
-    tag = "Webhooks",
+#[routes::path(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.update", "webhooks.*", "*"])),
     responses(
@@ -500,10 +476,7 @@ async fn patch_webhook(
 /// Delete webhook
 ///
 /// Permanently remove a webhook by its UUID. The webhook will no longer receive task notifications.
-#[utoipa::path(
-    delete,
-    path = "/{uuid}",
-    tag = "Webhooks",
+#[routes::path(
     security(("Bearer" = ["webhooks.delete", "webhooks.*", "*"])),
     responses(
         (status = 204, description = "Webhook deleted successfully."),
