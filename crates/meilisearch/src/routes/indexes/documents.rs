@@ -487,7 +487,7 @@ pub struct BrowseQuery {
 ///
 /// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request body to specify filters, sort order, and which fields to return.
 #[routes::path(
-    security(("Bearer" = ["documents.delete", "documents.*", "*"])),
+    security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = BrowseQuery,
     responses(

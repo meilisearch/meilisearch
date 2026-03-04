@@ -654,7 +654,7 @@ async fn register_new_settings(
 #[routes::path(
     summary = "List all settings",
     description = "Returns all settings of the index. Each setting is returned with its current value or the default if not set.",
-    security(("Bearer" = ["settings.update", "settings.*", "*"])),
+    security(("Bearer" = ["settings.get", "settings.*", "*"])),
     params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 200, description = "Returns all settings with their current or default values.", body = Settings<Unchecked>, content_type = "application/json", example = json!(

@@ -72,7 +72,7 @@ impl Aggregate for IndexSwappedAnalytics {
 /// The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa.
 /// Enqueued tasks are left unmodified.
 #[routes::path(
-    security(("Bearer" = ["search", "*"])),
+    security(("Bearer" = ["indexes.swap", "*"])),
     request_body(content = Vec<SwapIndexesPayload>),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
