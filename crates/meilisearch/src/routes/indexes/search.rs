@@ -190,7 +190,7 @@ pub struct SearchQueryGet {
     crop_marker: String,
     /// Strategy for matching query terms. `last` (default): all terms must
     /// match, removing terms from the end if needed. `all`: all terms must
-    /// match exactly. `frequency`: prioritizes matching frequent terms.
+    /// match exactly. `frequency` prioritizes less frequent words.
     #[param(required = false)]
     #[deserr(default, error = DeserrQueryParamError<InvalidSearchMatchingStrategy>)]
     matching_strategy: MatchingStrategy,
