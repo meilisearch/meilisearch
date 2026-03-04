@@ -2,10 +2,6 @@
 #![allow(clippy::result_large_err)]
 
 #[cfg(not(windows))]
-#[cfg(test)]
-#[global_allocator]
-pub static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 #[macro_use]
 pub mod documents;
 

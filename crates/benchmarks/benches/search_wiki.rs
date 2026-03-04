@@ -5,10 +5,6 @@ use criterion::{criterion_group, criterion_main};
 use milli::update::Settings;
 use utils::Conf;
 
-#[cfg(not(windows))]
-#[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 fn base_conf(builder: &mut Settings) {
     let displayed_fields = ["title", "body", "url"].iter().map(|s| s.to_string()).collect();
     builder.set_displayed_fields(displayed_fields);

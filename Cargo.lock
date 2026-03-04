@@ -641,7 +641,6 @@ dependencies = [
  "http-client",
  "memmap2",
  "milli",
- "mimalloc",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
@@ -3981,16 +3980,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
 
 [[package]]
-name = "libmimalloc-sys"
-version = "0.1.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "667f4fec20f29dfc6bc7357c582d91796c169ad7e2fce709468aefeb2c099870"
-dependencies = [
- "cc",
- "libc",
-]
-
-[[package]]
 name = "libproc"
 version = "0.14.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4443,7 +4432,6 @@ dependencies = [
  "meilisearch-auth",
  "meilisearch-types",
  "memmap2",
- "mimalloc",
  "mime",
  "mopa-maintained",
  "num_cpus",
@@ -4641,7 +4629,6 @@ dependencies = [
  "meili-snap",
  "memchr",
  "memmap2",
- "mimalloc",
  "obkv",
  "once_cell",
  "ordered-float 5.1.0",
@@ -4672,15 +4659,6 @@ dependencies = [
  "utoipa",
  "uuid",
  "zerometry",
-]
-
-[[package]]
-name = "mimalloc"
-version = "0.1.48"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1ee66a4b64c74f4ef288bcbb9192ad9c3feaad75193129ac8509af543894fd8"
-dependencies = [
- "libmimalloc-sys",
 ]
 
 [[package]]

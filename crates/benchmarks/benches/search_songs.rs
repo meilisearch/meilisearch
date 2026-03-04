@@ -6,10 +6,6 @@ use milli::update::Settings;
 use milli::FilterableAttributesRule;
 use utils::Conf;
 
-#[cfg(not(windows))]
-#[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
 fn base_conf(builder: &mut Settings) {
     let displayed_fields =
         ["id", "title", "album", "artist", "genre", "country", "released", "duration"]

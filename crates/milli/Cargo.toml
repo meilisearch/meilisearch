@@ -125,7 +125,6 @@ geo-types = "=0.7.17" # fixed version: see <https://github.com/meilisearch/meili
 zerometry = "0.3.0"
 
 [dev-dependencies]
-mimalloc = { version = "0.1.48", default-features = false }
 # fixed version due to format breakages in v1.40
 insta = "=1.39.0"
 maplit = "1.0.2"
