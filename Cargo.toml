@@ -21,6 +21,8 @@ members = [
     "crates/build-info",
     "crates/openapi-generator",
     "crates/http-client",
+    "crates/routes-macros",
+    "crates/routes",
     "external-crates/async-openai",
     "external-crates/async-openai-macros",
 ]

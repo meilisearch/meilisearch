@@ -4458,6 +4458,7 @@ dependencies = [
  "regex",
  "reqwest",
  "roaring 0.10.12",
+ "routes",
  "rustls",
  "rustls-pemfile",
  "rustls-pki-types",
@@ -6258,6 +6259,26 @@ dependencies = [
  "time",
  "tokio",
  "uncased",
+]
+
+[[package]]
+name = "routes"
+version = "1.37.0"
+dependencies = [
+ "actix-web",
+ "routes-macros",
+ "utoipa",
+]
+
+[[package]]
+name = "routes-macros"
+version = "1.37.0"
+dependencies = [
+ "proc-macro2",
+ "proc-macro2-diagnostics",
+ "quote",
+ "syn 2.0.111",
+ "utoipa",
 ]
 
 [[package]]
