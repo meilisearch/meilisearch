@@ -42,9 +42,8 @@ pub mod route {
 
     use crate::tasks::network::Origin;
 
-    pub const NETWORK_CONTROL_PATH_SUFFIX: &str = "/control";
-
     pub fn network_control_path() -> PathAndQuery {
+        // WARNING: if you change this path, you must also change the path in the network route macro in the meilisearch crate.
         PathAndQuery::from_static("/network/control")
     }
 
