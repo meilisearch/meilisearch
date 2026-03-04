@@ -18,7 +18,7 @@ use crate::extractors::authentication::GuardedData;
     tag = "Async task management",
     routes(
         "" => get(get_batches),
-        "/{batch_id}" => get(get_batch)
+        "/{batchUid}" => get(get_batch)
     ),
     tags((
         name = "Batches",

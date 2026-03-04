@@ -24,7 +24,7 @@ use crate::routes::Pagination;
 #[routes::routes(
     routes(
         "" => [post(create_api_key), get(list_api_keys)],
-        "/{key}" => [get(get_api_key), patch(patch_api_key), delete(delete_api_key)],
+        "/{uidOrKey}" => [get(get_api_key), patch(patch_api_key), delete(delete_api_key)],
     ),
     tag = "Keys",
     tags((

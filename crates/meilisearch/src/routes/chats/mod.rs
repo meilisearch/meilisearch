@@ -50,9 +50,9 @@ const MEILI_SEARCH_IN_INDEX_FUNCTION_NAME: &str = "_meiliSearchInIndex";
     tag = "Chats",
     routes(
         "" => [get(list_workspaces)],
-        "/{workspace_uid}/settings" => [get(settings::get_settings), patch(settings::patch_settings), delete(settings::reset_settings)],
-        "/{workspace_uid}" => [get(get_chat), delete(delete_chat)],
-        "/{workspace_uid}/chat/completions" => post(chat_completions::chat),
+        "/{workspaceUid}/settings" => [get(settings::get_settings), patch(settings::patch_settings), delete(settings::reset_settings)],
+        "/{workspaceUid}" => [get(get_chat), delete(delete_chat)],
+        "/{workspaceUid}/chat/completions" => post(chat_completions::chat),
     ),
     tags((
         name = "Chats",
@@ -69,6 +69,9 @@ pub struct ChatsParam {
 /// Get a chat workspace
 #[routes::path(
     security(("Bearer" = ["chats.get", "*"])),
+    params(
+        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
 )]
 pub async fn get_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_GET }>, Data<IndexScheduler>>,
@@ -87,6 +90,9 @@ pub async fn get_chat(
 /// Delete a chat workspace
 #[routes::path(
     security(("Bearer" = ["chats.delete", "*"])),
+    params(
+        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
 )]
 pub async fn delete_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_DELETE }>, Data<IndexScheduler>>,

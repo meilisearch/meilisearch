@@ -23,6 +23,9 @@ use crate::extractors::authentication::GuardedData;
 /// Get settings of a chat workspace
 #[routes::path(
     security(("Bearer" = ["chats.settings.get", "*"])),
+    params(
+        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
 )]
 pub async fn get_settings(
     index_scheduler: GuardedData<
@@ -51,6 +54,9 @@ pub async fn get_settings(
 /// Update settings of a chat workspace
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
+    params(
+        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
 )]
 pub async fn patch_settings(
     index_scheduler: GuardedData<
@@ -156,6 +162,9 @@ pub async fn patch_settings(
 /// Reset the settings of a chat workspace
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
+    params(
+        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
 )]
 pub async fn reset_settings(
     index_scheduler: GuardedData<
