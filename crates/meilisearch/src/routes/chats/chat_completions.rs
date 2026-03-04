@@ -62,12 +62,12 @@ use crate::routes::indexes::search::search_kind;
 use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
 use crate::search_queue::SearchQueue;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(chat)));
-}
-
-/// Get a chat completion
-async fn chat(
+/// Request a chat completion
+#[routes::path(
+    security(("Bearer" = ["chats.completions", "*"])),
+    request_body(content = Map<String, Value>),
+)]
+pub async fn chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
     chats_param: web::Path<ChatsParam>,
