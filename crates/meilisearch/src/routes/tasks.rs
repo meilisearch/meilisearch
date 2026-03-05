@@ -590,7 +590,7 @@ async fn get_tasks(
 /// Retrieve a single [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations) by its uid.
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
-    params(("taskUid" = u32, format = UInt32, example = "0", description = "The task identifier.", nullable = false)),
+    params(("taskUid" = u32, format = UInt32, example = 0, description = "The task identifier.", nullable = false)),
     responses(
         (status = 200, description = "Task successfully retrieved.", body = TaskView, content_type = "application/json", example = json!(
             {
@@ -655,7 +655,7 @@ async fn get_task(
 /// Retrieve the list of documents that were processed or affected by a given [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). Only available for document-related tasks.
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
-    params(("taskUid" = u32, format = UInt32, example = "0", description = "The task identifier.", nullable = false)),
+    params(("taskUid" = u32, format = UInt32, example = 0, description = "The task identifier.", nullable = false)),
     responses(
         (status = 200, description = "The content of the task update.", body = serde_json::Value, content_type = "application/x-ndjson"),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
