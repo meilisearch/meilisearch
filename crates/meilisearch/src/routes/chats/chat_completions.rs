@@ -77,18 +77,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(chat)));
 }
 
-/// Chat completions
+/// Create a chat completion
 ///
-/// Send a chat completion request. The LLM can automatically search your Meilisearch indexes to provide relevant answers. Supports both streamed and non-streamed responses.
+/// Send an [OpenAI-compatible](https://platform.openai.com/docs/api-reference/chat/create) chat completion request within a workspace. Meilisearch automatically injects a search tool so the LLM can query your indexes to ground its answers in real data.
+///
+/// When `stream` is `true` (recommended), the response is a stream of Server-Sent Events. When `false`, the full response is returned as a single JSON object (not yet implemented).
 #[utoipa::path(
     post,
     path = "",
     tag = "Chats",
     security(("Bearer" = ["chatCompletions", "*"])),
-    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
-    request_body(content = serde_json::Value, description = "A chat completion request (OpenAI-compatible format)", content_type = "application/json"),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace to use for this completion", example = "default")),
+    request_body(content = serde_json::Value, description = "An OpenAI-compatible chat completion request. Key fields: `model` (required), `messages` (array of conversation messages), `stream` (boolean, recommended `true`), and `tools` (optional front-end notification tools like `_meiliSearchProgress`).", content_type = "application/json"),
     responses(
-        (status = 200, description = "Chat completion response (streamed or JSON)", content_type = "application/json"),
+        (status = 200, description = "The chat completion response. When `stream: true`, this is a stream of Server-Sent Events following the OpenAI streaming format. When `stream: false`, a single JSON chat completion object is returned.", content_type = "application/json"),
     )
 )]
 async fn chat(

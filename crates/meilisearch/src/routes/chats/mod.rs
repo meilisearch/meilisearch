@@ -35,7 +35,7 @@ mod utils;
     paths(list_workspaces, get_chat, delete_chat),
     tags((
         name = "Chats",
-        description = "The `/chats` route allows you to manage chat workspaces and interact with LLM-powered chat completions that can search your Meilisearch indexes.",
+        description = "Chat workspaces group LLM-powered conversations that can automatically search your Meilisearch indexes. Each workspace has its own settings for the LLM provider, API keys, and custom prompts. Use these routes to list, inspect, and delete workspaces, send chat completion requests, and configure per-workspace LLM settings.",
     )),
 )]
 pub struct ChatApi;
@@ -80,16 +80,23 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 
 /// Get a chat workspace
 ///
-/// Get information about a specific chat workspace by its unique identifier.
+/// Return the metadata of a single chat workspace identified by its `workspace_uid`. A workspace is created implicitly the first time you update its settings.
 #[utoipa::path(
     get,
     path = "/{workspace_uid}",
     tag = "Chats",
     security(("Bearer" = ["chats.get", "*"])),
-    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace to retrieve", example = "default")),
     responses(
-        (status = 200, description = "The chat workspace", content_type = "application/json"),
-        (status = 404, description = "Chat workspace not found", body = ResponseError, content_type = "application/json"),
+        (status = 200, description = "The chat workspace metadata", body = ChatWorkspaceView, content_type = "application/json", example = json!({"uid": "default"})),
+        (status = 404, description = "The requested chat workspace does not exist", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "chat default not found",
+                "code": "chat_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
     )
 )]
 pub async fn get_chat(
@@ -108,16 +115,23 @@ pub async fn get_chat(
 
 /// Delete a chat workspace
 ///
-/// Delete a chat workspace and all its associated settings.
+/// Permanently remove a chat workspace and all its associated settings (LLM provider configuration, prompts, API keys). This action is **not reversible**.
 #[utoipa::path(
     delete,
     path = "/{workspace_uid}",
     tag = "Chats",
     security(("Bearer" = ["chats.delete", "*"])),
-    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace to delete", example = "default")),
     responses(
-        (status = 204, description = "The chat workspace has been deleted"),
-        (status = 404, description = "Chat workspace not found", body = ResponseError, content_type = "application/json"),
+        (status = 204, description = "The chat workspace has been successfully deleted"),
+        (status = 404, description = "The requested chat workspace does not exist", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "chat default not found",
+                "code": "chat_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
     )
 )]
 pub async fn delete_chat(
@@ -165,7 +179,9 @@ pub struct ChatWorkspaceView {
 
 /// List chat workspaces
 ///
-/// List all chat workspaces with pagination.
+/// Return all chat workspaces on the instance. A workspace is created implicitly the first time you update its settings.
+///
+/// Results are paginated using `offset` and `limit` query parameters.
 #[utoipa::path(
     get,
     path = "",
@@ -173,7 +189,14 @@ pub struct ChatWorkspaceView {
     security(("Bearer" = ["chats.get", "*"])),
     params(ListChats),
     responses(
-        (status = 200, description = "Paginated list of chat workspaces", body = PaginationView<ChatWorkspaceView>, content_type = "application/json"),
+        (status = 200, description = "Paginated list of chat workspaces", body = PaginationView<ChatWorkspaceView>, content_type = "application/json", example = json!(
+            {
+                "results": [{"uid": "default"}, {"uid": "support-bot"}],
+                "offset": 0,
+                "limit": 20,
+                "total": 2
+            }
+        )),
     )
 )]
 pub async fn list_workspaces(
