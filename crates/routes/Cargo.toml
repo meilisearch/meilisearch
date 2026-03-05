@@ -1,0 +1,28 @@
+[package]
+name = "routes"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+homepage.workspace = true
+readme.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+actix-web = { version = "4.12.0", default-features = false, features = [
+    "macros",
+    "compress-brotli",
+    "compress-gzip",
+    "cookies",
+    "rustls-0_23",
+] }
+utoipa = { version = "5.4.0", features = [
+    "actix_extras",
+    "macros",
+    "non_strict_integers",
+    "preserve_order",
+    "uuid",
+    "time",
+    "openapi_extensions",
+] }
+routes-macros = { path = "../routes-macros" }

@@ -11,7 +11,7 @@ use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
@@ -25,9 +25,9 @@ use crate::search::{
 };
 use crate::search_queue::SearchQueue;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(search),
+#[routes::routes(
+    routes(""=>post(search)),
+    tag = "Facet Search",
     tags(
         (
             name = "Facet Search",
@@ -36,10 +36,6 @@ use crate::search_queue::SearchQueue;
     ),
 )]
 pub struct FacetSearchApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(search)));
-}
 
 // # Important
 //
@@ -214,12 +210,9 @@ impl Aggregate for FacetSearchAggregator {
 /// Search for facet values within a given facet.
 ///
 /// > Use this to build autocomplete or refinement UIs for facet filters.
-#[utoipa::path(
-    post,
-    path = "{indexUid}/facet-search",
-    tag = "Facet Search",
+#[routes::path(
     security(("Bearer" = ["search", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = FacetSearchQuery,
     responses(
         (status = 200, description = "The documents are returned.", body = SearchResult, content_type = "application/json", example = json!(

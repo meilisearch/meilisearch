@@ -8,16 +8,18 @@ use meilisearch_types::deserr::DeserrQueryParamError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use super::tasks::TasksFilterQuery;
 use super::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_batch, get_batches),
+#[routes::routes(
+    tag = "Async task management",
+    routes(
+        "" => get(get_batches),
+        "/{batch_id}" => get(get_batch)
+    ),
     tags((
         name = "Batches",
         description = "Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing. For example, multiple document additions to the same index may be batched together. The /batches routes give information about the progress of these batches and let you monitor batch progress and performance.",
@@ -25,20 +27,12 @@ use crate::extractors::sequential_extractor::SeqHandler;
 )]
 pub struct BatchesApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::get().to(SeqHandler(get_batches))))
-        .service(web::resource("/{batch_id}").route(web::get().to(SeqHandler(get_batch))));
-}
-
 /// Get batch
 ///
 /// Meilisearch groups compatible tasks ([asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)) into batches for efficient processing.
 ///
 /// For example, multiple document additions to the same index may be batched together. Retrieve a single batch by its unique identifier to monitor its progress and performance.
-#[utoipa::path(
-    get,
-    path = "/{batchUid}",
-    tag = "Async task management",
+#[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(
         ("batchUid" = String, Path, example = "8685", description = "The unique batch identifier.", nullable = false),
@@ -137,10 +131,7 @@ pub struct AllBatches {
 /// For example, multiple document additions to the same index may be batched together. List batches to monitor their progress and performance.
 ///
 /// Batches are always returned in descending order of uid. This means that by default, the most recently created batch objects appear first. Batch results are paginated and can be filtered with query parameters.
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Async task management",
+#[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(TasksFilterQuery),
     responses(

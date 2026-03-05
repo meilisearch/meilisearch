@@ -13,18 +13,20 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::{CreateApiKey, Key, PatchApiKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use utoipa::{IntoParams, OpenApi, ToSchema};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use super::{PaginationView, PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::Pagination;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(create_api_key, list_api_keys, get_api_key, patch_api_key, delete_api_key),
+#[routes::routes(
+    routes(
+        "" => [post(create_api_key), get(list_api_keys)],
+        "/{key}" => [get(get_api_key), patch(patch_api_key), delete(delete_api_key)],
+    ),
+    tag = "Keys",
     tags((
         name = "Keys",
         description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions.
@@ -34,27 +36,10 @@ Accessing any route under `/keys` without having set a master key will result in
 )]
 pub struct ApiKeyApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::post().to(SeqHandler(create_api_key)))
-            .route(web::get().to(SeqHandler(list_api_keys))),
-    )
-    .service(
-        web::resource("/{key}")
-            .route(web::get().to(SeqHandler(get_api_key)))
-            .route(web::patch().to(SeqHandler(patch_api_key)))
-            .route(web::delete().to(SeqHandler(delete_api_key))),
-    );
-}
-
 /// Create API key
 ///
 /// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Keys",
+#[routes::path(
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
     responses(
@@ -132,10 +117,7 @@ impl ListApiKeys {
 /// List API keys
 ///
 /// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Keys",
+#[routes::path(
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(ListApiKeys),
     responses(
@@ -202,10 +184,7 @@ pub async fn list_api_keys(
 /// Get API key
 ///
 /// Retrieve a single API key by its `uid` or by its `key` value.
-#[utoipa::path(
-    get,
-    path = "/{uidOrKey}",
-    tag = "Keys",
+#[routes::path(
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     responses(
@@ -276,10 +255,7 @@ pub async fn get_api_key(
 /// Update the name and description of an API key.
 ///
 /// Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
-#[utoipa::path(
-    patch,
-    path = "/{uidOrKey}",
-    tag = "Keys",
+#[routes::path(
     security(("Bearer" = ["keys.update", "keys.*", "*"])),
     params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     request_body = PatchApiKey,
@@ -350,10 +326,7 @@ pub async fn patch_api_key(
 /// Delete API key
 ///
 /// Permanently delete the specified API key. The key will no longer be valid for authentication.
-#[utoipa::path(
-    delete,
-    path = "/{uidOrKey}",
-    tag = "Keys",
+#[routes::path(
     security(("Bearer" = ["keys.delete", "keys.*", "*"])),
     params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     responses(

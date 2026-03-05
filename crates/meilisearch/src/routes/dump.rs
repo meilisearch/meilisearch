@@ -5,32 +5,27 @@ use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
-use utoipa::OpenApi;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
-#[derive(OpenApi)]
-#[openapi(paths(create_dump))]
+#[routes::routes(
+    routes(
+        "" => post(create_dump),
+    ),
+    tag = "Backups",
+)]
 pub struct DumpApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(create_dump))));
-}
 
 crate::empty_analytics!(DumpAnalytics, "Dump Created");
 
 /// Create dump
 ///
 /// Trigger a dump creation process. When complete, a dump file is written to the [dump directory](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#dump-directory). The directory is created if it does not exist.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Backups",
+#[routes::path(
     security(("Bearer" = ["dumps.create", "dumps.*", "*"])),
     responses(
         (status = 202, description = "Dump is being created.", body = SummarizedTaskView, content_type = "application/json", example = json!(

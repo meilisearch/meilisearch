@@ -19,13 +19,12 @@ use meilisearch_types::network::{
 };
 use serde::Serialize;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 
 #[cfg(not(feature = "enterprise"))]
 mod community_edition;
@@ -37,9 +36,12 @@ use community_edition as current_edition;
 #[cfg(feature = "enterprise")]
 use enterprise_edition as current_edition;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_network, patch_network),
+#[routes::routes(
+    routes(
+        "" => [get(get_network), patch(patch_network)],
+        "/control" => post(post_network_change),
+    ),
+    tag = "Experimental features",
     tags((
         name = "Network",
         description = "The `/network` route allows you to describe the topology of a network of Meilisearch instances.
@@ -49,25 +51,10 @@ This route is **synchronous**. This means that no task object will be returned, 
 )]
 pub struct NetworkApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(get_network))
-            .route(web::patch().to(SeqHandler(patch_network))),
-    )
-    .service(
-        web::resource(route::NETWORK_CONTROL_PATH_SUFFIX)
-            .route(web::post().to(SeqHandler(post_network_change))),
-    );
-}
-
 /// Get network topology
 ///
 /// Return the list of Meilisearch instances currently known to this node (self and remotes).
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Experimental features",
+#[routes::path(
     security(("Bearer" = ["network.get", "*"])),
     responses(
         (status = OK, description = "Known nodes are returned.", body = Network, content_type = "application/json", example = json!(
@@ -299,10 +286,7 @@ impl Aggregate for PatchNetworkAnalytics {
 /// Configure network topology
 ///
 /// Add or remove remote nodes from the network. Changes apply to the current instance’s view of the cluster.
-#[utoipa::path(
-    patch,
-    path = "",
-    tag = "Experimental features",
+#[routes::path(
     request_body = Network,
     security(("Bearer" = ["network.update", "*"])),
     responses(
@@ -335,6 +319,26 @@ async fn patch_network(
     current_edition::patch_network(index_scheduler, new_network, req, analytics).await
 }
 
+/// Network control
+///
+/// Send messages to control the progress of a network topology change task.
+///
+/// The route is mostly used internally when sending a PATCH to the network, but is accessible for manual control as well.
+#[routes::path(
+    request_body = route::NetworkChange,
+    security(("Bearer" = ["network.update", "*"])),
+    responses(
+        (status = OK, description = "Empty response."),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    )
+)]
 async fn post_network_change(
     index_scheduler: GuardedData<ActionPolicy<{ actions::NETWORK_UPDATE }>, Data<IndexScheduler>>,
     payload: Json<route::NetworkChange>,

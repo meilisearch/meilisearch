@@ -63,6 +63,7 @@ use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
+use ::routes::Routes;
 
 /// Default number of simultaneously opened indexes.
 ///
@@ -147,8 +148,16 @@ pub fn create_app(
 > {
     let app = actix_web::App::new()
         .configure(|s| configure_data(s, services, &opt))
-        .configure(routes::configure)
+        .configure(<routes::MeilisearchApi as Routes>::configure)
         .configure(|s| dashboard(s, enable_dashboard));
+
+    #[cfg(feature = "swagger")]
+    let app = app.configure(|cfg| {
+        use utoipa::OpenApi;
+        use utoipa_scalar::{Scalar, Servable as ScalarServable};
+        let openapi = routes::MeilisearchApi::openapi();
+        cfg.service(Scalar::with_url("/scalar", openapi.clone()));
+    });
 
     let app = app.wrap(middleware::RouteMetrics);
     app.wrap(

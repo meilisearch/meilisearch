@@ -18,17 +18,19 @@ use serde::Serialize;
 use tokio::sync::mpsc;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::Layer;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::{LogRouteHandle, LogStderrHandle};
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_logs, cancel_logs, update_stderr_target),
+#[routes::routes(
+    routes(
+        "/stream" => [post(get_logs), delete(cancel_logs)],
+        "/stderr" => post(update_stderr_target),
+    ),
+    tag = "Logs",
     tags((
         name = "Logs",
         description = "Everything about retrieving or customizing logs.
@@ -36,15 +38,6 @@ Currently [experimental](https://www.meilisearch.com/docs/learn/experimental/ove
     )),
 )]
 pub struct LogsApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("stream")
-            .route(web::post().to(SeqHandler(get_logs)))
-            .route(web::delete().to(SeqHandler(cancel_logs))),
-    )
-    .service(web::resource("stderr").route(web::post().to(SeqHandler(update_stderr_target))));
-}
 
 /// Format for log output
 #[derive(Debug, Default, Clone, Copy, Deserr, Serialize, PartialEq, Eq, ToSchema)]
@@ -286,10 +279,7 @@ fn entry_stream(
 /// Stream logs over HTTP. The format of the logs depends on the configuration specified in the payload. The logs are sent as multi-part, and the stream never stops, so ensure your client can handle a long-lived connection. To stop receiving logs, call the `DELETE /logs/stream` route.
 ///
 /// Only one client can listen at a time. An error is returned if you call this route while it is already in use by another client.
-#[utoipa::path(
-    post,
-    path = "/stream",
-    tag = "Experimental features",
+#[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     request_body = GetLogs,
     responses(
@@ -354,10 +344,7 @@ pub async fn get_logs(
 /// Stop retrieving logs
 ///
 /// Call this route to make the engine stop sending logs to the client that opened the `POST /logs/stream` connection.
-#[utoipa::path(
-    delete,
-    path = "/stream",
-    tag = "Experimental features",
+#[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
         (status = NO_CONTENT, description = "Logs are being returned."),
@@ -398,10 +385,7 @@ pub struct UpdateStderrLogs {
 /// Update target of the console logs
 ///
 /// Configure at runtime the level of the console logs written to stderr (e.g. debug, info, warn, error).
-#[utoipa::path(
-    post,
-    path = "/stderr",
-    tag = "Experimental features",
+#[routes::path(
     request_body = UpdateStderrLogs,
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(

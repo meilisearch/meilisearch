@@ -36,7 +36,7 @@ use tempfile::tempfile;
 use tokio::fs::File;
 use tokio::io::{AsyncSeekExt, AsyncWriteExt, BufWriter};
 use tracing::debug;
-use utoipa::{IntoParams, OpenApi, ToSchema};
+use utoipa::{IntoParams, ToSchema};
 
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
 use crate::error::MeilisearchHttpError;
@@ -44,7 +44,6 @@ use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
@@ -79,9 +78,16 @@ pub struct DocumentParam {
     document_id: String,
 }
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_document, get_documents, delete_document, replace_documents, update_documents, clear_all_documents, delete_documents_batch, delete_documents_by_filter, edit_documents_by_function, documents_by_query_post),
+#[routes::routes(
+    routes(
+        "" => [get(get_documents), post(replace_documents), put(update_documents), delete(clear_all_documents)],
+        "/delete-batch" => post(delete_documents_batch),
+        "/delete" => post(delete_documents_by_filter),
+        "/edit" => post(edit_documents_by_function),
+        "/fetch" => post(documents_by_query_post),
+        "/{document_id}" => [get(get_document), delete(delete_document)],
+    ),
+    tag = "Documents",
     tags(
         (
             name = "Documents",
@@ -90,28 +96,6 @@ pub struct DocumentParam {
     ),
 )]
 pub struct DocumentsApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(SeqHandler(get_documents)))
-            .route(web::post().to(SeqHandler(replace_documents)))
-            .route(web::put().to(SeqHandler(update_documents)))
-            .route(web::delete().to(SeqHandler(clear_all_documents))),
-    )
-    // these routes need to be before the /documents/{document_id} to match properly
-    .service(
-        web::resource("/delete-batch").route(web::post().to(SeqHandler(delete_documents_batch))),
-    )
-    .service(web::resource("/delete").route(web::post().to(SeqHandler(delete_documents_by_filter))))
-    .service(web::resource("/edit").route(web::post().to(SeqHandler(edit_documents_by_function))))
-    .service(web::resource("/fetch").route(web::post().to(SeqHandler(documents_by_query_post))))
-    .service(
-        web::resource("/{document_id}")
-            .route(web::get().to(SeqHandler(get_document)))
-            .route(web::delete().to(SeqHandler(delete_document))),
-    );
-}
 
 #[derive(Debug, Deserr, IntoParams, ToSchema)]
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
@@ -194,10 +178,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
 /// Get document
 ///
 /// Retrieve a single document by its [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) value.
-#[utoipa::path(
-    get,
-    path = "{indexUid}/documents/{documentId}",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
         ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
@@ -308,10 +289,7 @@ impl Aggregate for DocumentsDeletionAggregator {
 /// Delete document
 ///
 /// Delete a single document by its [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key).
-#[utoipa::path(
-    delete,
-    path = "{indexUid}/documents/{documentId}",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
         ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
@@ -508,12 +486,9 @@ pub struct BrowseQuery {
 /// List documents with POST
 ///
 /// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request body to specify filters, sort order, and which fields to return.
-#[utoipa::path(
-    post,
-    path = "{indexUid}/documents/fetch",
-    tag = "Documents",
-    security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+#[routes::path(
+    security(("Bearer" = ["documents.get", "documents.*", "*"])),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = BrowseQuery,
     responses(
         (status = 200, description = "Documents returned.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
@@ -597,13 +572,10 @@ pub async fn documents_by_query_post(
 /// List documents with GET
 ///
 /// Retrieve documents in batches using query parameters for offset, limit, and optional filtering. Suited for browsing or exporting index contents.
-#[utoipa::path(
-    get,
-    path = "{indexUid}/documents",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
         BrowseQueryGet
     ),
     responses(
@@ -876,13 +848,10 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 /// > Use the reserved `_geo` object to add geo coordinates to a document.
 /// > `_geo` is an object made of `lat` and `lng` field.
 
-#[utoipa::path(
-    post,
-    path = "{indexUid}/documents",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
@@ -991,13 +960,10 @@ pub async fn replace_documents(
 /// > Use the reserved `_geo` object to add geo coordinates to a document.
 /// > `_geo` is an object made of `lat` and `lng` field.
 
-#[utoipa::path(
-    put,
-    path = "{indexUid}/documents",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
@@ -1304,15 +1270,12 @@ async fn copy_body_to_file(
 /// Delete documents by batch
 ///
 /// Delete multiple documents in one request by providing an array of [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) values.
-#[utoipa::path(
-    post,
-    path = "{indexUid}/documents/delete-batch",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
-    request_body = Vec<Value>,
+    request_body(content = Vec<Value>),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -1423,12 +1386,9 @@ pub struct DocumentDeletionByFilter {
 /// Delete documents by filter
 ///
 /// Delete all documents in the index that match the given filter expression.
-#[utoipa::path(
-    post,
-    path = "{indexUid}/documents/delete",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = DocumentDeletionByFilter,
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -1585,13 +1545,10 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
 /// Use a [RHAI function](https://rhai.rs/book/engine/hello-world.html) to edit one or more documents directly in Meilisearch. The function receives each document and returns the modified document.
 ///
 /// This feature is experimental and must be enabled through the experimental route.
-#[utoipa::path(
-    post,
-    path = "{indexUid}/documents/edit",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.*", "*"])),
     params(
-        ("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = DocumentEditionByFunction,
     responses(
@@ -1722,12 +1679,9 @@ pub async fn edit_documents_by_function(
 /// Delete all documents
 ///
 /// Permanently delete all documents in the specified index. Settings and index metadata are preserved.
-#[utoipa::path(
-    delete,
-    path = "{indexUid}/documents",
-    tag = "Documents",
+#[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {

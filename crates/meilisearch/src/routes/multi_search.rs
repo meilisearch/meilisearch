@@ -10,7 +10,7 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::TotalProcessingTimeStep;
 use serde::Serialize;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::multi_search_analytics::MultiSearchAggregator;
@@ -18,7 +18,6 @@ use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
@@ -26,19 +25,17 @@ use crate::search::{
 };
 use crate::search_queue::SearchQueue;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(multi_search_with_post),
+#[routes::routes(
+    routes(
+        "" => post(multi_search_with_post),
+    ),
+    tag = "Multi-search",
     tags((
         name = "Multi-search",
         description = "The `/multi-search` route allows you to perform multiple search queries on one or more indexes by bundling them into a single HTTP request. Multi-search is also known as federated search.",
     )),
 )]
 pub struct MultiSearchApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
-}
 
 /// Response containing results from multiple search queries
 #[derive(Serialize, ToSchema)]
@@ -52,11 +49,8 @@ pub struct SearchResults {
 /// Run multiple search queries in a single API request.
 ///
 /// Each query can target a different index, so you can search across several indexes at once and get one combined response.
-#[utoipa::path(
-    post,
-    request_body = FederatedSearch,
-    path = "",
-    tag = "Search",
+#[routes::path(
+    request_body(content = FederatedSearch),
     security(("Bearer" = ["search", "*"])),
     responses(
         (status = OK, description = "Non federated multi-search.", body = SearchResults, content_type = "application/json", example = json!(

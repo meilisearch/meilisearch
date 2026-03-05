@@ -16,7 +16,7 @@ use meilisearch_types::tasks::KindWithContent;
 use serde::Serialize;
 use time::OffsetDateTime;
 use tracing::debug;
-use utoipa::{IntoParams, OpenApi, ToSchema};
+use utoipa::{IntoParams, ToSchema};
 
 use super::{
     get_task_id, Pagination, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
@@ -24,11 +24,9 @@ use super::{
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::is_dry_run;
 use crate::Opt;
-use fields::post_index_fields;
 
 pub mod compact;
 pub mod documents;
@@ -45,16 +43,20 @@ mod settings_analytics;
 pub mod similar;
 mod similar_analytics;
 
-#[derive(OpenApi)]
-#[openapi(
-    nest(
-        (path = "/", api = documents::DocumentsApi),
-        (path = "/", api = facet_search::FacetSearchApi),
-        (path = "/", api = similar::SimilarApi),
-        (path = "/", api = settings::SettingsApi),
-        (path = "/", api = compact::CompactApi),
+#[routes::routes(
+    routes(
+        "" => [get(list_indexes), post(create_index)],
+        "/{index_uid}" => [get(get_index), patch(update_index), delete(delete_index)],
+        "/{index_uid}/documents" => sub(documents::DocumentsApi),
+        "/{index_uid}/facet-search" => sub(facet_search::FacetSearchApi),
+        "/{index_uid}/similar" => sub(similar::SimilarApi),
+        "/{index_uid}/settings" => sub(settings::SettingsApi),
+        "/{index_uid}/compact" => sub(compact::CompactApi),
+        "/{index_uid}/search" => sub(search::SearchApi),
+        "/{index_uid}/stats" => get(get_index_stats),
+        "/{index_uid}/fields" => post(fields::post_index_fields),
     ),
-    paths(list_indexes, create_index, get_index, update_index, delete_index, get_index_stats, fields::post_index_fields),
+    tag = "Indexes",
     tags(
         (
             name = "Indexes",
@@ -63,31 +65,6 @@ mod similar_analytics;
     ),
 )]
 pub struct IndexesApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(list_indexes))
-            .route(web::post().to(SeqHandler(create_index))),
-    )
-    .service(
-        web::scope("/{index_uid}")
-            .service(
-                web::resource("")
-                    .route(web::get().to(SeqHandler(get_index)))
-                    .route(web::patch().to(SeqHandler(update_index)))
-                    .route(web::delete().to(SeqHandler(delete_index))),
-            )
-            .service(web::resource("/stats").route(web::get().to(SeqHandler(get_index_stats))))
-            .service(web::resource("/fields").route(web::post().to(SeqHandler(post_index_fields))))
-            .service(web::scope("/documents").configure(documents::configure))
-            .service(web::scope("/search").configure(search::configure))
-            .service(web::scope("/facet-search").configure(facet_search::configure))
-            .service(web::scope("/similar").configure(similar::configure))
-            .service(web::scope("/settings").configure(settings::configure))
-            .service(web::scope("/compact").configure(compact::configure)),
-    );
-}
 
 /// An index containing searchable documents
 #[derive(Debug, Serialize, Clone, ToSchema)]
@@ -144,10 +121,7 @@ impl ListIndexes {
 /// Return all indexes on the instance.
 ///
 /// Results are paginated using `offset` and `limit` query parameters.
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Indexes",
+#[routes::path(
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
     params(ListIndexes),
     responses(
@@ -238,10 +212,7 @@ impl Aggregate for IndexCreatedAggregate {
 /// Create a new index with an optional [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key).
 ///
 /// If no primary key is provided, Meilisearch will [infer one](https://www.meilisearch.com/docs/learn/getting_started/primary_key#meilisearch-guesses-your-primary-key) from the first batch of documents.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Indexes",
+#[routes::path(
     security(("Bearer" = ["indexes.create", "indexes.*", "*"])),
     request_body = IndexCreateRequest,
     responses(
@@ -338,12 +309,9 @@ fn deny_immutable_fields_index(
 /// Get index
 ///
 /// Retrieve the metadata of a single index: its uid, [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key), and creation/update timestamps.
-#[utoipa::path(
-    get,
-    path = "/{indexUid}",
-    tag = "Indexes",
+#[routes::path(
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 200, description = "The index is returned.", body = IndexView, content_type = "application/json", example = json!(
             {
@@ -424,12 +392,9 @@ pub struct UpdateIndexRequest {
 /// Update the [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) or uid of an index.
 ///
 /// Returns an error if the index does not exist or if it already contains documents ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) cannot be changed in that case).
-#[utoipa::path(
-    patch,
-    path = "/{indexUid}",
-    tag = "Indexes",
+#[routes::path(
     security(("Bearer" = ["indexes.update", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = UpdateIndexRequest,
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -521,12 +486,9 @@ pub async fn update_index(
 /// Delete index
 ///
 /// Permanently delete an index and all its documents, settings, and task history.
-#[utoipa::path(
-    delete,
-    path = "/{indexUid}",
-    tag = "Indexes",
+#[routes::path(
     security(("Bearer" = ["indexes.delete", "indexes.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -631,12 +593,9 @@ impl From<index_scheduler::IndexStats> for IndexStats {
 /// Get stats of index
 ///
 /// Return statistics for a single index: document count, database size, indexing status, and field distribution.
-#[utoipa::path(
-    get,
-    path = "/{indexUid}/stats",
-    tag = "Stats",
+#[routes::path(
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = OK, description = "The stats of the index.", body = IndexStats, content_type = "application/json", example = json!(
             {

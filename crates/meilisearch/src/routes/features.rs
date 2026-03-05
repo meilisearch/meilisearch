@@ -8,16 +8,17 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use serde::Serialize;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_features, patch_features),
+#[routes::routes(
+    routes(
+        "" => [get(get_features), patch(patch_features)],
+    ),
+    tag = "Experimental features",
     tags((
         name = "Experimental features",
         description = "The `/experimental-features` route allows you to activate or deactivate some of Meilisearch's experimental features.
@@ -27,21 +28,10 @@ This route is **synchronous**. This means that no task object will be returned, 
 )]
 pub struct ExperimentalFeaturesApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(get_features))
-            .route(web::patch().to(SeqHandler(patch_features))),
-    );
-}
-
 /// List experimental features
 ///
 /// Return all experimental features that can be toggled via this API, and whether each one is currently enabled or disabled.
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Experimental features",
+#[routes::path(
     security(("Bearer" = ["experimental_features.get", "experimental_features.*", "*"])),
     responses(
         (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
@@ -182,10 +172,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 /// Configure experimental features
 ///
 /// Enable or disable experimental features at runtime.
-#[utoipa::path(
-    patch,
-    path = "",
-    tag = "Experimental features",
+#[routes::path(
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
     responses(
         (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {

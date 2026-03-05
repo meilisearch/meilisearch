@@ -8,28 +8,24 @@ use meilisearch_types::milli::progress::ProgressStepView;
 use meilisearch_types::tasks::Status;
 use prometheus::{Encoder, TextEncoder};
 use time::OffsetDateTime;
-use utoipa::OpenApi;
 
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::routes::create_all_stats;
 use crate::search_queue::SearchQueue;
 
-#[derive(OpenApi)]
-#[openapi(paths(get_metrics))]
+#[routes::routes(
+    routes(
+        "" => get(get_metrics),
+    ),
+    tag = "Stats",
+)]
 pub struct MetricApi;
-
-pub fn configure(config: &mut web::ServiceConfig) {
-    config.service(web::resource("").route(web::get().to(get_metrics)));
-}
 
 /// Get Prometheus metrics
 ///
 /// Return metrics for the engine in Prometheus format. This is an [experimental feature](https://www.meilisearch.com/docs/learn/experimental/overview) and must be enabled before use.
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Stats",
+#[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
         (status = 200, description = "The metrics of the instance.", body = String, content_type = "text/plain", example = json!(

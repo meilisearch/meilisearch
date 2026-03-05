@@ -23,7 +23,7 @@ use meilisearch_types::tasks::{Kind, Status, Task, TaskId};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use self::api_key::KeyView;
 use self::indexes::documents::BrowseQuery;
@@ -76,27 +76,29 @@ pub mod tasks;
 mod tasks_test;
 mod webhooks;
 
-#[derive(OpenApi)]
-#[openapi(
-    nest(
-        (path = "/tasks", api = tasks::TaskApi),
-        (path = "/batches", api = batches::BatchesApi),
-        (path = "/indexes", api = indexes::IndexesApi),
+#[routes::routes(
+    routes(
+        "/health" => get(get_health),
+        "/version" => get(get_version),
+        "/stats" => get(get_stats),
+        "/chats" => sub(chats::ChatsApi),
+        "/tasks" => sub(tasks::TaskApi),
+        "/batches"=>sub(batches::BatchesApi),
+        "/indexes" => sub(indexes::IndexesApi),
         // We must stop the search path here because the rest must be configured by each route individually
-        (path = "/indexes", api = indexes::search::SearchApi),
-        (path = "/snapshots", api = snapshot::SnapshotApi),
-        (path = "/dumps", api = dump::DumpApi),
-        (path = "/keys", api = api_key::ApiKeyApi),
-        (path = "/metrics", api = metrics::MetricApi),
-        (path = "/logs", api = logs::LogsApi),
-        (path = "/multi-search", api = multi_search::MultiSearchApi),
-        (path = "/swap-indexes", api = swap_indexes::SwapIndexesApi),
-        (path = "/experimental-features", api = features::ExperimentalFeaturesApi),
-        (path = "/export", api = export::ExportApi),
-        (path = "/network", api = network::NetworkApi),
-        (path = "/webhooks", api = webhooks::WebhooksApi),
+        "/snapshots"=> sub(snapshot::SnapshotApi),
+        "/dumps"=> sub(dump::DumpApi),
+        "/keys"=> sub(api_key::ApiKeyApi),
+        "/metrics"=> sub(metrics::MetricApi),
+        "/logs"=> sub(logs::LogsApi),
+        "/multi-search"=> sub(multi_search::MultiSearchApi),
+        "/swap-indexes"=> sub(swap_indexes::SwapIndexesApi),
+        "/experimental-features"=> sub(features::ExperimentalFeaturesApi),
+        "/export"=> sub(export::ExportApi),
+        "/network"=> sub(network::NetworkApi),
+        "/webhooks"=> sub(webhooks::WebhooksApi),
     ),
-    paths(get_health, get_version, get_stats),
+    tag = "Root",
     tags(
         (name = "Stats", description = "Stats gives extended information and metrics about indexes and the Meilisearch database."),
         (name = "Health", description = "The health check endpoint enables you to periodically test the health of your Meilisearch instance."),
@@ -113,34 +115,6 @@ mod webhooks;
     components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, ListFields, ListFieldsFilter))
 )]
 pub struct MeilisearchApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::scope("/tasks").configure(tasks::configure))
-        .service(web::scope("/batches").configure(batches::configure))
-        .service(web::resource("/health").route(web::get().to(get_health)))
-        .service(web::scope("/logs").configure(logs::configure))
-        .service(web::scope("/keys").configure(api_key::configure))
-        .service(web::scope("/dumps").configure(dump::configure))
-        .service(web::scope("/snapshots").configure(snapshot::configure))
-        .service(web::resource("/stats").route(web::get().to(get_stats)))
-        .service(web::resource("/version").route(web::get().to(get_version)))
-        .service(web::scope("/indexes").configure(indexes::configure))
-        .service(web::scope("/multi-search").configure(multi_search::configure))
-        .service(web::scope("/swap-indexes").configure(swap_indexes::configure))
-        .service(web::scope("/metrics").configure(metrics::configure))
-        .service(web::scope("/experimental-features").configure(features::configure))
-        .service(web::scope("/network").configure(network::configure))
-        .service(web::scope("/export").configure(export::configure))
-        .service(web::scope("/chats").configure(chats::configure))
-        .service(web::scope("/webhooks").configure(webhooks::configure));
-
-    #[cfg(feature = "swagger")]
-    {
-        use utoipa_scalar::{Scalar, Servable as ScalarServable};
-        let openapi = MeilisearchApi::openapi();
-        cfg.service(Scalar::with_url("/scalar", openapi.clone()));
-    }
-}
 
 pub fn get_task_id(req: &HttpRequest, opt: &Opt) -> Result<Option<TaskId>, ResponseError> {
     if !opt.experimental_replication_parameters {
@@ -434,10 +408,8 @@ pub struct Stats {
 /// Get stats of all indexes
 ///
 /// Return statistics for the Meilisearch instance and for each index. Includes database size, last update time, document counts, and indexing status per index.
-#[utoipa::path(
-    get,
-    path = "/stats",
-    tag = "Stats",
+#[routes::path(
+    override_tag = "Stats",
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
     responses(
         (status = 200, description = "The stats of the instance.", body = Stats, content_type = "application/json", example = json!(
@@ -533,10 +505,8 @@ struct VersionResponse {
 /// Get version
 ///
 /// Return the current Meilisearch version, including the commit SHA and build date.
-#[utoipa::path(
-    get,
-    path = "/version",
-    tag = "Version",
+#[routes::path(
+    override_tag = "Version",
     security(("Bearer" = ["version", "*"])),
     responses(
         (status = 200, description = "Instance is healthy.", body = VersionResponse, content_type = "application/json", example = json!(
@@ -592,17 +562,16 @@ enum HealthStatus {
 /// Get health
 ///
 /// The health check endpoint enables you to periodically test the health of your Meilisearch instance. Returns a simple status indicating that the server is available.
-#[utoipa::path(
-    get,
-    path = "/health",
-    tag = "Health",
+#[routes::path(
     responses(
         (status = 200, description = "Instance is healthy.", body = HealthResponse, content_type = "application/json", example = json!(
             {
                 "status": "available"
             }
         )),
-    )
+    ),
+    override_tag = "Health",
+    security()
 )]
 pub async fn get_health(
     index_scheduler: Data<IndexScheduler>,

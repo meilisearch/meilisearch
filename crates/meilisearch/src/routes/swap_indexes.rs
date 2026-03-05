@@ -9,24 +9,23 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Serialize;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use super::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::Opt;
 
-#[derive(OpenApi)]
-#[openapi(paths(swap_indexes))]
+#[routes::routes(
+    routes(
+        "" => post(swap_indexes),
+    ),
+    tag = "Indexes",
+)]
 pub struct SwapIndexesApi;
-
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(swap_indexes))));
-}
 
 /// Request body for swapping two indexes
 #[derive(Deserr, Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
@@ -72,12 +71,9 @@ impl Aggregate for IndexSwappedAnalytics {
 /// Indexes are swapped in pairs; a single request can include multiple pairs.
 /// The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa.
 /// Enqueued tasks are left unmodified.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Indexes",
-    security(("Bearer" = ["search", "*"])),
-    request_body = Vec<SwapIndexesPayload>,
+#[routes::path(
+    security(("Bearer" = ["indexes.swap", "*"])),
+    request_body(content = Vec<SwapIndexesPayload>),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {

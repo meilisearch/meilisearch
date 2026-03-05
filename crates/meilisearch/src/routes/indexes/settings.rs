@@ -11,7 +11,6 @@ use meilisearch_types::settings::{
 };
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
-use utoipa::OpenApi;
 
 use super::settings_analytics::*;
 use crate::analytics::Analytics;
@@ -39,9 +38,12 @@ macro_rules! make_setting_routes {
             make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $analytics);
         )*
 
-        #[derive(OpenApi)]
-        #[openapi(
-            paths(update_all, get_all, delete_all, $( $attr::get, $attr::update, $attr::delete,)*),
+        #[routes::routes(
+            routes(
+                "" => [patch(update_all), get(get_all), delete(delete_all)],
+                $( $route => [get($attr::get), $update_verb($attr::update), delete($attr::delete)]),*
+            ),
+            tag = "Settings",
             tags(
                 (
                     name = "Settings",
@@ -50,16 +52,6 @@ macro_rules! make_setting_routes {
             ),
         )]
         pub struct SettingsApi;
-
-        pub fn configure(cfg: &mut web::ServiceConfig) {
-            use crate::extractors::sequential_extractor::SeqHandler;
-            cfg.service(
-                web::resource("")
-                .route(web::patch().to(SeqHandler(update_all)))
-                .route(web::get().to(SeqHandler(get_all)))
-                .route(web::delete().to(SeqHandler(delete_all))))
-                $(.service($attr::resources()))*;
-        }
 
         pub const ALL_SETTINGS_NAMES: &[&str] = &[$(stringify!($attr)),*];
     };
@@ -86,15 +78,12 @@ macro_rules! make_setting_route {
             #[allow(unused_imports)]
             use super::*;
 
-            #[utoipa::path(
-                delete,
-                path = concat!("{indexUid}/settings", $route),
-                tag = "Settings",
+            #[routes::path(
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 operation_id = concat!("delete", $camelcase_attr),
                 summary = concat!("Reset ", $camelcase_attr),
                 description = concat!("Resets the `", $camelcase_attr, "` setting to its default value."),
-                params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+                params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
                     (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
@@ -143,16 +132,13 @@ macro_rules! make_setting_route {
             }
 
 
-            #[utoipa::path(
-                $update_verb,
-                path = concat!("{indexUid}/settings", $route),
-                tag = "Settings",
+            #[routes::path(
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 operation_id = concat!(stringify!($update_verb), $camelcase_attr),
                 summary = concat!("Update ", $camelcase_attr),
                 description = concat!("Updates the `", $camelcase_attr, "` setting for the index. Send the new value in the request body; send null to reset to default."),
-                params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
-                request_body = $type,
+                params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+                request_body(content = $type),
                 responses(
                     (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
@@ -218,15 +204,12 @@ macro_rules! make_setting_route {
             }
 
 
-            #[utoipa::path(
-                get,
-                path = concat!("{indexUid}/settings", $route),
-                tag = "Settings",
+            #[routes::path(
                 summary = concat!("Get ", $camelcase_attr),
                 description = concat!("Returns the current value of the `", $camelcase_attr, "` setting for the index."),
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
                 operation_id = concat!("get", $camelcase_attr),
-                params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+                params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
                     (status = 200, description = concat!("Returns the current value of the `", $camelcase_attr, "` setting."), body = $type, content_type = "application/json", example = json!(
                         <$type>::default()
@@ -511,15 +494,12 @@ make_setting_routes!(
     },
 );
 
-#[utoipa::path(
-    patch,
-    path = "{indexUid}/settings",
-    tag = "Settings",
+#[routes::path(
     summary = "Update all settings",
     description = "Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created.",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
-    request_body = Settings<Unchecked>,
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    request_body(content = Settings<Unchecked>),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -671,14 +651,11 @@ async fn register_new_settings(
     Ok(task.into())
 }
 
-#[utoipa::path(
-    get,
-    path = "{indexUid}/settings",
-    tag = "Settings",
+#[routes::path(
     summary = "List all settings",
     description = "Returns all settings of the index. Each setting is returned with its current value or the default if not set.",
-    security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    security(("Bearer" = ["settings.get", "settings.*", "*"])),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 200, description = "Returns all settings with their current or default values.", body = Settings<Unchecked>, content_type = "application/json", example = json!(
             Settings::<Unchecked>::default()
@@ -724,14 +701,11 @@ pub async fn get_all(
     Ok(HttpResponse::Ok().json(new_settings))
 }
 
-#[utoipa::path(
-    delete,
-    path = "{indexUid}/settings",
-    tag = "Settings",
+#[routes::path(
     summary = "Reset all settings",
     description = "Resets all settings of the index to their default values.",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
