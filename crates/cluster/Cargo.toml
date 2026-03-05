@@ -1,0 +1,65 @@
+[package]
+name = "meilisearch-cluster"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+# QUIC transport
+quinn = "0.11"
+quinn-plaintext = "0.3"  # Used in plaintext mode (default, HMAC-only integrity)
+
+# TLS encryption (opt-in via --cluster-tls, deterministic cert from cluster secret)
+rcgen = "0.13"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+
+# HMAC-SHA256 per-message signing
+hmac = "0.12"
+sha2 = "0.10"
+
+# Raft consensus
+openraft = { version = "0.9", features = ["serde", "storage-v2"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+bytes = "1"
+
+# LMDB storage for persistent Raft state
+heed = { version = "0.22.1-nested-rtxns-6", default-features = false, features = [
+    "serde-bincode",
+] }
+
+# Logging
+tracing = "0.1"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Utilities
+rand = "0.8"
+uuid = { version = "1", features = ["v4"] }
+
+# Secure memory handling
+zeroize = "1"
+
+# Scheduler signaling (shared with index-scheduler for wake_up)
+synchronoise = "1"
+
+# Atomic file writes (crash-safe DML file transfers)
+tempfile = "3"
+
+# Snapshot streaming (tar archive for full-state transfer, kept for tests)
+tar = "0.4"
+flate2 = "1"
+
+# Per-chunk integrity verification for snapshot transfers
+xxhash-rust = { version = "0.8", features = ["xxh64"] }
+
+[dev-dependencies]
+tempfile = "3"
