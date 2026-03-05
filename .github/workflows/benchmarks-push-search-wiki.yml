@@ -39,9 +39,18 @@ jobs:
 
       # Run benchmarks
       - name: Run benchmarks - Dataset ${BENCH_NAME} - Branch ${{ steps.current_branch.outputs.name }} - Commit ${{ steps.commit_sha.outputs.short }}
+        env:
+          MILLI_BENCH_DATASETS_PATH: "target/benchmarks-datasets"
+          S3_ACCESS_KEY: ${{ secrets.DO_SPACES_ACCESS_KEY }}
+          S3_SECRET_KEY: ${{ secrets.DO_SPACES_SECRET_KEY }}
         run: |
           cd crates/benchmarks
           cargo bench --bench ${BENCH_NAME} -- --save-baseline ${{ steps.file.outputs.basename }}
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.8.0
+        with:
+          directory: target/benchmarks-datasets
 
       # Generate critcmp files
       - name: Install critcmp

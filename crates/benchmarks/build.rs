@@ -1,14 +1,18 @@
 use std::fs::File;
 use std::io::{Cursor, Read, Seek, Write};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use std::{env, fs};
 
 use bytes::Bytes;
 use convert_case::{Case, Casing};
 use flate2::read::GzDecoder;
-use reqwest::IntoUrl;
+use rusty_s3::S3Action as _;
+use rusty_s3::{Bucket, Credentials, UrlStyle};
 
-const BASE_URL: &str = "https://milli-benchmarks.fra1.digitaloceanspaces.com/datasets";
+const BUCKET_REGION: &str = "fra1";
+const BUCKET_NAME: &str = "milli-benchmarks";
+const ENDPOINT: &str = "https://fra1.digitaloceanspaces.com";
 
 const DATASET_SONGS: (&str, &str) = ("smol-songs", "csv");
 const DATASET_SONGS_1_2: (&str, &str) = ("smol-songs-1_2", "csv");
@@ -49,6 +53,17 @@ const BASE_DATASETS_PATH_KEY: &str = "MILLI_BENCH_DATASETS_PATH";
 fn main() -> anyhow::Result<()> {
     let out_dir = PathBuf::from(env::var(BASE_DATASETS_PATH_KEY).unwrap_or(env::var("OUT_DIR")?));
 
+    // setting up a bucket
+    let endpoint = ENDPOINT.parse().expect("endpoint is a valid Url");
+    let path_style = UrlStyle::VirtualHost;
+    let bucket = Bucket::new(endpoint, path_style, BUCKET_NAME, BUCKET_REGION)
+        .expect("Url has a valid scheme and host");
+
+    // setting up the credentials
+    let key = env::var("S3_ACCESS_KEY").expect("S3_ACCESS_KEY is set and a valid String");
+    let secret = env::var("S3_SECRET_KEY").expect("S3_SECRET_KEY is set and a valid String");
+    let credentials = Credentials::new(key, secret);
+
     let benches_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?).join("benches");
     let mut manifest_paths_file = File::create(benches_dir.join("datasets_paths.rs"))?;
     write!(
@@ -78,10 +93,10 @@ fn main() -> anyhow::Result<()> {
             );
             continue;
         }
-        let url = format!("{}/{}.{}.gz", BASE_URL, dataset, extension);
-        eprintln!("downloading: {}", url);
-        let bytes = retry(|| download_dataset(url.clone()), 10)?;
-        eprintln!("{} downloaded successfully", url);
+        let object = format!("datasets/{dataset}.{extension}.gz");
+        eprintln!("downloading: {object}");
+        let bytes = retry(|| download_object(&bucket, &credentials, &object), 10)?;
+        eprintln!("{object} downloaded successfully");
         eprintln!("uncompressing in {}", out_file.display());
         uncompress_in_file(bytes, &out_file)?;
     }
@@ -98,7 +113,15 @@ fn retry<Ok, Err>(fun: impl Fn() -> Result<Ok, Err>, times: usize) -> Result<Ok,
     fun()
 }
 
-fn download_dataset<U: IntoUrl>(url: U) -> anyhow::Result<Cursor<Bytes>> {
+fn download_object(
+    bucket: &Bucket,
+    credentials: &Credentials,
+    object: &str,
+) -> anyhow::Result<Cursor<Bytes>> {
+    let presigned_url_duration = Duration::from_secs(60 * 60);
+    let action = bucket.get_object(Some(&credentials), object);
+    let url = action.sign(presigned_url_duration);
+
     let bytes =
         reqwest::blocking::Client::builder().timeout(None).build()?.get(url).send()?.bytes()?;
     Ok(Cursor::new(bytes))
