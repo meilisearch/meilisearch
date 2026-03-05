@@ -1,5 +1,6 @@
 use std::env;
 use std::io::{stderr, LineWriter, Write};
+use std::net::ToSocketAddrs;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -195,11 +196,36 @@ async fn run_http(
             .disable_signals()
             .keep_alive(KeepAlive::Os);
 
-    if let Some(config) = opt_clone.get_ssl_config()? {
-        http_server.bind_rustls_0_23(opt_clone.http_addr, config)?.run().await?;
+    let http_addr = opt_clone.http_addr.clone();
+
+    let server = if let Some(config) = opt_clone.get_ssl_config()? {
+        http_server.bind_rustls_0_23(opt_clone.http_addr, config)?
     } else {
-        http_server.bind(&opt_clone.http_addr)?.run().await?;
-    }
+        http_server.bind(&opt_clone.http_addr)?
+    };
+
+    let _tunnel_handle = if opt_clone.experimental_tunnel {
+        let local_addr = http_addr
+            .to_socket_addrs()?
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("could not resolve http address: {}", http_addr))?;
+        let instance_uid = std::fs::read_to_string(opt_clone.db_path.join("instance-uid"))
+            .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+        let subdomain = instance_uid.rsplit('-').next().unwrap_or(&instance_uid);
+        let client = burrow_client::TunnelClient::new("wss://new.meilisearch.link", local_addr)
+            .subdomain(subdomain);
+        match client.connect().await {
+            Ok(handle) => Some(handle),
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to connect tunnel, continuing without it");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    server.run().await?;
     Ok(())
 }
 
@@ -229,6 +255,12 @@ pub fn print_launch_resume(opt: &Opt, analytics: Analytics, config_read_from: Op
     );
     eprintln!("Database path:\t\t{:?}", opt.db_path);
     eprintln!("Server listening on:\t\"{}://{}\"", protocol, opt.http_addr);
+    if opt.experimental_tunnel {
+        let instance_uid = std::fs::read_to_string(opt.db_path.join("instance-uid"))
+            .unwrap_or_else(|_| String::from("unknown"));
+        let subdomain = instance_uid.rsplit('-').next().unwrap_or(&instance_uid);
+        eprintln!("Public URL:\t\t\"https://{}.meilisearch.link\"", subdomain);
+    }
     eprintln!("Environment:\t\t{:?}", opt.env);
     eprintln!("Commit SHA:\t\t{:?}", build_info.commit_sha1.unwrap_or("unknown"));
     eprintln!(
