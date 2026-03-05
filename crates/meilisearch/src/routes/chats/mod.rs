@@ -89,6 +89,11 @@ pub struct ChatsParam {
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 200, description = "Chat workspace retrieved.", content_type = "application/json", example = json!(
+            {
+                "uid": "my-workspace"
+            }
+        )),
     ),
 )]
 pub async fn get_chat(
@@ -128,6 +133,7 @@ pub async fn get_chat(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 204, description = "Chat workspace deleted."),
     ),
 )]
 pub async fn delete_chat(
@@ -183,6 +189,16 @@ pub struct ChatWorkspaceView {
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 200, description = "Chat workspaces retrieved.", content_type = "application/json", example = json!(
+            {
+                "results": [
+                    { "uid": "my-workspace" }
+                ],
+                "offset": 0,
+                "limit": 20,
+                "total": 1
             }
         )),
     ),

@@ -43,6 +43,20 @@ use crate::extractors::authentication::GuardedData;
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "My super system prompt",
+                    "searchDescription": "My super search tool description",
+                    "searchQParam": "My awesome q search parameter description",
+                    "searchIndexUidParam": "My incredible index uid param description"
+                }
+            }
+            
+        )),
     ),
 )]
 pub async fn get_settings(
@@ -91,6 +105,20 @@ pub async fn get_settings(
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
+        )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "My super system prompt",
+                    "searchDescription": "My super search tool description",
+                    "searchQParam": "My awesome q search parameter description",
+                    "searchIndexUidParam": "My incredible index uid param description"
+                }
+            }
+            
         )),
     ),
 )]
@@ -217,6 +245,20 @@ pub async fn patch_settings(
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
+        )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "default system prompt",
+                    "searchDescription": "default search tool description",
+                    "searchQParam": "default q search parameter description",
+                    "searchIndexUidParam": "default index uid param description"
+                }
+            }
+            
         )),
     ),
 )]

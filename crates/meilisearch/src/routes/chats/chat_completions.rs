@@ -86,6 +86,46 @@ use crate::search_queue::SearchQueue;
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 200, description = "Start a conversation.", content_type = "application/json", example = json!(
+            {
+                "id": "chatcmpl-abc123",
+                "choices": [
+                  {
+                    "index": 0,
+                    "message": {
+                      "content": "After searching the Steam database, here are some game recommendations related to your query:\n\n1. **Game Dev Tycoon**: This game might interest you, as it involves developing games, which could resonate with your work as a developer working on selling a search engine. It is a casual, strategy, and simulation game where you simulate a game development studio.\n\n2. **Mad Games Tycoon**: Another game that could be relevant is Mad Games Tycoon. In this game, you build up your own games, similar to the process of creating and selling software, which could provide insights and inspiration for your work.\n\n3. **Airline Tycoon 2**: While not directly related to search engines, Airline Tycoon 2 involves strategic decision-making and business management, which could offer valuable lessons for selling a product like a search engine.\n\nThese games provide a mix of strategic thinking, simulation, and development aspects that might appeal to you as a developer working on selling a search engine.",
+                      "refusal": null,
+                      "tool_calls": null,
+                      "role": "assistant",
+                      "function_call": null,
+                      "audio": null
+                    },
+                    "finish_reason": "stop",
+                    "logprobs": null
+                  }
+                ],
+                "created": 1747922647,
+                "model": "gpt-3.5-turbo-0125",
+                "service_tier": "default",
+                "system_fingerprint": null,
+                "object": "chat.completion",
+                "usage": {
+                  "prompt_tokens": 1515,
+                  "completion_tokens": 197,
+                  "total_tokens": 1712,
+                  "prompt_tokens_details": {
+                    "audio_tokens": 0,
+                    "cached_tokens": 0
+                  },
+                  "completion_tokens_details": {
+                    "accepted_prediction_tokens": 0,
+                    "audio_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                  }
+                }
+              }
+        )),
     ),
 )]
 pub async fn chat(
