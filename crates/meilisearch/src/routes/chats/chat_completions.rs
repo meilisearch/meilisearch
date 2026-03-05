@@ -38,6 +38,7 @@ use meilisearch_types::{Document, Index};
 use serde::Deserialize;
 use serde_json::json;
 use tokio::runtime::Handle;
+use utoipa::OpenApi;
 use tokio::sync::mpsc::error::SendError;
 
 use super::chat_completion_analytics::ChatCompletionAggregator;
@@ -62,11 +63,34 @@ use crate::routes::indexes::search::search_kind;
 use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
 use crate::search_queue::SearchQueue;
 
+#[derive(OpenApi)]
+#[openapi(
+    paths(chat),
+    tags((
+        name = "Chats",
+        description = "The `/chats` route allows you to manage chat workspaces and interact with LLM-powered chat completions that can search your Meilisearch indexes.",
+    )),
+)]
+pub struct ChatCompletionsApi;
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(chat)));
 }
 
-/// Get a chat completion
+/// Chat completions
+///
+/// Send a chat completion request. The LLM can automatically search your Meilisearch indexes to provide relevant answers. Supports both streamed and non-streamed responses.
+#[utoipa::path(
+    post,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chatCompletions", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
+    request_body(content = serde_json::Value, description = "A chat completion request (OpenAI-compatible format)", content_type = "application/json"),
+    responses(
+        (status = 200, description = "Chat completion response (streamed or JSON)", content_type = "application/json"),
+    )
+)]
 async fn chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,

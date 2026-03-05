@@ -95,6 +95,7 @@ mod webhooks;
         (path = "/export", api = export::ExportApi),
         (path = "/network", api = network::NetworkApi),
         (path = "/webhooks", api = webhooks::WebhooksApi),
+        (path = "/chats", api = chats::ChatApi),
     ),
     paths(get_health, get_version, get_stats),
     tags(
@@ -110,7 +111,7 @@ mod webhooks;
         url = "http://localhost:7700",
         description = "Local server.",
     )),
-    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, ListFields, ListFieldsFilter))
+    components(schemas(PaginationView<KeyView>, PaginationView<IndexView>, IndexView, DocumentDeletionByFilter, AllBatches, BatchStats, ProgressStepView, ProgressView, BatchView, RuntimeTogglableFeatures, SwapIndexesPayload, DocumentEditionByFunction, MergeFacets, FederationOptions, SearchQueryWithIndex, Federation, FederatedSearch, FederatedSearchResult, SearchResults, SearchResultWithIndex, SimilarQuery, SimilarResult, PaginationView<serde_json::Value>, BrowseQuery, UpdateIndexRequest, IndexUid, IndexCreateRequest, KeyView, Action, CreateApiKey, UpdateStderrLogs, LogMode, GetLogs, IndexStats, Stats, HealthStatus, HealthResponse, VersionResponse, Code, ErrorType, AllTasks, TaskView, Status, DetailsView, ResponseError, Settings<Unchecked>, Settings<Checked>, TypoSettings, MinWordSizeTyposSetting, FacetingSettings, PaginationSettings, SummarizedTaskView, Kind, Network, Remote, Shard, FilterableAttributesRule, FilterableAttributesPatterns, AttributePatterns, FilterableAttributesFeatures, FilterFeatures, Export, WebhookSettings, WebhookResults, WebhookWithMetadataRedactedAuthorization, meilisearch_types::milli::vector::VectorStoreBackend, ListFields, ListFieldsFilter, PaginationView<chats::ChatWorkspaceView>, chats::ChatWorkspaceView, chats::settings::ChatWorkspaceSettings, chats::settings::ChatCompletionSource, chats::settings::ChatPrompts))
 )]
 pub struct MeilisearchApi;
 

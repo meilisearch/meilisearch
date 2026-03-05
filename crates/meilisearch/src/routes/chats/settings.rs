@@ -14,12 +14,22 @@ use meilisearch_types::features::{
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{OpenApi, ToSchema};
 
 use super::ChatsParam;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(get_settings, patch_settings, reset_settings),
+    tags((
+        name = "Chats",
+        description = "The `/chats` route allows you to manage chat workspaces and interact with LLM-powered chat completions that can search your Meilisearch indexes.",
+    )),
+)]
+pub struct ChatSettingsApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -30,6 +40,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// Get chat workspace settings
+///
+/// Get the settings of a specific chat workspace.
+#[utoipa::path(
+    get,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chats.settings.get", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
+    responses(
+        (status = 200, description = "The chat workspace settings", content_type = "application/json"),
+        (status = 404, description = "Chat workspace not found", body = ResponseError, content_type = "application/json"),
+    )
+)]
 async fn get_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_GET }>,
@@ -54,6 +78,20 @@ async fn get_settings(
     Ok(HttpResponse::Ok().json(settings))
 }
 
+/// Update chat workspace settings
+///
+/// Partially update the settings of a specific chat workspace. Unspecified fields are left unchanged.
+#[utoipa::path(
+    patch,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chats.settings.update", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
+    request_body = ChatWorkspaceSettings,
+    responses(
+        (status = 200, description = "The updated chat workspace settings", content_type = "application/json"),
+    )
+)]
 async fn patch_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_UPDATE }>,
@@ -155,6 +193,20 @@ async fn patch_settings(
     Ok(HttpResponse::Ok().json(settings))
 }
 
+/// Reset chat workspace settings
+///
+/// Reset the settings of a specific chat workspace to their default values.
+#[utoipa::path(
+    delete,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chats.settings.update", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
+    responses(
+        (status = 200, description = "The default chat workspace settings", content_type = "application/json"),
+        (status = 404, description = "Chat workspace not found", body = ResponseError, content_type = "application/json"),
+    )
+)]
 async fn reset_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_UPDATE }>,

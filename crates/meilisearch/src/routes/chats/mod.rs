@@ -12,9 +12,9 @@ use meilisearch_types::keys::actions;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::debug;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::{IntoParams, OpenApi, ToSchema};
 
-use super::Pagination;
+use super::{Pagination, PaginationView};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::PAGINATION_DEFAULT_LIMIT;
@@ -25,6 +25,20 @@ mod config;
 mod errors;
 pub mod settings;
 mod utils;
+
+#[derive(OpenApi)]
+#[openapi(
+    nest(
+        (path = "/{workspace_uid}/chat/completions", api = chat_completions::ChatCompletionsApi),
+        (path = "/{workspace_uid}/settings", api = settings::ChatSettingsApi),
+    ),
+    paths(list_workspaces, get_chat, delete_chat),
+    tags((
+        name = "Chats",
+        description = "The `/chats` route allows you to manage chat workspaces and interact with LLM-powered chat completions that can search your Meilisearch indexes.",
+    )),
+)]
+pub struct ChatApi;
 
 /// The function name to report search progress.
 /// This function is used to report on what meilisearch is
@@ -64,6 +78,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// Get a chat workspace
+///
+/// Get information about a specific chat workspace by its unique identifier.
+#[utoipa::path(
+    get,
+    path = "/{workspace_uid}",
+    tag = "Chats",
+    security(("Bearer" = ["chats.get", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
+    responses(
+        (status = 200, description = "The chat workspace", content_type = "application/json"),
+        (status = 404, description = "Chat workspace not found", body = ResponseError, content_type = "application/json"),
+    )
+)]
 pub async fn get_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_GET }>, Data<IndexScheduler>>,
     workspace_uid: web::Path<String>,
@@ -78,6 +106,20 @@ pub async fn get_chat(
     }
 }
 
+/// Delete a chat workspace
+///
+/// Delete a chat workspace and all its associated settings.
+#[utoipa::path(
+    delete,
+    path = "/{workspace_uid}",
+    tag = "Chats",
+    security(("Bearer" = ["chats.delete", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace")),
+    responses(
+        (status = 204, description = "The chat workspace has been deleted"),
+        (status = 404, description = "Chat workspace not found", body = ResponseError, content_type = "application/json"),
+    )
+)]
 pub async fn delete_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_DELETE }>, Data<IndexScheduler>>,
     workspace_uid: web::Path<String>,
@@ -121,6 +163,19 @@ pub struct ChatWorkspaceView {
     pub uid: String,
 }
 
+/// List chat workspaces
+///
+/// List all chat workspaces with pagination.
+#[utoipa::path(
+    get,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chats.get", "*"])),
+    params(ListChats),
+    responses(
+        (status = 200, description = "Paginated list of chat workspaces", body = PaginationView<ChatWorkspaceView>, content_type = "application/json"),
+    )
+)]
 pub async fn list_workspaces(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_GET }>, Data<IndexScheduler>>,
     paginate: AwebQueryParameter<ListChats, DeserrQueryParamError>,
