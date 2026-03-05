@@ -72,6 +72,24 @@ pub struct ChatsParam {
     params(
         ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    ),
 )]
 pub async fn get_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_GET }>, Data<IndexScheduler>>,
@@ -92,6 +110,24 @@ pub async fn get_chat(
     security(("Bearer" = ["chats.delete", "*"])),
     params(
         ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
     ),
 )]
 pub async fn delete_chat(
@@ -140,6 +176,16 @@ pub struct ChatWorkspaceView {
 /// List chat workspaces
 #[routes::path(
     security(("Bearer" = ["chats.get", "*"])),
+    responses(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    ),
 )]
 pub async fn list_workspaces(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHATS_GET }>, Data<IndexScheduler>>,

@@ -69,6 +69,24 @@ use crate::search_queue::SearchQueue;
         ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     request_body(content = Map<String, Value>),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    ),
 )]
 pub async fn chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,

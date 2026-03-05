@@ -26,6 +26,24 @@ use crate::extractors::authentication::GuardedData;
     params(
         ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+    ),
 )]
 pub async fn get_settings(
     index_scheduler: GuardedData<
@@ -56,6 +74,24 @@ pub async fn get_settings(
     security(("Bearer" = ["chats.settings.update", "*"])),
     params(
         ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
     ),
 )]
 pub async fn patch_settings(
@@ -164,6 +200,24 @@ pub async fn patch_settings(
     security(("Bearer" = ["chats.settings.update", "*"])),
     params(
         ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
     ),
 )]
 pub async fn reset_settings(
