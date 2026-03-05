@@ -21,6 +21,9 @@
 ## ... pending
 *.pending-snap
 
+# Python
+__pycache__/
+
 # Tmp files
 .tmp*
 

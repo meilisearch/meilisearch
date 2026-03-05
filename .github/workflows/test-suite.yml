@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
-        features: ["", "--features enterprise"]
+        features: ["", "--features enterprise", "--features cluster"]
     steps:
       - uses: actions/checkout@v5
       - name: check free space before
@@ -120,6 +120,39 @@ jobs:
         run: |
           cargo test --workspace --locked --features "$(cargo xtask list-features --exclude-feature cuda,test-ollama)"
 
+  cluster-integration:
+    name: Cluster integration tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
+      - uses: dtolnay/rust-toolchain@1.91.1
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.8.0
+        with:
+          key: cluster
+      - name: Build cluster binary
+        run: cargo build --locked --features cluster -p meilisearch
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Python dependencies
+        run: |
+          python -m venv /tmp/cluster-test-venv
+          /tmp/cluster-test-venv/bin/pip install -r tests/cluster_scenarios/requirements.txt
+          /tmp/cluster-test-venv/bin/pip install pytest-timeout
+      - name: Run cluster integration tests
+        env:
+          MEILI_BINARY: ${{ github.workspace }}/target/debug/meilisearch
+        run: /tmp/cluster-test-venv/bin/python -m pytest tests/cluster_scenarios/ -v --timeout=180
+
   ollama-ubuntu:
     name: Test with Ollama
     runs-on: ubuntu-22.04
@@ -203,7 +236,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        features: ["", "--features enterprise"]
+        features: ["", "--features enterprise", "--features cluster"]
     steps:
       - uses: actions/checkout@v5
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709

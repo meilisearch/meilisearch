@@ -1,0 +1,3 @@
+pytest>=7.0
+pytest-timeout>=2.0
+requests>=2.28

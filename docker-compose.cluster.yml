@@ -1,0 +1,66 @@
+# 3-node Meilisearch cluster for local testing.
+#
+# Build:  docker compose -f docker-compose.cluster.yml build
+# Start:  docker compose -f docker-compose.cluster.yml up
+# Verify: curl -s http://localhost:7700/cluster/status -H "Authorization: Bearer masterkey" | jq
+# Stop:   docker compose -f docker-compose.cluster.yml down -v
+
+services:
+  node1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        EXTRA_ARGS: "--features cluster"
+    environment:
+      MEILI_MASTER_KEY: masterkey
+      MEILI_HTTP_ADDR: "0.0.0.0:7700"
+      MEILI_CLUSTER_CREATE: "true"
+      MEILI_CLUSTER_BIND: "0.0.0.0:7701"
+      MEILI_CLUSTER_ADDR: "node1"
+      MEILI_CLUSTER_NODE_ID: "1"
+    ports:
+      - "7700:7700"
+    volumes:
+      - node1-data:/meili_data
+
+  node2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        EXTRA_ARGS: "--features cluster"
+    environment:
+      MEILI_MASTER_KEY: masterkey
+      MEILI_HTTP_ADDR: "0.0.0.0:7700"
+      MEILI_CLUSTER_JOIN: "node1:7701"
+      MEILI_CLUSTER_BIND: "0.0.0.0:7701"
+      MEILI_CLUSTER_ADDR: "node2"
+      MEILI_CLUSTER_NODE_ID: "2"
+    ports:
+      - "7710:7700"
+    depends_on:
+      node1:
+        condition: service_started
+
+  node3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        EXTRA_ARGS: "--features cluster"
+    environment:
+      MEILI_MASTER_KEY: masterkey
+      MEILI_HTTP_ADDR: "0.0.0.0:7700"
+      MEILI_CLUSTER_JOIN: "node1:7701"
+      MEILI_CLUSTER_BIND: "0.0.0.0:7701"
+      MEILI_CLUSTER_ADDR: "node3"
+      MEILI_CLUSTER_NODE_ID: "3"
+    ports:
+      - "7720:7700"
+    depends_on:
+      node1:
+        condition: service_started
+
+volumes:
+  node1-data:

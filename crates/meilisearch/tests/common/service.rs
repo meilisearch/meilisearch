@@ -59,8 +59,31 @@ impl Service {
         self.request(req).await
     }
 
+    /// Send a test post request and return response headers alongside body and status.
+    pub async fn post_with_response_headers(
+        &self,
+        url: impl AsRef<str>,
+        body: Value,
+    ) -> (Value, StatusCode, std::collections::BTreeMap<String, String>) {
+        let mut req = test::TestRequest::post().uri(url.as_ref());
+        req = self.encode(req, body, Encoder::Plain);
+        self.request_with_headers(req).await
+    }
+
     pub async fn get(&self, url: impl AsRef<str>) -> (Value, StatusCode) {
         let req = test::TestRequest::get().uri(url.as_ref());
+        self.request(req).await
+    }
+
+    pub async fn get_with_headers(
+        &self,
+        url: impl AsRef<str>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req = test::TestRequest::get().uri(url.as_ref());
+        for header in headers {
+            req = req.insert_header(header);
+        }
         self.request(req).await
     }
 
@@ -110,6 +133,17 @@ impl Service {
 
     pub async fn patch(&self, url: impl AsRef<str>, body: Value) -> (Value, StatusCode) {
         self.patch_encoded(url, body, Encoder::Plain).await
+    }
+
+    /// Send a test patch request and return response headers alongside body and status.
+    pub async fn patch_with_response_headers(
+        &self,
+        url: impl AsRef<str>,
+        body: Value,
+    ) -> (Value, StatusCode, std::collections::BTreeMap<String, String>) {
+        let mut req = test::TestRequest::patch().uri(url.as_ref());
+        req = self.encode(req, body, Encoder::Plain);
+        self.request_with_headers(req).await
     }
 
     pub async fn patch_encoded(
@@ -173,6 +207,9 @@ impl Service {
                 logs_route_handle: Data::new(route_layer_handle),
                 logs_stderr_handle: Data::new(stderr_layer_handle),
                 analytics: Data::new(Analytics::no_analytics()),
+                cluster_state: Data::new(meilisearch::cluster::ClusterState::from_opts(
+                    &self.options,
+                )),
             },
             self.options.clone(),
             true,
@@ -180,7 +217,15 @@ impl Service {
         .await
     }
 
-    pub async fn request(&self, mut req: test::TestRequest) -> (Value, StatusCode) {
+    pub async fn request(&self, req: test::TestRequest) -> (Value, StatusCode) {
+        let (value, code, _headers) = self.request_with_headers(req).await;
+        (value, code)
+    }
+
+    pub async fn request_with_headers(
+        &self,
+        mut req: test::TestRequest,
+    ) -> (Value, StatusCode, std::collections::BTreeMap<String, String>) {
         let app = self.init_web_app().await;
 
         if let Some(api_key) = &self.api_key {
@@ -190,9 +235,17 @@ impl Service {
         let res = test::call_service(&app, req).await;
         let status_code = res.status();
 
+        let headers: std::collections::BTreeMap<String, String> = res
+            .headers()
+            .iter()
+            .map(|(name, value)| {
+                (name.as_str().to_string(), value.to_str().unwrap_or("").to_string())
+            })
+            .collect();
+
         let body = test::read_body(res).await;
         let response = serde_json::from_slice(&body).unwrap_or_default();
-        (response, status_code)
+        (response, status_code, headers)
     }
 
     fn encode(&self, req: TestRequest, body: Value, encoder: Encoder) -> TestRequest {

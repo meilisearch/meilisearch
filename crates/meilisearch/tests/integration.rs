@@ -1,5 +1,7 @@
 mod auth;
+mod barrier;
 mod batches;
+mod cluster;
 mod common;
 mod dashboard;
 mod documents;

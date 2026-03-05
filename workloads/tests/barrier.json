@@ -1,0 +1,75 @@
+{
+  "type": "test",
+  "name": "barrier",
+  "commands": [
+    {
+      "description": "Add documents to movies index",
+      "route": "indexes/movies/documents?primaryKey=id",
+      "method": "POST",
+      "body": {
+        "inline": [
+          {"id": 1, "title": "The Matrix"},
+          {"id": 2, "title": "Inception"},
+          {"id": 3, "title": "Interstellar"}
+        ]
+      },
+      "expectedStatus": 202,
+      "register": {
+        "task_uid": "/taskUid"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "description": "Search with barrier for completed task (should return 200)",
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {"q": "matrix"}
+      },
+      "headers": {
+        "X-Meili-Barrier": "movies={{ task_uid }}"
+      },
+      "expectedStatus": 200,
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "description": "Add more documents (don't wait for task)",
+      "route": "indexes/movies/documents?primaryKey=id",
+      "method": "POST",
+      "body": {
+        "inline": [
+          {"id": 4, "title": "The Dark Knight"},
+          {"id": 5, "title": "Pulp Fiction"}
+        ]
+      },
+      "expectedStatus": 202,
+      "register": {
+        "task_uid_2": "/taskUid"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "description": "Search with barrier for pending task (should block then return 200)",
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {"q": ""}
+      },
+      "headers": {
+        "X-Meili-Barrier": "movies={{ task_uid_2 }}"
+      },
+      "expectedStatus": 200,
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "description": "Search without barrier (normal behavior)",
+      "route": "indexes/movies/search",
+      "method": "POST",
+      "body": {
+        "inline": {"q": "inception"}
+      },
+      "expectedStatus": 200,
+      "synchronous": "WaitForResponse"
+    }
+  ]
+}

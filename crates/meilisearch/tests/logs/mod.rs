@@ -59,6 +59,9 @@ async fn basic_test_log_stream_route() {
             logs_route_handle: Data::new(route_layer_handle),
             logs_stderr_handle: Data::new(stderr_layer_handle),
             analytics: Data::new(Analytics::no_analytics()),
+            cluster_state: Data::new(meilisearch::cluster::ClusterState::from_opts(
+                &server.service.options,
+            )),
         },
         server.service.options.clone(),
         true,
