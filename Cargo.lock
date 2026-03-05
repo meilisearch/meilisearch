@@ -865,8 +865,9 @@ dependencies = [
 
 [[package]]
 name = "bumparaw-collections"
-version = "0.1.4"
-source = "git+https://github.com/luusl/bumparaw-collections.git?branch=Add-ARMv7-support#9f32da1876384f2e626e897022b1bbd46e62c68c"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f9dacf8e6123982e75cbf09bfabe731e8a09cbbae548940ad2087159d9b3126"
 dependencies = [
  "allocator-api2",
  "bitpacking",
