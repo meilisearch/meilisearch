@@ -17,7 +17,7 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
-use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
+use crate::routes::{accepted_response_with_barrier, get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
 /// This macro generates the routes for the settings.
@@ -120,7 +120,12 @@ macro_rules! make_setting_route {
                 index_uid: web::Path<String>,
                 req: HttpRequest,
                 opt: web::Data<Opt>,
+                cluster: web::Data<$crate::cluster::ClusterState>,
             ) -> Result<HttpResponse, ResponseError> {
+                if let Some(resp) = cluster.forward_if_follower(&req, &[]).await? {
+                    return Ok(resp);
+                }
+
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
                 let new_settings = Settings { $attr: Setting::Reset.into(), ..Default::default() };
@@ -128,7 +133,7 @@ macro_rules! make_setting_route {
                 let task = register_new_settings(new_settings, true, index_scheduler, &req, index_uid, opt).await?;
 
                 debug!(returns = ?task, "Delete settings");
-                Ok(HttpResponse::Accepted().json(task))
+                Ok(accepted_response_with_barrier(&task))
             }
 
 
@@ -177,7 +182,15 @@ macro_rules! make_setting_route {
                 req: HttpRequest,
                 opt: web::Data<Opt>,
                 analytics: web::Data<Analytics>,
+                cluster: web::Data<$crate::cluster::ClusterState>,
             ) -> std::result::Result<HttpResponse, ResponseError> {
+                if cluster.is_follower() {
+                    let body_bytes = serde_json::to_vec(&body.0).unwrap_or_default();
+                    if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+                        return Ok(resp);
+                    }
+                }
+
                 let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
                 let body = body.into_inner();
@@ -200,7 +213,7 @@ macro_rules! make_setting_route {
                 let task = register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
 
                 debug!(returns = ?task, "Update settings");
-                Ok(HttpResponse::Accepted().json(task))
+                Ok(accepted_response_with_barrier(&task))
             }
 
 
@@ -544,7 +557,15 @@ pub async fn update_all(
     req: HttpRequest,
     opt: Data<Opt>,
     analytics: Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&body.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let new_settings: Settings<Unchecked> = body.into_inner();
@@ -599,7 +620,7 @@ pub async fn update_all(
         register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
 
     debug!(returns = ?task, "Update all settings");
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 async fn register_new_settings(
@@ -770,7 +791,12 @@ pub async fn delete_all(
     index_uid: web::Path<String>,
     req: HttpRequest,
     opt: web::Data<Opt>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = cluster.forward_if_follower(&req, &[]).await? {
+        return Ok(resp);
+    }
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let new_settings = Settings::cleared().into_unchecked();
@@ -779,7 +805,7 @@ pub async fn delete_all(
         register_new_settings(new_settings, true, index_scheduler, &req, index_uid, opt).await?;
 
     debug!(returns = ?task, "Delete all settings");
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 fn validate_settings(

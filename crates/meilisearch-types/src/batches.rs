@@ -32,6 +32,10 @@ pub struct Batch {
     pub enqueued_at: Option<BatchEnqueuedAt>,
     #[serde(default = "default_stop_reason")]
     pub stop_reason: String,
+    /// SHA-256 checksum of batch results for cluster divergence detection.
+    /// Computed from batch UID + task UIDs + final statuses + error messages.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checksum: Option<String>,
 }
 
 pub fn default_stop_reason() -> String {
@@ -50,6 +54,7 @@ impl PartialEq for Batch {
             finished_at,
             enqueued_at,
             stop_reason,
+            checksum,
         } = self;
 
         *uid == other.uid
@@ -61,6 +66,7 @@ impl PartialEq for Batch {
             && finished_at == &other.finished_at
             && enqueued_at == &other.enqueued_at
             && stop_reason == &other.stop_reason
+            && checksum == &other.checksum
     }
 }
 

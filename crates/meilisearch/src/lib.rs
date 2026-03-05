@@ -4,6 +4,8 @@
 #[macro_use]
 pub mod error;
 pub mod analytics;
+pub mod barrier;
+pub mod cluster;
 #[macro_use]
 pub mod extractors;
 pub mod metrics;
@@ -103,7 +105,15 @@ fn is_empty_db(db_path: impl AsRef<Path>) -> bool {
         true
     // if we encounter an error or if the db is a file we consider the db non empty
     } else if let Ok(dir) = db_path.read_dir() {
-        dir.count() == 0
+        // Ignore the `cluster/` subdirectory when checking emptiness.
+        // During cluster-join, the Raft LMDB is created in db_path/cluster/ before
+        // the IndexScheduler is initialized. We don't want those files to make
+        // the db appear non-empty.
+        dir.filter(|entry| {
+            entry.as_ref().map(|e| e.file_name() != "cluster").unwrap_or(true)
+        })
+        .count()
+            == 0
     } else {
         true
     }
@@ -149,6 +159,10 @@ pub fn create_app(
     let app = actix_web::App::new()
         .configure(|s| configure_data(s, services, &opt))
         .configure(<routes::MeilisearchApi as Routes>::configure)
+        .configure(|cfg| {
+            cfg.service(web::scope("/cluster/status").configure(routes::cluster_status::configure));
+            cfg.service(web::scope("/cluster").configure(routes::cluster_status::configure_health));
+        })
         .configure(|s| dashboard(s, enable_dashboard));
 
     #[cfg(feature = "swagger")]
@@ -159,7 +173,7 @@ pub fn create_app(
         cfg.service(Scalar::with_url("/scalar", openapi.clone()));
     });
 
-    let app = app.wrap(middleware::RouteMetrics);
+    let app = app.wrap(middleware::RouteMetrics).wrap(middleware::ClusterAuthGuard);
     app.wrap(
         Cors::default()
             .send_wildcard()
@@ -553,7 +567,7 @@ fn import_dump(
     auth.raw_delete_all_keys()?;
     for key in dump_reader.keys()? {
         let key = key?;
-        auth.raw_insert_key(key.clone())?;
+        auth.raw_insert_key(key.clone(), 0)?;
         keys.push(key);
     }
 
@@ -746,6 +760,7 @@ pub fn configure_data(config: &mut web::ServiceConfig, services: ServicesData, o
         logs_route_handle,
         logs_stderr_handle,
         analytics,
+        cluster_state,
     } = services;
 
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
@@ -754,6 +769,7 @@ pub fn configure_data(config: &mut web::ServiceConfig, services: ServicesData, o
         .app_data(auth)
         .app_data(search_queue)
         .app_data(analytics)
+        .app_data(cluster_state)
         .app_data(personalization_service)
         .app_data(logs_route_handle)
         .app_data(logs_stderr_handle)
@@ -827,4 +843,5 @@ pub struct ServicesData {
     pub logs_route_handle: Data<LogRouteHandle>,
     pub logs_stderr_handle: Data<LogStderrHandle>,
     pub analytics: Data<Analytics>,
+    pub cluster_state: Data<cluster::ClusterState>,
 }

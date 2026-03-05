@@ -75,7 +75,33 @@ const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
 const MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY: &str =
     "MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY";
 
+const MEILI_BARRIER_TIMEOUT_MS: &str = "MEILI_BARRIER_TIMEOUT_MS";
 const MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: &str = "MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS";
+
+// Cluster configuration (Phase 2 — manual role)
+const MEILI_CLUSTER_PEERS: &str = "MEILI_CLUSTER_PEERS";
+const MEILI_CLUSTER_ROLE: &str = "MEILI_CLUSTER_ROLE";
+const MEILI_NODE_ID: &str = "MEILI_NODE_ID";
+const MEILI_CLUSTER_ADDR: &str = "MEILI_CLUSTER_ADDR";
+const MEILI_CLUSTER_SECRET: &str = "MEILI_CLUSTER_SECRET";
+
+// Cluster configuration (Phase 3 — Raft consensus)
+const MEILI_CLUSTER_CREATE: &str = "MEILI_CLUSTER_CREATE";
+const MEILI_CLUSTER_JOIN: &str = "MEILI_CLUSTER_JOIN";
+const MEILI_CLUSTER_BIND: &str = "MEILI_CLUSTER_BIND";
+const MEILI_CLUSTER_NODE_ID: &str = "MEILI_CLUSTER_NODE_ID";
+const MEILI_CLUSTER_HEARTBEAT_MS: &str = "MEILI_CLUSTER_HEARTBEAT_MS";
+const MEILI_CLUSTER_ELECTION_TIMEOUT_MIN_MS: &str = "MEILI_CLUSTER_ELECTION_TIMEOUT_MIN_MS";
+const MEILI_CLUSTER_ELECTION_TIMEOUT_MAX_MS: &str = "MEILI_CLUSTER_ELECTION_TIMEOUT_MAX_MS";
+const MEILI_CLUSTER_ACCEPT_TIMEOUT_MS: &str = "MEILI_CLUSTER_ACCEPT_TIMEOUT_MS";
+const MEILI_CLUSTER_MAX_MESSAGE_SIZE_MB: &str = "MEILI_CLUSTER_MAX_MESSAGE_SIZE_MB";
+const MEILI_CLUSTER_RAFT_DB_SIZE_MB: &str = "MEILI_CLUSTER_RAFT_DB_SIZE_MB";
+const MEILI_CLUSTER_MAX_TRANSFER_FAILURES: &str = "MEILI_CLUSTER_MAX_TRANSFER_FAILURES";
+const MEILI_CLUSTER_MAX_REPLICATION_LAG: &str = "MEILI_CLUSTER_MAX_REPLICATION_LAG";
+const MEILI_CLUSTER_WRITE_TIMEOUT_SECS: &str = "MEILI_CLUSTER_WRITE_TIMEOUT_SECS";
+const MEILI_CLUSTER_SNAPSHOT_MAX_COMPACTION_AGE_S: &str = "MEILI_CLUSTER_SNAPSHOT_MAX_COMPACTION_AGE_S";
+const MEILI_CLUSTER_ENABLE_TEST_ENDPOINTS: &str = "MEILI_CLUSTER_ENABLE_TEST_ENDPOINTS";
+const MEILI_CLUSTER_TLS: &str = "MEILI_CLUSTER_TLS";
 
 // Related to S3 snapshots
 const MEILI_S3_BUCKET_URL: &str = "MEILI_S3_BUCKET_URL";
@@ -380,6 +406,12 @@ pub struct Opt {
     #[serde(default)]
     pub log_level: LogLevel,
 
+    /// Maximum time in milliseconds to wait for X-Meili-Barrier conditions
+    /// before returning HTTP 503. Used for read-after-write consistency.
+    #[clap(long, env = MEILI_BARRIER_TIMEOUT_MS, default_value_t = default_barrier_timeout_ms())]
+    #[serde(default = "default_barrier_timeout_ms")]
+    pub barrier_timeout_ms: u64,
+
     /// Experimental contains filter feature. For more information,
     /// see: <https://github.com/orgs/meilisearch/discussions/763>
     ///
@@ -522,6 +554,164 @@ pub struct Opt {
     #[clap(flatten)]
     pub s3_snapshot_options: Option<S3SnapshotOpts>,
 
+    /// Comma-separated list of peer URLs for cluster discovery.
+    /// Example: "http://node2:7700,http://node3:7700"
+    #[clap(long, env = MEILI_CLUSTER_PEERS)]
+    #[serde(default)]
+    pub cluster_peers: Option<String>,
+
+    /// This node's role in the cluster: "leader" or "follower".
+    /// When set, enables cluster mode. Followers forward write requests to the leader.
+    #[clap(long, env = MEILI_CLUSTER_ROLE)]
+    #[serde(default)]
+    pub cluster_role: Option<String>,
+
+    /// UUID identifying this node in the cluster.
+    /// Auto-generated if not set.
+    #[clap(long, env = MEILI_NODE_ID)]
+    #[serde(default)]
+    pub node_id: Option<String>,
+
+    /// Hostname or IP this node advertises to peers for both HTTP and QUIC traffic.
+    /// Required in Docker/Kubernetes where the bind address (0.0.0.0) is not reachable
+    /// by peers. Example: --cluster-addr node1
+    /// When set, the HTTP URL becomes http://{cluster-addr}:{http-port} and the QUIC
+    /// address becomes {cluster-addr}:{cluster-bind-port}.
+    /// When not set, the bind addresses are advertised directly, and peers that connect
+    /// with 0.0.0.0 addresses are auto-detected via the QUIC connection source IP.
+    #[clap(long, env = MEILI_CLUSTER_ADDR)]
+    #[serde(default)]
+    pub cluster_addr: Option<String>,
+
+    /// Shared secret for inter-cluster authentication.
+    /// Derived from the master key via HKDF if not set.
+    #[clap(long, env = MEILI_CLUSTER_SECRET)]
+    #[serde(default)]
+    pub cluster_secret: Option<String>,
+
+    /// Create a new Raft cluster. Generates a cluster key and bootstraps this node as leader.
+    /// Requires --cluster-bind.
+    #[clap(long, env = MEILI_CLUSTER_CREATE)]
+    #[serde(default)]
+    pub cluster_create: bool,
+
+    /// Join an existing Raft cluster using a bootstrap node address.
+    /// Format: "host:port" of any existing cluster node's QUIC bind address.
+    #[clap(long, env = MEILI_CLUSTER_JOIN)]
+    #[serde(default)]
+    pub cluster_join: Option<String>,
+
+    /// QUIC bind address for Raft cluster traffic (separate from HTTP).
+    /// Required when using --cluster-create or --cluster-join.
+    #[clap(long, env = MEILI_CLUSTER_BIND, default_value = "0.0.0.0:7701")]
+    #[serde(default)]
+    pub cluster_bind: Option<String>,
+
+
+    /// Numeric node ID for this Raft cluster member.
+    /// When 0 (default), the leader auto-assigns the next available ID on join.
+    /// For --cluster-create, 0 is always used as the leader ID.
+    /// Set explicitly only when you need deterministic IDs (e.g. tests).
+    #[clap(long, env = MEILI_CLUSTER_NODE_ID, alias = "cluster-raft-node-id", default_value = "0")]
+    #[serde(default, alias = "cluster_raft_node_id")]
+    pub cluster_node_id: u64,
+
+    /// Raft heartbeat interval in milliseconds.
+    #[clap(long, env = MEILI_CLUSTER_HEARTBEAT_MS, default_value = "500")]
+    #[serde(default = "default_heartbeat_ms")]
+    pub cluster_heartbeat_ms: u64,
+
+    /// Raft election timeout minimum in milliseconds.
+    #[clap(long, env = MEILI_CLUSTER_ELECTION_TIMEOUT_MIN_MS, default_value = "1500")]
+    #[serde(default = "default_election_timeout_min_ms")]
+    pub cluster_election_timeout_min_ms: u64,
+
+    /// Raft election timeout maximum in milliseconds.
+    #[clap(long, env = MEILI_CLUSTER_ELECTION_TIMEOUT_MAX_MS, default_value = "3000")]
+    #[serde(default = "default_election_timeout_max_ms")]
+    pub cluster_election_timeout_max_ms: u64,
+
+    /// Timeout in milliseconds for accepting all 4 QUIC streams from a peer.
+    #[clap(long, env = MEILI_CLUSTER_ACCEPT_TIMEOUT_MS, default_value = "10000")]
+    #[serde(default = "default_cluster_accept_timeout_ms")]
+    pub cluster_accept_timeout_ms: u64,
+
+    /// Maximum cluster message size in megabytes (for DML file transfers).
+    #[clap(long, env = MEILI_CLUSTER_MAX_MESSAGE_SIZE_MB, default_value = "512")]
+    #[serde(default = "default_cluster_max_message_size_mb")]
+    pub cluster_max_message_size_mb: u64,
+
+    /// LMDB map size in megabytes for the Raft state store.
+    #[clap(long, env = MEILI_CLUSTER_RAFT_DB_SIZE_MB, default_value = "256")]
+    #[serde(default = "default_cluster_raft_db_size_mb")]
+    pub cluster_raft_db_size_mb: u64,
+
+    /// Maximum consecutive file transfer failures before evicting a follower.
+    #[clap(long, env = MEILI_CLUSTER_MAX_TRANSFER_FAILURES, default_value = "3")]
+    #[serde(default = "default_cluster_max_transfer_failures")]
+    pub cluster_max_transfer_failures: u32,
+
+    /// Maximum replication lag (in log entries) before evicting a follower.
+    /// Set to 0 to disable lag-based eviction.
+    #[clap(long, env = MEILI_CLUSTER_MAX_REPLICATION_LAG, default_value = "10000")]
+    #[serde(default = "default_cluster_max_replication_lag")]
+    pub cluster_max_replication_lag: u64,
+
+    /// Timeout in seconds for Raft client_write proposals.
+    #[clap(long, env = MEILI_CLUSTER_WRITE_TIMEOUT_SECS, default_value = "10")]
+    #[serde(default = "default_cluster_write_timeout_secs")]
+    pub cluster_write_timeout_secs: u64,
+
+    /// Query a running cluster node's status and exit.
+    /// Format: URL of the node (e.g., "http://localhost:7700").
+    /// Requires --master-key if auth is enabled on the target node.
+    #[clap(long)]
+    #[serde(default)]
+    pub cluster_status_url: Option<String>,
+
+    /// Tell a running cluster node to gracefully leave and exit.
+    /// Format: URL of the node (e.g., "http://localhost:7700").
+    /// Requires --master-key if auth is enabled on the target node.
+    #[clap(long)]
+    #[serde(default)]
+    pub cluster_leave_url: Option<String>,
+
+    /// Print the cluster secret that would be derived from --master-key and exit.
+    /// Useful for scripting or verifying what secret a node would use.
+    #[clap(long)]
+    #[serde(default)]
+    pub cluster_show_secret: bool,
+
+    /// Wipe persisted cluster state (Raft log, metadata) and exit.
+    /// Use after a major version upgrade that changes the Raft log format.
+    /// The node can then re-create or re-join the cluster with --cluster-create/--cluster-join.
+    #[clap(long)]
+    #[serde(default)]
+    pub cluster_reset: bool,
+
+    /// Enable fault-injection test endpoints (/cluster/test/block-peer, etc.).
+    /// Only for testing — NEVER enable in production.
+    #[clap(long, env = MEILI_CLUSTER_ENABLE_TEST_ENDPOINTS)]
+    #[serde(default)]
+    pub cluster_enable_test_endpoints: bool,
+
+    /// Maximum age of the last LMDB compaction (seconds) before a snapshot transfer
+    /// triggers a fresh compaction. Compaction produces smaller files for transfer.
+    /// - Omit or set empty → never compact before snapshot (raw LMDB copy)
+    /// - 0 → always compact before snapshot (smallest transfer)
+    /// - N → compact only if last compaction was more than N seconds ago (default 300)
+    #[clap(long, env = MEILI_CLUSTER_SNAPSHOT_MAX_COMPACTION_AGE_S, default_value = "300")]
+    #[serde(default = "default_cluster_snapshot_max_compaction_age_s")]
+    pub cluster_snapshot_max_compaction_age_s: Option<u64>,
+
+    /// Enable TLS encryption on QUIC cluster transport. Derives a self-signed
+    /// certificate from the cluster secret — zero configuration, no PKI needed.
+    /// All nodes in the cluster must use the same setting.
+    /// Without this flag, uses plaintext QUIC with HMAC-SHA256 integrity only.
+    #[clap(long, env = MEILI_CLUSTER_TLS)]
+    #[serde(default)]
+    pub cluster_tls: bool,
+
     /// Set the path to a configuration file that should be used to setup the engine.
     /// Format must be TOML.
     #[clap(long)]
@@ -532,6 +722,28 @@ impl Opt {
     /// Whether analytics should be enabled or not.
     pub fn analytics(&self) -> bool {
         !self.no_analytics
+    }
+
+    /// Return the configured barrier timeout as a Duration.
+    pub fn barrier_timeout(&self) -> Duration {
+        Duration::from_millis(self.barrier_timeout_ms)
+    }
+
+    /// Returns true if this node is configured as a cluster follower.
+    pub fn is_cluster_follower(&self) -> bool {
+        self.cluster_role.as_deref() == Some("follower")
+    }
+
+    /// Returns the leader URL if this node is a follower.
+    /// The leader is identified as the first peer in cluster_peers.
+    pub fn leader_url(&self) -> Option<String> {
+        if !self.is_cluster_follower() {
+            return None;
+        }
+        self.cluster_peers
+            .as_ref()
+            .and_then(|peers| peers.split(',').next())
+            .map(|s| s.trim().to_string())
     }
 
     /// Build a new Opt from config file, env vars and cli args.
@@ -609,6 +821,7 @@ impl Opt {
             ignore_dump_if_db_exists: _,
             config_file_path: _,
             no_analytics,
+            barrier_timeout_ms,
             experimental_contains_filter,
             experimental_enable_metrics,
             experimental_search_queue_size,
@@ -626,6 +839,31 @@ impl Opt {
             experimental_personalization_api_key,
             experimental_allowed_ip_networks,
             s3_snapshot_options,
+            cluster_peers,
+            cluster_role,
+            node_id,
+            cluster_addr,
+            cluster_secret,
+            cluster_create,
+            cluster_join,
+            cluster_bind,
+            cluster_node_id,
+            cluster_heartbeat_ms,
+            cluster_election_timeout_min_ms,
+            cluster_election_timeout_max_ms,
+            cluster_accept_timeout_ms,
+            cluster_max_message_size_mb,
+            cluster_raft_db_size_mb,
+            cluster_max_transfer_failures,
+            cluster_max_replication_lag,
+            cluster_write_timeout_secs,
+            cluster_status_url: _,
+            cluster_leave_url: _,
+            cluster_show_secret: _,
+            cluster_reset: _,
+            cluster_enable_test_endpoints: _,
+            cluster_snapshot_max_compaction_age_s,
+            cluster_tls: _,
         } = self;
         export_to_env_if_not_present(MEILI_DB_PATH, db_path);
         export_to_env_if_not_present(MEILI_HTTP_ADDR, http_addr);
@@ -644,6 +882,7 @@ impl Opt {
         }
 
         export_to_env_if_not_present(MEILI_NO_ANALYTICS, no_analytics.to_string());
+        export_to_env_if_not_present(MEILI_BARRIER_TIMEOUT_MS, barrier_timeout_ms.to_string());
         export_to_env_if_not_present(
             MEILI_HTTP_PAYLOAD_SIZE_LIMIT,
             http_payload_size_limit.to_string(),
@@ -743,6 +982,72 @@ impl Opt {
             export_to_env_if_not_present(
                 MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS,
                 experimental_allowed_ip_networks,
+            );
+        }
+
+        // Cluster configuration
+        if let Some(cluster_peers) = cluster_peers {
+            export_to_env_if_not_present(MEILI_CLUSTER_PEERS, cluster_peers);
+        }
+        if let Some(cluster_role) = cluster_role {
+            export_to_env_if_not_present(MEILI_CLUSTER_ROLE, cluster_role);
+        }
+        if let Some(node_id) = node_id {
+            export_to_env_if_not_present(MEILI_NODE_ID, node_id);
+        }
+        if let Some(cluster_addr) = cluster_addr {
+            export_to_env_if_not_present(MEILI_CLUSTER_ADDR, cluster_addr);
+        }
+        if let Some(cluster_secret) = cluster_secret {
+            export_to_env_if_not_present(MEILI_CLUSTER_SECRET, cluster_secret);
+        }
+        if cluster_create {
+            export_to_env_if_not_present(MEILI_CLUSTER_CREATE, "true");
+        }
+        if let Some(cluster_join) = cluster_join {
+            export_to_env_if_not_present(MEILI_CLUSTER_JOIN, cluster_join);
+        }
+        if let Some(cluster_bind) = cluster_bind {
+            export_to_env_if_not_present(MEILI_CLUSTER_BIND, cluster_bind);
+        }
+        export_to_env_if_not_present(MEILI_CLUSTER_NODE_ID, cluster_node_id.to_string());
+        export_to_env_if_not_present(MEILI_CLUSTER_HEARTBEAT_MS, cluster_heartbeat_ms.to_string());
+        export_to_env_if_not_present(
+            MEILI_CLUSTER_ELECTION_TIMEOUT_MIN_MS,
+            cluster_election_timeout_min_ms.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_CLUSTER_ELECTION_TIMEOUT_MAX_MS,
+            cluster_election_timeout_max_ms.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_CLUSTER_ACCEPT_TIMEOUT_MS,
+            cluster_accept_timeout_ms.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_CLUSTER_MAX_MESSAGE_SIZE_MB,
+            cluster_max_message_size_mb.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_CLUSTER_RAFT_DB_SIZE_MB,
+            cluster_raft_db_size_mb.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_CLUSTER_MAX_TRANSFER_FAILURES,
+            cluster_max_transfer_failures.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_CLUSTER_MAX_REPLICATION_LAG,
+            cluster_max_replication_lag.to_string(),
+        );
+        export_to_env_if_not_present(
+            MEILI_CLUSTER_WRITE_TIMEOUT_SECS,
+            cluster_write_timeout_secs.to_string(),
+        );
+        if let Some(age) = cluster_snapshot_max_compaction_age_s {
+            export_to_env_if_not_present(
+                MEILI_CLUSTER_SNAPSHOT_MAX_COMPACTION_AGE_S,
+                age.to_string(),
             );
         }
 
@@ -1350,6 +1655,50 @@ fn default_drop_search_after() -> NonZeroUsize {
 
 fn default_nb_searches_per_core() -> NonZeroUsize {
     NonZeroUsize::new(4).unwrap()
+}
+
+fn default_barrier_timeout_ms() -> u64 {
+    3000
+}
+
+fn default_heartbeat_ms() -> u64 {
+    500
+}
+
+fn default_election_timeout_min_ms() -> u64 {
+    1500
+}
+
+fn default_election_timeout_max_ms() -> u64 {
+    3000
+}
+
+fn default_cluster_accept_timeout_ms() -> u64 {
+    10000
+}
+
+fn default_cluster_max_message_size_mb() -> u64 {
+    512
+}
+
+fn default_cluster_raft_db_size_mb() -> u64 {
+    256
+}
+
+fn default_cluster_max_transfer_failures() -> u32 {
+    3
+}
+
+fn default_cluster_max_replication_lag() -> u64 {
+    10_000
+}
+
+fn default_cluster_write_timeout_secs() -> u64 {
+    10
+}
+
+fn default_cluster_snapshot_max_compaction_age_s() -> Option<u64> {
+    Some(300)
 }
 
 /// Indicates if a snapshot was scheduled, and if yes with which interval.

@@ -28,6 +28,7 @@ actix-web = { version = "4.12.0", default-features = false, features = [
     "rustls-0_23",
 ] }
 anyhow = { version = "1.0.100", features = ["backtrace"] }
+bincode = "1"
 bstr = "1.12.1"
 byte-unit = { version = "5.1.6", features = ["serde"] }
 bytes = "1.11.1"
@@ -117,6 +118,7 @@ backoff = { version = "0.4.0", features = ["tokio"] }
 humantime = { version = "2.3.0", default-features = false }
 cidr = { version = "0.3.2", features = ["serde"] }
 routes = { path = "../routes" }
+meilisearch-cluster = { path = "../cluster", optional = true }
 
 [dev-dependencies]
 actix-rt = "2.11.0"
@@ -170,6 +172,7 @@ vietnamese = ["meilisearch-types/vietnamese"]
 swedish-recomposition = ["meilisearch-types/swedish-recomposition"]
 german = ["meilisearch-types/german"]
 turkish = ["meilisearch-types/turkish"]
+cluster = ["meilisearch-cluster"]
 
 [package.metadata.mini-dashboard]
 assets-url = "https://github.com/meilisearch/mini-dashboard/releases/download/v0.4.1/build.zip"

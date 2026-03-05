@@ -9,7 +9,7 @@ use tracing::debug;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
+use crate::routes::{accepted_response_with_barrier, get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
 #[routes::routes(
@@ -53,7 +53,13 @@ pub async fn create_dump(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if let Some(resp) = cluster.forward_if_follower(&req, &[]).await? {
+        return Ok(resp);
+    }
+
     analytics.publish(DumpAnalytics::default(), &req);
 
     let task = KindWithContent::DumpCreation {
@@ -68,5 +74,5 @@ pub async fn create_dump(
             .into();
 
     debug!(returns = ?task, "Create dump");
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }

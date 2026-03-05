@@ -3,6 +3,7 @@ pub mod error;
 mod store;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use error::{AuthControllerError, Result};
 use maplit::hashset;
@@ -16,10 +17,45 @@ use store::{generate_key_as_hexa, HeedAuthStore};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+/// Classify a proposer error, recognizing cluster-specific error types.
+///
+/// The proposer may box an `AuthControllerError::ClusterNoLeader` or
+/// `ClusterQuorumUnavailable` — if so, we downcast and return the proper
+/// variant instead of wrapping it as `Internal`.
+fn classify_proposer_error(
+    e: Box<dyn std::error::Error + Send + Sync>,
+) -> AuthControllerError {
+    match e.downcast::<AuthControllerError>() {
+        Ok(auth_err) => *auth_err,
+        Err(e) => AuthControllerError::Internal(e),
+    }
+}
+
+/// Trait for proposing API key mutations through Raft consensus.
+///
+/// When set on `AuthController`, key create/update/delete operations are
+/// proposed through Raft instead of being applied directly. The state machine
+/// applies them on all nodes via `AuthApplier`.
+pub trait KeyProposer: Send + Sync {
+    /// Propose a key create or update through Raft.
+    /// `key` is the fully-formed Key (with timestamps set).
+    fn propose_key_put(
+        &self,
+        key: &Key,
+    ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>;
+
+    /// Propose a key deletion through Raft.
+    fn propose_key_delete(
+        &self,
+        uid: Uuid,
+    ) -> std::result::Result<(), Box<dyn std::error::Error + Send + Sync>>;
+}
+
 #[derive(Clone)]
 pub struct AuthController {
     store: HeedAuthStore,
     master_key: Option<String>,
+    key_proposer: Arc<std::sync::OnceLock<Arc<dyn KeyProposer>>>,
 }
 
 impl AuthController {
@@ -30,7 +66,17 @@ impl AuthController {
             generate_default_keys(&store)?;
         }
 
-        Ok(Self { store, master_key: master_key.clone() })
+        Ok(Self {
+            store,
+            master_key: master_key.clone(),
+            key_proposer: Arc::new(std::sync::OnceLock::new()),
+        })
+    }
+
+    /// Set the key proposer for cluster mode.
+    /// When set, key mutations are proposed through Raft instead of applied directly.
+    pub fn set_key_proposer(&self, proposer: Arc<dyn KeyProposer>) {
+        let _ = self.key_proposer.set(proposer);
     }
 
     /// Return `Ok(())` if the auth controller is able to access one of its database.
@@ -52,7 +98,20 @@ impl AuthController {
     pub fn create_key(&self, create_key: CreateApiKey) -> Result<Key> {
         match self.store.get_api_key(create_key.uid)? {
             Some(_) => Err(AuthControllerError::ApiKeyAlreadyExists(create_key.uid.to_string())),
-            None => self.store.put_api_key(create_key.to_key()),
+            None => {
+                let key = create_key.to_key();
+                if let Some(proposer) = self.key_proposer.get() {
+                    // Cluster mode: propose through Raft. The state machine will
+                    // apply it to the store on all nodes via AuthApplier.
+                    proposer
+                        .propose_key_put(&key)
+                        .map_err(classify_proposer_error)?;
+                    Ok(key)
+                } else {
+                    // Standalone: write directly to the store
+                    self.store.put_api_key(key)
+                }
+            }
         }
     }
 
@@ -67,7 +126,13 @@ impl AuthController {
             name => key.name = name.set(),
         };
         key.updated_at = OffsetDateTime::now_utc();
-        self.store.put_api_key(key)
+
+        if let Some(proposer) = self.key_proposer.get() {
+            proposer.propose_key_put(&key).map_err(classify_proposer_error)?;
+            Ok(key)
+        } else {
+            self.store.put_api_key(key)
+        }
     }
 
     pub fn get_key(&self, uid: Uuid) -> Result<Key> {
@@ -109,7 +174,14 @@ impl AuthController {
     }
 
     pub fn delete_key(&self, uid: Uuid) -> Result<()> {
-        if self.store.delete_api_key(uid)? {
+        if let Some(proposer) = self.key_proposer.get() {
+            // Check key exists before proposing delete through Raft
+            if self.store.get_api_key(uid)?.is_none() {
+                return Err(AuthControllerError::ApiKeyNotFound(uid.to_string()));
+            }
+            proposer.propose_key_delete(uid).map_err(classify_proposer_error)?;
+            Ok(())
+        } else if self.store.delete_api_key(uid)? {
             Ok(())
         } else {
             Err(AuthControllerError::ApiKeyNotFound(uid.to_string()))
@@ -158,9 +230,48 @@ impl AuthController {
         self.store.delete_all_keys()
     }
 
-    /// Insert a key directly into the store.
-    pub fn raw_insert_key(&mut self, key: Key) -> Result<()> {
+    /// Insert a key directly into the store (for replication/recovery).
+    /// When `raft_log_index > 0`, checks idempotency to prevent duplicate application.
+    pub fn raw_insert_key(&self, key: Key, raft_log_index: u64) -> Result<()> {
+        if raft_log_index > 0 && self.store.raft_already_applied(raft_log_index)? {
+            return Ok(());
+        }
         self.store.put_api_key(key)?;
+        if raft_log_index > 0 {
+            self.store.set_raft_last_applied(raft_log_index)?;
+        }
+        Ok(())
+    }
+
+    /// Replace all keys in the auth store with the snapshot contents.
+    /// Clears all existing keys (including inverted indexes) and inserts the snapshot keys.
+    pub fn install_snapshot_keys(
+        &self,
+        key_bytes_list: &[Vec<u8>],
+        last_applied_log_index: u64,
+    ) -> Result<()> {
+        self.store.clear_all_auth_data()?;
+        for key_bytes in key_bytes_list {
+            let key: Key = serde_json::from_slice(key_bytes)
+                .map_err(|e| AuthControllerError::Internal(Box::new(e)))?;
+            self.store.put_api_key(key)?;
+        }
+        if last_applied_log_index > 0 {
+            self.store.set_raft_last_applied(last_applied_log_index)?;
+        }
+        Ok(())
+    }
+
+    /// Delete a key from the store without error if not found (for replication).
+    /// When `raft_log_index > 0`, checks idempotency to prevent duplicate application.
+    pub fn raw_delete_key(&self, uid: Uuid, raft_log_index: u64) -> Result<()> {
+        if raft_log_index > 0 && self.store.raft_already_applied(raft_log_index)? {
+            return Ok(());
+        }
+        self.store.delete_api_key(uid)?;
+        if raft_log_index > 0 {
+            self.store.set_raft_last_applied(raft_log_index)?;
+        }
         Ok(())
     }
 }

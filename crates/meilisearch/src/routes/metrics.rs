@@ -120,7 +120,9 @@ pub async fn get_metrics(
     index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
     auth_controller: Data<AuthController>,
     search_queue: web::Data<SearchQueue>,
+    cluster_state: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    let _ = &cluster_state; // used only with "cluster" feature
     index_scheduler.features().check_metrics()?;
     let auth_filters = index_scheduler.filters();
     if !auth_filters.all_indexes_authorized() {
@@ -225,6 +227,27 @@ pub async fn get_metrics(
 
     crate::metrics::MEILISEARCH_TASK_QUEUE_SIZE_UNTIL_STOP_REGISTERING
         .set(index_scheduler.remaining_size_until_task_queue_stop()? as i64);
+
+    // Populate Raft cluster metrics when a Raft node is active
+    #[cfg(feature = "cluster")]
+    if let Some(ref raft_node) = cluster_state.raft_node {
+        crate::metrics::MEILISEARCH_CLUSTER_IS_LEADER.set(raft_node.is_leader() as i64);
+        crate::metrics::MEILISEARCH_CLUSTER_CURRENT_TERM.set(raft_node.current_term() as i64);
+        crate::metrics::MEILISEARCH_CLUSTER_LAST_APPLIED_LOG
+            .set(raft_node.last_applied_log().unwrap_or(0) as i64);
+        crate::metrics::MEILISEARCH_CLUSTER_MEMBERS_TOTAL
+            .set(raft_node.members_total() as i64);
+        crate::metrics::MEILISEARCH_CLUSTER_FAILED_APPLIES_TOTAL
+            .set(raft_node.state_machine.failed_applies_count() as i64);
+        crate::metrics::MEILISEARCH_CLUSTER_FILE_TRANSFER_FAILURES_TOTAL
+            .set(raft_node.file_transfer_failures.load(std::sync::atomic::Ordering::Relaxed) as i64);
+        crate::metrics::MEILISEARCH_CLUSTER_NODES_EVICTED_TOTAL
+            .set(raft_node.nodes_evicted.load(std::sync::atomic::Ordering::Relaxed) as i64);
+        crate::metrics::MEILISEARCH_CLUSTER_NODE_LIFECYCLE
+            .set(raft_node.lifecycle() as i64);
+        crate::metrics::MEILISEARCH_CLUSTER_SNAPSHOT_TRANSFER_BYTES
+            .set(raft_node.snapshot_metrics.bytes_transferred.load(std::sync::atomic::Ordering::Relaxed) as i64);
+    }
 
     let encoder = TextEncoder::new();
     let mut buffer = vec![];

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -58,6 +58,7 @@ const PAGINATION_DEFAULT_LIMIT_FN: fn() -> usize = || 20;
 mod api_key;
 pub mod batches;
 pub mod chats;
+pub mod cluster_status;
 mod dump;
 mod export;
 mod export_analytics;
@@ -177,6 +178,69 @@ pub fn parse_include_metadata_header(req: &HttpRequest) -> bool {
         .and_then(|h| h.to_str().ok())
         .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1"))
         .unwrap_or(false)
+}
+
+pub const X_MEILI_BARRIER: &str = "X-Meili-Barrier";
+
+/// Map of index_name -> minimum task_uid that must be in terminal state.
+/// Used for read-after-write consistency via the `X-Meili-Barrier` header.
+#[derive(Debug, Clone, Default)]
+pub struct Barrier(pub HashMap<String, TaskId>);
+
+/// Parse `X-Meili-Barrier: movies=4523,books=4520` from request.
+/// Returns `None` if the header is absent.
+pub fn parse_barrier_header(req: &HttpRequest) -> Result<Option<Barrier>, ResponseError> {
+    let header = match req.headers().get(X_MEILI_BARRIER) {
+        Some(h) => h,
+        None => return Ok(None),
+    };
+    let header_str = header.to_str().map_err(|e| {
+        ResponseError::from_msg(
+            format!("{X_MEILI_BARRIER} is not a valid utf-8 string: {e}"),
+            Code::BadRequest,
+        )
+    })?;
+    let mut map = HashMap::new();
+    for entry in header_str.split(',') {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        let (index, task_id_str) = entry.split_once('=').ok_or_else(|| {
+            ResponseError::from_msg(
+                format!(
+                    "Invalid {X_MEILI_BARRIER} entry: '{entry}'. Expected format: index=taskUid"
+                ),
+                Code::BadRequest,
+            )
+        })?;
+        let index = index.trim();
+        let task_id_str = task_id_str.trim();
+        let task_id: TaskId = task_id_str.parse().map_err(|e| {
+            ResponseError::from_msg(
+                format!("Invalid task UID in {X_MEILI_BARRIER} for index '{index}': {e}"),
+                Code::BadRequest,
+            )
+        })?;
+        map.insert(index.to_string(), task_id);
+    }
+    Ok(Some(Barrier(map)))
+}
+
+/// Generate barrier value from a SummarizedTaskView for response header.
+/// Returns `None` if the task has no associated index.
+pub fn barrier_header_value(task: &SummarizedTaskView) -> Option<String> {
+    task.index_uid.as_ref().map(|index| format!("{index}={}", task.task_uid))
+}
+
+/// Build an `HttpResponse::Accepted` with the `X-Meili-Barrier` header set
+/// when the task targets an index.
+pub fn accepted_response_with_barrier(task: &SummarizedTaskView) -> HttpResponse {
+    let mut resp = HttpResponse::Accepted();
+    if let Some(val) = barrier_header_value(task) {
+        resp.insert_header((X_MEILI_BARRIER, val));
+    }
+    resp.json(task)
 }
 
 /// A summarized view of a task, returned when a task is enqueued
@@ -550,6 +614,9 @@ async fn get_version(
 struct HealthResponse {
     /// The status of the instance.
     status: HealthStatus,
+    /// Cluster state (only present in cluster mode).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cluster: Option<String>,
 }
 
 #[derive(Default, Serialize, ToSchema)]
@@ -557,6 +624,7 @@ struct HealthResponse {
 enum HealthStatus {
     #[default]
     Available,
+    Evicted,
 }
 
 /// Get health
@@ -577,10 +645,41 @@ pub async fn get_health(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     search_queue: Data<SearchQueue>,
+    cluster_state: Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
     search_queue.health().unwrap();
     index_scheduler.health().unwrap();
     auth_controller.health().unwrap();
 
-    Ok(HttpResponse::Ok().json(HealthResponse::default()))
+    #[allow(unused_mut)]
+    let mut cluster_field: Option<String> = None;
+    #[allow(unused_mut)]
+    let mut is_evicted = false;
+
+    // When a Raft node is active, add cluster state header
+    #[cfg(feature = "cluster")]
+    if let Some(ref raft_node) = cluster_state.raft_node {
+        if raft_node.is_evicted() {
+            is_evicted = true;
+            cluster_field = Some("evicted".to_string());
+        } else if cluster_state.current_leader_url().is_some() {
+            cluster_field = Some("healthy".to_string());
+        } else {
+            cluster_field = Some("election".to_string());
+        }
+    }
+    let _ = &cluster_state; // used only with "cluster" feature
+
+    let mut response = if is_evicted { HttpResponse::ServiceUnavailable() } else { HttpResponse::Ok() };
+
+    if let Some(ref state) = cluster_field {
+        response.insert_header(("X-Meili-Cluster-State", state.as_str()));
+    }
+
+    let status = if is_evicted { HealthStatus::Evicted } else { HealthStatus::Available };
+
+    Ok(response.json(HealthResponse {
+        status,
+        cluster: cluster_field,
+    }))
 }

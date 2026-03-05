@@ -69,8 +69,17 @@ impl aweb::error::ResponseError for ResponseError {
         let mut builder = HttpResponseBuilder::new(self.status_code());
         builder.content_type("application/json");
 
+        let is_cluster_error = self.error_code == "cluster_no_leader"
+            || self.error_code == "cluster_quorum_unavailable";
+
         if self.code == StatusCode::SERVICE_UNAVAILABLE {
-            builder.insert_header((header::RETRY_AFTER, "10"));
+            // Cluster write stalls use a shorter retry hint
+            let retry_after = if is_cluster_error { "5" } else { "10" };
+            builder.insert_header((header::RETRY_AFTER, retry_after));
+        }
+
+        if is_cluster_error {
+            builder.insert_header(("X-Meili-Cluster-State", "degraded"));
         }
 
         builder.body(json)
@@ -397,6 +406,9 @@ RemoteCouldNotSendRequest                      , System               , BAD_GATE
 RemoteInvalidApiKey                            , Auth                 , FORBIDDEN ;
 RemoteRemoteError                              , System               , BAD_GATEWAY ;
 RemoteTimeout                                  , System               , BAD_GATEWAY ;
+BarrierTimeout                                 , System               , SERVICE_UNAVAILABLE ;
+ClusterNoLeader                                , System               , SERVICE_UNAVAILABLE ;
+ClusterQuorumUnavailable                       , System               , SERVICE_UNAVAILABLE ;
 TooManySearchRequests                          , System               , SERVICE_UNAVAILABLE ;
 TaskNotFound                                   , InvalidRequest       , NOT_FOUND ;
 TaskFileNotFound                               , InvalidRequest       , NOT_FOUND ;

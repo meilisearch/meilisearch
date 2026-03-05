@@ -14,6 +14,7 @@ use tracing::debug;
 use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
+use crate::barrier::enforce_barrier;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
@@ -24,6 +25,7 @@ use crate::search::{
     DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
+use crate::Opt;
 
 #[routes::routes(
     routes(""=>post(search)),
@@ -264,8 +266,12 @@ pub async fn search(
     index_uid: web::Path<String>,
     params: AwebJson<FacetSearchQuery, DeserrJsonError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let query = params.into_inner();

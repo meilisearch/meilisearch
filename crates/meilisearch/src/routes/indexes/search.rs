@@ -18,6 +18,7 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
+use crate::barrier::enforce_barrier;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -32,6 +33,7 @@ use crate::search::{
     DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
+use crate::Opt;
 
 #[routes::routes(
     routes(""=>[get(search_with_url_query), post(search_with_post)]),
@@ -530,6 +532,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
         )),
     )
 )]
+#[allow(clippy::too_many_arguments)]
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
@@ -537,8 +540,12 @@ pub async fn search_with_url_query(
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     let request_uid = Uuid::now_v7();
     debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
     let progress = Progress::default();
@@ -739,6 +746,7 @@ pub(crate) async fn search(
         )),
     )
 )]
+#[allow(clippy::too_many_arguments)]
 pub async fn search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
@@ -746,8 +754,12 @@ pub async fn search_with_post(
     index_uid: web::Path<String>,
     params: AwebJson<SearchQuery, DeserrJsonError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let request_uid = Uuid::now_v7();
 

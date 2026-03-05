@@ -404,11 +404,41 @@ pub async fn update_stderr_target(
     index_scheduler: GuardedData<ActionPolicy<{ actions::METRICS_GET }>, Data<IndexScheduler>>,
     logs: Data<LogStderrHandle>,
     body: AwebJson<UpdateStderrLogs, DeserrJsonError>,
+    req: actix_web::HttpRequest,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler.features().check_logs_route()?;
 
     let opt = body.into_inner();
 
+    // In cluster mode, propose through Raft so all nodes update their log level.
+    #[cfg(feature = "cluster")]
+    {
+        // Forward to leader if this node is a follower
+        if cluster.is_follower() {
+            let body_bytes = serde_json::to_vec(&serde_json::json!({
+                "target": format!("{}", opt.target.0)
+            })).unwrap_or_default();
+            if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+                return Ok(resp);
+            }
+        }
+
+        if let Some(ref raft_node) = cluster.raft_node {
+            // Use the debug representation of the Targets to get a parseable string
+            let target_str = format!("{}", opt.target.0);
+            raft_node
+                .client_write(meilisearch_cluster::types::RaftRequest::SetLogLevel {
+                    target: target_str,
+                })
+                .await
+                .map_err(crate::cluster::cluster_write_error_to_response)?;
+            return Ok(HttpResponse::NoContent().finish());
+        }
+    }
+    let _ = (&req, &cluster); // suppress unused warnings in non-cluster builds
+
+    // Standalone mode: apply directly
     logs.modify(|layer| {
         *layer.filter_mut() = opt.target.0.clone();
     })

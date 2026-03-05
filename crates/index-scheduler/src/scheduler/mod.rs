@@ -436,6 +436,24 @@ impl IndexScheduler {
         tracing::debug!("call trace: {:?}", progress.accumulated_durations());
 
         if batch_made_progress {
+            // Compute a deterministic checksum over the batch results for cluster
+            // divergence detection. Hash: batch_uid + sorted task UIDs + their statuses + errors.
+            use sha2::{Digest, Sha256};
+            let mut hasher = Sha256::new();
+            hasher.update(processing_batch.uid.to_le_bytes());
+            // Iterate task IDs in sorted order (RoaringBitmap iterates in order)
+            for id in ids.iter() {
+                hasher.update(id.to_le_bytes());
+                if let Ok(Some(task)) = self.queue.tasks.get_task(&wtxn, id) {
+                    hasher.update(format!("{:?}", task.status).as_bytes());
+                    if let Some(ref err) = task.error {
+                        hasher.update(err.message.as_bytes());
+                    }
+                }
+            }
+            let hash = hasher.finalize();
+            processing_batch.checksum = Some(format!("{hash:x}"));
+
             self.queue.write_batch(&mut wtxn, processing_batch, &ids)?;
         }
 
@@ -472,6 +490,11 @@ impl IndexScheduler {
                 }
                 Ok(())
             })?;
+
+            // Notify barrier subscribers that tasks have completed
+            for id in ids.iter() {
+                let _ = self.task_completion_tx.send(id);
+            }
 
             self.notify_webhooks(ids);
         }

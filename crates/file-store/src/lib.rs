@@ -148,6 +148,14 @@ impl File {
         Ok(Self { path: PathBuf::new(), file: None })
     }
 
+    /// Flush all data to disk, ensuring durability before persist.
+    pub fn sync_all(&self) -> Result<()> {
+        if let Some(file) = self.file.as_ref() {
+            file.as_file().sync_all()?;
+        }
+        Ok(())
+    }
+
     pub fn persist(self) -> Result<Option<StdFile>> {
         let Some(file) = self.file else { return Ok(None) };
 

@@ -17,12 +17,14 @@ use utoipa::IntoParams;
 
 use super::ActionPolicy;
 use crate::analytics::Analytics;
+use crate::barrier::enforce_barrier;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
 use crate::search::{
     add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, Route,
     SearchKind, SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
+use crate::Opt;
 
 #[routes::routes(
     routes(""=>[get(similar_get), post(similar_post)]),
@@ -98,8 +100,12 @@ pub async fn similar_get(
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SimilarQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let query = params.0.into();
@@ -179,8 +185,12 @@ pub async fn similar_post(
     index_uid: web::Path<String>,
     params: AwebJson<SimilarQuery, DeserrJsonError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let query = params.into_inner();

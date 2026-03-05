@@ -33,8 +33,9 @@ impl<C: Default + ErrorCode> MergeWithError<IndexUidPatternFormatError> for Dese
     }
 }
 
-#[derive(Debug, Deserr, ToSchema)]
+#[derive(Debug, Deserr, Serialize, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct CreateApiKey {
     /// A description for the key. `null` if empty.
@@ -66,6 +67,7 @@ pub struct CreateApiKey {
     /// Represent the expiration date and time as RFC 3339 format. `null`
     /// equals to no expiration time.
     #[deserr(error = DeserrJsonError<InvalidApiKeyExpiresAt>, try_from(Option<String>) = parse_expiration_date -> ParseOffsetDateTimeError, missing_field_error = DeserrJsonError::missing_api_key_expires_at)]
+    #[serde(with = "time::serde::rfc3339::option")]
     pub expires_at: Option<OffsetDateTime>,
 }
 
@@ -109,8 +111,9 @@ fn deny_immutable_fields_api_key(
 /// Request body for updating an existing API key. Only the name and
 /// description can be modified - other properties like actions, indexes,
 /// and expiration are immutable after creation.
-#[derive(Debug, Deserr, ToSchema)]
+#[derive(Debug, Deserr, Serialize, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_api_key)]
+#[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct PatchApiKey {
     /// A new description for the API key. Pass `null` to remove the existing
@@ -143,10 +146,16 @@ pub struct Key {
     pub updated_at: OffsetDateTime,
 }
 
+/// Fixed namespace UUID for deterministic default API key generation.
+/// All nodes produce identical default keys using Uuid::new_v5 with this
+/// namespace and a unique seed string per key. Generated once and hardcoded.
+const DEFAULT_KEY_NAMESPACE: Uuid =
+    Uuid::from_bytes([0x9a, 0xa1, 0x3c, 0x7e, 0x45, 0xd8, 0x4b, 0x6f, 0xa2, 0x1b, 0xce, 0x57, 0x08, 0xf4, 0xe3, 0xd9]);
+
 impl Key {
     pub fn default_admin() -> Self {
         let now = OffsetDateTime::now_utc();
-        let uid = Uuid::new_v4();
+        let uid = Uuid::new_v5(&DEFAULT_KEY_NAMESPACE, b"default-admin-key");
         Self {
             name: Some("Default Admin API Key".to_string()),
             description: Some("Use it for anything that is not a search operation. Caution! Do not expose it on a public frontend".to_string()),
@@ -161,7 +170,7 @@ impl Key {
 
     pub fn default_read_only_admin() -> Self {
         let now = OffsetDateTime::now_utc();
-        let uid = Uuid::new_v4();
+        let uid = Uuid::new_v5(&DEFAULT_KEY_NAMESPACE, b"default-read-only-admin-key");
         Self {
             name: Some("Default Read-Only Admin API Key".to_string()),
             description: Some("Use it to read information across the whole database. Caution! Do not expose this key on a public frontend".to_string()),
@@ -176,7 +185,7 @@ impl Key {
 
     pub fn default_search() -> Self {
         let now = OffsetDateTime::now_utc();
-        let uid = Uuid::new_v4();
+        let uid = Uuid::new_v5(&DEFAULT_KEY_NAMESPACE, b"default-search-key");
         Self {
             name: Some("Default Search API Key".to_string()),
             description: Some("Use it to search from the frontend".to_string()),
@@ -191,7 +200,7 @@ impl Key {
 
     pub fn default_chat() -> Self {
         let now = OffsetDateTime::now_utc();
-        let uid = Uuid::new_v4();
+        let uid = Uuid::new_v5(&DEFAULT_KEY_NAMESPACE, b"default-chat-key");
         Self {
             name: Some("Default Chat API Key".to_string()),
             description: Some("Use it to chat and search from the frontend".to_string()),

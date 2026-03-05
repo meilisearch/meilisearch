@@ -203,6 +203,8 @@ gen_seq! { SeqFromRequestFut4; A B C D }
 gen_seq! { SeqFromRequestFut5; A B C D E }
 gen_seq! { SeqFromRequestFut6; A B C D E F }
 gen_seq! { SeqFromRequestFut7; A B C D E F G }
+gen_seq! { SeqFromRequestFut8; A B C D E F G H }
+gen_seq! { SeqFromRequestFut9; A B C D E F G H I }
 
 pin_project! {
     #[project = ExtractProj]

@@ -41,6 +41,8 @@ pub struct ProcessingBatch {
     pub started_at: OffsetDateTime,
     pub finished_at: Option<OffsetDateTime>,
     pub reason: BatchStopReason,
+    /// SHA-256 checksum of batch results for cluster divergence detection.
+    pub checksum: Option<String>,
 }
 
 impl ProcessingBatch {
@@ -63,6 +65,7 @@ impl ProcessingBatch {
             started_at: OffsetDateTime::now_utc(),
             finished_at: None,
             reason: Default::default(),
+            checksum: None,
         }
     }
 
@@ -205,6 +208,7 @@ impl ProcessingBatch {
             finished_at: self.finished_at,
             enqueued_at: self.enqueued_at,
             stop_reason: self.reason.to_string(),
+            checksum: self.checksum.clone(),
         }
     }
 }

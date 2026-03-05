@@ -81,8 +81,17 @@ pub struct ApiKeyApi;
 pub async fn create_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_CREATE }>, Data<AuthController>>,
     body: AwebJson<CreateApiKey, DeserrJsonError>,
-    _req: HttpRequest,
+    req: HttpRequest,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&body.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     let v = body.into_inner();
     let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
         let key = auth_controller.create_key(v)?;
@@ -307,7 +316,17 @@ pub async fn patch_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_UPDATE }>, Data<AuthController>>,
     body: AwebJson<PatchApiKey, DeserrJsonError>,
     path: web::Path<AuthParam>,
+    req: HttpRequest,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&body.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     let key = path.into_inner().key;
     let patch_api_key = body.into_inner();
     let res = tokio::task::spawn_blocking(move || -> Result<_, AuthControllerError> {
@@ -360,7 +379,14 @@ pub async fn patch_api_key(
 pub async fn delete_api_key(
     auth_controller: GuardedData<ActionPolicy<{ actions::KEYS_DELETE }>, Data<AuthController>>,
     path: web::Path<AuthParam>,
+    req: HttpRequest,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if let Some(resp) = cluster.forward_if_follower(&req, &[]).await? {
+        return Ok(resp);
+    }
+
     let key = path.into_inner().key;
     tokio::task::spawn_blocking(move || {
         let uid =

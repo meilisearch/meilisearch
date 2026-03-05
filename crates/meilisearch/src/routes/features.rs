@@ -1,3 +1,6 @@
+#[cfg(feature = "cluster")]
+use std::collections::BTreeMap;
+
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -60,13 +63,36 @@ async fn get_features(
         ActionPolicy<{ actions::EXPERIMENTAL_FEATURES_GET }>,
         Data<IndexScheduler>,
     >,
+    cluster_state: Data<crate::cluster::ClusterState>,
 ) -> HttpResponse {
     let features = index_scheduler.features();
 
     let features = features.runtime_features();
-    let features: RuntimeTogglableFeatures = features.into();
-    debug!(returns = ?features, "Get features");
-    HttpResponse::Ok().json(features)
+    #[allow(unused_mut)]
+    let mut response = serde_json::to_value(RuntimeTogglableFeatures::from(features))
+        .unwrap_or_default();
+
+    // In cluster mode, add available features and per-node details
+    #[cfg(feature = "cluster")]
+    if let Some(ref node) = cluster_state.raft_node {
+        let available = node.effective_compile_features();
+        let all = node.all_node_features();
+        let nodes: BTreeMap<String, serde_json::Value> = all
+            .into_iter()
+            .map(|(id, feats)| {
+                (
+                    format!("node-{id}"),
+                    serde_json::json!({ "compileFeatures": feats }),
+                )
+            })
+            .collect();
+        response["clusterAvailable"] = serde_json::json!(available);
+        response["clusterNodes"] = serde_json::json!(nodes);
+    }
+    let _ = &cluster_state; // suppress unused warning in non-cluster builds
+
+    debug!(returns = ?response, "Get features");
+    HttpResponse::Ok().json(response)
 }
 
 /// Experimental features that can be toggled at runtime
@@ -204,7 +230,16 @@ async fn patch_features(
     new_features: AwebJson<RuntimeTogglableFeatures, DeserrJsonError>,
     req: HttpRequest,
     analytics: Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&new_features.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     let features = index_scheduler.features();
     debug!(parameters = ?new_features, "Patch features");
 
@@ -259,7 +294,25 @@ async fn patch_features(
         },
         &req,
     );
+    // In cluster mode, propose through Raft so all nodes get the update.
+    // In standalone mode, write directly to the IndexScheduler.
+    #[cfg(feature = "cluster")]
+    if let Some(ref raft_node) = cluster.raft_node {
+        let features_json = serde_json::to_vec(&new_features)
+            .map_err(|e| ResponseError::from_msg(e.to_string(), meilisearch_types::error::Code::Internal))?;
+        raft_node
+            .client_write(meilisearch_cluster::types::RaftRequest::SetRuntimeFeatures {
+                features_json,
+            })
+            .await
+            .map_err(crate::cluster::cluster_write_error_to_response)?;
+    } else {
+        index_scheduler.put_runtime_features(new_features)?;
+    }
+
+    #[cfg(not(feature = "cluster"))]
     index_scheduler.put_runtime_features(new_features)?;
+
     let new_features: RuntimeTogglableFeatures = new_features.into();
     debug!(returns = ?new_features, "Patch features");
     Ok(HttpResponse::Ok().json(new_features))

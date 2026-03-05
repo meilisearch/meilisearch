@@ -471,6 +471,9 @@ impl IndexScheduler {
                     *post_compaction_size = Some(Byte::from_u64(post_size));
                 }
 
+                // Record compaction timestamp for cluster snapshot staleness checks
+                self.record_compaction();
+
                 Ok((vec![task], ProcessBatchInfo::default()))
             }
             Batch::Export { mut task } => {

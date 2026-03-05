@@ -52,7 +52,7 @@ utoipa = { version = "5.4.0", features = [
     "time",
     "openapi_extensions",
 ] }
-uuid = { version = "1.18.1", features = ["serde", "v4"] }
+uuid = { version = "1.18.1", features = ["serde", "v4", "v5"] }
 
 [dev-dependencies]
 # fixed version due to format breakages in v1.40

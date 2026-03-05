@@ -29,6 +29,8 @@ pub struct Command {
     pub register: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key_variable: Option<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub headers: HashMap<String, String>,
     #[serde(default)]
     pub synchronous: SyncMode,
 }
@@ -286,6 +288,12 @@ pub async fn run(
         }
     }
 
+    // Apply custom headers with variable substitution
+    for (name, value) in &command.headers {
+        let resolved = resolve_template(value, &registered);
+        request = request.header(name.as_str(), resolved);
+    }
+
     let request = if let Some((body, content_type)) = body {
         request.body(body).header(reqwest::header::CONTENT_TYPE, content_type)
     } else {
@@ -409,7 +417,34 @@ pub fn health_command() -> Command {
         expected_status: None,
         expected_response: None,
         api_key_variable: None,
+        headers: HashMap::new(),
     }
+}
+
+/// Resolve `{{ variable }}` templates in a string using registered values.
+/// Supports both string and numeric values.
+fn resolve_template(template: &str, registered: &HashMap<String, Value>) -> String {
+    let mut result = template.to_string();
+    while let (Some(pos1), Some(pos2)) = (result.find("{{"), result.rfind("}}")) {
+        if pos2 > pos1 {
+            let name = result[pos1 + 2..pos2].trim();
+            if let Some(value) = registered.get(name) {
+                let replacement = match value {
+                    Value::String(s) => s.clone(),
+                    Value::Number(n) => n.to_string(),
+                    other => other.to_string(),
+                };
+                let mut new_result = String::new();
+                new_result.push_str(&result[..pos1]);
+                new_result.push_str(&replacement);
+                new_result.push_str(&result[pos2 + 2..]);
+                result = new_result;
+                continue;
+            }
+        }
+        break;
+    }
+    result
 }
 
 pub fn insert_variables(value: &mut Value, registered: &HashMap<String, Value>) {

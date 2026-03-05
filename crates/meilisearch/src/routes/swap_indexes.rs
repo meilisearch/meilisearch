@@ -11,7 +11,7 @@ use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-use super::{get_task_id, is_dry_run, SummarizedTaskView};
+use super::{accepted_response_with_barrier, get_task_id, is_dry_run, SummarizedTaskView};
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
@@ -100,7 +100,16 @@ pub async fn swap_indexes(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&params.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     let params = params.into_inner();
 
     let network = index_scheduler.network();
@@ -147,5 +156,5 @@ pub async fn swap_indexes(
     }
 
     let task = SummarizedTaskView::from(task);
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }

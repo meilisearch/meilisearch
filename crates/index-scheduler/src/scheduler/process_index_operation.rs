@@ -79,7 +79,29 @@ impl IndexScheduler {
                     match operation {
                         DocumentOperation::Replace { content_file: content_uuid, .. }
                         | DocumentOperation::Update { content_file: content_uuid, .. } => {
-                            let content_file = self.queue.file_store.get_update(*content_uuid)?;
+                            let content_file = match self.queue.file_store.get_update(*content_uuid) {
+                                Ok(file) => file,
+                                Err(file_store::Error::IoError(ref e))
+                                    if e.kind() == std::io::ErrorKind::NotFound =>
+                                {
+                                    tracing::warn!(
+                                        uuid = %content_uuid,
+                                        "Update file not found — the document file may not have \
+                                         been transferred to this node (e.g., DML transfer failed). \
+                                         Failing the batch."
+                                    );
+                                    return Err(crate::Error::FileStore(
+                                        file_store::Error::IoError(std::io::Error::new(
+                                            std::io::ErrorKind::NotFound,
+                                            format!(
+                                                "Update file {content_uuid} not found on this node. \
+                                                 The document file was not received via cluster replication."
+                                            ),
+                                        )),
+                                    ));
+                                }
+                                Err(e) => return Err(e.into()),
+                            };
                             let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
                             content_files.push(mmap);
                         }

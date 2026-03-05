@@ -209,6 +209,12 @@ pub enum Error {
     #[error("{action} requires the Enterprise Edition")]
     RequiresEnterpriseEdition { action: &'static str },
 
+    // Cluster write errors (classified from Raft consensus failures)
+    #[error("No leader available in the cluster")]
+    ClusterNoLeader,
+    #[error("Cluster quorum unavailable, writes are temporarily stalled")]
+    ClusterQuorumUnavailable,
+
     #[cfg(test)]
     #[error("Planned failure for tests.")]
     PlannedFailure,
@@ -271,6 +277,8 @@ impl Error {
             | Error::ImportTaskAlreadyReceived(_)
             | Error::ImportTaskUnknownRemote(_)
             | Error::RequiresEnterpriseEdition { .. }
+            | Error::ClusterNoLeader
+            | Error::ClusterQuorumUnavailable
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
@@ -341,6 +349,8 @@ impl ErrorCode for Error {
                 Code::ReceiveImportFinishedUnknownRemote
             }
             Error::RequiresEnterpriseEdition { .. } => Code::RequiresEnterpriseEdition,
+            Error::ClusterNoLeader => Code::ClusterNoLeader,
+            Error::ClusterQuorumUnavailable => Code::ClusterQuorumUnavailable,
             Error::S3Error { status, .. } if status.is_client_error() => {
                 Code::InvalidS3SnapshotRequest
             }

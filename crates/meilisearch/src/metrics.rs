@@ -134,4 +134,51 @@ lazy_static! {
         "Meilisearch number of search requests with personalization"
     ))
     .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_IS_LEADER: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_cluster_is_leader",
+        "1 if this node is the Raft leader, 0 otherwise"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_CURRENT_TERM: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_cluster_current_term",
+        "Current Raft term"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_LAST_APPLIED_LOG: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_cluster_last_applied_log",
+        "Last applied Raft log index"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_MEMBERS_TOTAL: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_cluster_members_total",
+        "Total number of members in the Raft cluster"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_FAILED_APPLIES_TOTAL: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_cluster_failed_applies_total",
+        "Total number of Raft entries that failed to apply"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_FILE_TRANSFER_FAILURES_TOTAL: IntGauge =
+        register_int_gauge!(opts!(
+            "meilisearch_cluster_file_transfer_failures_total",
+            "Total number of file transfer failures to followers"
+        ))
+        .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_NODES_EVICTED_TOTAL: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_cluster_nodes_evicted_total",
+        "Total number of nodes evicted from cluster"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_NODE_LIFECYCLE: IntGauge = register_int_gauge!(opts!(
+        "meilisearch_cluster_node_lifecycle",
+        "Current node lifecycle state (0=bootstrapping, 1=joining, 2=learner, 3=follower, 4=leader, 5=evicted, 6=shutting_down)"
+    ))
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_CLUSTER_SNAPSHOT_TRANSFER_BYTES: IntGauge =
+        register_int_gauge!(opts!(
+            "meilisearch_cluster_snapshot_transfer_bytes",
+            "Total bytes transferred during snapshot bootstrap"
+        ))
+        .expect("Can't create a metric");
 }

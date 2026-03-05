@@ -13,6 +13,10 @@ pub enum AuthControllerError {
     ApiKeyAlreadyExists(String),
     #[error("Internal error: {0}")]
     Internal(Box<dyn Error + Send + Sync + 'static>),
+    #[error("No leader available in the cluster")]
+    ClusterNoLeader,
+    #[error("Cluster quorum unavailable, writes are temporarily stalled")]
+    ClusterQuorumUnavailable,
 }
 
 internal_error!(
@@ -28,6 +32,8 @@ impl ErrorCode for AuthControllerError {
             Self::ApiKeyNotFound(_) => Code::ApiKeyNotFound,
             Self::ApiKeyAlreadyExists(_) => Code::ApiKeyAlreadyExists,
             Self::Internal(_) => Code::Internal,
+            Self::ClusterNoLeader => Code::ClusterNoLeader,
+            Self::ClusterQuorumUnavailable => Code::ClusterQuorumUnavailable,
         }
     }
 }

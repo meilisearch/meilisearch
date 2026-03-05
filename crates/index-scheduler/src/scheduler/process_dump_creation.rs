@@ -91,7 +91,20 @@ impl IndexScheduler {
                     return Err(Error::AbortedTask);
                 }
                 if status == Status::Enqueued {
-                    let content_file = self.queue.file_store.get_update(content_file)?;
+                    let content_file = match self.queue.file_store.get_update(content_file) {
+                        Ok(file) => file,
+                        Err(file_store::Error::IoError(ref e))
+                            if e.kind() == std::io::ErrorKind::NotFound =>
+                        {
+                            tracing::warn!(
+                                uuid = %content_file,
+                                "Update file not found during dump — file may not have been \
+                                 transferred to this node. Skipping this task's content."
+                            );
+                            continue;
+                        }
+                        Err(e) => return Err(e.into()),
+                    };
 
                     for document in
                         serde_json::de::Deserializer::from_reader(content_file).into_iter()

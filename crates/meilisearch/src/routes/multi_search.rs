@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use super::multi_search_analytics::MultiSearchAggregator;
 use crate::analytics::Analytics;
+use crate::barrier::enforce_barrier;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -24,6 +25,7 @@ use crate::search::{
     SearchQueryWithIndex, SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
+use crate::Opt;
 
 #[routes::routes(
     routes(
@@ -146,8 +148,12 @@ pub async fn multi_search_with_post(
     personalization_service: web::Data<crate::personalization::PersonalizationService>,
     params: AwebJson<FederatedSearch, DeserrJsonError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
     let progress = Progress::default();

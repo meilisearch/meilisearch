@@ -189,6 +189,7 @@ impl BatchQueue {
                 finished_at: batch.finished_at,
                 enqueued_at: batch.enqueued_at,
                 stop_reason: batch.reason.to_string(),
+                checksum: batch.checksum,
             },
         )?;
 

@@ -39,6 +39,7 @@ use tracing::debug;
 use utoipa::{IntoParams, ToSchema};
 
 use crate::analytics::{Aggregate, AggregateMethod, Analytics};
+use crate::barrier::enforce_barrier;
 use crate::error::MeilisearchHttpError;
 use crate::error::PayloadError::ReceivePayload;
 use crate::extractors::authentication::policies::*;
@@ -47,7 +48,8 @@ use crate::extractors::payload::Payload;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
 use crate::routes::{
-    get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
+    accepted_response_with_barrier, get_task_id, is_dry_run, PaginationView, SummarizedTaskView,
+    PAGINATION_DEFAULT_LIMIT,
 };
 use crate::search::{parse_filter, ExternalDocumentId, RetrieveVectors};
 use crate::{aggregate_methods, Opt};
@@ -226,8 +228,12 @@ pub async fn get_document(
     document_param: web::Path<DocumentParam>,
     params: AwebQueryParameter<GetDocument, DeserrQueryParamError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     let DocumentParam { index_uid, document_id } = document_param.into_inner();
     debug!(parameters = ?params, "Get document");
     let index_uid = IndexUid::try_from(index_uid)?;
@@ -330,7 +336,13 @@ pub async fn delete_document(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if let Some(resp) = cluster.forward_if_follower(&req, &[]).await? {
+        return Ok(resp);
+    }
+
     let CustomMetadataQuery { custom_metadata } = params.into_inner();
     let DocumentParam { index_uid, document_id } = path.into_inner();
     let index_uid = IndexUid::try_from(index_uid)?;
@@ -374,7 +386,7 @@ pub async fn delete_document(
 
     let task: SummarizedTaskView = task.into();
     debug!("returns: {:?}", task);
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 #[derive(Debug, Deserr, IntoParams)]
@@ -543,8 +555,12 @@ pub async fn documents_by_query_post(
     index_uid: web::Path<String>,
     body: AwebJson<BrowseQuery, DeserrJsonError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     let body = body.into_inner();
     debug!(parameters = ?body, "Get documents POST");
 
@@ -625,8 +641,12 @@ pub async fn get_documents(
     index_uid: web::Path<String>,
     params: AwebQueryParameter<BrowseQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
+    opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    if let Some(resp) = enforce_barrier(&req, &index_scheduler, opt.barrier_timeout()).await? {
+        return Ok(resp);
+    }
     debug!(parameters = ?params, "Get documents GET");
 
     let BrowseQueryGet { limit, offset, fields, retrieve_vectors, filter, ids, sort } =
@@ -892,8 +912,19 @@ pub async fn replace_documents(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        return match cluster.forward_streaming_if_follower(&req, body).await? {
+            Some(resp) => Ok(resp),
+            None => {
+                unreachable!("forward_streaming_if_follower always returns Some for a follower")
+            }
+        };
+    }
 
     debug!(parameters = ?params, "Replace documents");
     let params = params.into_inner();
@@ -941,7 +972,7 @@ pub async fn replace_documents(
 
     debug!(returns = ?task, "Replace documents");
 
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 /// Add or update documents
@@ -1004,8 +1035,19 @@ pub async fn update_documents(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
+
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        return match cluster.forward_streaming_if_follower(&req, body).await? {
+            Some(resp) => Ok(resp),
+            None => {
+                unreachable!("forward_streaming_if_follower always returns Some for a follower")
+            }
+        };
+    }
 
     let params = params.into_inner();
     debug!(parameters = ?params, "Update documents");
@@ -1052,7 +1094,7 @@ pub async fn update_documents(
     .await?;
     debug!(returns = ?task, "Update documents");
 
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1312,7 +1354,16 @@ pub async fn delete_documents_batch(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&*body).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     debug!(parameters = ?body, "Delete documents by batch");
     let CustomMetadataQuery { custom_metadata } = params.into_inner();
 
@@ -1369,7 +1420,7 @@ pub async fn delete_documents_batch(
     let task: SummarizedTaskView = task.into();
 
     debug!(returns = ?task, "Delete documents by batch");
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 /// Request body for deleting documents by filter
@@ -1426,7 +1477,16 @@ pub async fn delete_documents_by_filter(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&body.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     debug!(parameters = ?body, "Delete documents by filter");
     let CustomMetadataQuery { custom_metadata } = params.into_inner();
 
@@ -1491,7 +1551,7 @@ pub async fn delete_documents_by_filter(
     let task: SummarizedTaskView = task.into();
 
     debug!(returns = ?task, "Delete documents by filter");
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 /// Request body for editing documents using a JavaScript function
@@ -1587,7 +1647,16 @@ pub async fn edit_documents_by_function(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&body.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     debug!(parameters = ?body, "Edit documents by function");
     let CustomMetadataQuery { custom_metadata } = params.into_inner();
 
@@ -1673,7 +1742,7 @@ pub async fn edit_documents_by_function(
     let task: SummarizedTaskView = task.into();
 
     debug!(returns = ?task, "Edit documents by function");
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 /// Delete all documents
@@ -1717,7 +1786,13 @@ pub async fn clear_all_documents(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if let Some(resp) = cluster.forward_if_follower(&req, &[]).await? {
+        return Ok(resp);
+    }
+
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
     let network = index_scheduler.network();
     let CustomMetadataQuery { custom_metadata } = params.into_inner();
@@ -1760,7 +1835,7 @@ pub async fn clear_all_documents(
     let task: SummarizedTaskView = task.into();
 
     debug!(returns = ?task, "Delete all documents");
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 fn some_documents<'a, 't: 'a>(

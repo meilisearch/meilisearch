@@ -25,19 +25,22 @@ use super::{Action, Key};
 const AUTH_STORE_SIZE: usize = 1_073_741_824; //1GiB
 const KEY_DB_NAME: &str = "api-keys";
 const KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME: &str = "keyid-action-index-expiration";
+const AUTH_META_DB_NAME: &str = "auth-meta";
+const RAFT_LAST_APPLIED_KEY: &str = "raft_last_applied_log_index";
 
 #[derive(Clone)]
 pub struct HeedAuthStore {
     env: Env<WithoutTls>,
     keys: Database<Bytes, SerdeJson<Key>>,
     action_keyid_index_expiration: Database<KeyIdActionCodec, SerdeJson<Option<OffsetDateTime>>>,
+    meta: Database<heed::types::Str, heed::types::Str>,
 }
 
 pub fn open_auth_store_env(path: &Path) -> heed::Result<Env<WithoutTls>> {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
     options.map_size(AUTH_STORE_SIZE); // 1GB
-    options.max_dbs(2);
+    options.max_dbs(3);
     unsafe { options.open(path) }
 }
 
@@ -47,8 +50,28 @@ impl HeedAuthStore {
         let keys = env.create_database(&mut wtxn, Some(KEY_DB_NAME))?;
         let action_keyid_index_expiration =
             env.create_database(&mut wtxn, Some(KEY_ID_ACTION_INDEX_EXPIRATION_DB_NAME))?;
+        let meta = env.create_database(&mut wtxn, Some(AUTH_META_DB_NAME))?;
         wtxn.commit()?;
-        Ok(Self { env, keys, action_keyid_index_expiration })
+        Ok(Self { env, keys, action_keyid_index_expiration, meta })
+    }
+
+    /// Check if a Raft log index has already been applied to the auth store.
+    pub fn raft_already_applied(&self, raft_log_index: u64) -> Result<bool> {
+        let rtxn = self.env.read_txn()?;
+        if let Some(stored) = self.meta.get(&rtxn, RAFT_LAST_APPLIED_KEY)? {
+            if let Ok(stored_index) = stored.parse::<u64>() {
+                return Ok(raft_log_index <= stored_index);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Update the last applied Raft log index in the auth store.
+    pub fn set_raft_last_applied(&self, raft_log_index: u64) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.meta.put(&mut wtxn, RAFT_LAST_APPLIED_KEY, &raft_log_index.to_string())?;
+        wtxn.commit()?;
+        Ok(())
     }
 
     /// Return `Ok(())` if the auth store is able to access one of its database.
@@ -218,6 +241,16 @@ impl HeedAuthStore {
     pub fn delete_all_keys(&self) -> Result<()> {
         let mut wtxn = self.env.write_txn()?;
         self.keys.clear(&mut wtxn)?;
+        wtxn.commit()?;
+        Ok(())
+    }
+
+    /// Clear all auth data: keys, inverted index, and raft metadata.
+    /// Used during snapshot installation to ensure a clean slate.
+    pub fn clear_all_auth_data(&self) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.keys.clear(&mut wtxn)?;
+        self.action_keyid_index_expiration.clear(&mut wtxn)?;
         wtxn.commit()?;
         Ok(())
     }

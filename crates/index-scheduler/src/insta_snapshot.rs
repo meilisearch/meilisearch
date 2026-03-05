@@ -38,6 +38,7 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         embedders: _,
         chat_settings: _,
         runtime: _,
+        task_completion_tx: _,
     } = scheduler;
 
     let rtxn = env.read_txn().unwrap();
@@ -392,6 +393,7 @@ pub fn snapshot_batch(batch: &Batch) -> String {
         progress: _,
         enqueued_at,
         stop_reason,
+        checksum: _,
     } = batch;
     let stats = BatchStats {
         progress_trace: Default::default(),

@@ -25,7 +25,7 @@ use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
-use crate::routes::is_dry_run;
+use crate::routes::{accepted_response_with_barrier, is_dry_run};
 use crate::Opt;
 
 pub mod compact;
@@ -241,7 +241,16 @@ pub async fn create_index(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&body.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     debug!(parameters = ?body, "Create index");
 
     let network = index_scheduler.network();
@@ -284,7 +293,7 @@ pub async fn create_index(
         let task = SummarizedTaskView::from(task);
         debug!(returns = ?task, "Create index");
 
-        Ok(HttpResponse::Accepted().json(task))
+        Ok(accepted_response_with_barrier(&task))
     } else {
         Err(AuthenticationError::InvalidToken.into())
     }
@@ -431,7 +440,16 @@ pub async fn update_index(
     req: HttpRequest,
     opt: web::Data<Opt>,
     analytics: web::Data<Analytics>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if cluster.is_follower() {
+        let body_bytes = serde_json::to_vec(&body.0).unwrap_or_default();
+        if let Some(resp) = cluster.forward_if_follower(&req, &body_bytes).await? {
+            return Ok(resp);
+        }
+    }
+
     debug!(parameters = ?body, "Update index");
 
     let network = index_scheduler.network();
@@ -480,7 +498,7 @@ pub async fn update_index(
     let task = SummarizedTaskView::from(task);
 
     debug!(returns = ?task, "Update index");
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 /// Delete index
@@ -522,7 +540,13 @@ pub async fn delete_index(
     index_uid: web::Path<String>,
     req: HttpRequest,
     opt: web::Data<Opt>,
+    cluster: web::Data<crate::cluster::ClusterState>,
 ) -> Result<HttpResponse, ResponseError> {
+    // Forward to leader if this node is a cluster follower
+    if let Some(resp) = cluster.forward_if_follower(&req, &[]).await? {
+        return Ok(resp);
+    }
+
     let network = index_scheduler.network();
     let task_network = task_network_and_check_leader_and_version(&req, &network)?;
 
@@ -546,7 +570,7 @@ pub async fn delete_index(
 
     debug!(returns = ?task, "Delete index");
 
-    Ok(HttpResponse::Accepted().json(task))
+    Ok(accepted_response_with_barrier(&task))
 }
 
 /// Stats of an `Index`, as known to the `stats` route.

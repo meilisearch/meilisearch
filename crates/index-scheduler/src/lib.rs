@@ -48,6 +48,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use tokio::sync::broadcast;
+
 use byte_unit::Byte;
 use dump::Dump;
 pub use error::Error;
@@ -73,7 +75,7 @@ use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
 };
-use meilisearch_types::tasks::{KindWithContent, Task};
+use meilisearch_types::tasks::{KindWithContent, Status, Task};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};
 use milli::vector::db::IndexEmbeddingConfig;
 pub use queue::Query;
@@ -93,6 +95,28 @@ use crate::utils::clamp_to_page_size;
 pub(crate) type BEI128 = I128<BE>;
 
 const TASK_SCHEDULER_SIZE_THRESHOLD_PERCENT_INT: u64 = 40;
+
+/// Trait for proposing tasks through Raft consensus in cluster mode.
+///
+/// When set on `IndexScheduler`, calls to `register()` will propose the task
+/// through Raft instead of inserting locally. The Raft state machine then
+/// calls `register_from_raft()` on ALL nodes (including the leader) to insert
+/// the task into each node's local LMDB.
+///
+/// Implementations must block until the task is committed and applied.
+pub trait TaskProposer: Send + Sync {
+    /// Propose a task through Raft consensus. Blocks until committed on all nodes.
+    /// Returns the assigned TaskId after the task has been applied locally.
+    ///
+    /// For `DocumentAdditionOrUpdate` tasks, `content_file` provides the file UUID
+    /// and bytes. The proposer sends the file to followers via the DML channel
+    /// before proposing the Raft entry.
+    fn propose_task(
+        &self,
+        kind: &KindWithContent,
+        content_file: Option<(uuid::Uuid, std::path::PathBuf)>,
+    ) -> std::result::Result<TaskId, Box<dyn std::error::Error + Send + Sync>>;
+}
 
 mod db_name {
     pub const CHAT_SETTINGS: &str = "chat-settings";
@@ -190,6 +214,10 @@ pub struct IndexScheduler {
     /// Everything related to the processing of the tasks
     pub scheduler: scheduler::Scheduler,
 
+    /// Broadcast channel for notifying when tasks reach a terminal state.
+    /// Used by the barrier mechanism for read-after-write consistency.
+    task_completion_tx: broadcast::Sender<TaskId>,
+
     /// Whether we should automatically cleanup the task queue or not.
     pub(crate) cleanup_enabled: bool,
 
@@ -232,6 +260,22 @@ pub struct IndexScheduler {
 
     /// The tokio runtime used for asynchronous tasks.
     runtime: Option<tokio::runtime::Handle>,
+
+    /// When set, `register()` proposes tasks via Raft instead of inserting locally.
+    /// Uses `OnceLock` because the proposer is wired after IndexScheduler creation
+    /// (to break the circular dependency with ClusterNode).
+    task_proposer: Arc<std::sync::OnceLock<Arc<dyn TaskProposer>>>,
+
+    /// Whether this node is the cluster leader (or standalone).
+    /// When false, the run loop skips `tick()` — only the leader processes batches.
+    /// Defaults to `true` (standalone mode always processes).
+    is_leader: Arc<std::sync::atomic::AtomicBool>,
+
+    /// Epoch seconds of the last successful IndexCompaction task.
+    /// Used by the cluster snapshot provider to decide whether pre-snapshot
+    /// compaction is needed (if the last compaction is older than the configured
+    /// max age, a fresh compaction runs before snapshot transfer).
+    last_compaction_at: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl IndexScheduler {
@@ -242,6 +286,7 @@ impl IndexScheduler {
             version: self.version.clone(),
             queue: self.queue.private_clone(),
             scheduler: self.scheduler.private_clone(),
+            task_completion_tx: self.task_completion_tx.clone(),
 
             index_mapper: self.index_mapper.clone(),
             cleanup_enabled: self.cleanup_enabled,
@@ -260,6 +305,9 @@ impl IndexScheduler {
             features: self.features.clone(),
             chat_settings: self.chat_settings,
             runtime: self.runtime.clone(),
+            task_proposer: self.task_proposer.clone(),
+            is_leader: self.is_leader.clone(),
+            last_compaction_at: self.last_compaction_at.clone(),
         }
     }
 
@@ -344,11 +392,14 @@ impl IndexScheduler {
 
         wtxn.commit()?;
 
+        let (task_completion_tx, _) = broadcast::channel(1024);
+
         Ok(Self {
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             version,
             queue,
             scheduler: Scheduler::new(&options, auth_env),
+            task_completion_tx,
 
             index_mapper,
             env,
@@ -370,6 +421,9 @@ impl IndexScheduler {
             features,
             chat_settings,
             runtime,
+            task_proposer: Arc::new(std::sync::OnceLock::new()),
+            is_leader: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            last_compaction_at: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         })
     }
 
@@ -394,6 +448,245 @@ impl IndexScheduler {
 
     fn read_txn(&self) -> Result<RoTxn<'_, WithoutTls>> {
         self.env.read_txn().map_err(|e| e.into())
+    }
+
+    /// Subscribe to task completion notifications.
+    /// Returns a receiver that yields task IDs as they reach terminal states.
+    pub fn subscribe_to_task_completions(&self) -> broadcast::Receiver<TaskId> {
+        self.task_completion_tx.subscribe()
+    }
+
+    /// Set the task proposer for cluster mode.
+    /// When set, `register()` proposes tasks via Raft instead of inserting locally.
+    /// Can be called on a shared reference (uses OnceLock internally).
+    pub fn set_task_proposer(&self, proposer: Arc<dyn TaskProposer>) {
+        self.task_proposer.set(proposer).ok();
+    }
+
+    /// Get the is_leader flag for cluster mode.
+    /// The run loop only processes batches when this is true.
+    pub fn is_leader_flag(&self) -> Arc<std::sync::atomic::AtomicBool> {
+        self.is_leader.clone()
+    }
+
+    /// Get the wake_up signal for cluster mode.
+    /// Used by the Raft metrics watcher to wake the scheduler when leadership changes.
+    pub fn wake_up_signal(&self) -> Arc<synchronoise::SignalEvent> {
+        self.scheduler.wake_up.clone()
+    }
+
+    /// Returns the epoch seconds of the last successful IndexCompaction task.
+    /// Returns 0 if no compaction has ever completed.
+    pub fn last_compaction_at(&self) -> u64 {
+        self.last_compaction_at.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Record that an IndexCompaction task completed successfully.
+    pub fn record_compaction(&self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        self.last_compaction_at.store(now, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Prepare a consistent snapshot of the entire database for cluster transfer.
+    ///
+    /// Uses LMDB `copy_to_path()` for each environment (index-scheduler, auth, indexes)
+    /// to get a frozen point-in-time view. Also copies VERSION, instance-uid, and
+    /// update files for enqueued tasks.
+    pub fn prepare_cluster_snapshot(
+        &self,
+        compaction: meilisearch_types::heed::CompactionOption,
+    ) -> Result<tempfile::TempDir> {
+        let temp_dir = tempfile::tempdir()?;
+
+        // 1. Copy VERSION file
+        let version_path = &self.scheduler.version_file_path;
+        if version_path.exists() {
+            std::fs::copy(version_path, temp_dir.path().join("VERSION"))?;
+        }
+
+        // 2. Copy instance-uid if present
+        if let Some(parent) = version_path.parent() {
+            let instance_uid_path = parent.join("instance-uid");
+            if instance_uid_path.exists() {
+                std::fs::copy(&instance_uid_path, temp_dir.path().join("instance-uid"))?;
+            }
+        }
+
+        // 3. Snapshot the index-scheduler LMDB env
+        let tasks_dst = temp_dir.path().join("tasks");
+        std::fs::create_dir_all(&tasks_dst)?;
+        self.env.copy_to_path(tasks_dst.join("data.mdb"), compaction)?;
+
+        // 4. Copy update files for enqueued tasks
+        let update_files_dst = temp_dir.path().join("update_files");
+        std::fs::create_dir_all(&update_files_dst)?;
+        {
+            let rtxn = self.env.read_txn()?;
+            let enqueued = self
+                .queue
+                .tasks
+                .get_status(&rtxn, meilisearch_types::tasks::Status::Enqueued)?;
+            for task_id in enqueued {
+                if let Some(task) = self.queue.tasks.get_task(&rtxn, task_id)? {
+                    if let Some(content_uuid) = task.content_uuid() {
+                        let src = self.queue.file_store.update_path(content_uuid);
+                        if src.exists() {
+                            let dst = update_files_dst.join(content_uuid.to_string());
+                            std::fs::copy(&src, &dst).ok(); // best-effort
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Snapshot every index
+        let indexes_dst = temp_dir.path().join("indexes");
+        std::fs::create_dir_all(&indexes_dst)?;
+        {
+            let rtxn = self.env.read_txn()?;
+            let index_mapping = self.index_mapper.index_mapping;
+            for result in index_mapping.iter(&rtxn)? {
+                let (name, uuid) = result?;
+                let dst = indexes_dst.join(uuid.to_string());
+                std::fs::create_dir_all(&dst)?;
+                let index = self.index_mapper.index(&rtxn, name)?;
+                index
+                    .copy_to_path(dst.join("data.mdb"), compaction)
+                    .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
+            }
+        }
+
+        // 6. Snapshot the auth LMDB env
+        let auth_dst = temp_dir.path().join("auth");
+        std::fs::create_dir_all(&auth_dst)?;
+        self.scheduler
+            .auth_env
+            .copy_to_path(auth_dst.join("data.mdb"), compaction)?;
+
+        tracing::info!("Prepared consistent cluster snapshot");
+        Ok(temp_dir)
+    }
+
+    /// Register a task that has been committed through Raft consensus.
+    /// Called by the Raft state machine on ALL nodes (including the leader).
+    /// Inserts the task directly into LMDB without going through Raft again.
+    /// Task IDs are auto-assigned from LMDB — deterministic because Raft
+    /// guarantees all nodes apply entries in the same order.
+    ///
+    /// If `content_file_bytes` is provided and the task is a `DocumentAdditionOrUpdate`,
+    /// writes the file to the local file store (skipping if it already exists, as on
+    /// the leader node where the file was originally uploaded).
+    /// Idempotency key stored in the `persisted` database to track which Raft
+    /// log entries have already been applied. Prevents duplicate tasks when the
+    /// cluster LMDB commit fails after the IndexScheduler commit, causing Raft
+    /// to replay the entry on restart.
+    const RAFT_LAST_APPLIED_KEY: &'static str = "raft_last_applied_log_index";
+
+    pub fn register_from_raft(
+        &self,
+        kind: KindWithContent,
+        raft_log_index: u64,
+    ) -> Result<Task> {
+        // Document content files are transferred out-of-band via the DML channel
+        // before the Raft entry is proposed, so they should already be on disk.
+        let mut wtxn = self.env.write_txn()?;
+
+        // Idempotency check: skip if this Raft log entry was already applied.
+        // This prevents duplicate tasks when the cluster LMDB `last_applied`
+        // commit fails after IndexScheduler has already committed the task.
+        if raft_log_index > 0 {
+            if let Some(stored) = self.persisted.get(&wtxn, Self::RAFT_LAST_APPLIED_KEY)? {
+                if let Ok(stored_index) = stored.parse::<u64>() {
+                    if raft_log_index <= stored_index {
+                        tracing::debug!(
+                            raft_log_index,
+                            stored_index,
+                            "Skipping already-applied Raft entry (idempotent)"
+                        );
+                        // Return a dummy task — the real one was already registered.
+                        // The caller only uses the task_uid from the response.
+                        wtxn.abort();
+                        let rtxn = self.read_txn()?;
+                        // Return the most recent task as a best-effort response.
+                        let last_task_id = self.queue.tasks.next_task_id(&rtxn)?.saturating_sub(1);
+                        let task = self.queue.tasks.get_task(&rtxn, last_task_id)?.ok_or_else(
+                            || Error::TaskNotFound(last_task_id),
+                        )?;
+                        return Ok(task);
+                    }
+                }
+            }
+        }
+
+        let task = self.queue.register(&mut wtxn, &kind, None, None, false, None)?;
+
+        // If the registered task is a task cancelation, signal stop if needed.
+        if let KindWithContent::TaskCancelation { tasks, .. } = kind {
+            let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
+            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks_to_cancel)
+            {
+                self.scheduler.must_stop_processing.must_stop();
+            }
+        }
+
+        // Update the Raft idempotency tracker in the same transaction.
+        if raft_log_index > 0 {
+            self.persisted.put(
+                &mut wtxn,
+                Self::RAFT_LAST_APPLIED_KEY,
+                &raft_log_index.to_string(),
+            )?;
+        }
+
+        wtxn.commit()?;
+        // Wake the scheduler on all nodes — every node that receives a task via Raft
+        // should process it, since followers now run tick() independently.
+        self.scheduler.wake_up.signal();
+        Ok(task)
+    }
+
+    /// Check whether a content file exists in the update file store.
+    pub fn content_file_exists(&self, uuid: uuid::Uuid) -> bool {
+        self.queue.file_store.update_path(uuid).exists()
+    }
+
+    /// Check whether a task has reached a terminal state (succeeded, failed, or canceled).
+    pub fn is_task_finished(&self, task_id: TaskId) -> Result<bool> {
+        let rtxn = self.read_txn()?;
+        let succeeded =
+            self.queue.tasks.get_status(&rtxn, meilisearch_types::tasks::Status::Succeeded)?;
+        if succeeded.contains(task_id) {
+            return Ok(true);
+        }
+        let failed =
+            self.queue.tasks.get_status(&rtxn, meilisearch_types::tasks::Status::Failed)?;
+        if failed.contains(task_id) {
+            return Ok(true);
+        }
+        let canceled =
+            self.queue.tasks.get_status(&rtxn, meilisearch_types::tasks::Status::Canceled)?;
+        Ok(canceled.contains(task_id))
+    }
+
+    /// Return the highest task ID in terminal state for a given index, if any.
+    pub fn latest_completed_task_for_index(&self, index: &str) -> Result<Option<TaskId>> {
+        let rtxn = self.read_txn()?;
+        let index_tasks = self.queue.tasks.index_tasks(&rtxn, index)?;
+        if index_tasks.is_empty() {
+            return Ok(None);
+        }
+        let succeeded =
+            self.queue.tasks.get_status(&rtxn, meilisearch_types::tasks::Status::Succeeded)?;
+        let failed =
+            self.queue.tasks.get_status(&rtxn, meilisearch_types::tasks::Status::Failed)?;
+        let canceled =
+            self.queue.tasks.get_status(&rtxn, meilisearch_types::tasks::Status::Canceled)?;
+        let terminal = succeeded | failed | canceled;
+        let completed_for_index = index_tasks & terminal;
+        Ok(completed_for_index.max())
     }
 
     /// Return `Ok(())` if the index scheduler is able to access one of its database.
@@ -492,6 +785,9 @@ impl IndexScheduler {
                 run.scheduler.wake_up.wait_timeout(std::time::Duration::from_secs(60));
 
                 loop {
+                    // All nodes process batches. In cluster mode, followers receive
+                    // the same tasks in the same Raft-determined order and produce
+                    // identical batches via the deterministic autobatcher.
                     let ret = catch_unwind(AssertUnwindSafe(|| run.tick()));
                     match ret {
                         Ok(Ok(TickOutcome::TickAgain(_))) => (),
@@ -763,6 +1059,21 @@ impl IndexScheduler {
         self.queue.get_batch_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
+    /// Return the most recently completed batch (succeeded or failed), if any.
+    /// Used by the cluster status endpoint for divergence detection.
+    pub fn last_completed_batch(&self) -> Result<Option<Batch>> {
+        let rtxn = self.read_txn()?;
+        // Get the union of succeeded and failed batch IDs
+        let succeeded = self.queue.batches.get_status(&rtxn, Status::Succeeded)?;
+        let failed = self.queue.batches.get_status(&rtxn, Status::Failed)?;
+        let finished = succeeded | failed;
+        // The last (highest) batch ID is the most recent
+        if let Some(batch_id) = finished.max() {
+            return self.queue.batches.get_batch(&rtxn, batch_id);
+        }
+        Ok(None)
+    }
+
     /// Register a new task in the scheduler.
     ///
     /// If it fails and data was associated with the task, it tries to delete the associated data.
@@ -797,6 +1108,40 @@ impl IndexScheduler {
         dry_run: bool,
         task_network: Option<TaskNetwork>,
     ) -> Result<Task> {
+        // In cluster mode, propose the task through Raft instead of inserting locally.
+        // The Raft state machine will call register_from_raft() on all nodes.
+        // Skip for dry_run (no actual write needed) and task_network imports
+        // (network replication has its own mechanism).
+        if !dry_run && task_network.is_none() {
+            if let Some(proposer) = self.task_proposer.get() {
+                // Read content file for document operations. The proposer sends
+                // the file to followers via DML channel before the Raft entry.
+                let content_file = match &kind {
+                    KindWithContent::DocumentAdditionOrUpdate { content_file, .. } => {
+                        let path = self.queue.file_store.update_path(*content_file);
+                        Some((*content_file, path))
+                    }
+                    _ => None,
+                };
+                let task_id = proposer
+                    .propose_task(&kind, content_file)
+                    .map_err(|e| -> Error {
+                        // Try to downcast to our own Error type (proposer may box
+                        // ClusterNoLeader / ClusterQuorumUnavailable as Error).
+                        match e.downcast::<Error>() {
+                            Ok(err) => *err,
+                            Err(e) => anyhow::anyhow!("raft propose failed: {e}").into(),
+                        }
+                    })?;
+                // After Raft applies, the task is in our local LMDB. Read and return it.
+                let rtxn = self.env.read_txn()?;
+                let task = self.queue.tasks.get_task(&rtxn, task_id)?.ok_or_else(|| {
+                    anyhow::anyhow!("task {task_id} not found in local LMDB after Raft commit")
+                })?;
+                return Ok(task);
+            }
+        }
+
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
             && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64
