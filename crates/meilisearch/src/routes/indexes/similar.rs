@@ -46,7 +46,7 @@ pub struct SimilarApi;
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
         SimilarQueryGet
     ),
     responses(
@@ -128,7 +128,7 @@ pub async fn similar_get(
 /// > Useful for “more like this” or recommendations.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
-    params(("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = SimilarQuery,
     responses(
         (status = 200, description = "The documents are returned.", body = SimilarResult, content_type = "application/json", example = json!(

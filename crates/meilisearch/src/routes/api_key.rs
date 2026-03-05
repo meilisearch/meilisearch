@@ -186,7 +186,7 @@ pub async fn list_api_keys(
 /// Retrieve a single API key by its `uid` or by its `key` value.
 #[routes::path(
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
+    params(("key" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     responses(
         (status = 200, description = "The key is returned.", body = KeyView, content_type = "application/json", example = json!(
             {
@@ -257,7 +257,7 @@ pub async fn get_api_key(
 /// Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
 #[routes::path(
     security(("Bearer" = ["keys.update", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
+    params(("key" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     request_body = PatchApiKey,
     responses(
         (status = 200, description = "The key has been updated.", body = KeyView, content_type = "application/json", example = json!(
@@ -328,7 +328,7 @@ pub async fn patch_api_key(
 /// Permanently delete the specified API key. The key will no longer be valid for authentication.
 #[routes::path(
     security(("Bearer" = ["keys.delete", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
+    params(("key" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     responses(
         (status = NO_CONTENT, description = "The key has been removed."),
         (status = 404, description = "API key not found.", body = ResponseError, content_type = "application/json", example = json!(

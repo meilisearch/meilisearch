@@ -24,7 +24,7 @@ use crate::extractors::authentication::GuardedData;
 #[routes::path(
     security(("Bearer" = ["chats.settings.get", "*"])),
     params(
-        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
@@ -73,7 +73,7 @@ pub async fn get_settings(
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
     params(
-        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
@@ -199,7 +199,7 @@ pub async fn patch_settings(
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
     params(
-        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(

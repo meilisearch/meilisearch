@@ -65,7 +65,7 @@ use crate::search_queue::SearchQueue;
 /// Request a chat completion
 #[routes::path(
     params(
-        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     security(("Bearer" = ["chats.completions", "*"])),
     request_body(content = Map<String, Value>),

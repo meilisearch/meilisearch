@@ -376,7 +376,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
         SearchQueryGet
     ),
     responses(
@@ -585,7 +585,7 @@ pub(crate) async fn search(
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
     params(
-        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = SearchQuery,
     responses(

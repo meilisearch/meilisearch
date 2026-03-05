@@ -251,7 +251,7 @@ pub struct ListFieldsFilter {
     description = "Returns a paginated list of fields in the index with their metadata: whether they are displayed, searchable, sortable, filterable, distinct, have a custom ranking rule (asc/desc), and for filterable fields the sort order for facet values.",
     security(("Bearer" = ["fields.post", "fields.*", "*"])),
     params((
-        "indexUid" = String,
+        "index_uid" = String,
         Path,
         description = "Unique identifier of the index whose fields to list.",
         example = "movies",

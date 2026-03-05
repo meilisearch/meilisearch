@@ -181,8 +181,8 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
-        ("documentId" = String, Path, example = "85087", description = "The document identifier.", nullable = false),
+        ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("document_id" =  String, Path, example = "85087", description = "The document identifier.", nullable = false),
         GetDocument,
    ),
     responses(
@@ -292,8 +292,8 @@ impl Aggregate for DocumentsDeletionAggregator {
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
-        ("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
-        ("documentId" = String, Path, example = "853", description = "Document identifier.", nullable = false),
+        ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("document_id" =  String, Path, example = "853", description = "Document identifier.", nullable = false),
     ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -488,7 +488,7 @@ pub struct BrowseQuery {
 /// Retrieve a set of documents with optional filtering, sorting, and pagination. Use the request body to specify filters, sort order, and which fields to return.
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = BrowseQuery,
     responses(
         (status = 200, description = "Documents returned.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
@@ -575,7 +575,7 @@ pub async fn documents_by_query_post(
 #[routes::path(
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
-        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
         BrowseQueryGet
     ),
     responses(
@@ -851,7 +851,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 #[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
-        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
@@ -963,7 +963,7 @@ pub async fn replace_documents(
 #[routes::path(
     security(("Bearer" = ["documents.add", "documents.*", "*"])),
     params(
-        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
         // Here we can use the post version of the browse query since it contains the exact same parameter
         UpdateDocumentsQuery,
     ),
@@ -1273,7 +1273,7 @@ async fn copy_body_to_file(
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
-        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body(content = Vec<Value>),
     responses(
@@ -1388,7 +1388,7 @@ pub struct DocumentDeletionByFilter {
 /// Delete all documents in the index that match the given filter expression.
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = DocumentDeletionByFilter,
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -1548,7 +1548,7 @@ impl Aggregate for EditDocumentsByFunctionAggregator {
 #[routes::path(
     security(("Bearer" = ["documents.*", "*"])),
     params(
-        ("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
+        ("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false),
     ),
     request_body = DocumentEditionByFunction,
     responses(
@@ -1681,7 +1681,7 @@ pub async fn edit_documents_by_function(
 /// Permanently delete all documents in the specified index. Settings and index metadata are preserved.
 #[routes::path(
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {

@@ -25,7 +25,7 @@ pub struct CompactApi;
 /// Compaction reorganizes the index database to reclaim space and improve read performance.
 #[routes::path(
     security(("Bearer" = ["indexes.compact", "*"])),
-    params(("indexUid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
