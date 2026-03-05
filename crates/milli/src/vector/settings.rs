@@ -21,109 +21,201 @@ use crate::UserError;
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct EmbeddingSettings {
-    /// Embedding provider: `openAi`, `huggingFace`, `ollama`, `rest`, or `userProvided`. Determines which other fields are required or allowed.
+    /// Embedding provider.
+    ///
+    /// - `openAi`: integration with OpenAI. Use `rest` for OpenAI-like APIs.
+    /// - `huggingFace`: download a model from [Hugging Face](https://huggingface.co/), then compute embeddings on the local CPU/GPU.
+    /// - `ollama`: integration with [ollama](https://ollama.com/).
+    /// - `rest`: configurable integration with a remote embedder via its REST API.
+    /// - `composite`: combine two embedding providers at indexing and search time.
+    ///   The generated embeddings must be **exactly the same** regardless of the embedding provider.
+    /// - `userProvided`: manually provide embeddings in documents.
+    ///
+    /// - Determines which other fields are required or allowed.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<EmbedderSource>, default = json!("openAi"))]
     pub source: Setting<EmbedderSource>,
 
-    /// Model name. Mandatory for `ollama`. For `openAi`/`huggingFace` optional with defaults. Example: `text-embedding-3-small`, `BAAI/bge-base-en-v1.5`.
+    /// Model name.
+    ///
+    /// - Available for `openAi`, `huggingFace`, `ollama`.
+    /// - Mandatory for `ollama`.
+    /// - For `openAi`/`huggingFace` optional with defaults.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("text-embedding-3-small"))]
     pub model: Setting<String>,
 
-    /// Model revision (e.g. Hugging Face commit SHA). Only for `huggingFace`. If unset, latest is used.
+    /// Model revision (e.g. Hugging Face commit SHA).
+    ///
+    /// - Only available for `huggingFace`.
+    /// - If unset, latest is used.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>)]
     pub revision: Setting<String>,
 
-    /// Pooling method for Hugging Face: `useModel`, `forceMean`, or `forceCls`.
+    /// Pooling method when computing embedding locally.
+    ///
+    /// - Only available for `huggingFace`.
+    /// - `useModel`: automatically determine the pooling method depending on the chosen model (recommended).
+    /// - `forceMean`: always use mean pooling.
+    /// - `forceCls`: always use CLS pooling.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<OverridePooling>, default = json!("useModel"))]
     pub pooling: Setting<OverridePooling>,
 
-    /// API key sent to the embedder. For `openAi` can be read from `OPENAI_API_KEY`. Returned value is redacted.
+    /// API key sent to the embedder.
+    ///
+    /// - If not set for source `openAi`, the key is read from the `OPENAI_API_KEY` then `MEILI_OPENAI_API_KEY` environment variables.
+    /// - If not set for other sources, no bearer token is sent.
+    /// - This setting is partially hidden when returned by the settings
+    /// - 🌱 Changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>)]
     pub api_key: Setting<String>,
 
-    /// Number of dimensions of the embedding vectors. Mandatory for `userProvided`. For `openAi`/`ollama`/`rest` inferred if omitted.
+    /// Number of dimensions of the embedding vectors.
+    ///
+    /// - Available for `userProvided`, `openAi`, `ollama`, `rest`.
+    /// - Mandatory for `userProvided`.
+    /// - For `openAi`/`ollama`/`rest` inferred if omitted.
+    /// - 🏗️ For `openAi`, changing the value of this parameter always regenerates embeddings
+    /// - 🌱 For other sources, changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<usize>, example = json!(1536))]
     pub dimensions: Setting<usize>,
 
-    /// When true, vectors are stored as 1-bit (smaller, faster, less precise). Irreversible once enabled.
+    /// When true, vectors are stored as 1-bit (smaller, faster, less precise).
+    ///
+    /// - Available for all sources.
+    /// - Irreversible once enabled.
+    /// - 🏗️ When set to true, embeddings are not regenerated, but they are binary quantized, which takes time.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<bool>, default = false)]
     pub binary_quantized: Setting<bool>,
 
-    /// Liquid template to build the text sent to the embedder for each document. Example: `"{{doc.title}}: {{doc.overview}}"`.
+    /// [Liquid template](https://shopify.github.io/liquid/) to build the text sent to the embedder for each document.
+    ///
+    /// - Available for `openAi`, `huggingFace`, `ollama`, `rest`.
+    /// - 🏗️ When modified, embeddings are regenerated for documents whose rendering through the template produces a different text.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("{{doc.title}}: {{doc.overview}}"))]
     pub document_template: Setting<String>,
 
-    /// Max size in bytes of the rendered document template. Longer output is truncated.
+    /// Max size in bytes of the rendered document template.
+    ///
+    /// Longer output is truncated.
+    ///
+    /// - Available for `openAi`, `huggingFace`, `ollama`, `rest`.
+    /// - 🏗️ When increased, embeddings are regenerated for documents whose rendering through the template produces a different text.
+    /// - 🌱 When decreased, embeddings are never regenerated
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<usize>, default = 400, example = json!(400))]
     pub document_template_max_bytes: Setting<usize>,
 
-    /// URL of the embedder API. Mandatory for `rest`. Optional for `openAi` and `ollama`.
+    /// URL of the embedder API.
+    ///
+    /// - Mandatory for `rest`. Optional for `openAi` and `ollama`.
+    /// - 🌱 When modified for `openAi``, embeddings are never regenerated
+    /// - 🏗️ When modified for `ollama` and `rest`, embeddings are always regenerated
+    /// - If targetting URL resolving to a non-global IP (such as `localhost`), make sure that
+    ///   `--experimental-allowed-ip-networks` allows it.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("http://localhost:11434/api/embeddings"))]
     pub url: Setting<String>,
 
-    /// Fragments (with Liquid) sent to the embedder at indexing time. For `rest` with multimodal; key is fragment name, value the payload.
+    /// Fragments (with [Liquid](https://shopify.github.io/liquid/)) sent to the embedder at indexing time.
+    ///
+    /// For `rest` with multimodal; key is fragment name, value the payload.
+    ///
+    /// See also [Image search with multimodal embeddings](https://www.meilisearch.com/docs/learn/ai_powered_search/image_search_with_multimodal_embeddings)
+    ///
+    /// - 🏗️ When a fragment is deleted by passing `null` to its name, the corresponding embeddings are removed from documents.
+    /// - 🏗️ When a fragment is modified, the corresponding embeddings are regenerated if their rendered version changes.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
     pub indexing_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
-    /// Fragments sent to the embedder at search time. For `rest` with multimodal.
+    /// Fragments (with [Liquid](https://shopify.github.io/liquid/)) sent to the embedder at search time.
+    ///
+    /// For `rest` with multimodal.
+    ///
+    /// See also [Image search with multimodal embeddings](https://www.meilisearch.com/docs/learn/ai_powered_search/image_search_with_multimodal_embeddings)
+    ///
+    /// - 🌱 Changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
     pub search_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
-    /// Request body template for `rest` embedder. Use `"{{text}}"` for the input. Mandatory for `rest`.
+    /// Request body template for `rest` embedder.
+    ///
+    /// See also [Configure a REST embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/configure_rest_embedder)
+    ///
+    /// - Use `"{{text}}"` for the input.
+    /// - Mandatory for `rest`.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<serde_json::Value>)]
     pub request: Setting<serde_json::Value>,
 
-    /// Response template for `rest` embedder. Use `"{{embedding}}"` where the embedding array is. Mandatory for `rest`.
+    /// Response template for `rest` embedder.
+    ///
+    /// See also [Configure a REST embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/configure_rest_embedder)
+    ///
+    /// - Use `"{{embedding}}"` where the embedding array is.
+    /// - Mandatory for `rest`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<serde_json::Value>)]
     pub response: Setting<serde_json::Value>,
 
-    /// Extra HTTP headers sent to the embedder. For `rest`.
+    /// Extra HTTP headers sent to the embedder.
+    ///
+    /// - Available for `rest`.
+    /// - 🌱 Changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, String>>)]
     pub headers: Setting<BTreeMap<String, String>>,
 
-    /// Embedder used at search time when using a composite embedder. Same sub-parameters as a top-level embedder (`source`, `model`, `url`, etc.); no `documentTemplate`/`documentTemplateMaxBytes`.
+    /// Embedder used at search time when using a composite embedder.
+    ///
+    /// Same sub-parameters as a top-level embedder (`source`, `model`, `url`, etc.); no `documentTemplate`/`documentTemplateMaxBytes`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<SubEmbeddingSettings>)]
     pub search_embedder: Setting<SubEmbeddingSettings>,
 
-    /// Embedder used at indexing time when using a composite embedder. Same sub-parameters as a top-level embedder (`source`, `model`, `documentTemplate`, `url`, etc.).
+    /// Embedder used at indexing time when using a composite embedder.
+    ///
+    /// Same sub-parameters as a top-level embedder (`source`, `model`, `documentTemplate`, `url`, etc.).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<SubEmbeddingSettings>)]
     pub indexing_embedder: Setting<SubEmbeddingSettings>,
 
-    /// Affine transform (mean, sigma) for semantic score so it aligns with ranking score.
+    /// Affine transform (mean, sigma) applied to the semantic score to make it more comparable with the ranking score.
+    ///
+    /// See also [this article](https://www.meilisearch.com/blog/fixing-hybrid-search#making-the-scores-comparable).
+    ///
+    /// - Available for all sources.
+    /// - 🌱 Changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<DistributionShift>, example = json!({ "mean": 0.7, "sigma": 0.3 }))]
@@ -135,85 +227,165 @@ pub struct EmbeddingSettings {
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(rename_all = camelCase, deny_unknown_fields)]
 pub struct SubEmbeddingSettings {
-    /// Embedding provider: `openAi`, `huggingFace`, `ollama`, or `rest`. Determines which other fields are required or allowed.
+    /// Embedding provider.
+    ///
+    /// - `openAi`: integration with OpenAI. Use `rest` for OpenAI-like APIs.
+    /// - `huggingFace`: download a model from [Hugging Face](https://huggingface.co/), then compute embeddings on the local CPU/GPU.
+    /// - `ollama`: integration with [ollama](https://ollama.com/).
+    /// - `rest`: configurable integration with a remote embedder via its REST API.
+    /// - `userProvided`: manually provide embeddings in documents.
+    ///
+    /// - Determines which other fields are required or allowed.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<EmbedderSource>, default = json!("openAi"), example = json!("openAi"))]
     pub source: Setting<EmbedderSource>,
 
-    /// Model name. Mandatory for `ollama`. For `openAi`/`huggingFace` optional with defaults.
+    /// Model name.
+    ///
+    /// - Available for `openAi`, `huggingFace`, `ollama`.
+    /// - Mandatory for `ollama`.
+    /// - For `openAi`/`huggingFace` optional with defaults.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("text-embedding-3-small"))]
     pub model: Setting<String>,
 
-    /// Model revision (e.g. Hugging Face commit SHA). Only for `huggingFace`. If unset, latest is used.
+    /// Model revision (e.g. Hugging Face commit SHA).
+    ///
+    /// - Only available for `huggingFace`.
+    /// - If unset, latest is used.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("617ca489d9e86b49b8167676d8220688b99db36e"))]
     pub revision: Setting<String>,
 
-    /// Pooling method for Hugging Face: `useModel`, `forceMean`, or `forceCls`.
+    /// Pooling method when computing embedding locally.
+    ///
+    /// - Only available for `huggingFace`.
+    /// - `useModel`: automatically determine the pooling method depending on the chosen model (recommended).
+    /// - `forceMean`: always use mean pooling.
+    /// - `forceCls`: always use CLS pooling.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<OverridePooling>, default = json!("useModel"), example = json!("useModel"))]
     pub pooling: Setting<OverridePooling>,
 
-    /// API key sent to the embedder. For `openAi` can be read from `OPENAI_API_KEY`. Returned value is redacted.
+    /// API key sent to the embedder.
+    ///
+    /// - If not set for source `openAi`, the key is read from the `OPENAI_API_KEY` then `MEILI_OPENAI_API_KEY` environment variables.
+    /// - If not set for other sources, no bearer token is sent.
+    /// - This setting is partially hidden when returned by the settings
+    /// - 🌱 Changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("your-api-key"))]
     pub api_key: Setting<String>,
 
-    /// Number of dimensions of the embedding vectors. Mandatory for `userProvided`. For other sources inferred if omitted.
+    /// Number of dimensions of the embedding vectors.
+    ///
+    /// - Available for `userProvided`, `openAi`, `ollama`, `rest`.
+    /// - Mandatory for `userProvided`.
+    /// - For `openAi`/`ollama`/`rest` inferred if omitted.
+    /// - 🏗️ For `openAi`, changing the value of this parameter always regenerates embeddings
+    /// - 🌱 For other sources, changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<usize>, example = json!(1536))]
     pub dimensions: Setting<usize>,
 
-    /// Liquid template to build the text sent to the embedder for each document. Required for `indexingEmbedder`; not used for `searchEmbedder`.
+    /// [Liquid template](https://shopify.github.io/liquid/) to build the text sent to the embedder for each document.
+    ///
+    /// - Only available for `indexingEmbedder`, not `searchEmbedder`.
+    /// - Available for `openAi`, `huggingFace`, `ollama`, `rest`.
+    /// - 🏗️ When modified, embeddings are regenerated for documents whose rendering through the template produces a different text.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("{{doc.title}}: {{doc.overview}}"))]
     pub document_template: Setting<String>,
 
-    /// Max size in bytes of the rendered document template. Longer output is truncated. Only for `indexingEmbedder`.
+    /// Max size in bytes of the rendered document template.
+    ///
+    /// Longer output is truncated.
+    ///
+    /// - Only available for `indexingEmbedder`, not `searchEmbedder`.
+    /// - Available for `openAi`, `huggingFace`, `ollama`, `rest`.
+    /// - 🏗️ When increased, embeddings are regenerated for documents whose rendering through the template produces a different text.
+    /// - 🌱 When decreased, embeddings are never regenerated
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<usize>, default = 400, example = json!(400))]
     pub document_template_max_bytes: Setting<usize>,
 
-    /// URL of the embedder API. Mandatory for `rest`. Optional for `openAi` and `ollama`.
+    /// URL of the embedder API.
+    ///
+    /// - Mandatory for `rest`. Optional for `openAi` and `ollama`.
+    /// - 🌱 When modified for `openAi``, embeddings are never regenerated
+    /// - 🏗️ When modified for `ollama` and `rest`, embeddings are always regenerated
+    /// - If targetting URL resolving to a non-global IP (such as `localhost`), make sure that
+    ///   `--experimental-allowed-ip-networks` allows it.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("http://localhost:11434/api/embeddings"))]
     pub url: Setting<String>,
 
-    /// Fragments (with Liquid) sent to the embedder at indexing time. For `rest` with multimodal; key is fragment name, value the payload.
+    /// Fragments (with [Liquid](https://shopify.github.io/liquid/)) sent to the embedder at indexing time.
+    ///
+    /// For `rest` with multimodal; key is fragment name, value the payload.
+    ///
+    /// See also [Image search with multimodal embeddings](https://www.meilisearch.com/docs/learn/ai_powered_search/image_search_with_multimodal_embeddings)
+    ///
+    /// - Only available for `indexingEmbedder`, not `searchEmbedder`.
+    /// - 🏗️ When a fragment is deleted by passing `null` to its name, the corresponding embeddings are removed from documents.
+    /// - 🏗️ When a fragment is modified, the corresponding embeddings are regenerated if their rendered version changes.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
     pub indexing_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
-    /// Fragments sent to the embedder at search time. For `rest` with multimodal.
+    /// Fragments (with [Liquid](https://shopify.github.io/liquid/)) sent to the embedder at search time.
+    ///
+    /// For `rest` with multimodal.
+    ///
+    /// See also [Image search with multimodal embeddings](https://www.meilisearch.com/docs/learn/ai_powered_search/image_search_with_multimodal_embeddings)
+    ///
+    /// - 🌱 Changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, serde_json::Value>>, default = json!({}))]
     pub search_fragments: Setting<BTreeMap<String, Option<Fragment>>>,
 
-    /// Request body template for `rest` embedder. Use `"{{text}}"` for the input. Mandatory for `rest`.
+    /// Request body template for `rest` embedder.
+    ///
+    /// See also [Configure a REST embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/configure_rest_embedder)
+    ///
+    /// - Use `"{{text}}"` for the input.
+    /// - Mandatory for `rest`.
+    /// - 🏗️ Changing the value of this parameter always regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<serde_json::Value>)]
     pub request: Setting<serde_json::Value>,
 
-    /// Response template for `rest` embedder. Use `"{{embedding}}"` where the embedding array is. Mandatory for `rest`.
+    /// Response template for `rest` embedder.
+    ///
+    /// See also [Configure a REST embedder](https://www.meilisearch.com/docs/learn/ai_powered_search/configure_rest_embedder)
+    ///
+    /// - Use `"{{embedding}}"` where the embedding array is.
+    /// - Mandatory for `rest`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<serde_json::Value>)]
     pub response: Setting<serde_json::Value>,
 
-    /// Extra HTTP headers sent to the embedder. For `rest`.
+    /// Extra HTTP headers sent to the embedder.
+    ///
+    /// - Available for `rest`.
+    /// - 🌱 Changing the value of this parameter never regenerates embeddings
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<BTreeMap<String, String>>)]

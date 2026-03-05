@@ -309,7 +309,7 @@ pub struct Settings<T> {
     /// [Embedders](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search) used for semantic and [hybrid search](https://www.meilisearch.com/docs/learn/ai_powered_search/getting_started_with_ai_search). Map of embedder name to config (`source`, `model`, `documentTemplate`, etc.).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default, error = DeserrJsonError<InvalidSettingsEmbedders>)]
-    #[schema(value_type = Option<BTreeMap<String, SettingEmbeddingSettings>>, default = json!({}), example = json!({ "default": { "source": "openAi", "model": "text-embedding-3-small", "documentTemplate": "{{doc.title}}: {{doc.overview}}" } }))]
+    #[schema(value_type = Option<BTreeMap<String, crate::milli::vector::settings::EmbeddingSettings>>, default = json!({}), example = json!({ "default": { "source": "openAi", "model": "text-embedding-3-small", "documentTemplate": "{{doc.title}}: {{doc.overview}}" } }), nullable = true)]
     pub embedders: Setting<BTreeMap<String, SettingEmbeddingSettings>>,
 
     /// Maximum duration of a search in milliseconds. If reached, the search stops and returns results computed so far. When null, 1500 ms is used.
