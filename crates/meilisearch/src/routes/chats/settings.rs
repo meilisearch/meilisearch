@@ -14,12 +14,22 @@ use meilisearch_types::features::{
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{OpenApi, ToSchema};
 
 use super::ChatsParam;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(get_settings, patch_settings, reset_settings),
+    tags((
+        name = "Chats",
+        description = "The `/chats` route allows you to manage chat workspaces and interact with LLM-powered chat completions that can search your Meilisearch indexes.",
+    )),
+)]
+pub struct ChatSettingsApi;
 
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -30,6 +40,20 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
     );
 }
 
+/// Get chat workspace settings
+///
+/// Return the full settings of a chat workspace, including the LLM provider source, base URL, organization/project IDs, and custom prompts. Secrets such as the API key are redacted in the response.
+#[utoipa::path(
+    get,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chats.settings.get", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace whose settings you want to retrieve", example = "default")),
+    responses(
+        (status = 200, description = "The chat workspace settings. Secret fields like `apiKey` are redacted.", body = ChatWorkspaceSettings, content_type = "application/json"),
+        (status = 404, description = "The requested chat workspace does not exist", body = ResponseError, content_type = "application/json"),
+    )
+)]
 async fn get_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_GET }>,
@@ -54,6 +78,22 @@ async fn get_settings(
     Ok(HttpResponse::Ok().json(settings))
 }
 
+/// Update chat workspace settings
+///
+/// Partially update the settings of a chat workspace. Only the fields present in the request body are changed; omitted fields keep their current value. Set a field to `null` to reset it to its default.
+///
+/// If the workspace does not exist yet, it is created with default values before the patch is applied. This is the standard way to create a new workspace.
+#[utoipa::path(
+    patch,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chats.settings.update", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace to update (created automatically if it does not exist)", example = "default")),
+    request_body(content = ChatWorkspaceSettings, description = "A partial settings object. Include only the fields you want to change. Set a field to `null` to reset it to its default value."),
+    responses(
+        (status = 200, description = "The full settings of the workspace after the update has been applied. Secret fields like `apiKey` are redacted.", body = ChatWorkspaceSettings, content_type = "application/json"),
+    )
+)]
 async fn patch_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_UPDATE }>,
@@ -155,6 +195,20 @@ async fn patch_settings(
     Ok(HttpResponse::Ok().json(settings))
 }
 
+/// Reset chat workspace settings
+///
+/// Reset **all** settings of a chat workspace back to their default values. This clears the LLM provider configuration, API keys, and custom prompts. The workspace itself is not deleted.
+#[utoipa::path(
+    delete,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chats.settings.update", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace whose settings you want to reset", example = "default")),
+    responses(
+        (status = 200, description = "The settings have been reset. Returns the new default settings.", body = ChatWorkspaceSettings, content_type = "application/json"),
+        (status = 404, description = "The requested chat workspace does not exist", body = ResponseError, content_type = "application/json"),
+    )
+)]
 async fn reset_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_UPDATE }>,

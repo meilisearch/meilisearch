@@ -38,6 +38,7 @@ use meilisearch_types::{Document, Index};
 use serde::Deserialize;
 use serde_json::json;
 use tokio::runtime::Handle;
+use utoipa::OpenApi;
 use tokio::sync::mpsc::error::SendError;
 
 use super::chat_completion_analytics::ChatCompletionAggregator;
@@ -62,11 +63,36 @@ use crate::routes::indexes::search::search_kind;
 use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
 use crate::search_queue::SearchQueue;
 
+#[derive(OpenApi)]
+#[openapi(
+    paths(chat),
+    tags((
+        name = "Chats",
+        description = "The `/chats` route allows you to manage chat workspaces and interact with LLM-powered chat completions that can search your Meilisearch indexes.",
+    )),
+)]
+pub struct ChatCompletionsApi;
+
 pub fn configure(cfg: &mut web::ServiceConfig) {
     cfg.service(web::resource("").route(web::post().to(chat)));
 }
 
-/// Get a chat completion
+/// Create a chat completion
+///
+/// Send an [OpenAI-compatible](https://platform.openai.com/docs/api-reference/chat/create) chat completion request within a workspace. Meilisearch automatically injects a search tool so the LLM can query your indexes to ground its answers in real data.
+///
+/// When `stream` is `true` (recommended), the response is a stream of Server-Sent Events. When `false`, the full response is returned as a single JSON object (not yet implemented).
+#[utoipa::path(
+    post,
+    path = "",
+    tag = "Chats",
+    security(("Bearer" = ["chatCompletions", "*"])),
+    params(("workspace_uid" = String, Path, description = "The unique identifier of the chat workspace to use for this completion", example = "default")),
+    request_body(content = serde_json::Value, description = "An OpenAI-compatible chat completion request. Key fields: `model` (required), `messages` (array of conversation messages), `stream` (boolean, recommended `true`), and `tools` (optional front-end notification tools like `_meiliSearchProgress`).", content_type = "application/json"),
+    responses(
+        (status = 200, description = "The chat completion response. When `stream: true`, this is a stream of Server-Sent Events following the OpenAI streaming format. When `stream: false`, a single JSON chat completion object is returned.", content_type = "application/json"),
+    )
+)]
 async fn chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
