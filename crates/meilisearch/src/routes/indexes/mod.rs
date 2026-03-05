@@ -118,14 +118,14 @@ impl ListIndexes {
 
 /// List indexes
 ///
-/// Return all indexes on the instance.
-///
-/// Results are paginated using `offset` and `limit` query parameters.
+/// Returns a paginated list of indexes. Use the `offset` and `limit` query parameters to page through results.
 #[routes::path(
+    summary = "List all indexes",
+    description = "Returns a paginated list of indexes. Use the `offset` and `limit` query parameters to page through results.",
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
     params(ListIndexes),
     responses(
-        (status = 200, description = "Indexes are returned.", body = PaginationView<IndexView>, content_type = "application/json", example = json!(
+        (status = 200, description = "Returns the list of indexes with pagination metadata.", body = PaginationView<IndexView>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {

@@ -10,47 +10,33 @@ use crate::index::{self, ChatConfig, MatchingStrategy, RankingScoreThreshold, Se
 use crate::prompt::{default_max_bytes, PromptData};
 use crate::update::Setting;
 
-/// Configuration settings for AI-powered chat and search functionality.
-///
-/// These settings control how documents are presented to the LLM and what
-/// search parameters are used when the LLM queries the index.
+/// [Chat (conversation)](https://www.meilisearch.com/docs/learn/chat/getting_started_with_chat) settings: how the index is described to the LLM and how it is queried.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = JsonError, deny_unknown_fields, rename_all = camelCase)]
 pub struct ChatSettings {
-    /// A description of this index that helps the LLM understand its contents
-    /// and purpose. This description is provided to the LLM to help it decide
-    /// when and how to query this index.
-    /// Example: "Contains product catalog with prices and descriptions".
+    /// Index description shown to the LLM so it can decide when and how to query this index.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<String>)]
+    #[schema(value_type = Option<String>, default = json!(""), example = json!("A comprehensive movie database containing titles, overviews, genres, and release dates"))]
     pub description: Setting<String>,
 
-    /// A liquid template used to render documents to a text that can be embedded.
-    ///
-    /// Meillisearch interpolates the template for each document and sends the resulting text to the embedder.
-    /// The embedder then generates document vectors based on this text.
+    /// Liquid template that defines the text sent to the LLM for each document.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<String>)]
+    #[schema(value_type = Option<String>, example = json!("{% for field in fields %}{% if field.is_searchable and field.value != nil %}{{ field.name }}: {{ field.value }}\n{% endif %}{% endfor %}"))]
     pub document_template: Setting<String>,
 
-    /// Maximum size in bytes for the rendered document text. Texts longer than
-    /// this limit are truncated. This prevents very large documents from
-    /// consuming too much context in the LLM conversation.
-    /// Defaults to `400` bytes.
+    /// Maximum size in bytes of the rendered document template. Longer text is truncated.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<usize>)]
+    #[schema(value_type = Option<usize>, default = 400, example = json!(400))]
     pub document_template_max_bytes: Setting<usize>,
 
-    /// Default search parameters used when the LLM queries this index.
-    /// These settings control how search results are retrieved and ranked.
-    /// If not specified, standard search defaults are used.
+    /// Search parameters used when the LLM queries this index (`hybrid`, `limit`, `sort`, `distinct`, etc.).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<ChatSearchParams>)]
+    #[schema(value_type = Option<ChatSearchParams>, default = json!({}), example = json!({ "limit": 20 }))]
     pub search_parameters: Setting<ChatSearchParams>,
 }
 
@@ -96,92 +82,66 @@ impl From<ChatConfig> for ChatSettings {
     }
 }
 
-/// Search parameters that control how the LLM queries this index.
-///
-/// These settings are applied automatically when the chat system
-/// performs searches.
+/// Search parameters applied when the LLM queries this index.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = JsonError, deny_unknown_fields, rename_all = camelCase)]
 pub struct ChatSearchParams {
-    /// Configuration for hybrid search combining keyword and semantic search.
-    /// Set the `semanticRatio` to balance between keyword matching (0.0) and
-    /// semantic similarity (1.0). Requires an embedder to be configured.
+    /// Hybrid search: mix of keyword and semantic search. Requires an embedder (set via `embedder` and optionally `semanticRatio`).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<HybridQuery>)]
+    #[schema(value_type = Option<HybridQuery>, example = json!({ "embedder": "default", "semanticRatio": 0.5 }))]
     pub hybrid: Setting<HybridQuery>,
 
-    /// Maximum number of documents to return when the LLM queries this index.
-    /// Higher values provide more context to the LLM but may increase
-    /// response time and token usage.
+    /// Maximum number of documents returned per search performed by the LLM.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<usize>)]
+    #[schema(value_type = Option<usize>, example = json!(20))]
     pub limit: Setting<usize>,
 
-    /// Sort criteria for ordering search results before presenting to the LLM.
-    /// Each entry should be in the format `attribute:asc` or `attribute:desc`.
-    /// Example: `["price:asc", "rating:desc"]`.
+    /// Sort order: array of strings like `attribute:asc` or `attribute:desc`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<Vec<String>>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["price:asc", "rating:desc"]))]
     pub sort: Setting<Vec<String>>,
 
-    /// The attribute used for deduplicating results. When set, only one
-    /// document per unique value of this attribute is returned. Useful for
-    /// avoiding duplicate content in LLM responses.
+    /// Attribute used to return at most one document per distinct value.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<String>)]
+    #[schema(value_type = Option<String>, example = json!("sku"))]
     pub distinct: Setting<String>,
 
-    /// Strategy for matching query terms. `last` (default) matches all words
-    /// and returns documents matching at least the last word. `all` requires
-    /// all words to match. `frequency` prioritizes less frequent words.
+    /// How query terms are matched: `last`, `all`, or `frequency`.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<MatchingStrategy>)]
     pub matching_strategy: Setting<MatchingStrategy>,
 
-    /// Restricts the search to only the specified attributes. If not set, all
-    /// searchable attributes are searched.
-    /// Example: `["title", "description"]` searches only these two fields.
+    /// Attributes on which to run the search. If unset, all searchable attributes are used.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<Vec<String>>)]
+    #[schema(value_type = Option<Vec<String>>, example = json!(["title", "description"]))]
     pub attributes_to_search_on: Setting<Vec<String>>,
 
-    /// Minimum ranking score (0.0 to 1.0) that documents must achieve to be
-    /// included in results. Documents below this threshold are excluded.
-    /// Useful for filtering out low-relevance results.
+    /// Minimum ranking score (0.0–1.0) for a document to be included. Lower scores are excluded.
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
-    #[schema(value_type = Option<RankingScoreThreshold>)]
+    #[schema(value_type = Option<RankingScoreThreshold>, example = json!(0.5))]
     pub ranking_score_threshold: Setting<RankingScoreThreshold>,
 }
 
-/// Configuration for hybrid search combining keyword and semantic search.
-///
-/// This allows searches that understand both exact words and conceptual
-/// meaning.
+/// Hybrid search: balance between keyword and semantic search.
 #[derive(Debug, Clone, Default, Deserr, ToSchema, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[deserr(error = JsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct HybridQuery {
-    /// Controls the balance between keyword search and semantic search.
-    /// A value of `0.0` uses only keyword search, `1.0` uses only semantic
-    /// search, and `0.5` (the default) gives equal weight to both.
-    /// Use lower values for exact term matching and higher values for
-    /// conceptual similarity.
+    /// Balance between keyword (0.0) and semantic (1.0) search.
     #[deserr(default)]
     #[serde(default)]
-    #[schema(default, value_type = f32)]
+    #[schema(default, value_type = f32, example = json!(0.5))]
     pub semantic_ratio: SemanticRatio,
-    /// The name of the embedder configuration to use for generating query
-    /// vectors. This must match one of the embedders defined in the index's
-    /// `embedders` settings.
-    #[schema(value_type = String)]
+    /// Name of the embedder from the index embedders setting (`embedder` in JSON). Used to vectorize the query.
+    #[schema(value_type = String, example = json!("default"))]
     pub embedder: String,
 }
 
