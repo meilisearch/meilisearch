@@ -85,7 +85,7 @@ pub struct DocumentParam {
         "/delete" => post(delete_documents_by_filter),
         "/edit" => post(edit_documents_by_function),
         "/fetch" => post(documents_by_query_post),
-        "/{documentId}" => [get(get_document), delete(delete_document)],
+        "/{document_id}" => [get(get_document), delete(delete_document)],
     ),
     tag = "Documents",
     tags(

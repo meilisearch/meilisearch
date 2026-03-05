@@ -64,10 +64,10 @@ use crate::search_queue::SearchQueue;
 
 /// Request a chat completion
 #[routes::path(
-    security(("Bearer" = ["chats.completions", "*"])),
     params(
         ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
+    security(("Bearer" = ["chats.completions", "*"])),
     request_body(content = Map<String, Value>),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(

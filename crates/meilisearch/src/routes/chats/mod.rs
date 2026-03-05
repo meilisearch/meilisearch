@@ -50,9 +50,9 @@ const MEILI_SEARCH_IN_INDEX_FUNCTION_NAME: &str = "_meiliSearchInIndex";
     tag = "Chats",
     routes(
         "" => [get(list_workspaces)],
-        "/{workspaceUid}/settings" => [get(settings::get_settings), patch(settings::patch_settings), delete(settings::reset_settings)],
-        "/{workspaceUid}" => [get(get_chat), delete(delete_chat)],
-        "/{workspaceUid}/chat/completions" => post(chat_completions::chat),
+        "/{workspace_uid}/settings" => [get(settings::get_settings), patch(settings::patch_settings), delete(settings::reset_settings)],
+        "/{workspace_uid}" => [get(get_chat), delete(delete_chat)],
+        "/{workspace_uid}/chat/completions" => post(chat_completions::chat),
     ),
     tags((
         name = "Chats",

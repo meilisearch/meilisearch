@@ -32,8 +32,8 @@ use crate::{aggregate_methods, Opt};
     routes(
         "" => [get(get_tasks), delete(delete_tasks)],
         "/cancel" => post(cancel_tasks),
-        "/{taskUid}" => get(get_task),
-        "/{taskUid}/documents" => get(get_task_documents_file),
+        "/{task_id}" => get(get_task),
+        "/{task_id}/documents" => get(get_task_documents_file),
     ),
     tag = "Async task management",
     tags((
