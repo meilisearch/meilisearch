@@ -87,15 +87,14 @@ jobs:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Install Cross
-        if: matrix.cross
+        if: matrix.cross == true
         run: cargo install cross
+      - name: Build Cross
+        if: matrix.cross == true
+        run: cross build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
       - name: Build
-        run: |
-          if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
-          else
-            cargo build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
-          fi
+        if: matrix.cross != true
+        run: cargo build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
       # No need to upload binaries for dry run (cron or workflow_dispatch)
       - name: Upload binaries to release
         if: github.event_name == 'release'
