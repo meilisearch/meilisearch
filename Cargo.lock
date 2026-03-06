@@ -639,9 +639,9 @@ dependencies = [
  "csv",
  "flate2",
  "http-client",
+ "jemallocator",
  "memmap2",
  "milli",
- "mimalloc",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest",
@@ -3788,6 +3788,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 
 [[package]]
+name = "jemalloc-sys"
+version = "0.5.4+5.3.0-patched"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac6c1946e1cea1788cbfde01c993b52a10e2da07f4bac608228d1bed20bfebf2"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
+name = "jemallocator"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0de374a9f8e63150e6f5e8a60cc14c668226d7a347d8aee1a45766e3c4dd3bc"
+dependencies = [
+ "jemalloc-sys",
+ "libc",
+]
+
+[[package]]
 name = "jieba-macros"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3979,16 +3999,6 @@ name = "libm"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9fbbcab51052fe104eb5e5d351cf728d30a5be1fe14d9be8a3b097481fb97de"
-
-[[package]]
-name = "libmimalloc-sys"
-version = "0.1.44"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "667f4fec20f29dfc6bc7357c582d91796c169ad7e2fce709468aefeb2c099870"
-dependencies = [
- "cc",
- "libc",
-]
 
 [[package]]
 name = "libproc"
@@ -4435,6 +4445,7 @@ dependencies = [
  "insta",
  "is-terminal",
  "itertools 0.14.0",
+ "jemallocator",
  "jsonwebtoken",
  "lazy_static",
  "manifest-dir-macros",
@@ -4443,7 +4454,6 @@ dependencies = [
  "meilisearch-auth",
  "meilisearch-types",
  "memmap2",
- "mimalloc",
  "mime",
  "mopa-maintained",
  "num_cpus",
@@ -4632,6 +4642,7 @@ dependencies = [
  "indexmap",
  "insta",
  "itertools 0.14.0",
+ "jemallocator",
  "json-depth-checker",
  "levenshtein_automata",
  "liquid",
@@ -4641,7 +4652,6 @@ dependencies = [
  "meili-snap",
  "memchr",
  "memmap2",
- "mimalloc",
  "obkv",
  "once_cell",
  "ordered-float 5.1.0",
@@ -4672,15 +4682,6 @@ dependencies = [
  "utoipa",
  "uuid",
  "zerometry",
-]
-
-[[package]]
-name = "mimalloc"
-version = "0.1.48"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1ee66a4b64c74f4ef288bcbb9192ad9c3feaad75193129ac8509af543894fd8"
-dependencies = [
- "libmimalloc-sys",
 ]
 
 [[package]]

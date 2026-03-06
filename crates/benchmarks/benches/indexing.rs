@@ -20,7 +20,7 @@ use roaring::RoaringBitmap;
 
 #[cfg(not(windows))]
 #[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 fn no_cancel() -> bool {
     false

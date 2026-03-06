@@ -11,7 +11,7 @@ use utils::Conf;
 
 #[cfg(not(windows))]
 #[global_allocator]
-static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 fn base_conf(builder: &mut Settings) {
     let displayed_fields =
