@@ -30,6 +30,7 @@ use crate::Opt;
 
 pub mod compact;
 pub mod documents;
+pub mod streaming;
 
 pub mod facet_search;
 mod fields;
