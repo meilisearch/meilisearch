@@ -1774,12 +1774,20 @@ pub struct SearchParams {
     pub include_metadata: bool,
 }
 
-pub fn perform_search(
+pub(crate) struct SearchMetadataResult {
+    pub result: SearchResult,
+    pub format: AttributesFormat,
+    pub matching_words: milli::MatchingWords,
+    pub documents_ids: Vec<u32>,
+    pub document_scores: Vec<Vec<ScoreDetails>>,
+}
+
+pub(crate) fn perform_search(
     params: SearchParams,
     index_scheduler: &IndexScheduler,
     index: &Index,
     progress: &Progress,
-) -> Result<(SearchResult, Deadline), ResponseError> {
+) -> Result<(SearchMetadataResult, Deadline), ResponseError> {
     let SearchParams {
         index_uid,
         query,
@@ -1873,21 +1881,6 @@ pub fn perform_search(
         locales: locales.map(|l| l.iter().copied().map(Into::into).collect()),
     };
 
-    let mut documents = make_hits(
-        index,
-        &rtxn,
-        format,
-        matching_words,
-        documents_ids.iter().copied().zip(document_scores.iter()),
-        progress,
-    )?;
-
-    // Document join: hydrate documents based on the foreign keys
-    if features.runtime_features().foreign_keys {
-        let foreign_keys = index.foreign_keys(&rtxn)?;
-        hydrate_documents(&mut documents, &foreign_keys, index_scheduler)?;
-    }
-
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
     let hits_info = if is_finite_pagination {
         let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
@@ -1918,7 +1911,7 @@ pub fn perform_search(
     let performance_details =
         query.show_performance_details.then(|| progress.accumulated_durations());
     let result = SearchResult {
-        hits: documents,
+        hits: Vec::new(),
         hits_info,
         query: q.unwrap_or_default(),
         query_vector,
@@ -1933,7 +1926,16 @@ pub fn perform_search(
         remote_errors: None,
         performance_details,
     };
-    Ok((result, deadline))
+    Ok((
+        SearchMetadataResult {
+            result,
+            format,
+            matching_words,
+            documents_ids,
+            document_scores,
+        },
+        deadline,
+    ))
 }
 
 /// Computed facet data from a search
@@ -2074,37 +2076,21 @@ pub fn search_from_kind(
     Ok((milli_result, semantic_hit_count))
 }
 
-struct AttributesFormat {
-    /// Subset of the index's `displayedAttributes`.
-    ///
-    /// - If `None`, all `displayedAttributes` will be returned.
-    /// - Fields in `attributes_to_retrieve` that are not in `displayedAttributes` will not be retrieved.
-    attributes_to_retrieve: Option<BTreeSet<String>>,
-
-    /// Extra set of fields that will be stored in `extra_attributes` when making hits.
-    ///
-    /// This allows recovering fields that should not be shown to the end-user but that Meilisearch needs for e.g. distinct in
-    /// federated contexts.
-    ///
-    /// - If empty, `hit.extra_attributes` will not be populated.
-    /// - Fields in `extra_attributes_to_retrieve` will be retrieved in `hit.extra_attributes` **even** if missing in `displayedAttributes`.
-    /// - Fields in `attributes_to_retrieve` that are in `displayedAttributes` will **not** be collected in `extra_attributes`.
-    /// - `_vectors` cannot be retrieved in this way.
-    ///
-    /// Due to these properties, it is possible to populate `extra_attributes_to_retrieve` without checking the `displayedAttributes`.
-    extra_attributes_to_retrieve: BTreeSet<String>,
-    retrieve_vectors: RetrieveVectors,
-    attributes_to_highlight: Option<HashSet<String>>,
-    attributes_to_crop: Option<Vec<String>>,
-    crop_length: usize,
-    crop_marker: String,
-    highlight_pre_tag: String,
-    highlight_post_tag: String,
-    show_matches_position: bool,
-    sort: Option<Vec<String>>,
-    show_ranking_score: bool,
-    show_ranking_score_details: bool,
-    locales: Option<Vec<Language>>,
+pub(crate) struct AttributesFormat {
+    pub(crate) attributes_to_retrieve: Option<BTreeSet<String>>,
+    pub(crate) extra_attributes_to_retrieve: BTreeSet<String>,
+    pub(crate) retrieve_vectors: RetrieveVectors,
+    pub(crate) attributes_to_highlight: Option<HashSet<String>>,
+    pub(crate) attributes_to_crop: Option<Vec<String>>,
+    pub(crate) crop_length: usize,
+    pub(crate) crop_marker: String,
+    pub(crate) highlight_pre_tag: String,
+    pub(crate) highlight_post_tag: String,
+    pub(crate) show_matches_position: bool,
+    pub(crate) sort: Option<Vec<String>>,
+    pub(crate) show_ranking_score: bool,
+    pub(crate) show_ranking_score_details: bool,
+    pub(crate) locales: Option<Vec<Language>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2407,33 +2393,24 @@ impl<'a> HitMaker<'a> {
     }
 }
 
-fn make_hits<'a>(
-    index: &Index,
-    rtxn: &RoTxn<'_>,
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn make_hits<'a>(
+    index: &'a Index,
+    rtxn: &'a RoTxn<'_>,
     format: AttributesFormat,
     matching_words: milli::MatchingWords,
     documents_ids_scores: impl Iterator<Item = (u32, &'a Vec<ScoreDetails>)> + 'a,
-    progress: &Progress,
-) -> milli::Result<Vec<SearchHit>> {
-    let mut documents = Vec::new();
-
-    let dictionary = index.dictionary(rtxn)?;
-    let dictionary: Option<Vec<_>> =
-        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
-    let separators = index.allowed_separators(rtxn)?;
-    let separators: Option<Vec<_>> =
-        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
-
-    let tokenizer = HitMaker::tokenizer(dictionary.as_deref(), separators.as_deref());
+    progress: &'a Progress,
+    dictionary: Option<&'a [&'a str]>,
+    separators: Option<&'a [&'a str]>,
+) -> milli::Result<impl Iterator<Item = milli::Result<SearchHit>> + 'a> {
+    let tokenizer = HitMaker::tokenizer(dictionary, separators);
 
     let formatter_builder = HitMaker::formatter_builder(matching_words, tokenizer);
 
     let hit_maker = HitMaker::new(index, rtxn, format, formatter_builder)?;
 
-    for (id, score) in documents_ids_scores {
-        documents.push(hit_maker.make_hit(id, score, progress)?);
-    }
-    Ok(documents)
+    Ok(documents_ids_scores.map(move |(id, score)| hit_maker.make_hit(id, score, progress)))
 }
 
 pub fn perform_facet_search(
@@ -2593,6 +2570,13 @@ pub fn perform_similar(
         locales: None,
     };
 
+    let dictionary = index.dictionary(&rtxn)?;
+    let dictionary: Option<Vec<&str>> =
+        dictionary.as_ref().map(|x| x.iter().map(String::as_str).collect());
+    let separators = index.allowed_separators(&rtxn)?;
+    let separators: Option<Vec<&str>> =
+        separators.as_ref().map(|x| x.iter().map(String::as_str).collect());
+
     let hits = make_hits(
         index,
         &rtxn,
@@ -2600,7 +2584,10 @@ pub fn perform_similar(
         Default::default(),
         documents_ids.iter().copied().zip(document_scores.iter()),
         progress,
-    )?;
+        dictionary.as_deref(),
+        separators.as_deref(),
+    )?
+    .collect::<milli::Result<Vec<_>>>()?;
 
     let max_total_hits = index
         .pagination_max_total_hits(&rtxn)
