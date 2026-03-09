@@ -76,7 +76,7 @@ sha2 = "0.10.9"
 siphasher = "1.0.1"
 slice-group-by = "0.3.1"
 static-files = { version = "0.3.1", optional = true }
-sysinfo = "0.37.2"
+sysinfo = "0.38.4"
 tar = "0.4.44"
 tempfile = "3.23.0"
 thiserror = "2.0.17"
