@@ -1727,7 +1727,7 @@ pub fn perform_search(
     // Document join: hydrate documents based on the foreign keys
     if features.runtime_features().foreign_keys {
         let foreign_keys = index.foreign_keys(&rtxn)?;
-        hydrate_documents(&mut documents, &foreign_keys, &index_scheduler)?;
+        hydrate_documents(&mut documents, &foreign_keys, index_scheduler)?;
     }
 
     let number_of_hits = min(candidates.len() as usize, max_total_hits);

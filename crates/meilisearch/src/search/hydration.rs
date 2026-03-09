@@ -17,7 +17,7 @@ use crate::search::{make_document, ExternalDocumentId, SearchHit};
 /// This function will walk the document and hydrate the foreign key values with the full document from the foreign index using the displayed fields.
 /// If a foreign key value is not a valid document id, we warn and skip the document
 pub fn hydrate_documents(
-    documents: &mut Vec<SearchHit>,
+    documents: &mut [SearchHit],
     foreign_keys: &[ForeignKey],
     index_scheduler: &IndexScheduler,
 ) -> Result<(), ResponseError> {
@@ -163,7 +163,7 @@ impl HydrationCache {
                         };
                         self.hydration_docids
                             .entry(foreign_index_uid.clone())
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(external_document_id);
                     }
                 }
@@ -177,7 +177,7 @@ impl HydrationCache {
                     };
                     self.hydration_docids
                         .entry(foreign_index_uid.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(external_document_id);
                 }
                 None => {}
@@ -220,7 +220,7 @@ impl FederatedHydrationFormatter {
 
     pub fn hydrate_documents(
         &self,
-        documents: &mut Vec<(usize, SearchHit)>,
+        documents: &mut [(usize, SearchHit)],
     ) -> Result<(), ResponseError> {
         for (query_index, document) in documents.iter_mut() {
             let index_uid = &self.index_by_query_index[*query_index];
