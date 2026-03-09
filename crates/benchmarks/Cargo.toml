@@ -17,7 +17,7 @@ csv = "1.4.0"
 http-client = { path = "../http-client" }
 memmap2 = "0.9.9"
 milli = { path = "../milli" }
-jemallocator = { version = "0.5.4" }
+jemallocator = { version = "0.5.4", features = ["profiling"] }
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
 tempfile = "3.23.0"
 
