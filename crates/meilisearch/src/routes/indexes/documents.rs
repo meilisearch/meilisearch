@@ -182,7 +182,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsFetchAggregator<Method> {
     security(("Bearer" = ["documents.get", "documents.*", "*"])),
     params(
         ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
-        ("document_id" =  String, Path, example = "85087", description = "The document identifier.", nullable = false),
+        ("document_id" = String, Path, example = "85087", description = "The document identifier.", nullable = false),
         GetDocument,
    ),
     responses(
@@ -293,7 +293,7 @@ impl Aggregate for DocumentsDeletionAggregator {
     security(("Bearer" = ["documents.delete", "documents.*", "*"])),
     params(
         ("index_uid" = String, Path, example = "movies", description = "Unique identifier of the index.", nullable = false),
-        ("document_id" =  String, Path, example = "853", description = "Document identifier.", nullable = false),
+        ("document_id" = String, Path, example = "853", description = "Document identifier.", nullable = false),
     ),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(

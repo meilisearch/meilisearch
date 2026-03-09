@@ -55,7 +55,6 @@ use crate::extractors::authentication::GuardedData;
                     "searchIndexUidParam": "My incredible index uid param description"
                 }
             }
-            
         )),
     ),
 )]
@@ -118,7 +117,6 @@ pub async fn get_settings(
                     "searchIndexUidParam": "My incredible index uid param description"
                 }
             }
-            
         )),
     ),
 )]
@@ -258,7 +256,6 @@ pub async fn patch_settings(
                     "searchIndexUidParam": "default index uid param description"
                 }
             }
-            
         )),
     ),
 )]
