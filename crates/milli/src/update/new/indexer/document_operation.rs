@@ -4,6 +4,7 @@ use std::{mem, ops, ptr, vec};
 
 use bstr::ByteSlice;
 use bumpalo::collections::vec::Vec as BumpVec;
+use bumpalo::collections::CollectIn;
 use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use heed::RoTxn;
@@ -185,7 +186,7 @@ impl<'pl> IndexOperations<'pl> {
                 None => (available_ids.next().ok_or(UserError::DocumentLimitReached)?, true),
             };
 
-            if let Some(ops) = ops.into_payload_operations(is_missing, docid) {
+            if let Some(ops) = ops.into_payload_operations(is_missing, docid, indexer) {
                 if let Some(shard) = ops.shard {
                     // new docs are added to shard
                     if ops.is_new {
@@ -213,14 +214,12 @@ impl<'pl> IndexOperations<'pl> {
         // Reorder the offsets to make sure we iterate on the file sequentially
         // And finally sort them. This clearly speeds up reading the update files.
         progress.update_progress(IndexingStep::ReorderingPayloadOffsets);
+        let docids_version_offsets = docids_version_offsets.into_bump_slice_mut();
         docids_version_offsets
-            .par_sort_unstable_by_key(|(_, po)| first_update_pointer(&po.operations).unwrap_or(0));
+            .par_sort_unstable_by_key(|(_, po)| first_update_pointer(po.operations).unwrap_or(0));
 
         Ok((
-            DocumentOperationChanges {
-                docids_version_offsets: docids_version_offsets.into_bump_slice(),
-                shard_delta,
-            },
+            DocumentOperationChanges { docids_version_offsets, shard_delta },
             // Once we got the payload stats for the valid operations
             // we must prepend the stats from skipped ones.
             pre_payload_stats.into_iter().chain(payload_stats).collect(),
@@ -486,6 +485,7 @@ impl<'pl> DocumentOperations<'pl> {
         self,
         was_missing: bool,
         docid: DocumentId,
+        bump: &'pl Bump,
     ) -> Option<PayloadOperations<'pl>> {
         use DocumentExistence::*;
         use DocumentOperation::*;
@@ -508,7 +508,8 @@ impl<'pl> DocumentOperations<'pl> {
                             }
                             Deletion => InnerDocOp::Deletion,
                         })
-                        .collect(),
+                        .collect_in::<bumpalo::collections::Vec<_>>(bump)
+                        .into_bump_slice(),
                 }
             },
         )
@@ -701,13 +702,15 @@ pub struct PayloadStats {
     pub error: Option<UserError>,
 }
 
+// NOTE: Must use a bumpalo slices in this struct since
+//       we store them in bumpalo and Drop won't run.
 pub struct PayloadOperations<'pl> {
     /// The internal document id of the document.
     pub docid: DocumentId,
     /// Whether this document is not in the current database (visible by the rtxn).
     pub is_new: bool,
     /// The operations to perform, in order, on this document.
-    pub operations: Vec<InnerDocOp<'pl>>,
+    pub operations: &'pl [InnerDocOp<'pl>],
     /// The shard for this document. `None` when sharding is disabled
     pub shard: Option<&'pl Shard>,
 }
@@ -761,7 +764,7 @@ impl<'pl> PayloadOperations<'pl> {
                         InnerDocOp::Replace(_) => &self.operations[i..],
                         InnerDocOp::Update(_) => unreachable!("Found a non-tombstone operation"),
                     },
-                    None => &self.operations[..],
+                    None => self.operations,
                 };
 
                 // We collect the versions to generate the appropriate document.
