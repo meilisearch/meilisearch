@@ -35,7 +35,7 @@ pub struct BatchesApi;
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(
-        ("batchUid" = String, Path, example = "8685", description = "The unique batch identifier.", nullable = false),
+        ("batch_id" = String, Path, example = "8685", description = "The unique batch identifier.", nullable = false),
     ),
     responses(
         (status = OK, description = "Returns the batch.", body = BatchView, content_type = "application/json", example = json!(

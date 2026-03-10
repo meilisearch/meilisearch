@@ -311,7 +311,7 @@ fn deny_immutable_fields_index(
 /// Retrieve the metadata of a single index: its uid, [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key), and creation/update timestamps.
 #[routes::path(
     security(("Bearer" = ["indexes.get", "indexes.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 200, description = "The index is returned.", body = IndexView, content_type = "application/json", example = json!(
             {
@@ -394,7 +394,7 @@ pub struct UpdateIndexRequest {
 /// Returns an error if the index does not exist or if it already contains documents ([primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) cannot be changed in that case).
 #[routes::path(
     security(("Bearer" = ["indexes.update", "indexes.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = UpdateIndexRequest,
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -488,7 +488,7 @@ pub async fn update_index(
 /// Permanently delete an index and all its documents, settings, and task history.
 #[routes::path(
     security(("Bearer" = ["indexes.delete", "indexes.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = ACCEPTED, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
@@ -595,7 +595,7 @@ impl From<index_scheduler::IndexStats> for IndexStats {
 /// Return statistics for a single index: document count, database size, indexing status, and field distribution.
 #[routes::path(
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = OK, description = "The stats of the index.", body = IndexStats, content_type = "application/json", example = json!(
             {

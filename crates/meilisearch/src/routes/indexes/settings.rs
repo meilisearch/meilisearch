@@ -83,7 +83,7 @@ macro_rules! make_setting_route {
                 operation_id = concat!("delete", $camelcase_attr),
                 summary = concat!("Reset ", $camelcase_attr),
                 description = concat!("Resets the `", $camelcase_attr, "` setting to its default value."),
-                params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+                params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
                     (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
@@ -137,7 +137,7 @@ macro_rules! make_setting_route {
                 operation_id = concat!(stringify!($update_verb), $camelcase_attr),
                 summary = concat!("Update ", $camelcase_attr),
                 description = concat!("Updates the `", $camelcase_attr, "` setting for the index. Send the new value in the request body; send null to reset to default."),
-                params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+                params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 request_body(content = $type),
                 responses(
                     (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -209,7 +209,7 @@ macro_rules! make_setting_route {
                 description = concat!("Returns the current value of the `", $camelcase_attr, "` setting for the index."),
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
                 operation_id = concat!("get", $camelcase_attr),
-                params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+                params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
                     (status = 200, description = concat!("Returns the current value of the `", $camelcase_attr, "` setting."), body = $type, content_type = "application/json", example = json!(
                         <$type>::default()
@@ -498,7 +498,7 @@ make_setting_routes!(
     summary = "Update all settings",
     description = "Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created.\n\nSee also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body(content = Settings<Unchecked>),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
@@ -657,7 +657,7 @@ async fn register_new_settings(
     summary = "List all settings",
     description = "Returns all settings of the index. Each setting is returned with its current value or the default if not set.",
     security(("Bearer" = ["settings.get", "settings.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 200, description = "Returns all settings with their current or default values. Same structure as the PATCH request body.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
             "displayedAttributes": ["id", "title", "description", "url"],
@@ -733,7 +733,7 @@ pub async fn get_all(
     summary = "Reset all settings",
     description = "Resets all settings of the index to their default values.",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
         (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {

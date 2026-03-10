@@ -212,7 +212,7 @@ impl Aggregate for FacetSearchAggregator {
 /// > Use this to build autocomplete or refinement UIs for facet filters.
 #[routes::path(
     security(("Bearer" = ["search", "*"])),
-    params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = FacetSearchQuery,
     responses(
         (status = 200, description = "The documents are returned.", body = SearchResult, content_type = "application/json", example = json!(

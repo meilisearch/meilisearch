@@ -24,7 +24,7 @@ use crate::extractors::authentication::GuardedData;
 #[routes::path(
     security(("Bearer" = ["chats.settings.get", "*"])),
     params(
-        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
@@ -41,6 +41,19 @@ use crate::extractors::authentication::GuardedData;
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "My super system prompt",
+                    "searchDescription": "My super search tool description",
+                    "searchQParam": "My awesome q search parameter description",
+                    "searchIndexUidParam": "My incredible index uid param description"
+                }
             }
         )),
     ),
@@ -73,7 +86,7 @@ pub async fn get_settings(
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
     params(
-        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
@@ -90,6 +103,19 @@ pub async fn get_settings(
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "My super system prompt",
+                    "searchDescription": "My super search tool description",
+                    "searchQParam": "My awesome q search parameter description",
+                    "searchIndexUidParam": "My incredible index uid param description"
+                }
             }
         )),
     ),
@@ -199,7 +225,7 @@ pub async fn patch_settings(
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
     params(
-        ("workspaceUid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
@@ -216,6 +242,19 @@ pub async fn patch_settings(
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "default system prompt",
+                    "searchDescription": "default search tool description",
+                    "searchQParam": "default q search parameter description",
+                    "searchIndexUidParam": "default index uid param description"
+                }
             }
         )),
     ),
