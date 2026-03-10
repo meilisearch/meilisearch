@@ -14,7 +14,10 @@ use milli::proximity::ProximityPrecision;
 pub use milli::update::ChatSettings;
 use milli::update::Setting;
 use milli::vector::db::IndexEmbeddingConfig;
-use milli::{Criterion, CriterionError, FilterableAttributesRule, ForeignKey, Index, DEFAULT_VALUES_PER_FACET};
+use milli::{
+    Criterion, CriterionError, FilterableAttributesRule, ForeignKey, Index,
+    DEFAULT_VALUES_PER_FACET,
+};
 use serde::{Deserialize, Serialize, Serializer};
 use utoipa::ToSchema;
 
