@@ -890,6 +890,10 @@ impl SearchQueryWithIndex {
         self.show_performance_details.is_some()
     }
 
+    fn has_distinct(&self) -> bool {
+        self.distinct.is_some()
+    }
+
     pub fn from_index_query_federation(
         index_uid: IndexUid,
         query: SearchQuery,
@@ -1208,6 +1212,54 @@ pub struct SearchHit {
     /// Present when `showRankingScoreDetails` was true.
     #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+impl SearchHit {
+    fn facet_values(&self, field_name: &str) -> Option<Vec<FacetValue>> {
+        /// FIXME: nested field names
+        let field = self.document.get(field_name)?;
+
+        let mut facet_values = Vec::new();
+        FacetValue::from_value(&mut facet_values, &field, true);
+        Some(facet_values)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct FacetValue(serde_json::Value);
+
+impl FacetValue {
+    pub fn from_value(
+        facet_values: &mut Vec<FacetValue>,
+        field: &serde_json::Value,
+        allow_recursion: bool,
+    ) {
+        match field {
+            Value::Bool(b) => {
+                facet_values.push(FacetValue(serde_json::Value::String(b.to_string())))
+            }
+            Value::Number(number) => {
+                facet_values.push(FacetValue(serde_json::Value::Number(number.clone())))
+            }
+            Value::String(s) => {
+                let normalized = milli::normalize_facet(s);
+                facet_values.push(FacetValue(serde_json::Value::String(normalized)))
+            }
+            Value::Array(values) if allow_recursion => {
+                for value in values {
+                    Self::from_value(facet_values, value, false)
+                }
+            }
+            _ => (),
+        }
+    }
+
+    fn into_string(self) -> String {
+        match self.0 {
+            Value::String(string) => string,
+            value => value.to_string(),
+        }
+    }
 }
 
 /// Metadata about a search query (included when requested via header).
@@ -1777,6 +1829,30 @@ pub struct ComputedFacets {
     pub distribution: BTreeMap<String, IndexMap<String, u64>>,
     /// Numeric statistics for each facet
     pub stats: BTreeMap<String, FacetStats>,
+}
+
+impl ComputedFacets {
+    pub fn remove_hit(&mut self, hit: &SearchHit) {
+        /// TODO: stats
+        for (facet, distribution) in &mut self.distribution {
+            let Some(values) = hit.facet_values(facet) else {
+                continue;
+            };
+            for value in values {
+                /// FIXME: distribution contains denormalized values
+                if let indexmap::map::Entry::Occupied(mut occupied_entry) =
+                    distribution.entry(value.into_string())
+                {
+                    let count = occupied_entry.get_mut();
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        /// FIXME: O(maxFacetValues*nb_rejected_hit)
+                        occupied_entry.shift_remove();
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub enum Route {

@@ -153,6 +153,9 @@ if_remote=if let Some(remote) = remote {
     format!("Remote `{remote}` encountered an error: ")
 } else {"".into()} )]
     UnprocessedNetworkTask { remote: Option<String>, task_uid: meilisearch_types::tasks::TaskId },
+    #[error("Inside `.queries[{0}]`: Using `distinct` options is not allowed in federated queries when it also appears in `.federation.distinct`.\n - Hint: remove `distinct` from query #{0} or remove `federation` from the request\n  - Note: `distinct` at the query level is discouraged in federated search.")]
+
+    DistinctInFederatedQueryAndFederation(usize),
 }
 
 impl MeilisearchHttpError {
@@ -195,6 +198,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::PaginationInFederatedQuery(_, _) => {
                 Code::InvalidMultiSearchQueryPagination
             }
+            MeilisearchHttpError::DistinctInFederatedQueryAndFederation(..) => Code::InvalidMultiSearchDistinct,
             MeilisearchHttpError::FacetsInFederatedQuery(..) => Code::InvalidMultiSearchQueryFacets,
             MeilisearchHttpError::InconsistentFacetOrder { .. } => {
                 Code::InvalidMultiSearchFacetOrder

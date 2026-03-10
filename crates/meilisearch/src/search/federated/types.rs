@@ -105,6 +105,14 @@ pub struct Federation {
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
     #[schema(value_type = Option<MergeFacets>)]
     pub merge_facets: Option<MergeFacets>,
+
+    /// Restrict search to documents with unique values of the specified attribute across all queries.
+    ///
+    /// 1. This applies across all queries in the request, regardless of index or remote of origin.
+    /// 2. This overrides the index-level distinct attribute.
+    /// 3. This requires that the passed field can be set as distinct in all the participating indexes.
+    pub distinct: Option<String>,
+
     /// Whether to include performance details in the response
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
@@ -119,6 +127,7 @@ impl Default for Federation {
             hits_per_page: Default::default(),
             facets_by_index: Default::default(),
             merge_facets: Default::default(),
+            distinct: Default::default(),
             show_performance_details: Default::default(),
         }
     }
