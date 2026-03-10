@@ -461,7 +461,10 @@ impl SettingsChangeWordPairProximityDocidsExtractors {
             document_tokenizer.tokenize_document(
                 current_document,
                 &mut |field_name| {
-                    let fid = new_fields_ids_map.id(field_name).expect("All fields IDs must exist");
+                    let fid = match new_fields_ids_map.id(field_name) {
+                        Some(field_id) => field_id,
+                        None => panic!("Expected field `{field_name}` in the fields IDs map"),
+                    };
 
                     // If the document must be reindexed, early return NoMatch to stop the scanning process.
                     if action == ActionToOperate::ReindexAllFields {
@@ -507,8 +510,9 @@ impl SettingsChangeWordPairProximityDocidsExtractors {
             // TODO Tokenize must be based on old settings
             document_tokenizer,
             &mut word_positions,
-            &mut |field_name| {
-                Ok(old_fields_ids_map.id_with_metadata(field_name).expect("All fields must exist"))
+            &mut |field_name| match old_fields_ids_map.id_with_metadata(field_name) {
+                Some(field_id) => Ok(field_id),
+                None => panic!("Expected field `{field_name}` in the fields IDs map"),
             },
             &mut |(w1, w2), prox| {
                 del_word_pair_proximity.push(((w1, w2), prox));
@@ -520,8 +524,9 @@ impl SettingsChangeWordPairProximityDocidsExtractors {
             // TODO Tokenize must be based on new settings
             document_tokenizer,
             &mut word_positions,
-            &mut |field_name| {
-                Ok(new_fields_ids_map.id_with_metadata(field_name).expect("All fields must exist"))
+            &mut |field_name| match new_fields_ids_map.id_with_metadata(field_name) {
+                Some(field_id) => Ok(field_id),
+                None => panic!("Expected field `{field_name}` in the fields IDs map"),
             },
             &mut |(w1, w2), prox| {
                 add_word_pair_proximity.push(((w1, w2), prox));

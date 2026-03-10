@@ -606,7 +606,10 @@ impl SettingsChangeWordDocidsExtractors {
         document_tokenizer.tokenize_document(
             current_document,
             &mut |field_name| {
-                let fid = new_fields_ids_map.id(field_name).expect("All fields IDs must exist");
+                let fid = match new_fields_ids_map.id(field_name) {
+                    Some(field_id) => field_id,
+                    None => panic!("Expected field `{field_name}` in the fields IDs map"),
+                };
 
                 // If the document must be reindexed, early return NoMatch to stop the scanning process.
                 if action == ActionToOperate::ReindexAllFields {
@@ -646,7 +649,10 @@ impl SettingsChangeWordDocidsExtractors {
         }
 
         let mut should_tokenize = |field_name: &str| {
-            let field_id = new_fields_ids_map.id(field_name).expect("All fields IDs must exist");
+            let field_id = match new_fields_ids_map.id(field_name) {
+                Some(field_id) => field_id,
+                None => panic!("Expected field `{field_name}` in the fields IDs map"),
+            };
             let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
             let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
 
