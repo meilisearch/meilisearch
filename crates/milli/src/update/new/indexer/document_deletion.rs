@@ -196,7 +196,7 @@ mod test {
                 println!("deleted by {index}: {:?}", data.deleted.borrow());
             }
             for alloc in extractor_allocs.iter_mut() {
-                alloc.0.reset();
+                std::mem::take(&mut alloc.0);
             }
         }
     }

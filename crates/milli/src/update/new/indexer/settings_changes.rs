@@ -98,7 +98,7 @@ pub fn settings_change_extract<
     // Clean up and reuse the extractor allocs
     for extractor_alloc in extractor_allocs.iter_mut() {
         tracing::trace!("\tWith {} bytes reset", extractor_alloc.0.allocated_bytes());
-        extractor_alloc.0.reset();
+        std::mem::take(&mut extractor_alloc.0);
     }
 
     let total_documents = documents.len() as u32;
@@ -125,7 +125,7 @@ pub fn settings_change_extract<
             }
 
             // Clean up and reuse the document-specific allocator
-            context.doc_alloc.reset();
+            std::mem::take(&mut context.doc_alloc);
 
             let documents = items
                 .iter()

@@ -399,7 +399,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     let mut cursor = obkv_documents.into_cursor()?;
     let mut doc_alloc = Bump::new();
     while let Some((key, value)) = cursor.move_on_next()? {
-        doc_alloc.reset();
+        std::mem::take(&mut doc_alloc);
         // this must always be serialized as (docid, external_docid);
         const SIZE_OF_DOCUMENTID: usize = std::mem::size_of::<DocumentId>();
         let (docid_bytes, external_id_bytes) =

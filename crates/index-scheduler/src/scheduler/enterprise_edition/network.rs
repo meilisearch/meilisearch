@@ -332,7 +332,7 @@ impl IndexScheduler {
         self.index_mapper.try_for_each_index::<(), ()>(
             &scheduler_rtxn,
             |index_uid, index| -> crate::Result<()> {
-                indexer_alloc.reset();
+                std::mem::take(&mut indexer_alloc);
                 let mut index_wtxn = index.write_txn()?;
 
                 let err = |err| Error::from_milli(err, Some(index_uid.to_string()));

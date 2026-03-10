@@ -220,7 +220,7 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
     let mut out = BufWriter::new(output);
     let mut deserializer = serde_json::Deserializer::from_slice(&input);
     let res = array_each(&mut deserializer, |obj: &RawValue| {
-        doc_alloc.reset();
+        std::mem::take(&mut doc_alloc);
         let map = RawMap::from_raw_value_and_hasher(obj, FxBuildHasher, &doc_alloc)?;
         to_writer(&mut out, &map)
     });
@@ -260,7 +260,7 @@ pub fn read_ndjson(input: &File) -> Result<u64> {
 
     let mut count = 0;
     for result in serde_json::Deserializer::from_slice(&input).into_iter() {
-        bump.reset();
+        std::mem::take(&mut bump);
         match result {
             Ok(raw) => {
                 // try to deserialize as a map
