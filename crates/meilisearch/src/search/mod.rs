@@ -1253,13 +1253,6 @@ impl FacetValue {
             _ => (),
         }
     }
-
-    fn into_string(self) -> String {
-        match self.0 {
-            Value::String(string) => string,
-            value => value.to_string(),
-        }
-    }
 }
 
 /// Metadata about a search query (included when requested via header).
@@ -1832,24 +1825,56 @@ pub struct ComputedFacets {
 }
 
 impl ComputedFacets {
-    pub fn remove_hit(&mut self, hit: &SearchHit) {
+    pub fn remove_hits(&mut self, hits: &[SearchHit]) {
+        if hits.is_empty() {
+            return;
+        }
         /// TODO: stats
-        for (facet, distribution) in &mut self.distribution {
-            let Some(values) = hit.facet_values(facet) else {
-                continue;
-            };
-            for value in values {
-                /// FIXME: distribution contains denormalized values
-                if let indexmap::map::Entry::Occupied(mut occupied_entry) =
-                    distribution.entry(value.into_string())
-                {
-                    let count = occupied_entry.get_mut();
+        for (field_name, distribution) in &mut self.distribution {
+            let normalized_to_original: BTreeMap<_, _> = distribution
+                .keys()
+                .enumerate()
+                .filter_map(|(index, facet_value)| {
+                    let normalized = milli::normalize_facet(facet_value);
+                    if normalized == facet_value.as_str() {
+                        None
+                    } else {
+                        Some((normalized, index))
+                    }
+                })
+                .collect();
+
+            let mut must_remove = false;
+
+            for hit in hits {
+                let Some(values) = hit.facet_values(field_name) else {
+                    continue;
+                };
+                for value in values {
+                    let count = match value.0 {
+                        serde_json::Value::String(s) => {
+                            if let Some(original) = normalized_to_original.get(&s) {
+                                distribution.get_index_mut(*original).map(|(_, v)| v)
+                            } else {
+                                distribution.get_mut(&s)
+                            }
+                        }
+                        value => distribution.get_mut(&value.to_string()),
+                    };
+
+                    let Some(count) = count else {
+                        continue;
+                    };
+
                     *count = count.saturating_sub(1);
                     if *count == 0 {
-                        /// FIXME: O(maxFacetValues*nb_rejected_hit)
-                        occupied_entry.shift_remove();
+                        must_remove = true;
                     }
                 }
+            }
+
+            if must_remove {
+                distribution.retain(|_, v| *v != 0);
             }
         }
     }

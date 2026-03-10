@@ -183,7 +183,7 @@ pub async fn perform_federated_search(
     });
 
     // 3.2. merge federation metadata
-    let (mut hit_number, degraded, used_negative_operator, mut facets, max_remote_duration) =
+    let (mut hit_number, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
 
     let (skip, take) = match (federation.page, federation.hits_per_page) {
@@ -204,7 +204,7 @@ pub async fn perform_federated_search(
     // store remote rejected hits to fixup the facet distributions
     // ideally could fixup in the iterator,
     // but we cannot double borrows of `remote_results` (from `hit` and `facets_by_index`).
-    let mut rejected_hits = Vec::new();
+    let mut rejected_hits: BTreeMap<String, Vec<SearchHit>> = Default::default();
 
     let merged_hits: Vec<_> =
         merge_index_global_results(&mut results_by_index, &mut remote_results)
@@ -219,16 +219,12 @@ pub async fn perform_federated_search(
                     if is_rejected {
                         hit_number = hit_number.saturating_sub(1);
 
-                        match hit {
-                            MergedSearchHit::Local { hit, index } => {
-                                let facet_distribution = facets.0.get_mut(index);
-
-                                if let Some(facet_distribution) = facet_distribution {
-                                    facet_distribution.remove_hit(&hit.hit);
-                                }
-                            }
-                            MergedSearchHit::Remote(hit) => rejected_hits.push(hit),
-                        };
+                        /// FIXME: unwrap
+                        let index_uid = hit.index_uid().unwrap();
+                        rejected_hits
+                            .entry(index_uid.to_string())
+                            .or_default()
+                            .push(hit.into_hit());
 
                         return None;
                     }
@@ -253,22 +249,6 @@ pub async fn perform_federated_search(
             .map(|hit| hit.into_hit())
             .collect();
 
-    for hit in rejected_hits {
-        let Some(FederatedSearchResult { facets_by_index, .. }) =
-            remote_results.get_mut(hit.remote_index)
-        else {
-            continue;
-        };
-
-        let index_uid = hit.remote_index_uid().map_err(|err| err.as_response_error())?;
-
-        let Some(facet_distribution) = facets_by_index.0.get_mut(index_uid) else {
-            continue;
-        };
-
-        facet_distribution.remove_hit(&hit.hit);
-    }
-
     // 3.4. merge query vectors
     let query_vectors = if retrieve_vectors {
         for remote_results in remote_results.iter_mut() {
@@ -291,7 +271,7 @@ pub async fn perform_federated_search(
     // 3.5. merge facets
     progress.update_progress(FederatingResultsStep::MergeFacets);
     let (facet_distribution, facet_stats, facets_by_index) =
-        facet_order.merge(federation.merge_facets, remote_results, facets);
+        facet_order.merge(federation.merge_facets, remote_results, facets, rejected_hits);
 
     let after_merge = std::time::Instant::now();
 
@@ -423,8 +403,8 @@ fn merge_index_global_results<'a>(
             })
             // remote results
             .chain(
-                remote_results.iter_mut().enumerate().map(|(remote_index, x)| {
-                    either::Either::Right(iter_remote_hits(x, remote_index))
+                remote_results.iter_mut().map(|x| {
+                    either::Either::Right(iter_remote_hits(x))
                 }),
             ),
         |left: &MergedSearchHit, right: &MergedSearchHit| {
@@ -487,11 +467,10 @@ struct RemoteSearchHit {
     score: Vec<WeightedScoreValue>,
     global_weighted_score: f64,
     query_index: usize,
-    remote_index: usize,
 }
 
 impl MergedSearchHit<'_> {
-    fn remote(mut hit: SearchHit, remote_index: usize) -> Result<Self, ProxySearchError> {
+    fn remote(mut hit: SearchHit) -> Result<Self, ProxySearchError> {
         let federation = hit
             .document
             .get_mut(FEDERATION_HIT)
@@ -539,7 +518,6 @@ impl MergedSearchHit<'_> {
             score,
             global_weighted_score,
             query_index,
-            remote_index,
         }))
     }
 
@@ -573,7 +551,6 @@ impl MergedSearchHit<'_> {
                 global_weighted_score,
                 query_index,
                 hit: _,
-                remote_index: _,
             }) => {
                 let global_weighted_score = *global_weighted_score;
                 let query_index = *query_index;
@@ -581,15 +558,21 @@ impl MergedSearchHit<'_> {
             }
         }
     }
+
+    fn index_uid(&self) -> Result<&str, ProxySearchError> {
+        match self {
+            MergedSearchHit::Local { hit: _, index } => Ok(index),
+            MergedSearchHit::Remote(remote_search_hit) => remote_search_hit.remote_index_uid(),
+        }
+    }
 }
 
 fn iter_remote_hits(
     results_by_host: &mut FederatedSearchResult,
-    remote_index: usize,
 ) -> impl Iterator<Item = MergedSearchHit<'_>> + '_ {
     // have a per node registry of failed hits
     results_by_host.hits.drain(..).filter_map(move |hit| {
-        match MergedSearchHit::remote(hit, remote_index) {
+        match MergedSearchHit::remote(hit) {
             Ok(hit) => Some(hit),
             Err(err) => {
                 tracing::warn!("skipping remote hit due to error: {err}");
@@ -1548,6 +1531,7 @@ impl FacetOrder {
         merge_facets: Option<MergeFacets>,
         remote_results: Vec<FederatedSearchResult>,
         mut facets: FederatedFacets,
+        rejected_hits: BTreeMap<String, Vec<SearchHit>>,
     ) -> (Option<FacetDistributions>, Option<FacetStats>, FederatedFacets) {
         let (facet_distribution, facet_stats, facets_by_index) = match (self, merge_facets) {
             (FacetOrder::ByFacet(facet_order), Some(merge_facets)) => {
@@ -1556,7 +1540,16 @@ impl FacetOrder {
                 {
                     facets.append(remote_facets_by_index);
                 }
-                let facets = facets.merge(merge_facets, facet_order);
+                let mut facets = facets.merge(merge_facets, facet_order);
+
+                if let Some(facets) = &mut facets {
+                    let rejected_hits =
+                        rejected_hits.into_values().fold(Vec::new(), |mut init, mut v| {
+                            init.append(&mut v);
+                            init
+                        });
+                    facets.remove_hits(&rejected_hits);
+                }
 
                 let (facet_distribution, facet_stats) = facets
                     .map(|ComputedFacets { distribution, stats }| (distribution, stats))
@@ -1571,6 +1564,13 @@ impl FacetOrder {
                     facets.append(remote_facets_by_index);
                 }
                 facets.sort_and_truncate(facet_order);
+
+                for (index, facets) in &mut facets.0 {
+                    let Some(rejected_hits) = rejected_hits.get(index) else {
+                        continue;
+                    };
+                    facets.remove_hits(rejected_hits);
+                }
                 (None, None, facets)
             }
             _ => (None, None, facets),
