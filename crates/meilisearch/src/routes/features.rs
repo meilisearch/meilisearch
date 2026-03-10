@@ -103,6 +103,7 @@ pub struct RuntimeTogglableFeatures {
     /// Enable multimodal search with images and other media
     #[deserr(default)]
     pub multimodal: Option<bool>,
+    /// Enable foreign key support for document hydration
     #[deserr(default)]
     pub foreign_keys: Option<bool>,
 }
