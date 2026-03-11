@@ -606,15 +606,21 @@ impl SettingsChangeWordDocidsExtractors {
         document_tokenizer.tokenize_document(
             current_document,
             &mut |field_name| {
-                let fid = match new_fields_ids_map.id(field_name) {
-                    Some(field_id) => field_id,
-                    None => panic!("Expected field `{field_name}` in the fields IDs map"),
-                };
-
                 // If the document must be reindexed, early return NoMatch to stop the scanning process.
                 if action == ActionToOperate::ReindexAllFields {
-                    return Ok((fid, PatternMatch::NoMatch));
+                    // Note that if the pattern is no match, the caller will simply ignore the field id.
+                    return Ok((0, PatternMatch::NoMatch));
                 }
+
+                let fid = match new_fields_ids_map.id(field_name) {
+                    Some(field_id) => field_id,
+                    // We can skip unknown fields as it means that the field is not registered
+                    // in the new fields IDs map and therefore the content is neither filterable
+                    // nor searchable.
+                    //
+                    // Note that if the pattern is no match, the caller will simply ignore the field id.
+                    None => return Ok((0, PatternMatch::NoMatch)),
+                };
 
                 let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
                 let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
