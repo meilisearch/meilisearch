@@ -270,6 +270,7 @@ impl IndexScheduler {
         dump.create_webhooks(webhooks)?;
 
         // 8. Dump the dynamic search rules
+        progress.update_progress(DumpCreationProgress::DumpDynamicSearchRules);
         let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules()?;
         for result in self.dynamic_search_rules.persisted.iter(&rtxn)? {
             let (uid, rule) = result?;

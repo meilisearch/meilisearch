@@ -153,11 +153,7 @@ mod tests {
                     selector: Selector {
                         index_uid: None,
                         id: None,
-                        filter: Some(json!({
-                            "attribute": "brand",
-                            "op": "eq",
-                            "value": "premium",
-                        })),
+                        filter: Some(json!("brand = 'premium'")),
                     },
                     action: Action::Boost(BoostArgs { score: 1.5 }),
                 },
@@ -165,11 +161,7 @@ mod tests {
                     selector: Selector {
                         index_uid: None,
                         id: None,
-                        filter: Some(json!({
-                            "attribute": "category",
-                            "op": "eq",
-                            "value": "clearance",
-                        })),
+                        filter: Some(json!("category = 'clearance'")),
                     },
                     action: Action::Bury(BuryArgs { score: 0.5 }),
                 },

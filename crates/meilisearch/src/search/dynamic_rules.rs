@@ -1,3 +1,5 @@
+use crate::search::fuse_filters;
+
 use super::federated::Weight;
 use super::{SearchHit, SearchQueryWithIndex};
 use meilisearch_types::dynamic_search_rules::{
@@ -390,8 +392,6 @@ fn apply_relevance_tuning(
     hits.sort_by_key(|h| Reverse(OrderedFloat(h.ranking_score.unwrap_or_default())));
 }
 
-/// TODO - Will move to Filter expression when persisting a rule
-/// Convert a rule selector into a filter expression.
 ///
 /// For id-based selectors, the primary key field name is needed. For
 /// filter-based selectors the JSON `{"attribute": ..., "op": "eq", "value": ...}`
@@ -399,23 +399,13 @@ fn apply_relevance_tuning(
 ///
 /// Returns `None` when the selector has neither an `id` nor a `filter`.
 pub fn selector_to_filter(selector: &Selector, primary_key: Option<&str>) -> Option<Value> {
-    let mut conditions: Vec<Value> = Vec::new();
+    let id_selector = if let Some(id) = &selector.id {
+        primary_key.map(|pk| Value::String(format!("{pk} = '{id}'")))
+    } else {
+        None
+    };
 
-    if let Some(id) = &selector.id {
-        if let Some(pk) = primary_key {
-            conditions.push(Value::String(format!("{pk} = '{id}'")));
-        }
-    }
-
-    if let Some(filter) = selector.filter.as_ref().and_then(filter_json_to_string) {
-        conditions.push(Value::String(filter));
-    }
-
-    match conditions.len() {
-        0 => None,
-        1 => Some(conditions.pop().unwrap()),
-        _ => Some(Value::Array(conditions)), // AND of all conditions
-    }
+    fuse_filters(id_selector, selector.filter.clone())
 }
 
 pub fn negate_filter(filter: &Value) -> Value {
@@ -428,7 +418,7 @@ pub fn negate_filter(filter: &Value) -> Value {
                     if let Value::String(s) = v {
                         Value::String(format!("NOT ({s})"))
                     } else {
-                        v.clone()
+                        negate_filter(v)
                     }
                 })
                 .collect();
@@ -437,48 +427,6 @@ pub fn negate_filter(filter: &Value) -> Value {
         }
         other => other.clone(),
     }
-}
-
-/// TODO - Will be deleted once I change the filter syntax in `DynamicSearchRule` to match the
-/// filter syntax in the engine.
-/// Convert the rule-internal JSON filter format
-/// `{"attribute": "brand", "op": "eq", "value": "Nike"}` into filter string like `brand = 'Nike'`.
-fn filter_json_to_string(filter: &Value) -> Option<String> {
-    let obj = filter.as_object()?;
-    let attribute = obj.get("attribute")?.as_str()?;
-    let op = obj.get("op")?.as_str()?;
-    let value = obj.get("value")?;
-
-    match op {
-        "eq" => {
-            let value_str = match value {
-                Value::String(s) => format!("'{s}'"),
-                Value::Number(n) => n.to_string(),
-                Value::Bool(b) => b.to_string(),
-                _ => return None,
-            };
-            Some(format!("{attribute} = {value_str}"))
-        }
-        _ => None,
-    }
-}
-
-/// Combine an additional filter with an existing query filter
-fn combine_filters(filter: &mut Option<Value>, additional: Value) {
-    *filter = match filter.take() {
-        None => Some(additional),
-        Some(existing) => {
-            let mut combined = if let Value::Array(arr) = existing { arr } else { vec![existing] };
-
-            if let Value::Array(arr) = additional {
-                combined.extend(arr);
-            } else {
-                combined.push(additional);
-            }
-
-            Some(Value::Array(combined))
-        }
-    };
 }
 
 /// Expand federated search queries with boost/bury sub-queries.
@@ -513,7 +461,7 @@ pub fn expand_query_with_relevance_tuning(
 
             // Sub-query for the boosted / buried documents.
             let mut sub_query = query.clone();
-            combine_filters(&mut sub_query.filter, filter);
+            sub_query.filter = fuse_filters(sub_query.filter.take(), Some(filter));
             let weighted = *original_weight * entry.factor;
             sub_query.federation_options.get_or_insert_default().weight =
                 Weight::try_from(weighted).unwrap_or_default();
@@ -521,11 +469,8 @@ pub fn expand_query_with_relevance_tuning(
         }
     }
 
-    // Base sub-query: excludes all boosted/buried documents, keeps
-    // original weight.
-    query.federation_options.get_or_insert_default().weight = original_weight;
     for negated in negated_filters {
-        combine_filters(&mut query.filter, negated);
+        query.filter = fuse_filters(query.filter.take(), Some(negated));
     }
 
     result

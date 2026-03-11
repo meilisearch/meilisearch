@@ -31,11 +31,7 @@ expression: expected
     },
     {
       "selector": {
-        "filter": {
-          "attribute": "brand",
-          "op": "eq",
-          "value": "premium"
-        }
+        "filter": "brand = 'premium'"
       },
       "action": {
         "type": "boost",
@@ -44,11 +40,7 @@ expression: expected
     },
     {
       "selector": {
-        "filter": {
-          "attribute": "category",
-          "op": "eq",
-          "value": "clearance"
-        }
+        "filter": "category = 'clearance'"
       },
       "action": {
         "type": "bury",
