@@ -269,8 +269,8 @@ pub(crate) mod test {
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
     use meilisearch_types::dynamic_search_rules::{
-        Action as RuleActionKind, BoostArgs, Condition, DynamicSearchRule, DynamicSearchRules,
-        PinArgs, QueryCondition, RuleAction, Selector, TimeCondition,
+        Action as RuleActionKind, Condition, DynamicSearchRule, DynamicSearchRules, PinArgs,
+        QueryCondition, RuleAction, Selector, TimeCondition,
     };
     use meilisearch_types::facet_values_sort::FacetValuesSort;
     use meilisearch_types::features::RuntimeTogglableFeatures;
@@ -599,21 +599,15 @@ pub(crate) mod test {
                         selector: Selector {
                             index_uid: Some("products".to_string()),
                             id: Some("42".to_string()),
-                            filter: None,
                         },
                         action: RuleActionKind::Pin(PinArgs { position: 1 }),
                     },
                     RuleAction {
                         selector: Selector {
-                            index_uid: None,
-                            id: None,
-                            filter: Some(json!({
-                                "attribute": "brand",
-                                "op": "eq",
-                                "value": "premium",
-                            })),
+                            index_uid: Some("products".to_string()),
+                            id: Some("84".to_string()),
                         },
-                        action: RuleActionKind::Boost(BoostArgs { score: 1.5 }),
+                        action: RuleActionKind::Pin(PinArgs { position: 3 }),
                     },
                 ],
             },

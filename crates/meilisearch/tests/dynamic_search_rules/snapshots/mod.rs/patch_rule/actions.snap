@@ -18,7 +18,8 @@ source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
         "id": "99"
       },
       "action": {
-        "type": "hide"
+        "type": "pin",
+        "position": 7
       }
     }
   ]

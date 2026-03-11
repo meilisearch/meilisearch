@@ -49,9 +49,7 @@ pub use federated::{
 };
 
 mod dynamic_rules;
-pub use dynamic_rules::{
-    collect_active_rules, expand_query_with_relevance_tuning, ActiveRules, DynamicSearchContext,
-};
+pub use dynamic_rules::{collect_active_rules, DynamicSearchContext};
 
 mod ranking_rules;
 

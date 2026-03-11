@@ -55,7 +55,7 @@ pub struct TimeCondition {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct RuleAction {
     pub selector: Selector,
@@ -63,15 +63,13 @@ pub struct RuleAction {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct Selector {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub index_uid: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub filter: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
@@ -79,35 +77,14 @@ pub struct Selector {
 #[schema(rename_all = "camelCase")]
 pub enum Action {
     Pin(PinArgs),
-    Boost(BoostArgs),
-    Bury(BuryArgs),
-    Hide(HideArgs),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct PinArgs {
     pub position: u32,
 }
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub struct BoostArgs {
-    pub score: f64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub struct BuryArgs {
-    pub score: f64,
-}
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub struct HideArgs {}
 
 #[cfg(test)]
 mod tests {
@@ -145,33 +122,23 @@ mod tests {
                     selector: Selector {
                         index_uid: Some("products".to_string()),
                         id: Some("123".to_string()),
-                        filter: None,
                     },
                     action: Action::Pin(PinArgs { position: 3 }),
                 },
                 RuleAction {
                     selector: Selector {
-                        index_uid: None,
-                        id: None,
-                        filter: Some(json!("brand = 'premium'")),
-                    },
-                    action: Action::Boost(BoostArgs { score: 1.5 }),
-                },
-                RuleAction {
-                    selector: Selector {
-                        index_uid: None,
-                        id: None,
-                        filter: Some(json!("category = 'clearance'")),
-                    },
-                    action: Action::Bury(BuryArgs { score: 0.5 }),
-                },
-                RuleAction {
-                    selector: Selector {
-                        index_uid: None,
+                        index_uid: Some("products".to_string()),
                         id: Some("456".to_string()),
-                        filter: None,
                     },
-                    action: Action::Hide(HideArgs {}),
+                    action: Action::Pin(PinArgs { position: 0 }),
+                },
+                RuleAction {
+                    selector: Selector { index_uid: None, id: Some("789".to_string()) },
+                    action: Action::Pin(PinArgs { position: 8 }),
+                },
+                RuleAction {
+                    selector: Selector { index_uid: None, id: Some("999".to_string()) },
+                    action: Action::Pin(PinArgs { position: 12 }),
                 },
             ],
         };
@@ -189,7 +156,7 @@ mod tests {
             active: false,
             conditions: vec![],
             actions: vec![RuleAction {
-                selector: Selector { index_uid: None, id: Some("42".to_string()), filter: None },
+                selector: Selector { index_uid: None, id: Some("42".to_string()) },
                 action: Action::Pin(PinArgs { position: 1 }),
             }],
         };
@@ -203,18 +170,6 @@ mod tests {
         let action = Action::Pin(PinArgs { position: 5 });
         round_trip(&action);
         insta::assert_json_snapshot!("pin", action);
-
-        let action = Action::Boost(BoostArgs { score: 2.0 });
-        round_trip(&action);
-        insta::assert_json_snapshot!("boost", action);
-
-        let action = Action::Bury(BuryArgs { score: 0.3 });
-        round_trip(&action);
-        insta::assert_json_snapshot!("bury", action);
-
-        let action = Action::Hide(HideArgs {});
-        round_trip(&action);
-        insta::assert_json_snapshot!("hide", action);
     }
 
     #[test]
@@ -252,7 +207,7 @@ mod tests {
             "actions": [
                 {
                     "selector": {},
-                    "action": { "type": "hide" }
+                    "action": { "type": "pin", "position": 0 }
                 }
             ]
         });
@@ -273,8 +228,8 @@ mod tests {
             active: false,
             conditions: vec![],
             actions: vec![RuleAction {
-                selector: Selector { index_uid: None, id: None, filter: None },
-                action: Action::Hide(HideArgs {}),
+                selector: Selector { index_uid: None, id: None },
+                action: Action::Pin(PinArgs { position: 0 }),
             }],
         };
 
@@ -287,6 +242,5 @@ mod tests {
         let selector = obj["actions"][0]["selector"].as_object().unwrap();
         assert!(!selector.contains_key("indexUid"));
         assert!(!selector.contains_key("id"));
-        assert!(!selector.contains_key("filter"));
     }
 }

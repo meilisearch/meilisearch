@@ -31,28 +31,30 @@ expression: expected
     },
     {
       "selector": {
-        "filter": "brand = 'premium'"
-      },
-      "action": {
-        "type": "boost",
-        "score": 1.5
-      }
-    },
-    {
-      "selector": {
-        "filter": "category = 'clearance'"
-      },
-      "action": {
-        "type": "bury",
-        "score": 0.5
-      }
-    },
-    {
-      "selector": {
+        "indexUid": "products",
         "id": "456"
       },
       "action": {
-        "type": "hide"
+        "type": "pin",
+        "position": 0
+      }
+    },
+    {
+      "selector": {
+        "id": "789"
+      },
+      "action": {
+        "type": "pin",
+        "position": 8
+      }
+    },
+    {
+      "selector": {
+        "id": "999"
+      },
+      "action": {
+        "type": "pin",
+        "position": 12
       }
     }
   ]

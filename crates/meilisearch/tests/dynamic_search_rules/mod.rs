@@ -59,16 +59,16 @@ async fn create_full_rule() {
                     "action": { "type": "pin", "position": 1 }
                 },
                 {
-                    "selector": { "filter": { "brand": "premium" } },
-                    "action": { "type": "boost", "score": 2.0 }
+                    "selector": { "indexUid": "products", "id": "456" },
+                    "action": { "type": "pin", "position": 0 }
                 },
                 {
-                    "selector": {},
-                    "action": { "type": "bury", "score": 0.3 }
+                    "selector": { "id": "789" },
+                    "action": { "type": "pin", "position": 3 }
                 },
                 {
-                    "selector": { "id": "456" },
-                    "action": { "type": "hide" }
+                    "selector": { "id": "999" },
+                    "action": { "type": "pin", "position": 8 }
                 }
             ]
         }))
@@ -89,7 +89,7 @@ async fn full_lifecycle() {
     let (_, code) = server
         .create_dynamic_search_rule(json!({
             "uid": "rule-a",
-            "actions": [{ "selector": {}, "action": { "type": "hide" } }]
+            "actions": [{ "selector": { "id": "0" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"201 Created");
@@ -172,7 +172,7 @@ async fn patch_rule() {
     let (value, code) = server
         .patch_dynamic_search_rule(
             "updatable",
-            json!({ "actions": [{ "selector": { "id": "99" }, "action": { "type": "hide" } }] }),
+            json!({ "actions": [{ "selector": { "id": "99" }, "action": { "type": "pin", "position": 7 } }] }),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -234,7 +234,7 @@ async fn create_duplicate() {
     let (_, code) = server
         .create_dynamic_search_rule(json!({
             "uid": "dup",
-            "actions": [{ "selector": {}, "action": { "type": "hide" } }]
+            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"201 Created");
@@ -242,7 +242,7 @@ async fn create_duplicate() {
     let (value, code) = server
         .create_dynamic_search_rule(json!({
             "uid": "dup",
-            "actions": [{ "selector": {}, "action": { "type": "hide" } }]
+            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -263,7 +263,7 @@ async fn create_unknown_field() {
     let (value, code) = server
         .create_dynamic_search_rule(json!({
             "uid": "rule-x",
-            "actions": [{ "selector": {}, "action": { "type": "hide" } }],
+            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }],
             "unknownField": true
         }))
         .await;
@@ -278,7 +278,7 @@ async fn patch_unknown_field() {
     let (_, code) = server
         .create_dynamic_search_rule(json!({
             "uid": "rule-y",
-            "actions": [{ "selector": {}, "action": { "type": "hide" } }]
+            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"201 Created");
@@ -308,7 +308,7 @@ async fn create_missing_uid() {
 
     let (value, code) = server
         .create_dynamic_search_rule(json!({
-            "actions": [{ "selector": {}, "action": { "type": "hide" } }]
+            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -355,7 +355,7 @@ async fn patch_replaces_arrays() {
             "conditions": [{ "scope": "query", "isEmpty": true }],
             "actions": [
                 { "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } },
-                { "selector": { "id": "2" }, "action": { "type": "hide" } }
+                { "selector": { "id": "2" }, "action": { "type": "pin", "position": 2 } }
             ]
         }))
         .await;
@@ -369,7 +369,7 @@ async fn patch_replaces_arrays() {
     let (value, code) = server
         .patch_dynamic_search_rule(
             "arrays",
-            json!({ "actions": [{ "selector": {}, "action": { "type": "hide" } }] }),
+            json!({ "actions": [{ "selector": { "id": "3" }, "action": { "type": "pin", "position": 4 } }] }),
         )
         .await;
     snapshot!(code, @"200 OK");
@@ -384,7 +384,7 @@ async fn patch_empty_body() {
         .create_dynamic_search_rule(json!({
             "uid": "no-change",
             "active": true,
-            "actions": [{ "selector": {}, "action": { "type": "hide" } }]
+            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"201 Created");
@@ -401,7 +401,7 @@ async fn defaults_on_create() {
     let (value, code) = server
         .create_dynamic_search_rule(json!({
             "uid": "minimal",
-            "actions": [{ "selector": {}, "action": { "type": "hide" } }]
+            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"201 Created");

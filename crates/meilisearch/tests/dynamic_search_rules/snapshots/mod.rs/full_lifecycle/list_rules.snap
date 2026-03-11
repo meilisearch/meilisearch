@@ -9,9 +9,12 @@ source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
       "conditions": [],
       "actions": [
         {
-          "selector": {},
+          "selector": {
+            "id": "0"
+          },
           "action": {
-            "type": "hide"
+            "type": "pin",
+            "position": 0
           }
         }
       ]

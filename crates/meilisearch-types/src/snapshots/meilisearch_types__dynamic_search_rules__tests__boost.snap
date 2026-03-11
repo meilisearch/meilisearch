@@ -1,8 +1,0 @@
----
-source: crates/meilisearch-types/src/dynamic_search_rules.rs
-expression: action
----
-{
-  "type": "boost",
-  "score": 2.0
-}
