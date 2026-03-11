@@ -11,6 +11,7 @@ use crate::versioning::Versioning;
 mod v1_29;
 mod v1_30;
 mod v1_37;
+mod v1_38;
 
 trait UpgradeIndexScheduler {
     fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()>;
@@ -47,6 +48,7 @@ pub fn upgrade_index_scheduler(
         // List all upgrade functions to apply in order here.
         &v1_30::MigrateNetwork,
         &v1_37::MigrateNetwork,
+        &v1_38::FixupIndexTasks,
     ];
 
     let (initial_major, initial_minor, initial_patch) = initial_version;
