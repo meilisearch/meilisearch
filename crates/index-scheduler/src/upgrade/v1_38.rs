@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
-use meilisearch_types::tasks::Status;
+use meilisearch_types::tasks::{Kind, Status};
 use roaring::RoaringBitmap;
 use tracing::info;
 
@@ -68,21 +68,39 @@ impl super::UpgradeIndexScheduler for FixupIndexTasks {
     fn upgrade(&self, env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> anyhow::Result<()> {
         let queue = TaskQueue::new(env, wtxn)?;
         let mut tasks_per_index: BTreeMap<String, RoaringBitmap> = BTreeMap::new();
-        let enqueued = queue.get_status(wtxn, Status::Enqueued)?;
-        for task_id in enqueued {
-            let Some(task) = queue.get_task(wtxn, task_id)? else {
-                continue;
-            };
-            let Some(&index_name) = task.indexes().first() else {
-                continue;
-            };
-            let tasks_for_index = tasks_per_index.entry(index_name.to_string()).or_default();
-            tasks_for_index.insert(task_id);
+        let mut tasks_per_status: BTreeMap<Status, RoaringBitmap> = BTreeMap::new();
+        let mut tasks_per_kind: BTreeMap<Kind, RoaringBitmap> = BTreeMap::new();
+        for entry in queue.all_tasks.iter(wtxn)? {
+            let (task_id, task) = entry?;
+            let status = task.status;
+            let tasks_for_status = tasks_per_status.entry(status).or_default();
+            tasks_for_status.insert(task_id);
+
+            let kind = task.kind.as_kind();
+            let tasks_for_kind = tasks_per_kind.entry(kind).or_default();
+            tasks_for_kind.insert(task_id);
+
+            if let Some(index_name) = task.indexes().first() {
+                let tasks_for_index = tasks_per_index.entry(index_name.to_string()).or_default();
+                tasks_for_index.insert(task_id);
+            }
         }
 
         for (index, tasks_for_index) in tasks_per_index {
             queue.update_index(wtxn, &index, |tasks| {
                 *tasks |= &tasks_for_index;
+            })?;
+        }
+
+        for (status, tasks_for_status) in tasks_per_status {
+            queue.update_status(wtxn, status, |tasks| {
+                *tasks |= &tasks_for_status;
+            })?;
+        }
+
+        for (kind, tasks_for_kind) in tasks_per_kind {
+            queue.update_kind(wtxn, kind, |tasks| {
+                *tasks |= &tasks_for_kind;
             })?;
         }
 
