@@ -5,7 +5,6 @@ use std::path::Path;
 
 pub use meilisearch_types::milli;
 use meilisearch_types::milli::vector::embedder::hf::OverridePooling;
-use roaring::RoaringBitmap;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use tracing::debug;
@@ -57,9 +56,6 @@ pub struct V6Reader {
     instance_uid: Option<Uuid>,
     metadata: Metadata,
     tasks: BufReader<File>,
-    // This is just a second handler to the tasks to read
-    // them a second time and be able to extract batches.
-    tasks2: BufReader<File>,
     batches: Option<BufReader<File>>,
     keys: BufReader<File>,
     features: Option<RuntimeTogglableFeatures>,
@@ -137,7 +133,6 @@ impl V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
             tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
-            tasks2: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
             batches,
             keys: BufReader::new(File::open(dump.path().join("keys.jsonl"))?),
             features,
@@ -203,48 +198,12 @@ impl V6Reader {
         }))
     }
 
-    /// A way to read the tasks a second time to extract the batches.
-    fn tasks2(&mut self) -> Box<dyn Iterator<Item = Result<Task>> + '_> {
-        Box::new(
-            (&mut self.tasks2)
-                .lines()
-                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
-        )
-    }
-
     pub fn batches(&mut self) -> Box<dyn Iterator<Item = Result<Batch>> + '_> {
-        // Get batches but filter batches so that those whose tasks have been
-        // deleted are not returned. This is due to bug #5827 that caused them
-        // not to be deleted before version 1.18.
-
-        let mut task_uids = RoaringBitmap::new();
-        let mut faulty = false;
-        for task in self.tasks2() {
-            let Ok(task) = task else {
-                // If we can't read the tasks, just give up trying to filter
-                // the batches. The database may contain orphan batches, but
-                // that's not a big deal.
-                faulty = true;
-                break;
-            };
-            task_uids.insert(task.uid);
-        }
-
         match self.batches.as_mut() {
-            Some(batches) => Box::new(
-                batches
-                    .lines()
-                    .map(|line| -> Result<Batch> { Ok(serde_json::from_str(&line?)?) })
-                    .filter(move |batch| match batch {
-                        Ok(batch) => {
-                            faulty
-                                || batch.stats.status.values().any(|t| task_uids.contains(*t))
-                                || batch.stats.types.values().any(|t| task_uids.contains(*t))
-                                || batch.stats.index_uids.values().any(|t| task_uids.contains(*t))
-                        }
-                        Err(_) => true,
-                    }),
-            ),
+            Some(batches) => Box::new((batches).lines().map(|line| -> Result<_> {
+                let batch = serde_json::from_str(&line?)?;
+                Ok(batch)
+            })),
             None => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = Result<Batch>> + '_>,
         }
     }

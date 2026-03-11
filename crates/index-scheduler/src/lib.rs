@@ -832,7 +832,9 @@ impl IndexScheduler {
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).
         if let KindWithContent::TaskCancelation { tasks, .. } = kind {
-            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks) {
+            let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
+            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks_to_cancel)
+            {
                 self.scheduler.must_stop_processing.must_stop();
             }
         }

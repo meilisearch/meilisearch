@@ -491,7 +491,7 @@ pub struct BrowseQuery {
     params(("indexUid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     request_body = BrowseQuery,
     responses(
-        (status = 200, description = "Documents returned.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
+        (status = 200, description = "The documents are returned.", body = PaginationView<serde_json::Value>, content_type = "application/json", example = json!(
             {
                 "results":[
                     {
