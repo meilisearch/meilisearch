@@ -77,6 +77,38 @@ fn on_panic(info: &std::panic::PanicHookInfo) {
 
 #[actix_web::main]
 async fn main() -> anyhow::Result<()> {
+    use signal_hook::consts::SIGUSR1;
+    use signal_hook::iterator::Signals;
+    use std::sync::mpsc;
+    use std::thread;
+
+    // Channel for signal handler → dedicated thread communication
+    let (sender, receiver) = mpsc::channel();
+
+    // Spawn the signal handler thread
+    thread::spawn(move || {
+        let mut signals = Signals::new(&[SIGUSR1]).unwrap();
+        for _ in signals.forever() {
+            sender.send(()).expect("Failed to send signal");
+        }
+    });
+
+    // Spawn the dedicated thread for jemalloc dumps
+    thread::spawn(move || {
+        for _ in receiver {
+            unsafe {
+                jemalloc_sys::mallctl(
+                    b"prof.dump\0".as_ptr() as *const _,
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                    0,
+                );
+            }
+            eprintln!("jemalloc profile dump generated!");
+        }
+    });
+
     // won't panic inside of tokio::main
     let runtime = tokio::runtime::Handle::current();
 
