@@ -49,6 +49,7 @@ pub fn upgrade_index_scheduler(
         &v1_30::MigrateNetwork,
         &v1_37::MigrateNetwork,
         &v1_38::RemoveOrphanBatches,
+        &v1_38::FixupIndexTasks,
     ];
 
     let (initial_major, initial_minor, initial_patch) = initial_version;
