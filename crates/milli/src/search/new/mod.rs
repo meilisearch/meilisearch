@@ -426,8 +426,6 @@ fn get_ranking_rules_for_vector<'ctx>(
             | crate::Criterion::Typo
             | crate::Criterion::Proximity
             | crate::Criterion::Attribute
-            | crate::Criterion::AttributeRank
-            | crate::Criterion::WordPosition
             | crate::Criterion::Exactness => {
                 if !vector {
                     let vector_candidates = ctx.index.documents_ids(ctx.txn)?;
