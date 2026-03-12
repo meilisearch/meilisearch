@@ -395,18 +395,14 @@ fn merge_index_global_results<'a>(
     itertools::kmerge_by(
         // local results
         results_by_index
-            .into_iter()
+            .iter_mut()
             .map(|result_by_index| {
                 either::Either::Left(std::mem::take(&mut result_by_index.hits).into_iter().map(
                     |hit| MergedSearchHit::Local { hit, index: result_by_index.index.as_str() },
                 ))
             })
             // remote results
-            .chain(
-                remote_results.iter_mut().map(|x| {
-                    either::Either::Right(iter_remote_hits(x))
-                }),
-            ),
+            .chain(remote_results.iter_mut().map(|x| either::Either::Right(iter_remote_hits(x)))),
         |left: &MergedSearchHit, right: &MergedSearchHit| {
             let (left_it, left_weighted_global_score, left_query_index) = left.to_score();
             let (right_it, right_weighted_global_score, right_query_index) = right.to_score();
@@ -513,12 +509,7 @@ impl MergedSearchHit<'_> {
                 received_value: query_index.to_string(),
             })? as usize;
 
-        Ok(Self::Remote(RemoteSearchHit {
-            hit,
-            score,
-            global_weighted_score,
-            query_index,
-        }))
+        Ok(Self::Remote(RemoteSearchHit { hit, score, global_weighted_score, query_index }))
     }
 
     fn into_hit(self) -> SearchHit {
@@ -571,13 +562,11 @@ fn iter_remote_hits(
     results_by_host: &mut FederatedSearchResult,
 ) -> impl Iterator<Item = MergedSearchHit<'_>> + '_ {
     // have a per node registry of failed hits
-    results_by_host.hits.drain(..).filter_map(move |hit| {
-        match MergedSearchHit::remote(hit) {
-            Ok(hit) => Some(hit),
-            Err(err) => {
-                tracing::warn!("skipping remote hit due to error: {err}");
-                None
-            }
+    results_by_host.hits.drain(..).filter_map(move |hit| match MergedSearchHit::remote(hit) {
+        Ok(hit) => Some(hit),
+        Err(err) => {
+            tracing::warn!("skipping remote hit due to error: {err}");
+            None
         }
     })
 }

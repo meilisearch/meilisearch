@@ -1220,7 +1220,7 @@ impl SearchHit {
         let field = self.document.get(field_name)?;
 
         let mut facet_values = Vec::new();
-        FacetValue::from_value(&mut facet_values, &field, true);
+        FacetValue::from_value(&mut facet_values, field, true);
         Some(facet_values)
     }
 }
