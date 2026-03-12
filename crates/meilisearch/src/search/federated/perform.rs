@@ -15,8 +15,7 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, Deadline, DocumentId, FederatingResultsStep, OrderBy, SearchStep,
-    DEFAULT_VALUES_PER_FACET,
+    self, Deadline, DocumentId, FederatingResultsStep, OrderBy, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -99,6 +98,7 @@ pub async fn perform_federated_search(
     // This is an important property, otherwise we cannot guarantee the self-consistency of the results.
 
     // 1. partition queries by host and index
+    progress.update_progress(FederatingResultsStep::PartitionQueries);
     let mut partitioned_queries = PartitionedQueries::new();
 
     let mut federation = federation;
@@ -115,6 +115,7 @@ pub async fn perform_federated_search(
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
+    progress.update_progress(FederatingResultsStep::StartRemoteSearch);
     let remote_search = RemoteSearch::start(
         partitioned_queries.remote_queries_by_host,
         &federation,
@@ -124,6 +125,7 @@ pub async fn perform_federated_search(
     );
 
     // 2.2. concurrently execute local queries
+    progress.update_progress(FederatingResultsStep::ExecuteLocalSearch);
     let params = SearchByIndexParams {
         index_scheduler,
         features,
@@ -158,7 +160,6 @@ pub async fn perform_federated_search(
         facet_order,
     } = search_by_index;
 
-    progress.update_progress(SearchStep::Federation);
     progress.update_progress(FederatingResultsStep::WaitForRemoteResults);
     let before_waiting_remote_results = std::time::Instant::now();
 
