@@ -73,6 +73,7 @@ pub enum ExpectedValueKind {
 
 #[derive(Debug)]
 pub enum ErrorKind<'a> {
+    Foreign,
     ReservedGeo(&'a str),
     GeoRadius,
     GeoRadiusArgumentCount(usize),
@@ -296,6 +297,7 @@ impl Display for Error<'_> {
                 "Encountered an internal `{:?}` error while parsing your filter. Please fill an issue", kind
             )?,
             ErrorKind::External(ref error) => writeln!(f, "{}", error)?,
+            ErrorKind::Foreign => writeln!(f, "Was expecting a field name and an condition inside `_foreign(..)` filter but instead found `{escaped_input}`.")?,
         }
         let base_column = self.context.get_utf8_column();
         let size = self.context.fragment().chars().count();

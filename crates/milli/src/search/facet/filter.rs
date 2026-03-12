@@ -612,6 +612,9 @@ impl<'a> Filter<'a> {
         }
 
         match &self.condition {
+            FilterCondition::Foreign { fid, op } => {
+                todo!("evaluate foreign operator")
+            }
             FilterCondition::Not(f) => {
                 let selected = Self::inner_evaluate(
                     &(f.as_ref().clone()).into(),

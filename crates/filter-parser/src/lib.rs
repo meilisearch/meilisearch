@@ -60,7 +60,7 @@ use nom::character::complete::{char, multispace0};
 use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
-use nom::sequence::{delimited, preceded, terminated, tuple};
+use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
 use nom::Finish;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
@@ -160,6 +160,7 @@ pub enum FilterCondition<'a> {
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
     GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
     GeoPolygon { points: Vec<[Token<'a>; 2]> },
+    Foreign { fid: Token<'a>, op: Box<Self> },
 }
 
 pub enum TraversedElement<'a> {
@@ -193,6 +194,7 @@ impl<'a> FilterCondition<'a> {
             | FilterCondition::GeoBoundingBox { .. }
             | FilterCondition::GeoPolygon { .. }
             | FilterCondition::In { .. } => None,
+            FilterCondition::Foreign { fid: _, op } => op.use_contains_operator(),
         }
     }
 
@@ -208,6 +210,7 @@ impl<'a> FilterCondition<'a> {
             | FilterCondition::GeoPolygon { .. }
             | FilterCondition::In { .. } => None,
             FilterCondition::VectorExists { fid, .. } => Some(fid),
+            FilterCondition::Foreign { fid: _, op } => op.use_vector_filter(),
         }
     }
 
@@ -224,6 +227,25 @@ impl<'a> FilterCondition<'a> {
             | FilterCondition::GeoBoundingBox { .. }
             | FilterCondition::GeoPolygon { .. }
             | FilterCondition::VectorExists { .. } => None,
+            FilterCondition::Foreign { fid, op } => {
+                (fid.value() == field).then_some(fid).or_else(|| op.use_field(field))
+            }
+        }
+    }
+
+    pub fn use_foreign_operator(&self) -> Option<&Token<'a>> {
+        match self {
+            FilterCondition::Foreign { fid, .. } => Some(fid),
+            FilterCondition::Not(this) => this.use_foreign_operator(),
+            FilterCondition::Or(seq) | FilterCondition::And(seq) => {
+                seq.iter().find_map(|filter| filter.use_foreign_operator())
+            }
+            FilterCondition::VectorExists { .. }
+            | FilterCondition::GeoLowerThan { .. }
+            | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::GeoPolygon { .. }
+            | FilterCondition::Condition { .. }
+            | FilterCondition::In { .. } => None,
         }
     }
 
@@ -410,6 +432,22 @@ fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
         ),
         |input| parse_primary(input, depth + 1),
     ))(input)
+}
+
+/// foreign      = WS* "_foreign(string WS* "," WS* value WS*)
+/// If we parse `_foreign` we MUST parse the rest of the expression.
+fn parse_foreign(input: Span, depth: usize) -> IResult<FilterCondition> {
+    let (input, _) = tuple((multispace0, word_exact("_foreign")))(input)?;
+
+    // if we were able to parse `_foreign` and can't parse the rest of the input we return a failure
+    delimited(char('('), ws(|input| parse_foreign_operator(input, depth)), char(')'))(input)
+        .map_cut(ErrorKind::Foreign)
+}
+
+fn parse_foreign_operator(input: Span, depth: usize) -> IResult<FilterCondition> {
+    let (input, (fid, op)) =
+        separated_pair(parse_value, ws(tag(",")), |input| parse_or(input, depth))(input)?;
+    Ok((input, FilterCondition::Foreign { fid: fid.into(), op: op.into() }))
 }
 
 /// geoRadius      = WS* "_geoRadius(float WS* "," WS* float WS* "," WS* float)
@@ -603,6 +641,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_not_contains,
         parse_starts_with,
         parse_not_starts_with,
+        |input| parse_foreign(input, depth),
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
         parse_geo,
         parse_geo_distance,
@@ -694,6 +733,9 @@ impl std::fmt::Display for FilterCondition<'_> {
                     write!(f, "[{}, {}], ", point[0], point[1])?;
                 }
                 write!(f, "])")
+            }
+            FilterCondition::Foreign { fid, op } => {
+                write!(f, "_foreign({fid}, {op})")
             }
         }
     }
@@ -895,6 +937,11 @@ pub mod tests {
 
         // Confusing keywords
         insta::assert_snapshot!(p(r#"NOT "OR" EXISTS AND "EXISTS" NOT EXISTS"#), @"AND[NOT ({OR} EXISTS), NOT ({EXISTS} EXISTS), ]");
+
+        // Test foreign
+        insta::assert_snapshot!(p("_foreign(channel, subscribers = 1000)"), @"_foreign({channel}, {subscribers} = {1000})");
+        insta::assert_snapshot!(p("_foreign(channel, channel = ponce AND subscribers > 1000)"), @"_foreign({channel}, AND[{channel} = {ponce}, {subscribers} > {1000}, ])");
+        insta::assert_snapshot!(p("_foreign(channel, channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 ))"), @"_foreign({channel}, AND[{channel} = {ponce}, OR[{dog race} != {bernese mountain}, {subscribers} > {1000}, ], ])");
     }
 
     #[test]
