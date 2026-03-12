@@ -21,6 +21,7 @@ pub struct RuntimeTogglableFeatures {
     pub composite_embedders: bool,
     pub chat_completions: bool,
     pub multimodal: bool,
+    pub foreign_keys: bool,
 }
 
 #[derive(Default, Debug, Clone, Copy)]

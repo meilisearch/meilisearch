@@ -44,6 +44,7 @@ pub struct ExperimentalFeaturesApi;
             composite_embedders: Some(false),
             chat_completions: Some(false),
             multimodal: Some(false),
+            foreign_keys: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -102,6 +103,9 @@ pub struct RuntimeTogglableFeatures {
     /// Enable multimodal search with images and other media
     #[deserr(default)]
     pub multimodal: Option<bool>,
+    /// Enable foreign key support for document hydration
+    #[deserr(default)]
+    pub foreign_keys: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -116,6 +120,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             composite_embedders,
             chat_completions,
             multimodal,
+            foreign_keys,
         } = value;
 
         Self {
@@ -128,6 +133,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             composite_embedders: Some(composite_embedders),
             chat_completions: Some(chat_completions),
             multimodal: Some(multimodal),
+            foreign_keys: Some(foreign_keys),
         }
     }
 }
@@ -143,6 +149,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     composite_embedders: bool,
     chat_completions: bool,
     multimodal: bool,
+    foreign_keys: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -161,6 +168,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             composite_embedders: new.composite_embedders,
             chat_completions: new.chat_completions,
             multimodal: new.multimodal,
+            foreign_keys: new.foreign_keys,
         })
     }
 
@@ -185,6 +193,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             composite_embedders: Some(false),
             chat_completions: Some(false),
             multimodal: Some(false),
+            foreign_keys: Some(false),
          })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -228,6 +237,7 @@ async fn patch_features(
             .unwrap_or(old_features.composite_embedders),
         chat_completions: new_features.0.chat_completions.unwrap_or(old_features.chat_completions),
         multimodal: new_features.0.multimodal.unwrap_or(old_features.multimodal),
+        foreign_keys: new_features.0.foreign_keys.unwrap_or(old_features.foreign_keys),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -243,6 +253,7 @@ async fn patch_features(
         composite_embedders,
         chat_completions,
         multimodal,
+        foreign_keys,
     } = new_features;
 
     analytics.publish(
@@ -256,6 +267,7 @@ async fn patch_features(
             composite_embedders,
             chat_completions,
             multimodal,
+            foreign_keys,
         },
         &req,
     );

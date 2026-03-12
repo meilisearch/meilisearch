@@ -194,6 +194,11 @@ test_setting_routes!(
             "searchParameters": {}
         }
     },
+    {
+        setting: foreign_keys,
+        update_verb: put,
+        default_value: []
+    },
 );
 
 #[actix_rt::test]

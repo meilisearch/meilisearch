@@ -492,6 +492,17 @@ make_setting_routes!(
         camelcase_attr: "chat",
         analytics: ChatAnalytics
     },
+    {
+        route: "/foreign-keys",
+        update_verb: put,
+        value_type: Vec<meilisearch_types::milli::ForeignKey>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsForeignKeys,
+        >,
+        attr: foreign_keys,
+        camelcase_attr: "foreignKeys",
+        analytics: ForeignKeysAnalytics
+    },
 );
 
 #[routes::path(
@@ -565,6 +576,7 @@ pub async fn update_all(
             filterable_attributes: FilterableAttributesAnalytics::new(
                 new_settings.filterable_attributes.as_ref().set(),
             ),
+            foreign_keys: ForeignKeysAnalytics::new(new_settings.foreign_keys.as_ref().set()),
             distinct_attribute: DistinctAttributeAnalytics::new(
                 new_settings.distinct_attribute.as_ref().set(),
             ),
@@ -725,6 +737,10 @@ pub async fn get_all(
         new_settings.chat = Setting::NotSet;
     }
 
+    if features.check_foreign_keys_setting("showing index `foreignKeys` settings").is_err() {
+        new_settings.foreign_keys = Setting::NotSet;
+    }
+
     debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }
@@ -819,6 +835,10 @@ fn validate_settings(
 
     if let Setting::Set(_chat) = &settings.chat {
         features.check_chat_completions("setting `chat` in the index settings")?;
+    }
+
+    if let Setting::Set(_) = &settings.foreign_keys {
+        features.check_foreign_keys_setting("setting `foreignKeys` in the index settings")?;
     }
 
     Ok(settings.validate()?)

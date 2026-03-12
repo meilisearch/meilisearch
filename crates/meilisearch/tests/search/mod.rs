@@ -2,6 +2,7 @@
 // should be tested in its own module to isolate tests and keep the tests readable.
 
 mod distinct;
+mod document_join;
 mod errors;
 mod facet_search;
 mod filters;

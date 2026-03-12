@@ -198,6 +198,12 @@ impl IndexScheduler {
             if self.features().check_chat_completions("exporting chat settings").is_err() {
                 settings.chat = Setting::NotSet;
             }
+
+            // Remove the experimental foreign keys setting if not enabled
+            if self.features().check_foreign_keys_setting("exporting foreign keys").is_err() {
+                settings.foreign_keys = Setting::NotSet;
+            }
+
             // Retry logic for sending settings
             let url = format!(
                 "{base_url}/indexes/{index_uid}/settings",
