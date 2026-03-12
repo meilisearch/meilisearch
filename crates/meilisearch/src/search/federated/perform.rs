@@ -15,7 +15,7 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, Deadline, DocumentId, FederatingResultsStep, ForeignKey, OrderBy, SearchStep,
+    self, Deadline, DocumentId, FederatingResultsStep, ForeignKey, OrderBy,
     DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
@@ -107,6 +107,7 @@ pub async fn perform_federated_search(
     // This is an important property, otherwise we cannot guarantee the self-consistency of the results.
 
     // 1. partition queries by host and index
+    progress.update_progress(FederatingResultsStep::PartitionQueries);
     let mut partitioned_queries = PartitionedQueries::new();
 
     let mut federation = federation;
@@ -123,6 +124,7 @@ pub async fn perform_federated_search(
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
+    progress.update_progress(FederatingResultsStep::StartRemoteSearch);
     let remote_search = RemoteSearch::start(
         partitioned_queries.remote_queries_by_host,
         &federation,
@@ -132,6 +134,7 @@ pub async fn perform_federated_search(
     );
 
     // 2.2. concurrently execute local queries
+    progress.update_progress(FederatingResultsStep::ExecuteLocalSearch);
     let params = SearchByIndexParams {
         index_scheduler,
         features,
@@ -166,7 +169,6 @@ pub async fn perform_federated_search(
         facet_order,
     } = search_by_index;
 
-    progress.update_progress(SearchStep::Federation);
     progress.update_progress(FederatingResultsStep::WaitForRemoteResults);
     let before_waiting_remote_results = std::time::Instant::now();
 
@@ -237,6 +239,7 @@ pub async fn perform_federated_search(
         .collect();
 
     // 3.3.1. hydrate documents based on the hydration points
+    progress.update_progress(FederatingResultsStep::HydrateDocuments);
     if let Some(hydration_cache) = hydration_cache {
         let hydration_formatter =
             FederatedHydrationFormatter::new(hydration_cache, index_scheduler)?;
