@@ -121,7 +121,7 @@ pub async fn perform_federated_search(
         &federation,
         deadline,
         include_metadata,
-        index_scheduler.ip_policy().clone(),
+        index_scheduler.web_client(),
     );
 
     // 2.2. concurrently execute local queries
@@ -790,13 +790,14 @@ impl RemoteSearch {
         federation: &Federation,
         deadline: Instant,
         include_metadata: bool,
-        ip_policy: http_client::policy::IpPolicy,
+        client: &http_client::reqwest::Client,
     ) -> Self {
         let mut in_flight_remote_queries = BTreeMap::new();
-        let client = http_client::reqwest::ClientBuilder::new()
-            .prepare(|client| client.connect_timeout(std::time::Duration::from_millis(200)))
-            .build_with_policies(ip_policy, Default::default())
-            .unwrap();
+
+        if queries.is_empty() {
+            return Self { in_flight_remote_queries };
+        }
+
         let params =
             ProxySearchParams { deadline: Some(deadline), try_count: 3, client: client.clone() };
         for (node_name, (node, queries)) in queries {
