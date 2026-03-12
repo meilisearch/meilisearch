@@ -131,7 +131,7 @@ impl<'a> IndexDocumentMaker<'a> {
 pub type ForeignIndexUid = String;
 pub type SourceIndexUid = String;
 pub type ForeignExternalDocumentId = ExternalDocumentId;
-pub struct HydrationCache {
+pub struct HydrationContext {
     // list of indexes in the order of the queries
     index_by_query_index: Vec<SourceIndexUid>,
     // map from index uid to foreign keys
@@ -141,7 +141,7 @@ pub struct HydrationCache {
     hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
 }
 
-impl HydrationCache {
+impl HydrationContext {
     pub fn new(index_by_query_index: impl IntoIterator<Item = SourceIndexUid>) -> Self {
         let index_by_query_index = index_by_query_index.into_iter().collect();
         Self {
@@ -224,10 +224,10 @@ pub struct FederatedHydrationFormatter {
 
 impl FederatedHydrationFormatter {
     pub fn new(
-        hydration_cache: HydrationCache,
+        hydration_cache: HydrationContext,
         index_scheduler: &IndexScheduler,
     ) -> Result<Self, ResponseError> {
-        let HydrationCache { index_by_query_index, hydration_settings, hydration_docids } =
+        let HydrationContext { index_by_query_index, hydration_settings, hydration_docids } =
             hydration_cache;
 
         // Fetch the documents from the foreign indexes

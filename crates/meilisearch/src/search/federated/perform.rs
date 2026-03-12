@@ -39,7 +39,7 @@ use super::weighted_scores;
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE};
-use crate::search::hydration::{FederatedHydrationFormatter, HydrationCache};
+use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::DEFAULT_SEARCH_LIMIT;
 
 #[allow(clippy::too_many_arguments)]
@@ -100,7 +100,7 @@ pub async fn perform_federated_search(
     let mut hydration_cache = features
         .runtime_features()
         .foreign_keys
-        .then(|| HydrationCache::new(queries.iter().map(|q| q.index_uid.to_string())));
+        .then(|| HydrationContext::new(queries.iter().map(|q| q.index_uid.to_string())));
 
     // this implementation partition the queries by index to guarantee an important property:
     // - all the queries to a particular index use the same read transaction.
