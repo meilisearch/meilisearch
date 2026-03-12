@@ -49,7 +49,7 @@ pub use federated::{
 };
 
 mod dynamic_rules;
-pub use dynamic_rules::{collect_active_rules, DynamicSearchContext};
+pub use dynamic_rules::{collect_active_rules, resolve_pins, DynamicSearchContext};
 
 mod ranking_rules;
 

@@ -26,11 +26,11 @@ use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, Sear
 use crate::routes::parse_include_metadata_header;
 
 use crate::search::{
-    add_search_rules, collect_active_rules, perform_federated_search, perform_search,
-    DynamicSearchContext, Federation, HybridQuery, MatchingStrategy, Partition, Personalize,
-    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult,
-    SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    add_search_rules, perform_federated_search, perform_search, resolve_pins, Federation,
+    HybridQuery, MatchingStrategy, Partition, Personalize, RankingScoreThreshold, RetrieveVectors,
+    SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
+    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
+    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -607,14 +607,6 @@ pub(crate) async fn search(
         features.check_network("passing `useNetwork` in a search query")?
     }
 
-    let rules = index_scheduler.dynamic_search_rules();
-    let single_query_index_uid = index_uid.clone();
-    let single_query_dyn_search_ctx = DynamicSearchContext {
-        query_is_empty: query.q.as_ref().is_none_or(|s| s.trim().is_empty()),
-        index_uid: &single_query_index_uid,
-    };
-    let single_query_active_rules = collect_active_rules(&rules, &single_query_dyn_search_ctx);
-
     let (mut search_result, deadline) = if query
         .use_network
         // avoid accidental recursion
@@ -655,21 +647,11 @@ pub(crate) async fn search(
             _ => ResponseError::from(err),
         })?;
 
-        let mut resolved_pins = Vec::new();
-
-        if !single_query_active_rules.is_empty() {
-            let pin_actions = single_query_active_rules.positioning_rules_for_index_uid(&index_uid);
-            if !pin_actions.is_empty() {
-                let external_ids = index.external_documents_ids();
-                let rtxn = index.read_txn()?;
-                for action in pin_actions {
-                    if let Ok(Some(internal_id)) = external_ids.get(&rtxn, action.doc_id) {
-                        resolved_pins.push((action.position, internal_id));
-                    }
-                }
-                resolved_pins.sort_by_key(|&(pos, _)| pos);
-            }
-        }
+        let resolved_pins = {
+            let rtxn = index.read_txn()?;
+            let rules = index_scheduler.dynamic_search_rules();
+            resolve_pins(&rules, &query, index_uid.as_str(), &index, &rtxn)?
+        };
 
         let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);

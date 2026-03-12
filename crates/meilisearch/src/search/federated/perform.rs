@@ -26,14 +26,14 @@ use uuid::Uuid;
 
 use super::super::ranking_rules::{self, RankingRules};
 use super::super::{
-    compute_facet_distribution_stats, prepare_search, AttributesFormat, ComputedFacets, HitMaker,
-    HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata, SearchQuery,
-    SearchQueryWithIndex,
+    compute_facet_distribution_stats, prepare_search, resolve_pins, AttributesFormat,
+    ComputedFacets, HitMaker, HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata,
+    SearchQuery, SearchQueryWithIndex,
 };
 use super::proxy::{proxy_search, ProxySearchError, ProxySearchParams};
 use super::types::{
     FederatedFacets, FederatedSearchResult, Federation, FederationOptions, MergeFacets, Weight,
-    FEDERATION_HIT, FEDERATION_REMOTE, WEIGHTED_SCORE_VALUES,
+    FEDERATION_HIT, FEDERATION_REMOTE, PINNED_POSITION, WEIGHTED_SCORE_VALUES,
 };
 use super::weighted_scores;
 use crate::error::MeilisearchHttpError;
@@ -213,6 +213,7 @@ pub async fn perform_federated_search(
             }
         }
     }
+    extract_remote_pin_hits(&mut remote_results, &mut pins);
     pins.sort_by_key(|&(pos, _)| pos);
 
     // adjust pagination to reserve slots for pinned documents like we do in bucket_sort
@@ -522,6 +523,30 @@ fn iter_remote_hits(
             None
         }
     })
+}
+
+fn extract_remote_pin_hits(
+    remote_results: &mut [FederatedSearchResult],
+    pins: &mut Vec<(u32, SearchHit)>,
+) {
+    for remote_result in remote_results {
+        let previous_hits = std::mem::take(&mut remote_result.hits);
+        for mut hit in previous_hits {
+            let pin_position = hit
+                .document
+                .get_mut(FEDERATION_HIT)
+                .and_then(|federation| federation.as_object_mut())
+                .and_then(|federation| federation.remove(PINNED_POSITION))
+                .and_then(|position| position.as_u64())
+                .and_then(|position| u32::try_from(position).ok());
+
+            if let Some(position) = pin_position {
+                pins.push((position, hit));
+            } else {
+                remote_result.hits.push(hit);
+            }
+        }
+    }
 }
 
 impl<'a> Iterator for SearchResultByQueryIter<'a> {
@@ -1033,6 +1058,7 @@ impl SearchByIndex {
             .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
 
         let required_hit_count = usize::min(params.required_hit_count, max_total_hits);
+        let dynamic_search_rules = params.index_scheduler.dynamic_search_rules();
 
         let mut degraded = false;
         let mut used_negative_operator = false;
@@ -1141,6 +1167,10 @@ impl SearchByIndex {
                 search.offset(0);
                 search.limit(required_hit_count);
                 search.exhaustive_number_hits(params.is_exhaustive);
+                let pins = resolve_pins(&dynamic_search_rules, &query, &index_uid, &index, &rtxn)?;
+                if !pins.is_empty() {
+                    search.pins(pins);
+                }
 
                 let (result, _semantic_hit_count) =
                     super::super::search_from_kind(index_uid.to_string(), search_kind, search)?;
@@ -1248,6 +1278,12 @@ impl SearchByIndex {
                                 )
                                 .collect_vec()),
                             );
+                            if let Some(ScoreDetails::Pin { position }) = score.first() {
+                                _federation.as_object_mut().unwrap().insert(
+                                    PINNED_POSITION.to_string(),
+                                    serde_json::json!(position),
+                                );
+                            }
                         }
                         hit.document.insert(FEDERATION_HIT.to_string(), _federation);
                         Ok(SearchHitByIndex { hit, score, weight, query_index })
