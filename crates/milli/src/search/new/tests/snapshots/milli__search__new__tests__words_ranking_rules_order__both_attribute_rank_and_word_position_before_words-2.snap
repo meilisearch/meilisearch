@@ -1,0 +1,11 @@
+---
+source: crates/milli/src/search/new/tests/words_ranking_rules_order.rs
+expression: texts
+---
+[
+    "\"albert einstein\"",
+    "\"albert abraham michelson\"",
+    "\"albert schweitzer\"",
+    "\"richard feynman\"",
+    "\"albert camus\"",
+]
