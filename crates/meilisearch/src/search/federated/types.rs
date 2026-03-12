@@ -8,8 +8,8 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
     InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition, InvalidMultiSearchRemote,
-    InvalidMultiSearchWeight, InvalidSearchHitsPerPage, InvalidSearchLimit, InvalidSearchOffset,
-    InvalidSearchPage, InvalidSearchShowPerformanceDetails,
+    InvalidMultiSearchWeight, InvalidSearchDistinct, InvalidSearchHitsPerPage, InvalidSearchLimit,
+    InvalidSearchOffset, InvalidSearchPage, InvalidSearchShowPerformanceDetails,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -95,15 +95,18 @@ pub struct Federation {
     #[deserr(default = super::super::DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub page: Option<usize>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub hits_per_page: Option<usize>,
     /// Facets to retrieve per index
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
     pub facets_by_index: BTreeMap<IndexUid, Option<Vec<String>>>,
     /// Options for merging facets from multiple indexes
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
-    #[schema(value_type = Option<MergeFacets>)]
+    #[schema(required = false)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_facets: Option<MergeFacets>,
 
     /// Restrict search to documents with unique values of the specified attribute across all queries.
@@ -111,6 +114,9 @@ pub struct Federation {
     /// 1. This applies across all queries in the request, regardless of index or remote of origin.
     /// 2. This overrides the index-level distinct attribute.
     /// 3. This requires that the passed field can be set as distinct in all the participating indexes.
+    #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
+    #[schema(required = false)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub distinct: Option<String>,
 
     /// Whether to include performance details in the response
