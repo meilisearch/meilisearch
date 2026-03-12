@@ -206,7 +206,7 @@ pub async fn multi_search_with_post(
                 .get(PROXY_SEARCH_HEADER)
                 .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
             let search_result = perform_federated_search(
-                &index_scheduler,
+                index_scheduler.clone(),
                 queries,
                 federation,
                 features,
