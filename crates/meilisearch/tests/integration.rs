@@ -4,6 +4,7 @@ mod common;
 mod dashboard;
 mod documents;
 mod dumps;
+mod dynamic_search_rules;
 mod features;
 mod index;
 mod logs;

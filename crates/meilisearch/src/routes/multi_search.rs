@@ -232,7 +232,6 @@ pub async fn multi_search_with_post(
             );
 
             let (search_result, _) = search_result?;
-
             HttpResponse::Ok().json(search_result)
         }
         None => {

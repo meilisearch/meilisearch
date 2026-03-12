@@ -538,6 +538,7 @@ mod tests {
                 None,
                 None,
                 &progress,
+                &[],
             )
             .unwrap();
 

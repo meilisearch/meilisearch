@@ -739,6 +739,93 @@ async fn remote_sharding_auto_search() {
 }
 
 #[actix_rt::test]
+async fn remote_search_keeps_remote_pins() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    let index0 = ms0.index("test");
+    let index1 = ms1.index("test");
+
+    let (task, code) = index0
+        .add_documents(
+            json!([
+                { "id": "local", "title": "Batman Returns" }
+            ]),
+            None,
+        )
+        .await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index1
+        .add_documents(
+            json!([
+                { "id": "remote", "title": "Batman" }
+            ]),
+            None,
+        )
+        .await;
+    assert_eq!(code, StatusCode::ACCEPTED);
+    ms1.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = ms1
+        .create_dynamic_search_rule(json!({
+            "uid": "pin-remote",
+            "active": true,
+            "actions": [
+                {
+                    "selector": { "id": "remote" },
+                    "action": { "type": "pin", "position": 0 }
+                }
+            ]
+        }))
+        .await;
+    assert_eq!(code, StatusCode::CREATED, "{response}");
+
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+
+    let network = json!({"remotes": {
+        "ms0": {
+            "url": rms0.url()
+        },
+        "ms1": {
+            "url": rms1.url()
+        }
+    }});
+
+    let (response, code) = ms0.set_network(network.clone()).await;
+    assert_eq!(code, StatusCode::OK, "{response}");
+    let (response, code) = ms1.set_network(network).await;
+    assert_eq!(code, StatusCode::OK, "{response}");
+
+    let (response, code) = ms0
+        .index("test")
+        .search_post(json!({
+            "q": "batman returns",
+            "useNetwork": true
+        }))
+        .await;
+    assert_eq!(code, StatusCode::OK, "{response}");
+
+    let hits = response["hits"].as_array().unwrap();
+    assert_eq!(hits.len(), 2, "{response}");
+    assert_eq!(hits[0]["id"], "remote", "{response}");
+    assert_eq!(hits[0]["_federation"]["remote"], "ms1", "{response}");
+    assert_eq!(hits[1]["id"], "local", "{response}");
+}
+
+#[actix_rt::test]
 async fn remote_sharding_federated_auto_search() {
     let ms0 = Server::new().await;
     let ms1 = Server::new().await;
