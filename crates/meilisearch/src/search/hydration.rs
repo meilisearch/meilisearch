@@ -7,7 +7,7 @@ use meilisearch_types::{
     milli::{self, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey},
     Index,
 };
-use permissive_json_pointer::{map_leaf_values, select_values};
+use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, select_values};
 use serde_json::{Map, Value};
 
 use crate::search::{make_document, ExternalDocumentId, SearchHit};
@@ -21,11 +21,17 @@ pub fn hydrate_documents(
     foreign_keys: &[ForeignKey],
     index_scheduler: &IndexScheduler,
 ) -> Result<(), ResponseError> {
-    // Open each foreign index once
+    // Group the foreign keys by index uid
+    let mut foreign_keys_by_index_uid: HashMap<_, Vec<_>> = HashMap::new();
     for ForeignKey { foreign_index_uid, field_name } in foreign_keys {
+        foreign_keys_by_index_uid.entry(foreign_index_uid).or_default().push(field_name.as_str());
+    }
+
+    // Open each foreign index once
+    for (foreign_index_uid, field_names) in foreign_keys_by_index_uid {
         let index = index_scheduler.index(foreign_index_uid)?;
         let rtxn = index.read_txn()?;
-        let formatter = HydrationFormatter::new(&index, &rtxn, field_name)?;
+        let formatter = HydrationFormatter::new(&index, &rtxn, field_names.as_slice())?;
 
         for document in documents.iter_mut() {
             formatter.hydrate_document(&mut document.document)?;
@@ -38,20 +44,24 @@ pub fn hydrate_documents(
 
 struct HydrationFormatter<'a> {
     document_maker: IndexDocumentMaker<'a>,
-    field_name: &'a str,
+    field_names: &'a [&'a str],
 }
 
 impl<'a> HydrationFormatter<'a> {
-    fn new(index: &'a Index, rtxn: &'a RoTxn<'a>, field_name: &'a str) -> milli::Result<Self> {
+    fn new(
+        index: &'a Index,
+        rtxn: &'a RoTxn<'a>,
+        field_names: &'a [&'a str],
+    ) -> milli::Result<Self> {
         let document_maker = IndexDocumentMaker::new(index, rtxn)?;
 
-        Ok(Self { document_maker, field_name })
+        Ok(Self { document_maker, field_names })
     }
 
     /// Replace the foreign key value with the full document from the foreign index using the displayed fields.
     fn hydrate_document_value(&self, value: &mut Value) -> Result<(), ResponseError> {
         let Ok(external_document_id) = ExternalDocumentId::try_from(value.clone()) else {
-            tracing::warn!("Foreign key value `{value:?}` is not a valid document id when hydrating field `{}`", self.field_name);
+            tracing::warn!("Foreign key value `{value:?}` is not a valid document id when hydrating fields `{:?}`", self.field_names);
             return Ok(());
         };
         let document = self.document_maker.make_document(&external_document_id)?;
@@ -62,11 +72,17 @@ impl<'a> HydrationFormatter<'a> {
 
     fn hydrate_document(&self, document: &mut Map<String, Value>) -> Result<(), ResponseError> {
         let mut res = Ok(());
-        map_leaf_values(document, [self.field_name], |_key, _array_indices, value| {
-            if res.is_ok() {
-                res = self.hydrate_document_value(value);
-            }
-        });
+        map_leaf_values_in_object(
+            document,
+            self.field_names,
+            "",
+            &[],
+            &mut |_key, _array_indices, value| {
+                if res.is_ok() {
+                    res = self.hydrate_document_value(value);
+                }
+            },
+        );
 
         res
     }
