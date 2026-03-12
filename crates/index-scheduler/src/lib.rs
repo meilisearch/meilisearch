@@ -1220,6 +1220,10 @@ impl IndexScheduler {
         wtxn.commit()?;
         Ok(deleted)
     }
+
+    pub fn lmdb_env(&self) -> &Env<WithoutTls> {
+        &self.env
+    }
 }
 
 /// The outcome of calling the [`IndexScheduler::tick`] function.

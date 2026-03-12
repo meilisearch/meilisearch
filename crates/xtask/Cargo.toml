@@ -17,10 +17,11 @@ cargo_metadata = "0.23.1"
 clap = { version = "4.5.52", features = ["derive"] }
 futures-core = "0.3.31"
 futures-util = "0.3.31"
+jsonpath-rust = "1.0.4"
 reqwest = { version = "0.12.24", features = [
-    "stream",
-    "json",
-    "rustls-tls",
+	"stream",
+	"json",
+	"rustls-tls",
 ], default-features = false }
 semver = "1.0.27"
 serde = { version = "1.0.228", features = ["derive"] }

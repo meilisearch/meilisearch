@@ -585,7 +585,7 @@ impl IndexScheduler {
         index
             .copy_to_file(file.as_file_mut(), CompactionOption::Enabled)
             .map_err(|error| Error::Milli { error, index_uid: Some(index_uid.to_string()) })?;
-        // ...and reset the file position as specified in the documentation
+        // ...and reset the file position as specified in the heed documentation
         file.seek(SeekFrom::Start(0))?;
 
         // 4. We replace the index data file with the temporary file

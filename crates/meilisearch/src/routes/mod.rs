@@ -64,6 +64,7 @@ mod export_analytics;
 pub mod features;
 pub mod indexes;
 mod logs;
+mod maintenance;
 mod metrics;
 mod multi_search;
 mod multi_search_analytics;
@@ -97,6 +98,7 @@ mod webhooks;
         "/export"=> sub(export::ExportApi),
         "/network"=> sub(network::NetworkApi),
         "/webhooks"=> sub(webhooks::WebhooksApi),
+        "/maintenance"=> sub(maintenance::MaintenanceApi),
     ),
     tag = "Root",
     tags(

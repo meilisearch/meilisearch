@@ -437,7 +437,7 @@ pub fn clamp_to_page_size(size: usize) -> usize {
 impl crate::IndexScheduler {
     /// Asserts that the index scheduler's content is internally consistent.
     pub fn assert_internally_consistent(&self) {
-        let rtxn = self.env.read_txn().unwrap();
+        let rtxn = self.read_txn().unwrap();
         for task in self.queue.tasks.all_tasks.iter(&rtxn).unwrap() {
             let (task_id, task) = task.unwrap();
             let task_index_uid = task.index_uid().map(ToOwned::to_owned);
