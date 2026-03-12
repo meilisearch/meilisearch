@@ -542,6 +542,13 @@ async fn non_streamed_chat(
     Ok(HttpResponse::Ok().json(response))
 }
 
+fn sse_chat_response(rx: tokio::sync::mpsc::Receiver<Event>) -> impl Responder {
+    Sse::from_infallible_receiver(rx)
+        .with_retry_duration(Duration::from_secs(10))
+        .customize()
+        .insert_header(("X-Accel-Buffering", "no"))
+}
+
 async fn streamed_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
@@ -630,7 +637,7 @@ async fn streamed_chat(
     aggregate.succeed(start_time.elapsed());
     analytics.publish(aggregate, &req);
 
-    Ok(Sse::from_infallible_receiver(rx).with_retry_duration(Duration::from_secs(10)))
+    Ok(sse_chat_response(rx))
 }
 
 /// Updates the chat completion with the new messages, streams the LLM tokens,
