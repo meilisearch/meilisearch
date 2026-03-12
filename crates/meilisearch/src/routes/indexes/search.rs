@@ -618,7 +618,7 @@ pub(crate) async fn search(
             .into_query_partition(&mut federation, &query, None, &index_uid)?
             .collect();
         let search_result = perform_federated_search(
-            &index_scheduler,
+            index_scheduler,
             queries,
             federation,
             features,

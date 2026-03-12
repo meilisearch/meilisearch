@@ -232,6 +232,8 @@ pub struct IndexScheduler {
 
     /// The tokio runtime used for asynchronous tasks.
     runtime: Option<tokio::runtime::Handle>,
+
+    web_client: http_client::reqwest::Client,
 }
 
 impl IndexScheduler {
@@ -260,6 +262,7 @@ impl IndexScheduler {
             features: self.features.clone(),
             chat_settings: self.chat_settings,
             runtime: self.runtime.clone(),
+            web_client: self.web_client.clone(),
         }
     }
 
@@ -344,12 +347,17 @@ impl IndexScheduler {
 
         wtxn.commit()?;
 
+        let scheduler = Scheduler::new(&options, auth_env);
+
+        let web_client = http_client::reqwest::ClientBuilder::new()
+            .build_with_policies(scheduler.ip_policy.clone(), Default::default())
+            .unwrap();
+
         Ok(Self {
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             version,
             queue,
-            scheduler: Scheduler::new(&options, auth_env),
-
+            scheduler,
             index_mapper,
             env,
             cleanup_enabled: options.cleanup_enabled,
@@ -370,6 +378,7 @@ impl IndexScheduler {
             features,
             chat_settings,
             runtime,
+            web_client
         })
     }
 
@@ -1079,6 +1088,10 @@ impl IndexScheduler {
 
     pub fn ip_policy(&self) -> &http_client::policy::IpPolicy {
         &self.scheduler.ip_policy
+    }
+
+    pub fn web_client(&self) -> &http_client::reqwest::Client {
+        &self.web_client
     }
 
     pub fn features(&self) -> RoFeatures {

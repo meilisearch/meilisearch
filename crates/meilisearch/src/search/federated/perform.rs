@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 use std::vec::{IntoIter, Vec};
 
 use actix_http::StatusCode;
+use actix_web::web::Data;
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
 use meilisearch_types::error::ResponseError;
@@ -15,8 +16,7 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, Deadline, DocumentId, FederatingResultsStep, OrderBy, SearchStep,
-    DEFAULT_VALUES_PER_FACET,
+    self, Deadline, DocumentId, FederatingResultsStep, OrderBy, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -43,7 +43,7 @@ use crate::search::DEFAULT_SEARCH_LIMIT;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
-    index_scheduler: &IndexScheduler,
+    index_scheduler: Data<IndexScheduler>,
     queries: Vec<SearchQueryWithIndex>,
     federation: Federation,
     features: RoFeatures,
@@ -99,6 +99,7 @@ pub async fn perform_federated_search(
     // This is an important property, otherwise we cannot guarantee the self-consistency of the results.
 
     // 1. partition queries by host and index
+    progress.update_progress(FederatingResultsStep::PartitionQueries);
     let mut partitioned_queries = PartitionedQueries::new();
 
     let mut federation = federation;
@@ -115,20 +116,22 @@ pub async fn perform_federated_search(
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
+    progress.update_progress(FederatingResultsStep::StartRemoteSearch);
     let remote_search = RemoteSearch::start(
         partitioned_queries.remote_queries_by_host,
         &federation,
         deadline,
         include_metadata,
-        index_scheduler.ip_policy().clone(),
+        index_scheduler.web_client(),
     );
 
     // 2.2. concurrently execute local queries
+    progress.update_progress(FederatingResultsStep::ExecuteLocalSearch);
     let params = SearchByIndexParams {
         index_scheduler,
         features,
         is_proxy,
-        network: &network,
+        network,
         has_remote: partitioned_queries.has_remote,
         is_exhaustive: federation.is_exhaustive(),
         required_hit_count,
@@ -140,14 +143,26 @@ pub async fn perform_federated_search(
     );
 
     let mut deadline = Deadline::never();
-    for (index_uid, queries) in partitioned_queries.local_queries_by_index {
-        // note: this is the only place we open `index_uid`
-        let index_deadline = search_by_index.execute(index_uid, queries, &params, progress)?;
-        deadline = Deadline::earliest(deadline, index_deadline);
-    }
 
-    // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
-    search_by_index.check_unused_facets(index_scheduler)?;
+    let (search_by_index, params, deadline) = tokio::task::spawn_blocking({
+        let progress = progress.clone();
+        move || -> Result<_, ResponseError> {
+            for (index_uid, queries) in partitioned_queries.local_queries_by_index {
+                // note: this is the only place we open `index_uid`
+                let index_deadline =
+                    search_by_index.execute(index_uid, queries, &params, &progress)?;
+                deadline = Deadline::earliest(deadline, index_deadline);
+            }
+
+            // bonus step, make sure to return an error if an index wants a non-faceted field, even if no query actually uses that index.
+            search_by_index.check_unused_facets(&params.index_scheduler)?;
+
+            Ok((search_by_index, params, deadline))
+        }
+    })
+    .await??;
+
+    let SearchByIndexParams { network, .. } = params;
 
     let SearchByIndex {
         federation,
@@ -158,7 +173,6 @@ pub async fn perform_federated_search(
         facet_order,
     } = search_by_index;
 
-    progress.update_progress(SearchStep::Federation);
     progress.update_progress(FederatingResultsStep::WaitForRemoteResults);
     let before_waiting_remote_results = std::time::Instant::now();
 
@@ -789,13 +803,14 @@ impl RemoteSearch {
         federation: &Federation,
         deadline: Instant,
         include_metadata: bool,
-        ip_policy: http_client::policy::IpPolicy,
+        client: &http_client::reqwest::Client,
     ) -> Self {
         let mut in_flight_remote_queries = BTreeMap::new();
-        let client = http_client::reqwest::ClientBuilder::new()
-            .prepare(|client| client.connect_timeout(std::time::Duration::from_millis(200)))
-            .build_with_policies(ip_policy, Default::default())
-            .unwrap();
+
+        if queries.is_empty() {
+            return Self { in_flight_remote_queries };
+        }
+
         let params =
             ProxySearchParams { deadline: Some(deadline), try_count: 3, client: client.clone() };
         for (node_name, (node, queries)) in queries {
@@ -914,14 +929,14 @@ impl RemoteSearch {
     }
 }
 
-struct SearchByIndexParams<'a> {
-    index_scheduler: &'a IndexScheduler,
+struct SearchByIndexParams {
+    index_scheduler: Data<IndexScheduler>,
     required_hit_count: usize,
     is_exhaustive: bool,
     features: RoFeatures,
     is_proxy: bool,
     has_remote: bool,
-    network: &'a Network,
+    network: Network,
 }
 
 struct SearchByIndex {
@@ -957,7 +972,7 @@ impl SearchByIndex {
         &mut self,
         index_uid: String,
         queries: Vec<QueryByIndex>,
-        params: &SearchByIndexParams<'_>,
+        params: &SearchByIndexParams,
         progress: &Progress,
     ) -> Result<Deadline, ResponseError> {
         let first_query_index = queries.first().map(|query| query.query_index);
@@ -1019,7 +1034,7 @@ impl SearchByIndex {
 
             let res: Result<(), ResponseError> = (|| {
                 let search_kind =
-                    search_kind(&query, params.index_scheduler, index_uid.to_string(), &index)?;
+                    search_kind(&query, &params.index_scheduler, index_uid.to_string(), &index)?;
 
                 let canonicalization_kind = match (&search_kind, &query.q) {
                     (SearchKind::SemanticOnly { .. }, _) => {
