@@ -890,6 +890,10 @@ impl SearchQueryWithIndex {
         self.show_performance_details.is_some()
     }
 
+    fn has_distinct(&self) -> bool {
+        self.distinct.is_some()
+    }
+
     pub fn from_index_query_federation(
         index_uid: IndexUid,
         query: SearchQuery,
@@ -1208,6 +1212,47 @@ pub struct SearchHit {
     /// Present when `showRankingScoreDetails` was true.
     #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+impl SearchHit {
+    fn facet_values(&self, field_name: &str) -> Option<Vec<FacetValue>> {
+        /// FIXME: nested field names
+        let field = self.document.get(field_name)?;
+
+        let mut facet_values = Vec::new();
+        FacetValue::from_value(&mut facet_values, field, true);
+        Some(facet_values)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct FacetValue(serde_json::Value);
+
+impl FacetValue {
+    pub fn from_value(
+        facet_values: &mut Vec<FacetValue>,
+        field: &serde_json::Value,
+        allow_recursion: bool,
+    ) {
+        match field {
+            Value::Bool(b) => {
+                facet_values.push(FacetValue(serde_json::Value::String(b.to_string())))
+            }
+            Value::Number(number) => {
+                facet_values.push(FacetValue(serde_json::Value::Number(number.clone())))
+            }
+            Value::String(s) => {
+                let normalized = milli::normalize_facet(s);
+                facet_values.push(FacetValue(serde_json::Value::String(normalized)))
+            }
+            Value::Array(values) if allow_recursion => {
+                for value in values {
+                    Self::from_value(facet_values, value, false)
+                }
+            }
+            _ => (),
+        }
+    }
 }
 
 /// Metadata about a search query (included when requested via header).
@@ -1777,6 +1822,62 @@ pub struct ComputedFacets {
     pub distribution: BTreeMap<String, IndexMap<String, u64>>,
     /// Numeric statistics for each facet
     pub stats: BTreeMap<String, FacetStats>,
+}
+
+impl ComputedFacets {
+    pub fn remove_hits(&mut self, hits: &[SearchHit]) {
+        if hits.is_empty() {
+            return;
+        }
+        /// TODO: stats
+        for (field_name, distribution) in &mut self.distribution {
+            let normalized_to_original: BTreeMap<_, _> = distribution
+                .keys()
+                .enumerate()
+                .filter_map(|(index, facet_value)| {
+                    let normalized = milli::normalize_facet(facet_value);
+                    if normalized == facet_value.as_str() {
+                        None
+                    } else {
+                        Some((normalized, index))
+                    }
+                })
+                .collect();
+
+            let mut must_remove = false;
+
+            for hit in hits {
+                let Some(values) = hit.facet_values(field_name) else {
+                    continue;
+                };
+                for value in values {
+                    let count = match value.0 {
+                        serde_json::Value::String(s) => {
+                            if let Some(original) = normalized_to_original.get(&s) {
+                                distribution.get_index_mut(*original).map(|(_, v)| v)
+                            } else {
+                                distribution.get_mut(&s)
+                            }
+                        }
+                        value => distribution.get_mut(&value.to_string()),
+                    };
+
+                    let Some(count) = count else {
+                        continue;
+                    };
+
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        must_remove = true;
+                    }
+                }
+            }
+
+            if must_remove {
+                distribution.retain(|_, v| *v != 0);
+            }
+        }
+    }
 }
 
 pub enum Route {

@@ -115,7 +115,7 @@ fn fixup_query_federation(
         show_matches_position: _,
         filter: _,
         sort: _,
-        distinct: _,
+        distinct,
         facets,
         highlight_pre_tag: _,
         highlight_post_tag: _,
@@ -136,6 +136,7 @@ fn fixup_query_federation(
         facets_by_index: _,
         merge_facets: _,
         show_performance_details: federation_show_performance_details,
+        distinct: federation_distinct,
     } = federation;
 
     if let Some(limit) = limit.take() {
@@ -149,6 +150,9 @@ fn fixup_query_federation(
     }
     if let Some(hits_per_page) = hits_per_page.take() {
         *federation_hits_per_page = Some(hits_per_page);
+    }
+    if let Some(distinct) = distinct.take() {
+        *federation_distinct = Some(distinct);
     }
 
     if let Some(show_performance_details) = show_performance_details.take() {
