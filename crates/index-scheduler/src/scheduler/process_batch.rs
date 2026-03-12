@@ -2,6 +2,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs::{remove_file, File};
 use std::io::{ErrorKind, Seek, SeekFrom};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::rc::Rc;
 use std::sync::atomic::Ordering;
 
 use byte_unit::Byte;
@@ -827,7 +828,7 @@ impl IndexScheduler {
         to_delete_tasks -= enqueued_tasks;
 
         // 2. We now have a list of tasks to delete. Read their metadata to list what needs to be updated.
-        let mut affected_indexes = HashSet::new();
+        let mut affected_indexes = HashSet::<Rc<str>>::new();
         let mut affected_statuses = HashSet::new();
         let mut affected_kinds = HashSet::new();
         let mut affected_canceled_by = RoaringBitmap::new();
@@ -843,7 +844,7 @@ impl IndexScheduler {
             for task in self.queue.tasks.all_tasks.range(&rtxn, &range)? {
                 let (task_id, task) = task?;
 
-                affected_indexes.extend(task.indexes().into_iter().map(ToOwned::to_owned));
+                affected_indexes.extend(task.indexes().into_iter().map(Rc::from));
                 affected_statuses.insert(task.status);
                 affected_kinds.insert(task.kind.as_kind());
 
@@ -878,7 +879,7 @@ impl IndexScheduler {
         let mut affected_indexes_tasks = HashMap::new();
         for index in &affected_indexes {
             let tasks_ids = self.queue.tasks.index_tasks(&rtxn, index)?;
-            affected_indexes_tasks.insert(index.as_str(), tasks_ids);
+            affected_indexes_tasks.insert(index.clone(), tasks_ids);
         }
 
         let mut affected_kinds_tasks = HashMap::new();
@@ -918,7 +919,7 @@ impl IndexScheduler {
                 for (index, index_tasks) in &affected_indexes_tasks {
                     if index_tasks.is_disjoint(&tasks) {
                         to_remove_from_indexes
-                            .entry(index)
+                            .entry(index.clone())
                             .or_insert_with(RoaringBitmap::new)
                             .insert(batch_id);
                     }
@@ -951,6 +952,11 @@ impl IndexScheduler {
             }
         }
 
+        // Drop the read transaction before starting the write transaction
+        // to avoid reading stale task data.
+        drop(affected_indexes_tasks);
+        drop(affected_kinds_tasks);
+        drop(status_tasks);
         drop(rtxn);
 
         let mut owned_wtxn = self.env.write_txn()?;
@@ -974,7 +980,7 @@ impl IndexScheduler {
         progress.update_progress(TaskDeletionProgress::DeletingBatchesMetadata);
 
         for (index, batches) in to_remove_from_indexes {
-            self.queue.batches.update_index(wtxn, index, |b| *b -= &batches)?;
+            self.queue.batches.update_index(wtxn, &index, |b| *b -= &batches)?;
         }
 
         for (status, batches) in to_remove_from_statuses {
@@ -992,34 +998,18 @@ impl IndexScheduler {
         );
         progress.update_progress(task_progress);
 
-        for (index, mut tasks) in affected_indexes_tasks.into_iter() {
-            tasks -= &to_delete_tasks;
-            if tasks.is_empty() {
-                self.queue.tasks.index_tasks.delete(wtxn, index)?;
-            } else {
-                self.queue.tasks.index_tasks.put(wtxn, index, &tasks)?;
-            }
+        for index in affected_indexes {
+            self.queue.tasks.update_index(wtxn, &index, |tasks| *tasks -= &to_delete_tasks)?;
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
-        for status in affected_statuses.into_iter() {
-            let mut tasks = status_tasks.remove(&status).unwrap(); // we inserted all statuses above
-            tasks -= &to_delete_tasks;
-            if tasks.is_empty() {
-                self.queue.tasks.status.delete(wtxn, &status)?;
-            } else {
-                self.queue.tasks.status.put(wtxn, &status, &tasks)?;
-            }
+        for status in affected_statuses {
+            self.queue.tasks.update_status(wtxn, status, |tasks| *tasks -= &to_delete_tasks)?;
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
-        for (kind, mut tasks) in affected_kinds_tasks.into_iter() {
-            tasks -= &to_delete_tasks;
-            if tasks.is_empty() {
-                self.queue.tasks.kind.delete(wtxn, &kind)?;
-            } else {
-                self.queue.tasks.kind.put(wtxn, &kind, &tasks)?;
-            }
+        for kind in affected_kinds {
+            self.queue.tasks.update_kind(wtxn, kind, |tasks| *tasks -= &to_delete_tasks)?;
             atomic_progress.fetch_add(1, Ordering::Relaxed);
         }
 
@@ -1034,6 +1024,7 @@ impl IndexScheduler {
         }
 
         for canceled_by in affected_canceled_by {
+            // We retrieve the canceled_by tasks from the wtxn, we don't drop any task.
             if let Some(mut tasks) = self.queue.tasks.canceled_by.get(wtxn, &canceled_by)? {
                 tasks -= &to_delete_tasks;
                 if tasks.is_empty() {
