@@ -17,7 +17,7 @@ csv = "1.4.0"
 http-client = { path = "../http-client" }
 memmap2 = "0.9.9"
 milli = { path = "../milli" }
-mimalloc = { version = "0.1.48", default-features = false, features = ["v3"] }
+mimalloc = { workspace = true }
 serde_json = { version = "1.0.145", features = ["preserve_order"] }
 tempfile = "3.23.0"
 
