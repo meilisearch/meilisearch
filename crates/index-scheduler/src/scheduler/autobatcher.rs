@@ -69,7 +69,6 @@ impl From<KindWithContent> for AutobatchKind {
             KindWithContent::IndexUpdate { .. } => AutobatchKind::IndexUpdate,
             KindWithContent::IndexSwap { .. } => AutobatchKind::IndexSwap,
             KindWithContent::IndexCompaction { .. }
-            | KindWithContent::TaskQueueCompaction
             | KindWithContent::TaskCancelation { .. }
             | KindWithContent::TaskDeletion { .. }
             | KindWithContent::DumpCreation { .. }

@@ -361,8 +361,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         | K::Export { .. }
         | K::UpgradeDatabase { .. }
         | K::NetworkTopologyChange(_)
-        | K::SnapshotCreation
-        | K::TaskQueueCompaction => (),
+        | K::SnapshotCreation => (),
     };
     if let Some(Details::IndexSwap { swaps }) = &mut task.details {
         for IndexSwap { indexes: (lhs, rhs), rename: _ } in swaps.iter_mut() {
@@ -705,12 +704,6 @@ impl crate::IndexScheduler {
                     }
                     Details::NetworkTopologyChange { moved_documents: _, message: _ } => {
                         assert_eq!(kind.as_kind(), Kind::NetworkTopologyChange);
-                    }
-                    Details::TaskQueueCompaction {
-                        pre_deletion_size: _,
-                        post_deletion_size: _,
-                    } => {
-                        assert_eq!(kind.as_kind(), Kind::TaskQueueCompaction);
                     }
                 }
             }

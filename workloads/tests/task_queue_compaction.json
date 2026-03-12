@@ -25,15 +25,14 @@
       "synchronous": "WaitForTask"
     },
     {
-      "route": "maintenance/tasks/compact",
+      "route": "tasks/compact",
       "method": "POST",
-      "expectedStatus": 202,
+      "expectedStatus": 200,
       "expectedResponse": {
-        "enqueuedAt": "[timestamp]",
-        "indexUid": null,
-        "status": "enqueued",
-        "taskUid": 1,
-        "type": "taskQueueCompaction"
+        "preSize": "[preSize]",
+        "postSize": "[postSize]",
+        "status": "succeeded",
+        "actionRequired": "you must restart your instance"
       }
     },
     {

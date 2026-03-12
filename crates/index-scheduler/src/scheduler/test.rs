@@ -852,7 +852,6 @@ fn basic_get_stats() {
         "snapshotCreation": 0,
         "taskCancelation": 0,
         "taskDeletion": 0,
-        "taskQueueCompaction": 0,
         "upgradeDatabase": 0
       }
     }
@@ -889,7 +888,6 @@ fn basic_get_stats() {
         "snapshotCreation": 0,
         "taskCancelation": 0,
         "taskDeletion": 0,
-        "taskQueueCompaction": 0,
         "upgradeDatabase": 0
       }
     }
@@ -933,7 +931,6 @@ fn basic_get_stats() {
         "snapshotCreation": 0,
         "taskCancelation": 0,
         "taskDeletion": 0,
-        "taskQueueCompaction": 0,
         "upgradeDatabase": 0
       }
     }
@@ -978,7 +975,6 @@ fn basic_get_stats() {
         "snapshotCreation": 0,
         "taskCancelation": 0,
         "taskDeletion": 0,
-        "taskQueueCompaction": 0,
         "upgradeDatabase": 0
       }
     }

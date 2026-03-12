@@ -128,8 +128,6 @@ pub enum Error {
     TaskDeletionWithEmptyQuery,
     #[error("Query parameters to filter the tasks to cancel are missing. Available query parameters are: `uids`, `indexUids`, `statuses`, `types`, `canceledBy`, `beforeEnqueuedAt`, `afterEnqueuedAt`, `beforeStartedAt`, `afterStartedAt`, `beforeFinishedAt`, `afterFinishedAt`.")]
     TaskCancelationWithEmptyQuery,
-    #[error("Task queue compaction failed after {attempts} attempts: the queue is under heavy load and compaction cannot proceed safely without risking task loss")]
-    TaskQueueCompactionMaxAttemptReached { attempts: usize },
     #[error("Aborted task")]
     AbortedTask,
 
@@ -273,8 +271,7 @@ impl Error {
             | Error::ImportTaskAlreadyReceived(_)
             | Error::ImportTaskUnknownRemote(_)
             | Error::RequiresEnterpriseEdition { .. }
-            | Error::Anyhow(_)
-            | Error::TaskQueueCompactionMaxAttemptReached { .. } => true,
+            | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
             | Error::DatabaseUpgrade(_)
@@ -361,7 +358,6 @@ impl ErrorCode for Error {
             Error::IoError(e) => e.error_code(),
             Error::Persist(e) => e.error_code(),
             Error::FeatureNotEnabled(_) => Code::FeatureNotEnabled,
-            Error::TaskQueueCompactionMaxAttemptReached { .. } => Code::Internal,
 
             // Irrecoverable errors
             Error::Anyhow(_) => Code::Internal,
