@@ -192,9 +192,11 @@ pub async fn perform_federated_search(
 
     // Document join: register foreign settings for each index
     if let Some(hydration_cache) = hydration_cache.as_mut() {
-        for result_by_index in results_by_index.iter() {
-            hydration_cache
-                .register_foreign_settings(&result_by_index.index, &result_by_index.foreign_keys);
+        for result_by_index in results_by_index.iter_mut() {
+            hydration_cache.register_foreign_settings(
+                result_by_index.index.clone(),
+                std::mem::take(&mut result_by_index.foreign_keys),
+            );
         }
     }
 

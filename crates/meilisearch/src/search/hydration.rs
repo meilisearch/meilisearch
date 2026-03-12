@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap};
 
 use index_scheduler::IndexScheduler;
 use meilisearch_types::{
@@ -135,10 +135,10 @@ pub struct HydrationCache {
     // list of indexes in the order of the queries
     index_by_query_index: Vec<SourceIndexUid>,
     // map from index uid to foreign keys
-    hydration_settings: BTreeMap<SourceIndexUid, Vec<ForeignKey>>,
+    hydration_settings: HashMap<SourceIndexUid, Vec<ForeignKey>>,
     // map from foreign index uid to foreign document ids
     // TODO Document join: add remote name to the key when implementing network support
-    hydration_docids: BTreeMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
+    hydration_docids: HashMap<ForeignIndexUid, Vec<ForeignExternalDocumentId>>,
 }
 
 impl HydrationCache {
@@ -146,17 +146,17 @@ impl HydrationCache {
         let index_by_query_index = index_by_query_index.into_iter().collect();
         Self {
             index_by_query_index,
-            hydration_settings: BTreeMap::new(),
-            hydration_docids: BTreeMap::new(),
+            hydration_settings: HashMap::new(),
+            hydration_docids: HashMap::new(),
         }
     }
 
     pub fn register_foreign_settings(
         &mut self,
-        index_uid: &ForeignIndexUid,
-        foreign_keys: &[ForeignKey],
+        index_uid: ForeignIndexUid,
+        foreign_keys: Vec<ForeignKey>,
     ) {
-        self.hydration_settings.insert(index_uid.to_string(), foreign_keys.to_vec());
+        self.hydration_settings.insert(index_uid, foreign_keys);
     }
 
     pub fn register_foreign_docids(&mut self, hit: &SearchHit, query_index: usize) {
@@ -177,10 +177,15 @@ impl HydrationCache {
                             );
                             return;
                         };
-                        self.hydration_docids
-                            .entry(foreign_index_uid.clone())
-                            .or_default()
-                            .push(external_document_id);
+                        match self.hydration_docids.get_mut(foreign_index_uid) {
+                            Some(docids) => {
+                                docids.push(external_document_id);
+                            }
+                            None => {
+                                self.hydration_docids
+                                    .insert(foreign_index_uid.clone(), vec![external_document_id]);
+                            }
+                        }
                     }
                 }
                 Some(value) => {
@@ -191,10 +196,15 @@ impl HydrationCache {
                         );
                         return;
                     };
-                    self.hydration_docids
-                        .entry(foreign_index_uid.clone())
-                        .or_default()
-                        .push(external_document_id);
+                    match self.hydration_docids.get_mut(foreign_index_uid) {
+                        Some(docids) => {
+                            docids.push(external_document_id);
+                        }
+                        None => {
+                            self.hydration_docids
+                                .insert(foreign_index_uid.clone(), vec![external_document_id]);
+                        }
+                    }
                 }
                 None => {}
             }
@@ -206,9 +216,10 @@ pub struct FederatedHydrationFormatter {
     // list of indexes in the order of the queries
     index_by_query_index: Vec<SourceIndexUid>,
     // map from index uid to foreign keys
-    hydration_settings: BTreeMap<SourceIndexUid, Vec<ForeignKey>>,
+    hydration_settings: HashMap<SourceIndexUid, Vec<ForeignKey>>,
     // map from foreign index uid and foreign document id to document
-    hydration_documents: HashMap<(ForeignIndexUid, ForeignExternalDocumentId), Map<String, Value>>,
+    hydration_documents:
+        HashMap<ForeignIndexUid, HashMap<ForeignExternalDocumentId, Map<String, Value>>>,
 }
 
 impl FederatedHydrationFormatter {
@@ -220,14 +231,22 @@ impl FederatedHydrationFormatter {
             hydration_cache;
 
         // Fetch the documents from the foreign indexes
-        let mut hydration_documents = HashMap::new();
+        let mut hydration_documents: HashMap<_, HashMap<_, _>> = HashMap::new();
         for (index_uid, docids) in hydration_docids {
             let index = index_scheduler.index(&index_uid)?;
             let rtxn = index.read_txn()?;
             let document_maker = IndexDocumentMaker::new(&index, &rtxn)?;
             for docid in docids {
                 let document = document_maker.make_document(&docid)?;
-                hydration_documents.insert((index_uid.clone(), docid), document);
+                match hydration_documents.get_mut(&index_uid) {
+                    Some(documents) => {
+                        documents.insert(docid, document);
+                    }
+                    None => {
+                        hydration_documents
+                            .insert(index_uid.clone(), HashMap::from([(docid, document)]));
+                    }
+                }
             }
         }
 
@@ -276,8 +295,10 @@ impl FederatedHydrationFormatter {
             tracing::warn!("Foreign key value `{value:?}` is not a valid document id in `{key}`");
             return;
         };
-        let Some(document) =
-            self.hydration_documents.get(&(index_uid.clone(), external_document_id))
+        let Some(document) = self
+            .hydration_documents
+            .get(index_uid)
+            .and_then(|documents| documents.get(&external_document_id))
         else {
             tracing::warn!(
                 "Foreign key value `{value:?}` in `{key}` does not match any document in index `{index_uid}`"
