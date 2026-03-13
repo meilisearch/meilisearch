@@ -6,6 +6,9 @@ use std::str::FromStr;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
+#[cfg(test)]
+mod lib_test;
+
 const UPDATE_FILES_PATH: &str = "updates/updates_files";
 
 #[derive(Debug, thiserror::Error)]
@@ -170,36 +173,5 @@ impl Write for File {
         } else {
             Ok(())
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::io::Write;
-
-    use tempfile::TempDir;
-
-    use super::*;
-
-    #[test]
-    fn all_uuids() {
-        let dir = TempDir::new().unwrap();
-        let fs = FileStore::new(dir.path()).unwrap();
-        let (uuid, mut file) = fs.new_update().unwrap();
-        file.write_all(b"Hello world").unwrap();
-        file.persist().unwrap();
-        let all_uuids = fs.all_uuids().unwrap().collect::<Result<Vec<_>>>().unwrap();
-        assert_eq!(all_uuids, vec![uuid]);
-
-        let (uuid2, file) = fs.new_update().unwrap();
-        let all_uuids = fs.all_uuids().unwrap().collect::<Result<Vec<_>>>().unwrap();
-        assert_eq!(all_uuids, vec![uuid]);
-
-        file.persist().unwrap();
-        let mut all_uuids = fs.all_uuids().unwrap().collect::<Result<Vec<_>>>().unwrap();
-        all_uuids.sort();
-        let mut expected = vec![uuid, uuid2];
-        expected.sort();
-        assert_eq!(all_uuids, expected);
     }
 }
