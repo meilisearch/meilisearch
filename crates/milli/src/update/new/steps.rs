@@ -38,8 +38,10 @@ make_enum_progress! {
 
 make_enum_progress! {
     pub enum PostProcessingFacets {
+        PreparingStrings,
         StringsBulk,
         StringsIncremental,
+        PreparingNumbers,
         NumbersBulk,
         NumbersIncremental,
         FacetSearch,
