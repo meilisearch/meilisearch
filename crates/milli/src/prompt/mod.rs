@@ -129,8 +129,19 @@ impl Prompt {
                 liquid_error,
             )
         })?;
-        Ok(std::str::from_utf8(rendered.into_bump_slice())
-            .expect("render can only write UTF-8 because all inputs and processing preserve utf-8"))
+        let rendered = std::str::from_utf8(rendered.into_bump_slice())
+            .expect("render can only write UTF-8 because all inputs and processing preserve utf-8");
+        if let Some(max_bytes) = self.max_bytes {
+            let max_bytes = max_bytes.get();
+            if rendered.len() > max_bytes {
+                let mut end = max_bytes;
+                while !rendered.is_char_boundary(end) {
+                    end -= 1;
+                }
+                return Ok(&rendered[..end]);
+            }
+        }
+        Ok(rendered)
     }
 
     pub fn render_kvdeladd(
