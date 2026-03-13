@@ -13,6 +13,8 @@ use crate::{Index, Result};
 
 mod facet_distribution;
 mod facet_distribution_iter;
+#[cfg(test)]
+mod facet_distribution_tests;
 mod facet_range_search;
 mod facet_sort_ascending;
 mod facet_sort_descending;
