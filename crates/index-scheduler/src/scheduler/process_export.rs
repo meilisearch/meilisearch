@@ -563,10 +563,16 @@ where
                         Err(into_backoff_error(response))
                     }
                 }
-                Err(err) => Err(backoff::Error::Transient {
-                    err: ResponseError::Transport(err),
-                    retry_after: None,
-                }),
+                Err(err) => {
+                    if matches!(&err, http_client::ureq::Error::BadUri(_)) {
+                        Err(backoff::Error::Permanent(ResponseError::Transport(err)))
+                    } else {
+                        Err(backoff::Error::Transient {
+                            err: ResponseError::Transport(err),
+                            retry_after: None,
+                        })
+                    }
+                }
             }
         },
     ) {
