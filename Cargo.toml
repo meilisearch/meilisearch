@@ -39,6 +39,9 @@ readme = "README.md"
 edition = "2021"
 license = "MIT"
 
+[workspace.dependencies]
+mimalloc = { version = "0.1.48", default-features = false, features = ["v3", "override"] }
+
 [profile.release]
 codegen-units = 1
 
