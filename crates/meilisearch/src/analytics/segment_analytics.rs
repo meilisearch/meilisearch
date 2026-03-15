@@ -261,6 +261,7 @@ impl Infos {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_max_open_indexes: _,
             experimental_allowed_ip_networks,
             http_addr,
             master_key: _,

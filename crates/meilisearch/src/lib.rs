@@ -275,7 +275,7 @@ pub fn setup_meilisearch(
             |size| size.as_u64(),
         ),
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
-        index_count: DEFAULT_INDEX_COUNT,
+        index_count: opt.experimental_max_open_indexes.unwrap_or(DEFAULT_INDEX_COUNT),
         instance_features: opt.to_instance_features(),
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,

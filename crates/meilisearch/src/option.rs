@@ -70,6 +70,7 @@ const MEILI_EXPERIMENTAL_LIMIT_BATCHED_TASKS_TOTAL_SIZE: &str =
 const MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES: &str =
     "MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES";
 const MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION: &str = "MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION";
+const MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES: &str = "MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES";
 const MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS: &str =
     "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_DUMPS";
 const MEILI_EXPERIMENTAL_PERSONALIZATION_API_KEY: &str =
@@ -492,6 +493,14 @@ pub struct Opt {
     #[serde(default = "default_embedding_cache_entries")]
     pub experimental_embedding_cache_entries: usize,
 
+    /// Experimentally configures the maximum number of indexes that can be concurrently opened in memory.
+    ///
+    /// Defaults to 20 on Unix and 4 on Windows when not specified. Increasing this value is useful
+    /// for instances with thousands of indexes that are rarely queried, avoiding constant reopening.
+    #[clap(long, env = MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES)]
+    #[serde(default)]
+    pub experimental_max_open_indexes: Option<usize>,
+
     /// Experimental no snapshot compaction feature.
     ///
     /// When enabled, Meilisearch will not compact snapshots during creation.
@@ -623,6 +632,7 @@ impl Opt {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_max_open_indexes,
             experimental_personalization_api_key,
             experimental_allowed_ip_networks,
             s3_snapshot_options,
@@ -724,6 +734,12 @@ impl Opt {
             MEILI_EXPERIMENTAL_EMBEDDING_CACHE_ENTRIES,
             experimental_embedding_cache_entries.to_string(),
         );
+        if let Some(max_open_indexes) = experimental_max_open_indexes {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES,
+                max_open_indexes.to_string(),
+            );
+        }
         export_to_env_if_not_present(
             MEILI_EXPERIMENTAL_NO_SNAPSHOT_COMPACTION,
             experimental_no_snapshot_compaction.to_string(),
