@@ -14,6 +14,8 @@ use crate::{Index, Result};
 mod facet_distribution;
 mod facet_distribution_iter;
 mod facet_range_search;
+#[cfg(test)]
+mod facet_range_search_test;
 mod facet_sort_ascending;
 mod facet_sort_descending;
 mod filter;
