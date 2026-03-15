@@ -101,6 +101,8 @@ use crate::update::del_add::{DelAdd, KvReaderDelAdd};
 use crate::{try_split_array_at, FieldId, Index, Result};
 
 pub mod bulk;
+#[cfg(test)]
+mod bulk_test;
 pub mod incremental;
 pub mod new_incremental;
 
