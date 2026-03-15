@@ -205,6 +205,9 @@ pub struct IndexSwap {
 pub struct ExportIndexSettings {
     /// Filter expression to select documents for export
     pub filter: Option<Value>,
+    /// Target index name template on the destination instance
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// Whether to override settings on the destination index
     pub override_settings: bool,
 }

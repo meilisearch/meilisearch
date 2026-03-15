@@ -75,8 +75,8 @@ async fn export(
     let indexes = match indexes {
         Some(indexes) => indexes
             .into_iter()
-            .map(|(pattern, ExportIndexSettings { filter, override_settings })| {
-                (pattern, DbExportIndexSettings { filter, override_settings })
+            .map(|(pattern, ExportIndexSettings { filter, name, override_settings })| {
+                (pattern, DbExportIndexSettings { filter, name, override_settings })
             })
             .collect(),
         None => BTreeMap::from([(
@@ -178,6 +178,13 @@ pub struct ExportIndexSettings {
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportIndexFilter>)]
     pub filter: Option<Value>,
+    /// Target index name on the destination instance.
+    /// Use `$name` to reference the source index name dynamically.
+    /// If omitted, the source index name is used.
+    #[schema(value_type = Option<String>, example = json!("backup-$name"))]
+    #[serde(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidExportIndexName>)]
+    pub name: Option<String>,
     /// Whether to override settings on the destination index
     #[schema(value_type = Option<bool>, example = json!(true))]
     #[serde(default)]

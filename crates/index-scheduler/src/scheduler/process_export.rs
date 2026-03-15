@@ -79,7 +79,9 @@ impl IndexScheduler {
                 indexes.len() as u32,
             ));
 
-            let ExportIndexSettings { filter, override_settings } = export_settings;
+            let ExportIndexSettings { filter, name, override_settings } = export_settings;
+
+            let target_uid = resolve_target_index_name(name.as_deref(), uid);
 
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
@@ -99,7 +101,7 @@ impl IndexScheduler {
                 must_stop_processing: &must_stop_processing,
             };
             let options = ExportOptions {
-                index_uid: uid,
+                index_uid: &target_uid,
                 payload_size,
                 override_settings: *override_settings,
                 export_mode: ExportMode::ExportRoute,
@@ -678,5 +680,65 @@ pub(super) enum ExportMode<'a> {
     },
 }
 
+/// Resolves the target index name from an optional name template and the source index uid.
+///
+/// - If `name_template` is `None`, returns the source `uid` as-is.
+/// - If `name_template` contains `$name`, replaces all occurrences with the source `uid`.
+/// - If `name_template` does not contain `$name`, returns it as a static name.
+fn resolve_target_index_name(name_template: Option<&str>, uid: &str) -> String {
+    match name_template {
+        Some(template) => template.replace("$name", uid),
+        None => uid.to_string(),
+    }
+}
+
 // progress related
 enum ExportIndex {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_name_none_returns_source_uid() {
+        assert_eq!(resolve_target_index_name(None, "movies"), "movies");
+    }
+
+    #[test]
+    fn resolve_name_static_value() {
+        assert_eq!(resolve_target_index_name(Some("everyone"), "movies"), "everyone");
+    }
+
+    #[test]
+    fn resolve_name_with_dollar_name_variable() {
+        assert_eq!(resolve_target_index_name(Some("backup-$name"), "movies"), "backup-movies");
+    }
+
+    #[test]
+    fn resolve_name_dollar_name_only() {
+        assert_eq!(resolve_target_index_name(Some("$name"), "movies"), "movies");
+    }
+
+    #[test]
+    fn resolve_name_multiple_dollar_name() {
+        assert_eq!(
+            resolve_target_index_name(Some("$name-copy-$name"), "movies"),
+            "movies-copy-movies"
+        );
+    }
+
+    #[test]
+    fn resolve_name_with_wildcard_matched_uid() {
+        // When pattern "super-*" matches "super-toto", uid is "super-toto"
+        assert_eq!(
+            resolve_target_index_name(Some("mega-$name"), "super-toto"),
+            "mega-super-toto"
+        );
+    }
+
+    #[test]
+    fn resolve_name_static_with_wildcard_matched_uid() {
+        // Static name ignores the matched uid
+        assert_eq!(resolve_target_index_name(Some("everyone"), "super-toto"), "everyone");
+    }
+}

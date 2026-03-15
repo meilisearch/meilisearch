@@ -10,6 +10,7 @@ pub struct ExportAnalytics {
     sum_exports_meilisearch_cloud: usize,
     sum_index_patterns: usize,
     sum_patterns_with_filter: usize,
+    sum_patterns_with_name: usize,
     sum_patterns_with_override_settings: usize,
     payload_sizes: Vec<u64>,
 }
@@ -29,6 +30,9 @@ impl ExportAnalytics {
         let patterns_with_filter_count = indexes.as_ref().map_or(0, |indexes| {
             indexes.values().filter(|settings| settings.filter.is_some()).count()
         });
+        let patterns_with_name_count = indexes.as_ref().map_or(0, |indexes| {
+            indexes.values().filter(|settings| settings.name.is_some()).count()
+        });
         let patterns_with_override_settings_count = indexes.as_ref().map_or(0, |indexes| {
             indexes.values().filter(|settings| settings.override_settings).count()
         });
@@ -45,6 +49,7 @@ impl ExportAnalytics {
             sum_exports_meilisearch_cloud: is_meilisearch_cloud as usize,
             sum_index_patterns: index_patterns_count,
             sum_patterns_with_filter: patterns_with_filter_count,
+            sum_patterns_with_name: patterns_with_name_count,
             sum_patterns_with_override_settings: patterns_with_override_settings_count,
             payload_sizes,
         }
@@ -62,6 +67,7 @@ impl Aggregate for ExportAnalytics {
         self.sum_exports_meilisearch_cloud += other.sum_exports_meilisearch_cloud;
         self.sum_index_patterns += other.sum_index_patterns;
         self.sum_patterns_with_filter += other.sum_patterns_with_filter;
+        self.sum_patterns_with_name += other.sum_patterns_with_name;
         self.sum_patterns_with_override_settings += other.sum_patterns_with_override_settings;
         self.payload_sizes.extend(other.payload_sizes);
         self
@@ -92,6 +98,12 @@ impl Aggregate for ExportAnalytics {
             Some(self.sum_patterns_with_filter as f64 / self.total_received as f64)
         };
 
+        let avg_patterns_with_name = if self.total_received == 0 {
+            None
+        } else {
+            Some(self.sum_patterns_with_name as f64 / self.total_received as f64)
+        };
+
         let avg_patterns_with_override_settings = if self.total_received == 0 {
             None
         } else {
@@ -104,6 +116,7 @@ impl Aggregate for ExportAnalytics {
             "avg_exports_meilisearch_cloud": avg_exports_meilisearch_cloud,
             "avg_index_patterns": avg_index_patterns,
             "avg_patterns_with_filter": avg_patterns_with_filter,
+            "avg_patterns_with_name": avg_patterns_with_name,
             "avg_patterns_with_override_settings": avg_patterns_with_override_settings,
             "avg_payload_size": avg_payload_size,
         })
