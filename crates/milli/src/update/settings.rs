@@ -27,7 +27,7 @@ use crate::index::{
 };
 use crate::order_by_map::OrderByMap;
 use crate::progress::{EmbedderStats, Progress, VariableNameStep};
-use crate::prompt::{default_max_bytes, default_template_text, PromptData};
+use crate::prompt::{default_max_bytes, default_template_text, Prompt, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::reindex;
@@ -1377,6 +1377,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                         Setting::NotSet => prompt.max_bytes,
                     },
                 };
+
+                // Validate the document template syntax
+                Prompt::new(prompt.template.clone(), prompt.max_bytes)
+                    .map_err(UserError::InvalidChatSettingsDocumentTemplate)?;
 
                 let search_parameters = match new_search_parameters {
                     Setting::Set(sp) => {
