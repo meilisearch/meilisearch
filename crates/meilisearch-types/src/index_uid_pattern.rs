@@ -23,7 +23,7 @@ impl IndexUidPattern {
 
     /// Matches any index name.
     pub fn all() -> Self {
-        IndexUidPattern::from_str("*").unwrap()
+        IndexUidPattern::from_str("*").expect("pattern '*' should always be valid for IndexUidPattern")
     }
 
     /// Returns `true` if it matches any index.

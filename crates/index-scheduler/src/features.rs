@@ -222,7 +222,7 @@ impl FeatureData {
         // safe to unwrap, the lock will only fail if:
         // 1. requested by the same thread concurrently -> it is called and released in methods that don't call each other
         // 2. there's a panic while the thread is held -> it is only used for an assignment here.
-        let mut toggled_features = self.runtime.write().unwrap();
+        let mut toggled_features = self.runtime.write().expect("runtime features RwLock should not be poisoned");
         *toggled_features = features;
         Ok(())
     }
@@ -231,7 +231,7 @@ impl FeatureData {
         // sound to unwrap, the lock will only fail if:
         // 1. requested by the same thread concurrently -> it is called and released in methods that don't call each other
         // 2. there's a panic while the thread is held -> it is only used for copying the data here
-        *self.runtime.read().unwrap()
+        *self.runtime.read().expect("runtime features RwLock should not be poisoned")
     }
 
     pub fn features(&self) -> RoFeatures {
@@ -246,12 +246,12 @@ impl FeatureData {
         )?;
         wtxn.commit()?;
 
-        let mut network = self.network.write().unwrap();
+        let mut network = self.network.write().expect("network RwLock should not be poisoned");
         *network = new_network;
         Ok(())
     }
 
     pub fn network(&self) -> Network {
-        Network::clone(&*self.network.read().unwrap())
+        Network::clone(&*self.network.read().expect("network RwLock should not be poisoned"))
     }
 }

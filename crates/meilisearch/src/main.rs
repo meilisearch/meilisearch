@@ -48,7 +48,7 @@ fn default_log_stderr_layer(opt: &Opt) -> LogStderrType {
 
     layer.with_filter(
         tracing_subscriber::filter::Targets::new()
-            .with_target("", LevelFilter::from_str(&opt.log_level.to_string()).unwrap()),
+            .with_target("", LevelFilter::from_str(&opt.log_level.to_string()).expect("log_level should be a valid LevelFilter string")),
     )
 }
 
@@ -65,7 +65,7 @@ fn setup(opt: &Opt) -> anyhow::Result<(LogRouteHandle, LogStderrHandle)> {
     let subscriber = tracing_subscriber::registry().with(route_layer).with(stderr_layer);
 
     // set the subscriber as the default for the application
-    tracing::subscriber::set_global_default(subscriber).unwrap();
+    tracing::subscriber::set_global_default(subscriber).expect("global default subscriber should be set only once");
 
     Ok((route_layer_handle, stderr_layer_handle))
 }
@@ -134,7 +134,7 @@ async fn try_main(runtime: tokio::runtime::Handle) -> anyhow::Result<()> {
     print_launch_resume(&opt, analytics.clone(), config_read_from);
 
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.unwrap();
+        tokio::signal::ctrl_c().await.expect("ctrl_c signal handler should not fail");
         std::process::exit(130);
     });
 
@@ -167,7 +167,7 @@ async fn run_http(
     let search_queue = SearchQueue::new(
         opt.experimental_search_queue_size,
         available_parallelism()
-            .unwrap_or(NonZeroUsize::new(2).unwrap())
+            .unwrap_or(NonZeroUsize::new(2).expect("NonZeroUsize::new(2) should always succeed"))
             .checked_mul(opt.experimental_nb_searches_per_core)
             .unwrap_or(NonZeroUsize::MAX),
     )
@@ -300,17 +300,17 @@ fn print_master_key_too_short_warning() {
         .set_color(
             ColorSpec::new().set_bg(WARNING_BG_COLOR).set_fg(WARNING_FG_COLOR).set_bold(true),
         )
-        .unwrap();
-    writeln!(stderr, "\n").unwrap();
+        .expect("stderr color setting should not fail");
+    writeln!(stderr, "\n").expect("stderr write should not fail");
     writeln!(
         stderr,
         " Meilisearch started with a master key considered unsafe for use in a production environment.
 
  A master key of at least {MASTER_KEY_MIN_SIZE} bytes will be required when switching to a production environment."
     )
-    .unwrap();
-    stderr.reset().unwrap();
-    writeln!(stderr).unwrap();
+    .expect("stderr write should not fail");
+    stderr.reset().expect("stderr reset should not fail");
+    writeln!(stderr).expect("stderr write should not fail");
 
     eprintln!("\n{}", generated_master_key_message());
     eprintln!(

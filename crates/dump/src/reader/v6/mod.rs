@@ -271,7 +271,7 @@ impl V6Reader {
                     let path = Path::new(&file_name);
                     if entry.file_type()?.is_file() && path.extension() == Some(OsStr::new("json"))
                     {
-                        let name = path.file_stem().unwrap().to_str().unwrap().to_string();
+                        let name = path.file_stem().expect("path should have a file stem").to_str().expect("file stem should be valid UTF-8").to_string();
                         let file = File::open(entry.path())?;
                         let settings = serde_json::from_reader(file)?;
                         Ok(Some((name, settings)))

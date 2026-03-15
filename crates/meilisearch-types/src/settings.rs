@@ -976,7 +976,7 @@ pub fn settings(
             index
                 .pagination_max_total_hits(rtxn)?
                 .and_then(|x| (x as usize).try_into().ok())
-                .unwrap_or(NonZeroUsize::new(DEFAULT_PAGINATION_MAX_TOTAL_HITS).unwrap()),
+                .unwrap_or(NonZeroUsize::new(DEFAULT_PAGINATION_MAX_TOTAL_HITS).expect("DEFAULT_PAGINATION_MAX_TOTAL_HITS should be a valid NonZeroUsize")),
         ),
     };
 

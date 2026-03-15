@@ -654,19 +654,19 @@ impl IndexScheduler {
     /// 3. The number of times the properties appeared.
     pub fn get_stats(&self) -> Result<BTreeMap<String, BTreeMap<String, u64>>> {
         let rtxn = self.read_txn()?;
-        self.queue.get_stats(&rtxn, &self.processing_tasks.read().unwrap())
+        self.queue.get_stats(&rtxn, &self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned"))
     }
 
     // Return true if there is at least one task that is processing.
     pub fn is_task_processing(&self) -> Result<bool> {
-        Ok(!self.processing_tasks.read().unwrap().processing.is_empty())
+        Ok(!self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned").processing.is_empty())
     }
 
     /// Return true iff there is at least one task associated with this index
     /// that is processing.
     pub fn is_index_processing(&self, index: &str) -> Result<bool> {
         let rtxn = self.env.read_txn()?;
-        let processing_tasks = self.processing_tasks.read().unwrap().processing.clone();
+        let processing_tasks = self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned").processing.clone();
         let index_tasks = self.queue.tasks.index_tasks(&rtxn, index)?;
         let nbr_index_processing_tasks = processing_tasks.intersection_len(&index_tasks);
         Ok(nbr_index_processing_tasks > 0)
@@ -692,7 +692,7 @@ impl IndexScheduler {
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(Vec<Task>, u64)> {
         let rtxn = self.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap();
+        let processing = self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned");
         self.queue.get_tasks_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
@@ -711,7 +711,7 @@ impl IndexScheduler {
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(RoaringBitmap, u64)> {
         let rtxn = self.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap();
+        let processing = self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned");
         self.queue.get_task_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
@@ -740,7 +740,7 @@ impl IndexScheduler {
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(Vec<Batch>, u64)> {
         let rtxn = self.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap();
+        let processing = self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned");
         self.queue.get_batches_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
@@ -759,7 +759,7 @@ impl IndexScheduler {
         filters: &meilisearch_auth::AuthFilter,
     ) -> Result<(RoaringBitmap, u64)> {
         let rtxn = self.read_txn()?;
-        let processing = self.processing_tasks.read().unwrap();
+        let processing = self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned");
         self.queue.get_batch_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
@@ -832,7 +832,7 @@ impl IndexScheduler {
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).
         if let KindWithContent::TaskCancelation { tasks, .. } = kind {
-            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks) {
+            if self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned").must_cancel_processing_tasks(&tasks) {
                 self.scheduler.must_stop_processing.must_stop();
             }
         }
@@ -903,7 +903,7 @@ impl IndexScheduler {
             return Err(Error::ImportTaskWithoutNetworkTask);
         }
         let network_task = {
-            let processing = self.processing_tasks.read().unwrap().processing.clone();
+            let processing = self.processing_tasks.read().expect("processing_tasks RwLock should not be poisoned").processing.clone();
             if processing.is_disjoint(&network_tasks) {
                 let enqueued = self
                     .queue
@@ -918,10 +918,10 @@ impl IndexScheduler {
                 }
             } else {
                 network_tasks &= &*processing;
-                network_tasks.into_iter().next().unwrap()
+                network_tasks.into_iter().next().expect("network_tasks should not be empty when processing tasks are available")
             }
         };
-        let mut network_task = self.queue.tasks.get_task(&*wtxn, network_task)?.unwrap();
+        let mut network_task = self.queue.tasks.get_task(&*wtxn, network_task)?.expect("network task should exist for valid network_task id");
         let network_task_version = network_task
             .network
             .as_ref()

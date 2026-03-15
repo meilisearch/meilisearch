@@ -136,7 +136,7 @@ impl SegmentAnalytics {
         }
 
         let client =
-            HttpClient::new(client.unwrap(), "https://telemetry.meilisearch.com".to_string());
+            HttpClient::new(client.expect("HTTP client should be available when telemetry is enabled"), "https://telemetry.meilisearch.com".to_string());
         let user = User::UserId { user_id: instance_uid.to_string() };
         let mut batcher = AutoBatcher::new(client, Batcher::new(None), SEGMENT_API_KEY.to_string());
 
