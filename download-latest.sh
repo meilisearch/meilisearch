@@ -67,6 +67,28 @@ get_os() {
     return 0
 }
 
+# Checks the C library on Linux.
+# Returns 0 if compatible (glibc), 1 if incompatible (musl/bionic).
+# Skips the check on non-Linux systems.
+check_c_library() {
+    if [ "$os" != 'linux' ]; then
+        return 0
+    fi
+
+    # ldd --version outputs to stderr on musl systems
+    ldd_output=$(ldd --version 2>&1)
+
+    case "$ldd_output" in
+        *musl*)
+            return 1
+            ;;
+        *bionic*)
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 # Gets the architecture by setting the $archi variable.
 # Returns 0 in case of success, 1 otherwise.
 get_archi() {
@@ -108,6 +130,14 @@ not_available_failure_usage() {
     echo 'Follow the steps at the page ("Source" tab): https://www.meilisearch.com/docs/learn/getting_started/installation'
 }
 
+incompatible_c_library_failure_usage() {
+    printf "$RED%s\n$DEFAULT" 'ERROR: Meilisearch binary is not compatible with the C library on your system.'
+    echo 'Meilisearch requires glibc to run. Systems using musl or bionic are not supported by the precompiled binary.'
+    echo ''
+    echo 'You can compile the binary from source or use the Docker image instead.'
+    echo 'Follow the steps at the page: https://www.meilisearch.com/docs/learn/getting_started/installation'
+}
+
 fetch_release_failure_usage() {
     echo ''
     printf "$RED%s\n$DEFAULT" 'ERROR: Impossible to get the latest stable version of Meilisearch.'
@@ -134,6 +164,11 @@ fill_release_variables() {
      # Fill $archi variable.
      if ! get_archi; then
         not_available_failure_usage
+        exit 1
+     fi
+     # Check the C library compatibility on Linux.
+     if ! check_c_library; then
+        incompatible_c_library_failure_usage
         exit 1
      fi
 }
