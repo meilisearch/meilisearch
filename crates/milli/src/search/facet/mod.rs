@@ -12,6 +12,8 @@ use crate::heed_codec::BytesRefCodec;
 use crate::{Index, Result};
 
 mod facet_distribution;
+#[cfg(test)]
+mod facet_distribution_test;
 mod facet_distribution_iter;
 mod facet_range_search;
 mod facet_sort_ascending;
