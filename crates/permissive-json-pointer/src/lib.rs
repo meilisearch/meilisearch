@@ -43,7 +43,7 @@ fn contained_in(selector: &str, key: &str) -> bool {
 ///     }
 /// });
 /// map_leaf_values(
-///     value.as_object_mut().unwrap(),
+///     value.as_object_mut().expect("value should be a JSON object"),
 ///     ["jean.race.name"],
 ///     |key, _array_indices, value| match (value, key) {
 ///         (Value::String(name), "jean.race.name") => *name = "patou".to_string(),
