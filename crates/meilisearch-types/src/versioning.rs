@@ -34,6 +34,7 @@ pub fn get_version(db_path: &Path) -> Result<(u32, u32, u32), VersionFileError> 
     let version_path = db_path.join(VERSION_FILE_NAME);
 
     match fs::read_to_string(version_path) {
+        Ok(version) if version.trim().is_empty() => Err(VersionFileError::MissingVersionFile),
         Ok(version) => parse_version(&version),
         Err(error) => match error.kind() {
             ErrorKind::NotFound => Err(VersionFileError::MissingVersionFile),
@@ -93,4 +94,57 @@ pub enum VersionFileError {
 
     #[error(transparent)]
     AnyhowError(#[from] anyhow::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_version_valid() {
+        assert_eq!(parse_version("1.2.3").unwrap(), (1, 2, 3));
+        assert_eq!(parse_version("  1.2.3  ").unwrap(), (1, 2, 3));
+    }
+
+    #[test]
+    fn parse_version_missing_parts() {
+        let err = parse_version("1.2").unwrap_err();
+        assert!(matches!(err, VersionFileError::MalformedVersionFile { .. }));
+    }
+
+    #[test]
+    fn parse_version_non_numeric() {
+        let err = parse_version("a.b.c").unwrap_err();
+        assert!(matches!(err, VersionFileError::MalformedVersionFile { .. }));
+    }
+
+    #[test]
+    fn get_version_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let err = get_version(dir.path()).unwrap_err();
+        assert!(matches!(err, VersionFileError::MissingVersionFile));
+    }
+
+    #[test]
+    fn get_version_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(VERSION_FILE_NAME), "").unwrap();
+        let err = get_version(dir.path()).unwrap_err();
+        assert!(matches!(err, VersionFileError::MissingVersionFile));
+    }
+
+    #[test]
+    fn get_version_whitespace_only_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(VERSION_FILE_NAME), "  \n  ").unwrap();
+        let err = get_version(dir.path()).unwrap_err();
+        assert!(matches!(err, VersionFileError::MissingVersionFile));
+    }
+
+    #[test]
+    fn get_version_valid_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join(VERSION_FILE_NAME), "1.12.0").unwrap();
+        assert_eq!(get_version(dir.path()).unwrap(), (1, 12, 0));
+    }
 }
