@@ -170,7 +170,7 @@ pub struct IndexSchedulerOptions {
 /// to be performed on them.
 pub struct IndexScheduler {
     /// The LMDB environment which the DBs are associated with.
-    pub(crate) env: Env<WithoutTls>,
+    pub env: Env<WithoutTls>,
 
     /// The list of tasks currently processing
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,

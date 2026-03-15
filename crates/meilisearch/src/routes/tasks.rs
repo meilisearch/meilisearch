@@ -1,3 +1,5 @@
+pub mod compact;
+
 use std::io::ErrorKind;
 
 use actix_web::web::Data;
@@ -32,6 +34,7 @@ use crate::{aggregate_methods, Opt};
     routes(
         "" => [get(get_tasks), delete(delete_tasks)],
         "/cancel" => post(cancel_tasks),
+        "/compact" => post(compact::compact_task_queue),
         "/{task_id}" => get(get_task),
         "/{task_id}/documents" => get(get_task_documents_file),
     ),

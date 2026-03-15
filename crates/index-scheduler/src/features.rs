@@ -124,6 +124,19 @@ impl RoFeatures {
         }
     }
 
+    pub fn check_task_queue_compaction_route(&self) -> Result<()> {
+        if self.runtime.task_queue_compaction_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "Using the /tasks/compact route",
+                feature: "task queue compaction route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/883",
+            }
+            .into())
+        }
+    }
+
     pub fn check_composite_embedders(&self, disabled_action: &'static str) -> Result<()> {
         if self.runtime.composite_embedders {
             Ok(())

@@ -442,6 +442,10 @@ impl<State> Server<State> {
         self.service.delete(format!("/tasks?{}", value)).await
     }
 
+    pub async fn compact_task_queue(&self) -> (Value, StatusCode) {
+        self.service.post("/tasks/compact", json!(null)).await
+    }
+
     pub async fn wait_task(&self, update_id: impl super::IntoTaskUid) -> Value {
         let update_id = update_id.uid();
 
