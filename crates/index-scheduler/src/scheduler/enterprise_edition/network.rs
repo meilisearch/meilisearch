@@ -477,8 +477,7 @@ impl IndexScheduler {
         let fields_ids_map = index.fields_ids_map(&index_rtxn)?;
         let mut new_fields_ids_map = fields_ids_map.clone();
 
-        // candidates not empty => index not empty => a primary key is set
-        let primary_key = index.primary_key(&index_rtxn)?.unwrap();
+        let Some(primary_key) = index.primary_key(&index_rtxn)? else { return Ok(()) };
 
         let primary_key = PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
             .map_err(milli::Error::from)?;
