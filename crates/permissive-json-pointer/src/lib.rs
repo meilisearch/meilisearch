@@ -23,7 +23,7 @@ const SPLIT_SYMBOL: char = '.';
 /// `animaux.ch` doesn't match `animaux.chien`
 /// `animau`     doesn't match `animaux`
 /// ```
-fn contained_in(selector: &str, key: &str) -> bool {
+pub fn contained_in(selector: &str, key: &str) -> bool {
     selector.starts_with(key)
         && selector[key.len()..].chars().next().map(|c| c == SPLIT_SYMBOL).unwrap_or(true)
 }
