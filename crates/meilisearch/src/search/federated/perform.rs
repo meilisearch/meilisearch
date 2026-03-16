@@ -171,7 +171,7 @@ pub async fn perform_federated_search(
     })
     .await??;
 
-    let SearchByIndexParams { network, .. } = params;
+    let SearchByIndexParams { network, index_scheduler, .. } = params;
 
     let SearchByIndex {
         federation,
@@ -255,7 +255,7 @@ pub async fn perform_federated_search(
     progress.update_progress(FederatingResultsStep::HydrateDocuments);
     if let Some(hydration_cache) = hydration_cache {
         let hydration_formatter =
-            FederatedHydrationFormatter::new(hydration_cache, index_scheduler)?;
+            FederatedHydrationFormatter::new(hydration_cache, &index_scheduler)?;
         hydration_formatter.hydrate_documents(&mut merged_hits)?;
     }
 
