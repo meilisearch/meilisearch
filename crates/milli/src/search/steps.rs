@@ -11,17 +11,19 @@ make_enum_progress! {
         SemanticSearch,
         Format,
         FacetDistribution,
-        Federation,
         Personalization,
     }
 }
 
 make_enum_progress! {
     pub enum FederatingResultsStep {
-        HydrateDocuments,
+        PartitionQueries,
+        StartRemoteSearch,
+        ExecuteLocalSearch,
         WaitForRemoteResults,
-        MergeFacets,
         MergeResults,
+        HydrateDocuments,
+        MergeFacets,
     }
 }
 
