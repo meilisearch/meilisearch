@@ -177,6 +177,7 @@ pub async fn list_indexes(
 #[derive(Deserr, Serialize, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct IndexCreateRequest {
     /// Unique identifier for the index
     #[schema(required = true, example = "movies")]
