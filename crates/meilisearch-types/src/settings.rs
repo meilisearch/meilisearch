@@ -381,16 +381,20 @@ pub fn hide_secret(secret: &mut String, secret_offset: usize) {
     match secret.len().checked_sub(secret_offset) {
         None => (),
         Some(x) if x < 10 => {
-            secret.replace_range(secret_offset.., "XXX...");
+            let offset = secret.ceil_char_boundary(secret_offset);
+            secret.replace_range(offset.., "XXX...");
         }
         Some(x) if x < 20 => {
-            secret.replace_range((secret_offset + 2).., "XXXX...");
+            let offset = secret.ceil_char_boundary(secret_offset + 2);
+            secret.replace_range(offset.., "XXXX...");
         }
         Some(x) if x < 30 => {
-            secret.replace_range((secret_offset + 3).., "XXXXX...");
+            let offset = secret.ceil_char_boundary(secret_offset + 3);
+            secret.replace_range(offset.., "XXXXX...");
         }
         Some(_x) => {
-            secret.replace_range((secret_offset + 5).., "XXXXXX...");
+            let offset = secret.ceil_char_boundary(secret_offset + 5);
+            secret.replace_range(offset.., "XXXXXX...");
         }
     }
 }
@@ -1321,5 +1325,20 @@ pub(crate) mod test {
         let checked = settings.check();
         assert_eq!(checked.displayed_attributes, Setting::Reset.into());
         assert_eq!(checked.searchable_attributes, Setting::Reset.into());
+    }
+
+    #[test]
+    fn test_hide_secret() {
+        let mut secret = String::from("123456789");
+        hide_secret(&mut secret, 0);
+        assert_eq!(secret, "XXX...");
+        let mut secret = String::from("123456789012345678901234567890");
+        hide_secret(&mut secret, 0);
+        assert_eq!(secret, "12345XXXXXX...");
+
+        // related to https://linear.app/meilisearch/issue/SP-1771
+        let mut secret = String::from("ひらがな6789012345678901234567890");
+        hide_secret(&mut secret, 0);
+        assert_eq!(secret, "ひらXXXXXX...");
     }
 }
