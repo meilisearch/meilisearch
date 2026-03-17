@@ -1,9 +1,10 @@
-use crate::common::Server;
-use crate::json;
-use crate::tasks::OffsetDateTime;
 use meili_snap::{json_string, snapshot};
 use time::format_description::well_known::Rfc3339;
 use urlencoding::encode;
+
+use crate::common::Server;
+use crate::json;
+use crate::tasks::OffsetDateTime;
 
 #[actix_rt::test]
 async fn delete_task() {

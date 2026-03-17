@@ -12,6 +12,9 @@ license.workspace = true
 
 default-run = "meilisearch"
 
+[target.'cfg(unix)'.dependencies]
+rlimit = "0.10"
+
 [dependencies]
 actix-cors = "0.7.1"
 actix-http = { version = "3.11.2", default-features = false, features = [

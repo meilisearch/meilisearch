@@ -266,6 +266,7 @@ impl Infos {
             master_key: _,
             env,
             task_webhook_url,
+            experimental_max_open_indexes: _,
             task_webhook_authorization_header,
             max_index_size: _,
             max_task_db_size: _,

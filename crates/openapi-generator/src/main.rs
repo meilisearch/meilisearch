@@ -810,8 +810,9 @@ fn check_body_schema_in_file(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn test_normalize_path() {

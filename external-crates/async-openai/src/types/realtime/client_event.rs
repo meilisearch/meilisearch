@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use tokio_tungstenite::tungstenite::Message;
 
-use super::{item::Item, session_resource::SessionResource};
+use super::item::Item;
+use super::session_resource::SessionResource;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct SessionUpdateEvent {

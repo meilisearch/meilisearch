@@ -1,15 +1,11 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    rc::Rc,
-};
+use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 
 use index_scheduler::IndexScheduler;
-use meilisearch_types::{
-    error::ResponseError,
-    heed::RoTxn,
-    milli::{self, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey},
-    Index,
-};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::heed::RoTxn;
+use meilisearch_types::milli::{self, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey};
+use meilisearch_types::Index;
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, select_values};
 use serde_json::{Map, Value};
 
