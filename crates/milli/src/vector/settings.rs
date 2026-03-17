@@ -131,7 +131,8 @@ pub struct EmbeddingSettings {
     /// - 🌱 When modified for `openAi``, embeddings are never regenerated
     /// - 🏗️ When modified for `ollama` and `rest`, embeddings are always regenerated
     /// - If targetting URL resolving to a non-global IP (such as `localhost`), make sure that
-    ///   `--experimental-allowed-ip-networks` allows it.
+    ///   `--experimental-allowed-ip-networks` allows it. For details on how use this parameter,
+    ///   refer to [this documentation](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#allow-requests-to-private-networks).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("http://localhost:11434/api/embeddings"))]
@@ -327,7 +328,8 @@ pub struct SubEmbeddingSettings {
     /// - 🌱 When modified for `openAi``, embeddings are never regenerated
     /// - 🏗️ When modified for `ollama` and `rest`, embeddings are always regenerated
     /// - If targetting URL resolving to a non-global IP (such as `localhost`), make sure that
-    ///   `--experimental-allowed-ip-networks` allows it.
+    ///   `--experimental-allowed-ip-networks` allows it. For details on how use this parameter,
+    ///   refer to [this documentation](https://www.meilisearch.com/docs/learn/self_hosted/configure_meilisearch_at_launch#allow-requests-to-private-networks).
     #[serde(default, skip_serializing_if = "Setting::is_not_set")]
     #[deserr(default)]
     #[schema(value_type = Option<String>, example = json!("http://localhost:11434/api/embeddings"))]
