@@ -177,7 +177,9 @@ impl HydrationContext {
         };
 
         for (foreign_index_uid, field_name) in foreign_keys {
-            match select_values(&hit.document, [field_name.as_ref()]).get(field_name.as_ref()) {
+            match select_values(hit.document.clone(), [field_name.as_ref()])
+                .get(field_name.as_ref())
+            {
                 Some(Value::Array(values)) => {
                     for value in values {
                         let Ok(external_document_id) = ExternalDocumentId::try_from(value.clone())

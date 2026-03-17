@@ -2109,28 +2109,31 @@ impl<'a> HitMaker<'a> {
 
         // If you need to format fields, pay the cost create the document from the displayed fields
         // TODO make the format field use the obkv and only format necessary fields
-        let (matches_position, formatted) =
-            if !self.show_matches_position && self.formatted_options.is_empty() {
-                (None, Document::new())
+        let (matches_position, formatted) = if !self.show_matches_position
+            && self.formatted_options.is_empty()
+        {
+            (None, Document::new())
+        } else {
+            let extract_field = |&fid| self.fields_ids_map.name(fid).expect("Missing field name");
+            let selectors: Vec<_> = if self.show_matches_position {
+                self.displayed_ids.iter().map(extract_field).collect()
             } else {
-                let selectors: Vec<_> = self
-                    .displayed_ids
-                    .iter()
-                    .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"))
-                    .collect();
-                let document = make_document(obkv, &self.fields_ids_map, &selectors)?;
-
-                format_fields(
-                    document,
-                    &self.fields_ids_map,
-                    &self.formatter_builder,
-                    &self.formatted_options,
-                    self.show_matches_position,
-                    &self.displayed_ids,
-                    self.locales.as_deref(),
-                    &localized_attributes,
-                )?
+                self.formatted_options.keys().map(extract_field).collect()
             };
+
+            let document = make_document(obkv, &self.fields_ids_map, &selectors)?;
+
+            format_fields(
+                document,
+                &self.fields_ids_map,
+                &self.formatter_builder,
+                &self.formatted_options,
+                self.show_matches_position,
+                &self.displayed_ids,
+                self.locales.as_deref(),
+                &localized_attributes,
+            )?
+        };
 
         if let Some(sort) = self.sort.as_ref() {
             insert_geo_distance(sort, &mut document);
@@ -2591,12 +2594,9 @@ fn format_fields(
         },
     );
 
-    let selectors = formatted_options
-        .keys()
-        // This unwrap must be safe since we got the ids from the fields_ids_map just
-        // before.
-        .map(|&fid| field_ids_map.name(fid).unwrap());
-    let document = permissive_json_pointer::select_values(&document, selectors);
+    // We remove the fields that were not selected by the formatted_options.
+    let selectors = formatted_options.keys().map(|&fid| field_ids_map.name(fid).unwrap());
+    let document = permissive_json_pointer::select_values(document, selectors);
 
     Ok((matches_position, document))
 }
