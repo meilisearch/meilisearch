@@ -1229,6 +1229,57 @@ pub struct SearchHit {
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
+impl SearchHit {
+    fn facet_values<F>(&self, field_name: &str, mut visit: F)
+    where
+        F: FnMut(FacetValue),
+    {
+        permissive_json_pointer::visit_leaf_values(&self.document, field_name, &mut |value| {
+            for value in FacetValue::from_value(value) {
+                visit(value);
+            }
+        });
+        permissive_json_pointer::visit_leaf_values(
+            &self.extra_document,
+            field_name,
+            &mut |value| {
+                for value in FacetValue::from_value(value) {
+                    visit(value);
+                }
+            },
+        );
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FacetValue {
+    Normalized(String),
+    Number(serde_json::Number),
+}
+
+impl FacetValue {
+    pub fn from_value(field: &serde_json::Value) -> impl Iterator<Item = FacetValue> + '_ {
+        match field {
+            Value::Array(values) => {
+                either::Either::Left(values.iter().flat_map(Self::from_leaf_value))
+            }
+            value => either::Either::Right(Self::from_leaf_value(value).into_iter()),
+        }
+    }
+
+    fn from_leaf_value(field: &serde_json::Value) -> Option<FacetValue> {
+        match field {
+            Value::Bool(b) => Some(FacetValue::Normalized(b.to_string())),
+            Value::Number(number) => Some(FacetValue::Number(number.clone())),
+            Value::String(s) => {
+                let normalized = milli::normalize_facet(s);
+                Some(FacetValue::Normalized(normalized))
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Metadata about a search query (included when requested via header).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
