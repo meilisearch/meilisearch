@@ -1,6 +1,7 @@
 use core::fmt;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::ops::Not as _;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -1192,6 +1193,18 @@ pub struct SearchHit {
     #[serde(flatten)]
     #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
+
+    /// Extra document fields for internal use.
+    ///
+    /// They are never de/serialized and must be manually
+    /// mounted to/unmounted from `_federation` in a federated context.
+    ///
+    /// - Unmounting: See `SearchByIndex::execute`
+    /// - Mounting: See `MergedSearchHit::remote`
+    #[serde(default, skip)]
+    #[schema(ignore)]
+    pub extra_document: Document,
+
     /// Document with highlighted and cropped attributes.
     ///
     /// Present when `attributesToHighlight` or `attributesToCrop` was set.
@@ -1705,6 +1718,7 @@ pub fn perform_search(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        extra_attributes_to_retrieve: Default::default(),
         retrieve_vectors,
         attributes_to_highlight,
         attributes_to_crop,
@@ -1869,7 +1883,24 @@ pub fn search_from_kind(
 }
 
 struct AttributesFormat {
+    /// Subset of the index's `displayedAttributes`.
+    ///
+    /// - If `None`, all `displayedAttributes` will be returned.
+    /// - Fields in `attributes_to_retrieve` that are not in `displayedAttributes` will not be retrieved.
     attributes_to_retrieve: Option<BTreeSet<String>>,
+
+    /// Extra set of fields that will be stored in `extra_attributes` when making hits.
+    ///
+    /// This allows recovering fields that should not be shown to the end-user but that Meilisearch needs for e.g. distinct in
+    /// federated contexts.
+    ///
+    /// - If empty, `hit.extra_attributes` will not be populated.
+    /// - Fields in `extra_attributes_to_retrieve` will be retrieved in `hit.extra_attributes` **even** if missing in `displayedAttributes`.
+    /// - Fields in `attributes_to_retrieve` that are in `displayedAttributes` will **not** be collected in `extra_attributes`.
+    /// - `_vectors` cannot be retrieved in this way.
+    ///
+    /// Due to these properties, it is possible to populate `extra_attributes_to_retrieve` without checking the `displayedAttributes`.
+    extra_attributes_to_retrieve: BTreeSet<String>,
     retrieve_vectors: RetrieveVectors,
     attributes_to_highlight: Option<HashSet<String>>,
     attributes_to_crop: Option<Vec<String>>,
@@ -1915,6 +1946,7 @@ struct HitMaker<'a> {
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
     to_retrieve_ids: BTreeSet<FieldId>,
+    extra_ids: Vec<String>,
     formatter_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
     show_ranking_score: bool,
@@ -2016,7 +2048,23 @@ impl<'a> HitMaker<'a> {
             .map(fids)
             .unwrap_or_else(|| displayed_ids.clone())
             .intersection(&displayed_ids)
-            .cloned()
+            .copied()
+            .collect();
+
+        let fids_no_wildcard = |attrs: &BTreeSet<String>| {
+            let mut ids = BTreeSet::new();
+            for attr in attrs {
+                if let Some(id) = fields_ids_map.id(attr) {
+                    ids.insert(id);
+                }
+            }
+            ids
+        };
+
+        let extra_ids: Vec<_> = fids_no_wildcard(&format.extra_attributes_to_retrieve)
+            .difference(&to_retrieve_ids)
+            .copied()
+            .filter_map(|fid| fields_ids_map.name(fid).map(|field| field.to_owned()))
             .collect();
 
         let attr_to_highlight = format.attributes_to_highlight.unwrap_or_default();
@@ -2037,6 +2085,7 @@ impl<'a> HitMaker<'a> {
             rtxn,
             fields_ids_map,
             displayed_ids,
+            extra_ids,
             vectors_fid,
             retrieve_vectors,
             to_retrieve_ids,
@@ -2083,6 +2132,14 @@ impl<'a> HitMaker<'a> {
 
         // Generate a document with all the attributes to retrieve
         let mut document = make_document(obkv, &self.fields_ids_map, &attributes_to_retrieve)?;
+
+        let extra_document = self
+            .extra_ids
+            .is_empty()
+            .not()
+            .then(|| make_document(obkv, &self.fields_ids_map, &self.extra_ids))
+            .transpose()?
+            .unwrap_or_default();
 
         if self.retrieve_vectors == RetrieveVectors::Retrieve {
             // Clippy is wrong
@@ -2147,6 +2204,7 @@ impl<'a> HitMaker<'a> {
 
         let hit = SearchHit {
             document,
+            extra_document,
             formatted,
             matches_position,
             ranking_score_details,
@@ -2328,6 +2386,7 @@ pub fn perform_similar(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        extra_attributes_to_retrieve: Default::default(),
         retrieve_vectors,
         attributes_to_highlight: None,
         attributes_to_crop: None,
