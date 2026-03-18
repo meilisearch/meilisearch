@@ -2501,21 +2501,26 @@ fn add_non_formatted_ids_to_formatted_options(
     }
 }
 
-fn make_document(
+fn make_document<S, I>(
     obkv: &obkv::KvReaderU16,
     field_ids_map: &FieldsIdsMap,
-    selectors: &[&str],
-) -> milli::Result<Document> {
+    selectors: impl IntoIterator<IntoIter = I>,
+) -> milli::Result<Document>
+where
+    S: AsRef<str>,
+    I: Clone + Iterator<Item = S>,
+{
+    let selectors = selectors.into_iter();
     let mut document = serde_json::Map::new();
 
     for (key, value_bytes) in obkv {
         let key = field_ids_map.name(key).expect("Missing field name");
-        if !selectors.iter().any(|selector| contained_in(selector, key)) {
+        if !selectors.clone().any(|selector| contained_in(selector.as_ref(), key)) {
             // If the key is not part of the selection, skip this value
             continue;
         }
 
-        let visitor = ValuePathsVisitor::new_from_path(selectors, key);
+        let visitor = ValuePathsVisitor::new_from_path(selectors.clone(), key);
         let mut deserializer = serde_json::de::Deserializer::from_slice(value_bytes);
         let value = visitor.deserialize(&mut deserializer).map_err(InternalError::SerdeJson)?;
         document.insert(key.to_string(), value);
