@@ -1857,6 +1857,58 @@ pub struct ComputedFacets {
     pub stats: BTreeMap<String, FacetStats>,
 }
 
+impl ComputedFacets {
+    pub fn remove_hits(&mut self, hits: &[SearchHit]) {
+        if hits.is_empty() {
+            return;
+        }
+        for (field_name, distribution) in &mut self.distribution {
+            let normalized_to_original: BTreeMap<_, _> = distribution
+                .keys()
+                .enumerate()
+                .filter_map(|(index, facet_value)| {
+                    let normalized = milli::normalize_facet(facet_value);
+                    if normalized == facet_value.as_str() {
+                        None
+                    } else {
+                        Some((normalized, index))
+                    }
+                })
+                .collect();
+
+            let mut must_remove = false;
+
+            for hit in hits {
+                hit.facet_values(field_name, |value| {
+                    let count = match value {
+                        FacetValue::Normalized(s) => {
+                            if let Some(original) = normalized_to_original.get(&s) {
+                                distribution.get_index_mut(*original).map(|(_, v)| v)
+                            } else {
+                                distribution.get_mut(&s)
+                            }
+                        }
+                        FacetValue::Number(number) => distribution.get_mut(&number.to_string()),
+                    };
+
+                    let Some(count) = count else {
+                        return;
+                    };
+
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        must_remove = true;
+                    }
+                });
+            }
+
+            if must_remove {
+                distribution.retain(|_, v| *v != 0);
+            }
+        }
+    }
+}
+
 pub enum Route {
     Search,
     MultiSearch,
