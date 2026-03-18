@@ -897,6 +897,10 @@ impl SearchQueryWithIndex {
         self.show_performance_details.is_some()
     }
 
+    fn has_distinct(&self) -> bool {
+        self.distinct.is_some()
+    }
+
     pub fn from_index_query_federation(
         index_uid: IndexUid,
         query: SearchQuery,

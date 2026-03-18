@@ -96,16 +96,30 @@ pub struct Federation {
     #[deserr(default = super::super::DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
     #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub page: Option<usize>,
     #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub hits_per_page: Option<usize>,
     /// Facets to retrieve per index
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
     pub facets_by_index: BTreeMap<IndexUid, Option<Vec<String>>>,
     /// Options for merging facets from multiple indexes
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
-    #[schema(value_type = Option<MergeFacets>)]
+    #[schema(required = false)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_facets: Option<MergeFacets>,
+
+    /// Restrict search to documents with unique values of the specified attribute across all queries.
+    ///
+    /// 1. This applies across all queries in the request, regardless of index or remote of origin.
+    /// 2. This overrides the index-level distinct attribute.
+    /// 3. This requires that the passed field can be set as distinct in all the participating indexes.
+    #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
+    #[schema(required = false)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distinct: Option<String>,
+
     /// Whether to include performance details in the response
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
@@ -120,6 +134,7 @@ impl Default for Federation {
             hits_per_page: Default::default(),
             facets_by_index: Default::default(),
             merge_facets: Default::default(),
+            distinct: Default::default(),
             show_performance_details: Default::default(),
         }
     }
