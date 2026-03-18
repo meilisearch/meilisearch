@@ -811,6 +811,12 @@ impl PartitionedQueries {
             );
         }
 
+        if federated_query.has_distinct() && federation.distinct.is_some() {
+            return Err(
+                MeilisearchHttpError::DistinctInFederatedQueryAndFederation(query_index).into()
+            );
+        }
+
         if federated_query.use_network.is_some() {
             features.check_network("passing `.useNetwork` in a federated search query")?;
         }
