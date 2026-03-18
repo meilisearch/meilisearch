@@ -218,7 +218,7 @@ pub async fn perform_federated_search(
     }
 
     // 3.2. merge federation metadata
-    let (hit_number, degraded, used_negative_operator, facets, max_remote_duration) =
+    let (mut hit_number, degraded, used_negative_operator, facets, max_remote_duration) =
         merge_metadata(&mut results_by_index, &remote_results);
 
     let (skip, take) = match (federation.page, federation.hits_per_page) {
@@ -234,13 +234,47 @@ pub async fn perform_federated_search(
     };
 
     // 3.3. merge hits
-    let mut merged_hits: Vec<_> = merge_index_global_results(results_by_index, &mut remote_results)
-        .skip(skip)
+    let mut distinct_values = HashSet::new();
+
+    // store remote rejected hits to fixup the facet distributions
+    // ideally could fixup in the iterator,
+    // but we cannot double borrows of `remote_results` (from `hit` and `facets_by_index`).
+    let mut rejected_hits: BTreeMap<String, Vec<SearchHit>> = Default::default();
+
+    let mut hit_it = merge_index_global_results(&mut results_by_index, &mut remote_results)
+        .filter_map(|hit| {
+            if let Some(distinct) = federation.distinct.as_deref() {
+                let mut facet_values = Vec::new();
+                hit.as_hit().facet_values(distinct, |value| facet_values.push(value));
+                let is_rejected =
+                    facet_values.iter().any(|facet_value| distinct_values.contains(facet_value));
+
+                if is_rejected {
+                    hit_number = hit_number.saturating_sub(1);
+
+                    let index_uid = match hit.index_uid() {
+                        Ok(index_uid) => index_uid,
+                        Err(err) => {
+                            tracing::warn!("skipping remote hit due to error: {err}");
+                            return None;
+                        }
+                    };
+                    rejected_hits.entry(index_uid.to_string()).or_default().push(hit.into_hit());
+
+                    return None;
+                }
+
+                distinct_values.extend(facet_values.into_iter());
+            }
+            Some(hit)
+        })
+        .skip(skip);
+    let mut merged_hits: Vec<_> = (&mut hit_it)
         .take(take)
         .inspect(|hit| {
             if let Some(hydration_cache) = hydration_cache.as_mut() {
                 let query_index = hit.query_index();
-                hydration_cache.register_foreign_docids(hit.hit_ref(), query_index);
+                hydration_cache.register_foreign_docids(hit.as_hit(), query_index);
             }
 
             if let Some(semantic_hit_count) = &mut semantic_hit_count {
@@ -250,8 +284,17 @@ pub async fn perform_federated_search(
                 }
             }
         })
-        .map(|hit| (hit.query_index(), hit.hit()))
+        .map(|hit| (hit.query_index(), hit.into_hit()))
         .collect();
+
+    if federation.distinct.is_some() {
+        let _ = hit_it.count();
+    } else {
+        // since this variable is Drop and borrows local variables,
+        // it needs to be dropped explicitly before going to the next step that use these
+        // same variable.
+        drop(hit_it);
+    }
 
     // 3.3.1. hydrate documents based on the hydration points
     progress.update_progress(FederatingResultsStep::HydrateDocuments);
