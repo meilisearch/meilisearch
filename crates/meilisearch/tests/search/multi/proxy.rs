@@ -3746,7 +3746,6 @@ impl LocalMeili {
         std::thread::spawn(move || {
             let rt = tokio::runtime::Builder::new_current_thread().build().unwrap();
             while let Ok(req) = request_receiver.recv() {
-                let body = std::str::from_utf8(&req.body).unwrap();
                 let headers: Vec<(&str, &str)> = if params.gobble_headers {
                     vec![("Content-Type", "application/json")]
                 } else {
@@ -3757,9 +3756,11 @@ impl LocalMeili {
                 };
                 let (value, code) = rt.block_on(async {
                     match req.method.as_str() {
-                        "POST" => server.service.post_str(&req.url, body, headers.clone()).await,
-                        "PUT" => server.service.put_str(&req.url, body, headers.clone()).await,
-                        "PATCH" => server.service.patch_str(&req.url, body, headers).await,
+                        "POST" => {
+                            server.service.post_raw(&req.url, req.body, headers.clone()).await
+                        }
+                        "PUT" => server.service.put_raw(&req.url, req.body, headers.clone()).await,
+                        "PATCH" => server.service.patch_raw(&req.url, req.body, headers).await,
                         "GET" => server.service.get(&req.url).await,
                         "DELETE" => server.service.delete(&req.url).await,
                         _ => unimplemented!(),
