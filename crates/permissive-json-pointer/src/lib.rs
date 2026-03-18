@@ -28,6 +28,70 @@ pub fn contained_in(selector: &str, key: &str) -> bool {
         && selector[key.len()..].chars().next().map(|c| c == SPLIT_SYMBOL).unwrap_or(true)
 }
 
+/// Given a single permissive JSON pointer `selector`, visit all the selected leaf values.
+///
+/// ```
+/// use serde_json::{Value, json};
+/// use permissive_json_pointer::visit_leaf_values;
+///
+/// let mut value: Value = json!({
+///     "jean": {
+///         "age": 8,
+///     },
+///     "jean.age": "young"
+/// });
+/// let mut age_string = String::new();
+/// let mut age_number = 0;
+/// visit_leaf_values(
+///     value.as_object().unwrap(),
+///     "jean.age",
+///     &mut |value| match value {
+///         Value::String(age) => age_string = age.clone(),
+///         Value::Number(age) => age_number = age.as_u64().unwrap(),
+///         _ => unreachable!(),
+///     },
+/// );
+/// assert_eq!(
+///     age_string,
+///     "young"
+/// );
+/// assert_eq!(
+///     age_number,
+///     8
+/// );
+/// ```
+pub fn visit_leaf_values<'a, F>(document: &'a Document, selector: &str, visit: &mut F)
+where
+    F: FnMut(&'a serde_json::Value),
+{
+    if document.is_empty() {
+        return;
+    }
+
+    if let Some(value) = document.get(selector) {
+        visit(value);
+    }
+
+    for (root, suffix) in root_dot_suffixes(selector) {
+        match document.get(root) {
+            Some(Value::Object(subdocument)) => visit_leaf_values(subdocument, suffix, visit),
+            Some(Value::Array(values)) => {
+                for subdocument in values {
+                    let Value::Object(subdocument) = subdocument else {
+                        continue;
+                    };
+                    visit_leaf_values(subdocument, suffix, visit)
+                }
+            }
+            _ => (),
+        };
+    }
+}
+
+fn root_dot_suffixes(path: &str) -> impl Iterator<Item = (&str, &str)> {
+    path.rmatch_indices('.').map(|(index, _)| (&path[0..index], &path[index + 1..]))
+}
+
 /// Map the selected leaf values of a json allowing you to update only the fields that were selected.
 /// ```
 /// use serde_json::{Value, json};
