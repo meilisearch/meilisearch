@@ -8,8 +8,8 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
     InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition, InvalidMultiSearchRemote,
-    InvalidMultiSearchWeight, InvalidSearchHitsPerPage, InvalidSearchLimit, InvalidSearchOffset,
-    InvalidSearchPage, InvalidSearchShowPerformanceDetails,
+    InvalidMultiSearchWeight, InvalidSearchDistinct, InvalidSearchHitsPerPage, InvalidSearchLimit,
+    InvalidSearchOffset, InvalidSearchPage, InvalidSearchShowPerformanceDetails,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;

@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::iter::Zip;
 use std::rc::Rc;
 use std::str::FromStr as _;
@@ -39,7 +39,9 @@ use super::types::{
 use super::weighted_scores;
 use crate::error::MeilisearchHttpError;
 use crate::routes::indexes::search::search_kind;
-use crate::search::federated::types::{INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE};
+use crate::search::federated::types::{
+    FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE,
+};
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::DEFAULT_SEARCH_LIMIT;
 
