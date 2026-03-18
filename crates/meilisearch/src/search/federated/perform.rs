@@ -1146,6 +1146,15 @@ impl SearchByIndex {
         // all queries for an index share the same deadline
         let deadline = index.search_deadline(&rtxn)?;
 
+        let extra_attributes_to_retrieve: BTreeSet<_> =
+            if let Some(distinct) = self.federation.distinct.as_deref() {
+                std::iter::once(distinct.to_string())
+                    .chain(facets_by_index.iter().flatten().cloned())
+                    .collect()
+            } else {
+                Default::default()
+            };
+
         for QueryByIndex { query, weight, query_index } in queries {
             // use an immediately invoked lambda to capture the result without returning from the function
 
@@ -1232,10 +1241,15 @@ impl SearchByIndex {
                 search.limit(required_hit_count);
                 search.exhaustive_number_hits(params.is_exhaustive);
 
+                if let Some(distinct) = self.federation.distinct.as_deref() {
+                    search.distinct(distinct.to_owned());
+                }
+
                 let (result, _semantic_hit_count) =
                     super::super::search_from_kind(index_uid.to_string(), search_kind, search)?;
                 let format = AttributesFormat {
                     attributes_to_retrieve: query.attributes_to_retrieve,
+                    extra_attributes_to_retrieve: extra_attributes_to_retrieve.clone(),
                     retrieve_vectors,
                     attributes_to_highlight: query.attributes_to_highlight,
                     attributes_to_crop: query.attributes_to_crop,
