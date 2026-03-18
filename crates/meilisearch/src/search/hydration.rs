@@ -1,15 +1,11 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    rc::Rc,
-};
+use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 
 use index_scheduler::IndexScheduler;
-use meilisearch_types::{
-    error::ResponseError,
-    heed::RoTxn,
-    milli::{self, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey},
-    Index,
-};
+use meilisearch_types::error::ResponseError;
+use meilisearch_types::heed::RoTxn;
+use meilisearch_types::milli::{self, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey};
+use meilisearch_types::Index;
 use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, select_values};
 use serde_json::{Map, Value};
 
@@ -124,10 +120,15 @@ impl<'a> IndexDocumentMaker<'a> {
             );
             return Ok(Map::new());
         };
-        let (_, obkv) =
-            self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
 
-        make_document(&self.displayed_ids, &self.fields_ids_map, obkv).map_err(ResponseError::from)
+        let obkv = self.index.document(self.rtxn, id)?;
+        let selectors: Vec<_> = self
+            .displayed_ids
+            .iter()
+            .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"))
+            .collect();
+
+        make_document(obkv, &self.fields_ids_map, &selectors).map_err(ResponseError::from)
     }
 }
 
@@ -176,7 +177,9 @@ impl HydrationContext {
         };
 
         for (foreign_index_uid, field_name) in foreign_keys {
-            match select_values(&hit.document, [field_name.as_ref()]).get(field_name.as_ref()) {
+            match select_values(hit.document.clone(), [field_name.as_ref()])
+                .get(field_name.as_ref())
+            {
                 Some(Value::Array(values)) => {
                     for value in values {
                         let Ok(external_document_id) = ExternalDocumentId::try_from(value.clone())

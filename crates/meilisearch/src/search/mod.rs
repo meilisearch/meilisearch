@@ -32,7 +32,9 @@ use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, LocalizedAttributesRule,
     MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
+use permissive_json_pointer::contained_in;
 use regex::Regex;
+use serde::de::DeserializeSeed as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 #[cfg(test)]
@@ -41,6 +43,7 @@ use utoipa::ToSchema;
 use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
+use crate::search::value_paths_visitor::ValuePathsVisitor;
 
 mod federated;
 pub use federated::{
@@ -49,6 +52,7 @@ pub use federated::{
 };
 
 mod hydration;
+mod value_paths_visitor;
 use hydration::hydrate_documents;
 mod ranking_rules;
 
@@ -2054,17 +2058,14 @@ impl<'a> HitMaker<'a> {
         progress: &Progress,
     ) -> milli::Result<SearchHit> {
         let _step = progress.update_progress_scoped(SearchStep::Format);
-        let (_, obkv) =
-            self.index.iter_documents(self.rtxn, std::iter::once(id))?.next().unwrap()?;
-
-        // First generate a document with all the displayed fields
-        let displayed_document = make_document(&self.displayed_ids, &self.fields_ids_map, obkv)?;
+        let obkv = self.index.document(self.rtxn, id)?;
 
         let add_vectors_fid =
             self.vectors_fid.filter(|_fid| self.retrieve_vectors == RetrieveVectors::Retrieve);
 
-        // select the attributes to retrieve
-        let attributes_to_retrieve = self
+        // Select the attributes to retrieve
+        // Note that to_retrieve_ids is already an intersection with the displayed attributes
+        let attributes_to_retrieve: Vec<_> = self
             .to_retrieve_ids
             .iter()
             // skip the vectors_fid if RetrieveVectors::Hide
@@ -2076,10 +2077,12 @@ impl<'a> HitMaker<'a> {
             })
             // need to retrieve the existing `_vectors` field if the `RetrieveVectors::Retrieve`
             .chain(add_vectors_fid.iter())
-            .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"));
+            // Convert the field into their names
+            .map(|&fid| self.fields_ids_map.name(fid).expect("Missing field name"))
+            .collect();
 
-        let mut document =
-            permissive_json_pointer::select_values(&displayed_document, attributes_to_retrieve);
+        // Generate a document with all the attributes to retrieve
+        let mut document = make_document(obkv, &self.fields_ids_map, &attributes_to_retrieve)?;
 
         if self.retrieve_vectors == RetrieveVectors::Retrieve {
             // Clippy is wrong
@@ -2104,16 +2107,33 @@ impl<'a> HitMaker<'a> {
         let localized_attributes =
             self.index.localized_attributes_rules(self.rtxn)?.unwrap_or_default();
 
-        let (matches_position, formatted) = format_fields(
-            &displayed_document,
-            &self.fields_ids_map,
-            &self.formatter_builder,
-            &self.formatted_options,
-            self.show_matches_position,
-            &self.displayed_ids,
-            self.locales.as_deref(),
-            &localized_attributes,
-        )?;
+        // If you need to format fields, pay the cost create the document from the displayed fields
+        // TODO make the format field use the obkv and only format necessary fields
+        let (matches_position, formatted) = if !self.show_matches_position
+            && self.formatted_options.is_empty()
+        {
+            (None, Document::new())
+        } else {
+            let extract_field = |&fid| self.fields_ids_map.name(fid).expect("Missing field name");
+            let selectors: Vec<_> = if self.show_matches_position {
+                self.displayed_ids.iter().map(extract_field).collect()
+            } else {
+                self.formatted_options.keys().map(extract_field).collect()
+            };
+
+            let document = make_document(obkv, &self.fields_ids_map, &selectors)?;
+
+            format_fields(
+                document,
+                &self.fields_ids_map,
+                &self.formatter_builder,
+                &self.formatted_options,
+                self.show_matches_position,
+                &self.displayed_ids,
+                self.locales.as_deref(),
+                &localized_attributes,
+            )?
+        };
 
         if let Some(sort) = self.sort.as_ref() {
             insert_geo_distance(sort, &mut document);
@@ -2482,32 +2502,31 @@ fn add_non_formatted_ids_to_formatted_options(
 }
 
 fn make_document(
-    displayed_attributes: &BTreeSet<FieldId>,
-    field_ids_map: &FieldsIdsMap,
     obkv: &obkv::KvReaderU16,
+    field_ids_map: &FieldsIdsMap,
+    selectors: &[&str],
 ) -> milli::Result<Document> {
     let mut document = serde_json::Map::new();
 
-    // recreate the original json
-    for (key, value) in obkv.iter() {
-        let value = serde_json::from_slice(value).map_err(InternalError::SerdeJson)?;
-        let key = field_ids_map.name(key).expect("Missing field name").to_string();
+    for (key, value_bytes) in obkv {
+        let key = field_ids_map.name(key).expect("Missing field name");
+        if !selectors.iter().any(|selector| contained_in(selector, key)) {
+            // If the key is not part of the selection, skip this value
+            continue;
+        }
 
-        document.insert(key, value);
+        let visitor = ValuePathsVisitor::new_from_path(selectors, key);
+        let mut deserializer = serde_json::de::Deserializer::from_slice(value_bytes);
+        let value = visitor.deserialize(&mut deserializer).map_err(InternalError::SerdeJson)?;
+        document.insert(key.to_string(), value);
     }
 
-    // select the attributes to retrieve
-    let displayed_attributes = displayed_attributes
-        .iter()
-        .map(|&fid| field_ids_map.name(fid).expect("Missing field name"));
-
-    let document = permissive_json_pointer::select_values(&document, displayed_attributes);
     Ok(document)
 }
 
 #[allow(clippy::too_many_arguments)]
 fn format_fields(
-    document: &Document,
+    mut document: Document,
     field_ids_map: &FieldsIdsMap,
     builder: &MatcherBuilder<'_>,
     formatted_options: &BTreeMap<FieldId, FormatOptions>,
@@ -2517,7 +2536,6 @@ fn format_fields(
     localized_attributes: &[LocalizedAttributesRule],
 ) -> milli::Result<(Option<MatchesPosition>, Document)> {
     let mut matches_position = compute_matches.then(BTreeMap::new);
-    let mut document = document.clone();
 
     // reduce the formatted option list to the attributes that should be formatted,
     // instead of all the attributes to display.
@@ -2576,12 +2594,9 @@ fn format_fields(
         },
     );
 
-    let selectors = formatted_options
-        .keys()
-        // This unwrap must be safe since we got the ids from the fields_ids_map just
-        // before.
-        .map(|&fid| field_ids_map.name(fid).unwrap());
-    let document = permissive_json_pointer::select_values(&document, selectors);
+    // We remove the fields that were not selected by the formatted_options.
+    let selectors = formatted_options.keys().map(|&fid| field_ids_map.name(fid).unwrap());
+    let document = permissive_json_pointer::select_values(document, selectors);
 
     Ok((matches_position, document))
 }
