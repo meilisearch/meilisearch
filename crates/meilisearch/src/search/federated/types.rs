@@ -32,6 +32,7 @@ pub const QUERIES_POSITION: &str = "queriesPosition";
 pub const WEIGHTED_RANKING_SCORE: &str = "weightedRankingScore";
 pub const WEIGHTED_SCORE_VALUES: &str = "weightedScoreValues";
 pub const FEDERATION_REMOTE: &str = "remote";
+pub const FEDERATION_EXTRA_DOCUMENT: &str = "extra_document";
 
 /// Options for federated multi-search queries
 #[derive(Debug, Default, Clone, PartialEq, Serialize, deserr::Deserr, ToSchema)]

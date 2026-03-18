@@ -402,16 +402,18 @@ fn merge_index_local_results(
     )
 }
 
-fn merge_index_global_results(
-    results_by_index: Vec<SearchResultByIndex>,
-    remote_results: &mut [FederatedSearchResult],
-) -> impl Iterator<Item = MergedSearchHit> + '_ {
+fn merge_index_global_results<'a>(
+    results_by_index: &'a mut [SearchResultByIndex],
+    remote_results: &'a mut [FederatedSearchResult],
+) -> impl Iterator<Item = MergedSearchHit<'a>> + 'a {
     itertools::kmerge_by(
         // local results
         results_by_index
-            .into_iter()
+            .iter_mut()
             .map(|result_by_index| {
-                either::Either::Left(result_by_index.hits.into_iter().map(MergedSearchHit::Local))
+                either::Either::Left(std::mem::take(&mut result_by_index.hits).into_iter().map(
+                    |hit| MergedSearchHit::Local { hit, index: result_by_index.index.as_str() },
+                ))
             })
             // remote results
             .chain(remote_results.iter_mut().map(|x| either::Either::Right(iter_remote_hits(x)))),
@@ -435,17 +437,49 @@ fn merge_index_global_results(
     )
 }
 
-enum MergedSearchHit {
-    Local(SearchHitByIndex),
-    Remote {
-        hit: SearchHit,
-        score: Vec<WeightedScoreValue>,
-        global_weighted_score: f64,
-        query_index: usize,
-    },
+enum MergedSearchHit<'a> {
+    Local { hit: SearchHitByIndex, index: &'a str },
+    Remote(RemoteSearchHit),
 }
 
-impl MergedSearchHit {
+impl RemoteSearchHit {
+    fn remote_index_uid(&self) -> Result<&str, ProxySearchError> {
+        let hit = &self.hit;
+        let federation = hit
+            .document
+            .get(FEDERATION_HIT)
+            .ok_or(ProxySearchError::MissingPathInResponse("._federation"))?;
+        let federation = match federation.as_object() {
+            Some(federation) => federation,
+            None => {
+                return Err(ProxySearchError::UnexpectedValueInPath {
+                    path: "._federation",
+                    expected_type: "map",
+                    received_value: federation.to_string(),
+                });
+            }
+        };
+        let index = federation
+            .get(INDEX_UID)
+            .ok_or(ProxySearchError::MissingPathInResponse("._federation.indexUid"))?;
+        let index = index.as_str().ok_or_else(|| ProxySearchError::UnexpectedValueInPath {
+            path: "._federation.indexUid",
+            expected_type: "string",
+            received_value: index.to_string(),
+        })?;
+
+        Ok(index)
+    }
+}
+
+struct RemoteSearchHit {
+    hit: SearchHit,
+    score: Vec<WeightedScoreValue>,
+    global_weighted_score: f64,
+    query_index: usize,
+}
+
+impl MergedSearchHit<'_> {
     fn remote(mut hit: SearchHit) -> Result<Self, ProxySearchError> {
         let federation = hit
             .document
@@ -489,26 +523,38 @@ impl MergedSearchHit {
                 received_value: query_index.to_string(),
             })? as usize;
 
-        Ok(Self::Remote { hit, score, global_weighted_score, query_index })
+        // Mount `extra_document` to the search hit, see documentation for `Hit::extra_document`
+        let extra_document =
+            federation.remove(FEDERATION_EXTRA_DOCUMENT).and_then(|extra_document| {
+                if let serde_json::Value::Object(extra_document) = extra_document {
+                    Some(extra_document)
+                } else {
+                    None
+                }
+            });
+
+        hit.extra_document = extra_document.unwrap_or_default();
+
+        Ok(Self::Remote(RemoteSearchHit { hit, score, global_weighted_score, query_index }))
     }
 
-    fn hit(self) -> SearchHit {
+    fn into_hit(self) -> SearchHit {
         match self {
-            MergedSearchHit::Local(search_hit_by_index) => search_hit_by_index.hit,
-            MergedSearchHit::Remote { hit, .. } => hit,
+            MergedSearchHit::Local { hit: search_hit_by_index, .. } => search_hit_by_index.hit,
+            MergedSearchHit::Remote(RemoteSearchHit { hit, .. }) => hit,
         }
     }
 
-    fn hit_ref(&self) -> &SearchHit {
+    fn as_hit(&self) -> &SearchHit {
         match self {
-            MergedSearchHit::Local(search_hit_by_index) => &search_hit_by_index.hit,
-            MergedSearchHit::Remote { hit, .. } => hit,
+            MergedSearchHit::Local { hit: search_hit_by_index, .. } => &search_hit_by_index.hit,
+            MergedSearchHit::Remote(RemoteSearchHit { hit, .. }) => hit,
         }
     }
 
     fn to_score(&self) -> (impl Iterator<Item = WeightedScoreValue> + '_, f64, usize) {
         match self {
-            MergedSearchHit::Local(search_hit_by_index) => (
+            MergedSearchHit::Local { hit: search_hit_by_index, .. } => (
                 either::Left(ScoreDetails::weighted_score_values(
                     search_hit_by_index.score.iter(),
                     *search_hit_by_index.weight,
@@ -517,7 +563,12 @@ impl MergedSearchHit {
                     * *search_hit_by_index.weight,
                 search_hit_by_index.query_index,
             ),
-            MergedSearchHit::Remote { hit: _, score, global_weighted_score, query_index } => {
+            MergedSearchHit::Remote(RemoteSearchHit {
+                score,
+                global_weighted_score,
+                query_index,
+                hit: _,
+            }) => {
                 let global_weighted_score = *global_weighted_score;
                 let query_index = *query_index;
                 (either::Right(score.iter().cloned()), global_weighted_score, query_index)
@@ -525,19 +576,28 @@ impl MergedSearchHit {
         }
     }
 
+    fn index_uid(&self) -> Result<&str, ProxySearchError> {
+        match self {
+            MergedSearchHit::Local { hit: _, index } => Ok(index),
+            MergedSearchHit::Remote(remote_search_hit) => remote_search_hit.remote_index_uid(),
+        }
+    }
+
     fn query_index(&self) -> usize {
         match self {
-            MergedSearchHit::Local(search_hit_by_index) => search_hit_by_index.query_index,
-            MergedSearchHit::Remote { query_index, .. } => *query_index,
+            MergedSearchHit::Local { hit: search_hit_by_index, .. } => {
+                search_hit_by_index.query_index
+            }
+            MergedSearchHit::Remote(RemoteSearchHit { query_index, .. }) => *query_index,
         }
     }
 }
 
 fn iter_remote_hits(
     results_by_host: &mut FederatedSearchResult,
-) -> impl Iterator<Item = MergedSearchHit> + '_ {
+) -> impl Iterator<Item = MergedSearchHit<'_>> + '_ {
     // have a per node registry of failed hits
-    results_by_host.hits.drain(..).filter_map(|hit| match MergedSearchHit::remote(hit) {
+    results_by_host.hits.drain(..).filter_map(move |hit| match MergedSearchHit::remote(hit) {
         Ok(hit) => Some(hit),
         Err(err) => {
             tracing::warn!("skipping remote hit due to error: {err}");
@@ -659,9 +719,8 @@ fn merge_metadata(
         used_negative_operator |= *used_negative_operator_by_index;
 
         let facets_by_index = std::mem::take(facets_by_index);
-        let index = std::mem::take(index);
 
-        facets.insert(index, facets_by_index);
+        facets.insert(index.clone(), facets_by_index);
     }
     for FederatedSearchResult {
         hits: _,
