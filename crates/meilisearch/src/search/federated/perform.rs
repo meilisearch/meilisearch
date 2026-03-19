@@ -288,6 +288,9 @@ pub async fn perform_federated_search(
         .collect();
 
     if federation.distinct.is_some() {
+        // when using distinct, exhaust any remaining hit from the merged list
+        // so that the list of rejected hits is complete and the facet distribution is
+        // fully adjusted by removing the facet values of all rejected hits.
         let _ = hit_it.count();
     } else {
         // since this variable is Drop and borrows local variables,
@@ -485,6 +488,13 @@ enum MergedSearchHit<'a> {
     Remote(RemoteSearchHit),
 }
 
+struct RemoteSearchHit {
+    hit: SearchHit,
+    score: Vec<WeightedScoreValue>,
+    global_weighted_score: f64,
+    query_index: usize,
+}
+
 impl RemoteSearchHit {
     fn remote_index_uid(&self) -> Result<&str, ProxySearchError> {
         let hit = &self.hit;
@@ -513,13 +523,6 @@ impl RemoteSearchHit {
 
         Ok(index)
     }
-}
-
-struct RemoteSearchHit {
-    hit: SearchHit,
-    score: Vec<WeightedScoreValue>,
-    global_weighted_score: f64,
-    query_index: usize,
 }
 
 impl MergedSearchHit<'_> {
