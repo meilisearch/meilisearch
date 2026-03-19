@@ -401,6 +401,9 @@ pub enum Action {
     #[serde(rename = "fields.post")]
     #[deserr(rename = "fields.post")]
     FieldsPost,
+    #[serde(rename = "tasks.compact")]
+    #[deserr(rename = "tasks.compact")]
+    TasksCompact,
 }
 
 impl Action {
@@ -424,6 +427,7 @@ impl Action {
             TASKS_CANCEL => Some(Self::TasksCancel),
             TASKS_DELETE => Some(Self::TasksDelete),
             TASKS_GET => Some(Self::TasksGet),
+            TASKS_COMPACT => Some(Self::TasksCompact),
             SETTINGS_ALL => Some(Self::SettingsAll),
             SETTINGS_GET => Some(Self::SettingsGet),
             SETTINGS_UPDATE => Some(Self::SettingsUpdate),
@@ -514,6 +518,7 @@ impl Action {
             WebhooksDelete => false,
             WebhooksCreate => false,
             FieldsPost => true,
+            TasksCompact => false,
         }
     }
 
@@ -543,6 +548,7 @@ pub mod actions {
     pub const TASKS_CANCEL: u8 = TasksCancel.repr();
     pub const TASKS_DELETE: u8 = TasksDelete.repr();
     pub const TASKS_GET: u8 = TasksGet.repr();
+    pub const TASKS_COMPACT: u8 = TasksCompact.repr();
     pub const SETTINGS_ALL: u8 = SettingsAll.repr();
     pub const SETTINGS_GET: u8 = SettingsGet.repr();
     pub const SETTINGS_UPDATE: u8 = SettingsUpdate.repr();

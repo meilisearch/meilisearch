@@ -41,6 +41,7 @@ pub struct ExperimentalFeaturesApi;
             contains_filter: Some(false),
             network: Some(false),
             get_task_documents_route: Some(false),
+            task_queue_compaction_route: Some(false),
             composite_embedders: Some(false),
             chat_completions: Some(false),
             multimodal: Some(false),
@@ -94,6 +95,9 @@ pub struct RuntimeTogglableFeatures {
     /// Enable the route to get documents from tasks
     #[deserr(default)]
     pub get_task_documents_route: Option<bool>,
+    /// Enable the route to compact the task queue database
+    #[deserr(default)]
+    pub task_queue_compaction_route: Option<bool>,
     /// Enable composite embedders for multi-source embeddings
     #[deserr(default)]
     pub composite_embedders: Option<bool>,
@@ -117,6 +121,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             contains_filter,
             network,
             get_task_documents_route,
+            task_queue_compaction_route,
             composite_embedders,
             chat_completions,
             multimodal,
@@ -130,6 +135,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             contains_filter: Some(contains_filter),
             network: Some(network),
             get_task_documents_route: Some(get_task_documents_route),
+            task_queue_compaction_route: Some(task_queue_compaction_route),
             composite_embedders: Some(composite_embedders),
             chat_completions: Some(chat_completions),
             multimodal: Some(multimodal),
@@ -146,6 +152,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     contains_filter: bool,
     network: bool,
     get_task_documents_route: bool,
+    task_queue_compaction_route: bool,
     composite_embedders: bool,
     chat_completions: bool,
     multimodal: bool,
@@ -165,6 +172,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             contains_filter: new.contains_filter,
             network: new.network,
             get_task_documents_route: new.get_task_documents_route,
+            task_queue_compaction_route: new.task_queue_compaction_route,
             composite_embedders: new.composite_embedders,
             chat_completions: new.chat_completions,
             multimodal: new.multimodal,
@@ -190,6 +198,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             contains_filter: Some(false),
             network: Some(false),
             get_task_documents_route: Some(false),
+            task_queue_compaction_route: Some(false),
             composite_embedders: Some(false),
             chat_completions: Some(false),
             multimodal: Some(false),
@@ -231,6 +240,10 @@ async fn patch_features(
             .0
             .get_task_documents_route
             .unwrap_or(old_features.get_task_documents_route),
+        task_queue_compaction_route: new_features
+            .0
+            .task_queue_compaction_route
+            .unwrap_or(old_features.task_queue_compaction_route),
         composite_embedders: new_features
             .0
             .composite_embedders
@@ -250,6 +263,7 @@ async fn patch_features(
         contains_filter,
         network,
         get_task_documents_route,
+        task_queue_compaction_route,
         composite_embedders,
         chat_completions,
         multimodal,
@@ -264,6 +278,7 @@ async fn patch_features(
             contains_filter,
             network,
             get_task_documents_route,
+            task_queue_compaction_route,
             composite_embedders,
             chat_completions,
             multimodal,

@@ -18,6 +18,7 @@ pub struct RuntimeTogglableFeatures {
     pub contains_filter: bool,
     pub network: bool,
     pub get_task_documents_route: bool,
+    pub task_queue_compaction_route: bool,
     pub composite_embedders: bool,
     pub chat_completions: bool,
     pub multimodal: bool,
