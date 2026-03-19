@@ -150,6 +150,39 @@ pub enum VectorFilter<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexFilterCondition<'a> {
+    Not(Box<Self>),
+    Condition { fid: Token<'a>, op: Condition<'a> },
+    In { fid: Token<'a>, els: Vec<Token<'a>> },
+    Or(Vec<Self>),
+    And(Vec<Self>),
+    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
+    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
+    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
+    GeoPolygon { points: Vec<[Token<'a>; 2]> },
+}
+
+impl<'a> IndexFilterCondition<'a> {
+    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token<'a>> + '_> {
+        if depth == 0 {
+            return Box::new(std::iter::empty());
+        }
+        match self {
+            Self::Condition { fid, .. } | Self::In { fid, .. } => Box::new(std::iter::once(fid)),
+            Self::Not(filter) => {
+                let depth = depth.saturating_sub(1);
+                filter.fids(depth)
+            }
+            Self::And(subfilters) | Self::Or(subfilters) => {
+                let depth = depth.saturating_sub(1);
+                Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
+            }
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterCondition<'a> {
     Not(Box<Self>),
     Condition { fid: Token<'a>, op: Condition<'a> },
@@ -246,26 +279,6 @@ impl<'a> FilterCondition<'a> {
             | FilterCondition::GeoPolygon { .. }
             | FilterCondition::Condition { .. }
             | FilterCondition::In { .. } => None,
-        }
-    }
-
-    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token<'a>> + '_> {
-        if depth == 0 {
-            return Box::new(std::iter::empty());
-        }
-        match self {
-            FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
-                Box::new(std::iter::once(fid))
-            }
-            FilterCondition::Not(filter) => {
-                let depth = depth.saturating_sub(1);
-                filter.fids(depth)
-            }
-            FilterCondition::And(subfilters) | FilterCondition::Or(subfilters) => {
-                let depth = depth.saturating_sub(1);
-                Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
-            }
-            _ => Box::new(std::iter::empty()),
         }
     }
 
