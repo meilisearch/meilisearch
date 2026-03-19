@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use actix_http::header::{HeaderName, HeaderValue};
 use actix_web::web::{Bytes, Data};
 use actix_web::{web, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -335,7 +336,12 @@ pub async fn get_logs(
     .unwrap();
 
     if let Some(stream) = stream {
-        Ok(HttpResponse::Ok().streaming(stream))
+        let mut resp = HttpResponse::Ok().streaming(stream);
+
+        resp.headers_mut()
+            .insert(HeaderName::from_static("x-accel-buffering"), HeaderValue::from_static("no"));
+
+        Ok(resp)
     } else {
         Err(MeilisearchHttpError::AlreadyUsedLogRoute.into())
     }
