@@ -3,13 +3,12 @@ use std::collections::HashMap;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 
-use crate::error::OpenAIError;
-
 use super::{
     AssistantToolResources, AssistantTools, AssistantsApiResponseFormatOption,
     AssistantsApiToolChoiceOption, CreateAssistantToolResources, CreateMessageRequest,
     TruncationObject,
 };
+use crate::error::OpenAIError;
 
 /// Represents a thread that contains [messages](https://platform.openai.com/docs/api-reference/messages).
 #[derive(Clone, Serialize, Debug, Deserialize, PartialEq)]

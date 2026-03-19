@@ -1,9 +1,7 @@
-use crate::{
-    client::Client,
-    config::Config,
-    error::OpenAIError,
-    types::{CompletionResponseStream, CreateCompletionRequest, CreateCompletionResponse},
-};
+use crate::client::Client;
+use crate::config::Config;
+use crate::error::OpenAIError;
+use crate::types::{CompletionResponseStream, CreateCompletionRequest, CreateCompletionResponse};
 
 /// Given a prompt, the model will return one or more predicted completions,
 /// and can also return the probabilities of alternative tokens at each position.

@@ -106,7 +106,7 @@ const DEFAULT_S3_SNAPSHOT_MAX_IN_FLIGHT_PARTS: NonZeroUsize = NonZeroUsize::new(
 const DEFAULT_S3_SNAPSHOT_COMPRESSION_LEVEL: u32 = 0;
 const DEFAULT_S3_SNAPSHOT_SIGNATURE_DURATION_SECONDS: u64 = 8 * 3600; // 8 hours
 const DEFAULT_S3_SNAPSHOT_MULTIPART_PART_SIZE: Byte = Byte::from_u64(375 * 1024 * 1024); // 375 MiB
-
+const MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES: &str = "MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES";
 const MEILI_MAX_INDEXING_MEMORY: &str = "MEILI_MAX_INDEXING_MEMORY";
 const MEILI_MAX_INDEXING_THREADS: &str = "MEILI_MAX_INDEXING_THREADS";
 const DEFAULT_LOG_EVERY_N: usize = 100_000;
@@ -419,6 +419,14 @@ pub struct Opt {
     #[serde(default = "default_drop_search_after")]
     pub experimental_drop_search_after: NonZeroUsize,
 
+    /// Experimentally configures the maximum number of indexes that can be concurrently opened in memory.
+    ///
+    /// Defaults to 20 on Unix and 4 on Windows when not specified. Increasing this value is useful
+    /// for instances with thousands of indexes that are rarely queried, avoiding constant reopening.
+    #[clap(long, env = MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES)]
+    #[serde(default)]
+    pub experimental_max_open_indexes: Option<usize>,
+
     /// Experimental number of searches per core. For more information,
     /// see: <https://github.com/orgs/meilisearch/discussions/784>
     ///
@@ -615,6 +623,7 @@ impl Opt {
             experimental_drop_search_after,
             experimental_nb_searches_per_core,
             experimental_logs_mode,
+            experimental_max_open_indexes,
             experimental_dumpless_upgrade,
             experimental_enable_logs_route,
             experimental_replication_parameters,
@@ -635,6 +644,12 @@ impl Opt {
         export_to_env_if_not_present(MEILI_ENV, env);
         if let Some(task_webhook_url) = task_webhook_url {
             export_to_env_if_not_present(MEILI_TASK_WEBHOOK_URL, task_webhook_url.to_string());
+        }
+        if let Some(max_open_indexes) = experimental_max_open_indexes {
+            export_to_env_if_not_present(
+                MEILI_EXPERIMENTAL_MAX_OPEN_INDEXES,
+                max_open_indexes.to_string(),
+            )
         }
         if let Some(task_webhook_authorization_header) = task_webhook_authorization_header {
             export_to_env_if_not_present(

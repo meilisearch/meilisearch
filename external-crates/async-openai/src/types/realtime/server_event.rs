@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use super::{
-    content_part::ContentPart, conversation::Conversation, error::RealtimeAPIError, item::Item,
-    rate_limit::RateLimit, response_resource::ResponseResource, session_resource::SessionResource,
-};
+use super::content_part::ContentPart;
+use super::conversation::Conversation;
+use super::error::RealtimeAPIError;
+use super::item::Item;
+use super::rate_limit::RateLimit;
+use super::response_resource::ResponseResource;
+use super::session_resource::SessionResource;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ErrorEvent {

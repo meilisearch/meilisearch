@@ -25,6 +25,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use ::routes::Routes;
 use actix_cors::Cors;
 use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
@@ -57,42 +58,24 @@ use meilisearch_types::versioning::{
 use meilisearch_types::{compression, heed, milli, VERSION_FILE_NAME};
 pub use option::Opt;
 use option::ScheduleSnapshot;
+#[cfg(unix)]
+use rlimit::Resource;
 use search_queue::SearchQueue;
 use tracing::{error, info_span};
 use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
-use ::routes::Routes;
 
-/// Default number of simultaneously opened indexes.
-///
-/// This value is used when dynamic computation of how many indexes can be opened at once was skipped (e.g., in tests).
-///
-/// Lower for Windows that dedicates a smaller virtual address space to processes.
-///
-/// The value was chosen this way:
-///
-/// - Windows provides a small virtual address space of about 10TiB to processes.
-/// - The chosen value allows for indexes to use the default map size of 2TiB safely.
+#[cfg(unix)]
+fn get_fd_limit() -> usize {
+    Resource::NOFILE.get().ok().map(|(soft, _hard)| soft).unwrap_or(256) as usize
+}
 #[cfg(windows)]
-const DEFAULT_INDEX_COUNT: usize = 4;
-
-/// Default number of simultaneously opened indexes.
-///
-/// This value is used when dynamic computation of how many indexes can be opened at once was skipped (e.g., in tests).
-///
-/// The higher, the better for avoiding reopening indexes.
-///
-/// The value was chosen this way:
-///
-/// - Opening an index consumes a file descriptor.
-/// - The default on many unices is about 256 file descriptors for a process.
-/// - 100 is a little bit less than half this value.
-/// - The chosen value allows for indexes to use the default map size of 2TiB safely.
-#[cfg(not(windows))]
-const DEFAULT_INDEX_COUNT: usize = 20;
-
+fn get_fd_limit() -> usize {
+    // pick a safe default cause windows supports thousands of handles
+    1024
+}
 /// Check if a db is empty. It does not provide any information on the
 /// validity of the data in it.
 /// We consider a database as non empty when it's a non empty directory.
@@ -275,7 +258,14 @@ pub fn setup_meilisearch(
             |size| size.as_u64(),
         ),
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
-        index_count: DEFAULT_INDEX_COUNT,
+        index_count: opt.experimental_max_open_indexes.unwrap_or_else(|| {
+            let limit = get_fd_limit();
+            if limit < 256 {
+                256
+            } else {
+                limit
+            }
+        }),
         instance_features: opt.to_instance_features(),
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,

@@ -1,8 +1,8 @@
 //! Helpers to handle connection delays when receiving errors
 
-use crate::error::Error;
 use std::time::Duration;
 
+use crate::error::Error;
 #[cfg(doc)]
 use crate::event_source::{Event, EventSource};
 

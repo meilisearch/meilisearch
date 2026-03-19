@@ -1,12 +1,11 @@
 use deserr::Deserr;
-use heed::{
-    types::{SerdeJson, Str},
-    RoTxn, RwTxn,
-};
+use heed::types::{SerdeJson, Str};
+use heed::{RoTxn, RwTxn};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::{index::main_key, Index};
+use crate::index::main_key;
+use crate::Index;
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Debug, ToSchema, Deserr)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]

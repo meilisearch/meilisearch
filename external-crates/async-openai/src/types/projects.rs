@@ -1,6 +1,7 @@
-use crate::types::OpenAIError;
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
+
+use crate::types::OpenAIError;
 
 /// `active` or `archived`
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
