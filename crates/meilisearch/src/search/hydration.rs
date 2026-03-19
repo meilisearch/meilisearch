@@ -6,7 +6,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::{self, ExternalDocumentsIds, FieldId, FieldsIdsMap, ForeignKey};
 use meilisearch_types::Index;
-use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, select_values};
+use permissive_json_pointer::{map_leaf_values, map_leaf_values_in_object, visit_leaf_values};
 use serde_json::{Map, Value};
 
 use crate::search::{make_document, ExternalDocumentId, SearchHit};
@@ -177,10 +177,8 @@ impl HydrationContext {
         };
 
         for (foreign_index_uid, field_name) in foreign_keys {
-            match select_values(hit.document.clone(), [field_name.as_ref()])
-                .get(field_name.as_ref())
-            {
-                Some(Value::Array(values)) => {
+            visit_leaf_values(&hit.document, field_name.as_ref(), &mut |value| match value {
+                Value::Array(values) => {
                     for value in values {
                         let Ok(external_document_id) = ExternalDocumentId::try_from(value.clone())
                         else {
@@ -195,7 +193,7 @@ impl HydrationContext {
                             .push(external_document_id);
                     }
                 }
-                Some(value) => {
+                value => {
                     let Ok(external_document_id) = ExternalDocumentId::try_from(value.clone())
                     else {
                         tracing::warn!(
@@ -208,8 +206,7 @@ impl HydrationContext {
                         .or_default()
                         .push(external_document_id);
                 }
-                None => {}
-            }
+            });
         }
     }
 }

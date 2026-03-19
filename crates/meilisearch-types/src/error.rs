@@ -271,6 +271,7 @@ InvalidMultiSearchFederationOptions            , InvalidRequest       , BAD_REQU
 InvalidMultiSearchMaxValuesPerFacet            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchMergeFacets                  , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryFacets                  , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchDistinct                     , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPagination              , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryRankingRules            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPosition                , InvalidRequest       , BAD_REQUEST ;

@@ -9,21 +9,31 @@ use serde_json::Value;
 /// It's very handy for collecting fields and skipping
 /// potentially huge parts of the document avoiding
 /// deserialization and allocation costs.
-pub struct ValuePathsVisitor<'a> {
+pub struct ValuePathsVisitor<I> {
     /// List of accepted paths.
-    accepted_paths: &'a [&'a str],
+    accepted_paths: I,
     /// This is a string representing the current
     /// path with dots (.) separating levels, e.g., foo.bar.
     current_path: String,
 }
 
-impl<'a> ValuePathsVisitor<'a> {
-    pub fn new_from_path(accepted_paths: &'a [&'a str], current_path: impl Into<String>) -> Self {
-        ValuePathsVisitor { accepted_paths, current_path: current_path.into() }
+impl<I> ValuePathsVisitor<I> {
+    pub fn new_from_path(
+        accepted_paths: impl IntoIterator<IntoIter = I>,
+        current_path: impl Into<String>,
+    ) -> Self {
+        ValuePathsVisitor {
+            accepted_paths: accepted_paths.into_iter(),
+            current_path: current_path.into(),
+        }
     }
 }
 
-impl<'a, 'de> Visitor<'de> for ValuePathsVisitor<'a> {
+impl<'de, S, I> Visitor<'de> for ValuePathsVisitor<I>
+where
+    S: AsRef<str>,
+    I: Clone + Iterator<Item = S>,
+{
     type Value = Value;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -43,12 +53,13 @@ impl<'a, 'de> Visitor<'de> for ValuePathsVisitor<'a> {
             }
             self.current_path.push_str(&key);
 
-            if self.accepted_paths.iter().any(|&ap| {
+            if self.accepted_paths.clone().any(|ap| {
+                let ap = ap.as_ref();
                 // We must accept both directions to handle partial paths
                 contained_in(ap, &self.current_path) || contained_in(&self.current_path, ap)
             }) {
                 let value = map.next_value_seed(ValuePathsVisitor {
-                    accepted_paths: self.accepted_paths,
+                    accepted_paths: self.accepted_paths.clone(),
                     current_path: self.current_path.clone(),
                 })?;
                 result.insert(key, value);
@@ -71,7 +82,7 @@ impl<'a, 'de> Visitor<'de> for ValuePathsVisitor<'a> {
     {
         let mut result = Vec::new();
         while let Some(value) = seq.next_element_seed(ValuePathsVisitor {
-            accepted_paths: self.accepted_paths,
+            accepted_paths: self.accepted_paths.clone(),
             current_path: self.current_path.clone(),
         })? {
             result.push(value);
@@ -137,7 +148,11 @@ impl<'a, 'de> Visitor<'de> for ValuePathsVisitor<'a> {
     }
 }
 
-impl<'a, 'de> DeserializeSeed<'de> for ValuePathsVisitor<'a> {
+impl<'de, S, I> DeserializeSeed<'de> for ValuePathsVisitor<I>
+where
+    S: AsRef<str>,
+    I: Clone + Iterator<Item = S>,
+{
     type Value = Value;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>

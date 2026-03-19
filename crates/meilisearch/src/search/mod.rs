@@ -1,6 +1,7 @@
 use core::fmt;
 use std::cmp::min;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::ops::Not as _;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -896,6 +897,10 @@ impl SearchQueryWithIndex {
         self.show_performance_details.is_some()
     }
 
+    fn has_distinct(&self) -> bool {
+        self.distinct.is_some()
+    }
+
     pub fn from_index_query_federation(
         index_uid: IndexUid,
         query: SearchQuery,
@@ -1192,6 +1197,18 @@ pub struct SearchHit {
     #[serde(flatten)]
     #[schema(additional_properties, inline, value_type = HashMap<String, Value>)]
     pub document: Document,
+
+    /// Extra document fields for internal use.
+    ///
+    /// They are never de/serialized and must be manually
+    /// mounted to/unmounted from `_federation` in a federated context.
+    ///
+    /// - Unmounting: See `SearchByIndex::execute`
+    /// - Mounting: See `MergedSearchHit::remote`
+    #[serde(default, skip)]
+    #[schema(ignore)]
+    pub extra_document: Document,
+
     /// Document with highlighted and cropped attributes.
     ///
     /// Present when `attributesToHighlight` or `attributesToCrop` was set.
@@ -1214,6 +1231,57 @@ pub struct SearchHit {
     /// Present when `showRankingScoreDetails` was true.
     #[serde(default, rename = "_rankingScoreDetails", skip_serializing_if = "Option::is_none")]
     pub ranking_score_details: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+impl SearchHit {
+    fn facet_values<F>(&self, field_name: &str, mut visit: F)
+    where
+        F: FnMut(FacetValue),
+    {
+        permissive_json_pointer::visit_leaf_values(&self.document, field_name, &mut |value| {
+            for value in FacetValue::from_value(value) {
+                visit(value);
+            }
+        });
+        permissive_json_pointer::visit_leaf_values(
+            &self.extra_document,
+            field_name,
+            &mut |value| {
+                for value in FacetValue::from_value(value) {
+                    visit(value);
+                }
+            },
+        );
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FacetValue {
+    Normalized(String),
+    Number(serde_json::Number),
+}
+
+impl FacetValue {
+    pub fn from_value(field: &serde_json::Value) -> impl Iterator<Item = FacetValue> + '_ {
+        match field {
+            Value::Array(values) => {
+                either::Either::Left(values.iter().flat_map(Self::from_leaf_value))
+            }
+            value => either::Either::Right(Self::from_leaf_value(value).into_iter()),
+        }
+    }
+
+    fn from_leaf_value(field: &serde_json::Value) -> Option<FacetValue> {
+        match field {
+            Value::Bool(b) => Some(FacetValue::Normalized(b.to_string())),
+            Value::Number(number) => Some(FacetValue::Number(number.clone())),
+            Value::String(s) => {
+                let normalized = milli::normalize_facet(s);
+                Some(FacetValue::Normalized(normalized))
+            }
+            _ => None,
+        }
+    }
 }
 
 /// Metadata about a search query (included when requested via header).
@@ -1705,6 +1773,7 @@ pub fn perform_search(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        extra_attributes_to_retrieve: Default::default(),
         retrieve_vectors,
         attributes_to_highlight,
         attributes_to_crop,
@@ -1792,6 +1861,58 @@ pub struct ComputedFacets {
     pub stats: BTreeMap<String, FacetStats>,
 }
 
+impl ComputedFacets {
+    pub fn remove_hits(&mut self, hits: &[SearchHit]) {
+        if hits.is_empty() {
+            return;
+        }
+        for (field_name, distribution) in &mut self.distribution {
+            let normalized_to_original: BTreeMap<_, _> = distribution
+                .keys()
+                .enumerate()
+                .filter_map(|(index, facet_value)| {
+                    let normalized = milli::normalize_facet(facet_value);
+                    if normalized == facet_value.as_str() {
+                        None
+                    } else {
+                        Some((normalized, index))
+                    }
+                })
+                .collect();
+
+            let mut must_remove = false;
+
+            for hit in hits {
+                hit.facet_values(field_name, |value| {
+                    let count = match value {
+                        FacetValue::Normalized(s) => {
+                            if let Some(original) = normalized_to_original.get(&s) {
+                                distribution.get_index_mut(*original).map(|(_, v)| v)
+                            } else {
+                                distribution.get_mut(&s)
+                            }
+                        }
+                        FacetValue::Number(number) => distribution.get_mut(&number.to_string()),
+                    };
+
+                    let Some(count) = count else {
+                        return;
+                    };
+
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        must_remove = true;
+                    }
+                });
+            }
+
+            if must_remove {
+                distribution.retain(|_, v| *v != 0);
+            }
+        }
+    }
+}
+
 pub enum Route {
     Search,
     MultiSearch,
@@ -1869,7 +1990,24 @@ pub fn search_from_kind(
 }
 
 struct AttributesFormat {
+    /// Subset of the index's `displayedAttributes`.
+    ///
+    /// - If `None`, all `displayedAttributes` will be returned.
+    /// - Fields in `attributes_to_retrieve` that are not in `displayedAttributes` will not be retrieved.
     attributes_to_retrieve: Option<BTreeSet<String>>,
+
+    /// Extra set of fields that will be stored in `extra_attributes` when making hits.
+    ///
+    /// This allows recovering fields that should not be shown to the end-user but that Meilisearch needs for e.g. distinct in
+    /// federated contexts.
+    ///
+    /// - If empty, `hit.extra_attributes` will not be populated.
+    /// - Fields in `extra_attributes_to_retrieve` will be retrieved in `hit.extra_attributes` **even** if missing in `displayedAttributes`.
+    /// - Fields in `attributes_to_retrieve` that are in `displayedAttributes` will **not** be collected in `extra_attributes`.
+    /// - `_vectors` cannot be retrieved in this way.
+    ///
+    /// Due to these properties, it is possible to populate `extra_attributes_to_retrieve` without checking the `displayedAttributes`.
+    extra_attributes_to_retrieve: BTreeSet<String>,
     retrieve_vectors: RetrieveVectors,
     attributes_to_highlight: Option<HashSet<String>>,
     attributes_to_crop: Option<Vec<String>>,
@@ -1915,6 +2053,7 @@ struct HitMaker<'a> {
     vectors_fid: Option<FieldId>,
     retrieve_vectors: RetrieveVectors,
     to_retrieve_ids: BTreeSet<FieldId>,
+    extra_ids: Vec<String>,
     formatter_builder: MatcherBuilder<'a>,
     formatted_options: BTreeMap<FieldId, FormatOptions>,
     show_ranking_score: bool,
@@ -2016,7 +2155,23 @@ impl<'a> HitMaker<'a> {
             .map(fids)
             .unwrap_or_else(|| displayed_ids.clone())
             .intersection(&displayed_ids)
-            .cloned()
+            .copied()
+            .collect();
+
+        let fids_no_wildcard = |attrs: &BTreeSet<String>| {
+            let mut ids = BTreeSet::new();
+            for attr in attrs {
+                if let Some(id) = fields_ids_map.id(attr) {
+                    ids.insert(id);
+                }
+            }
+            ids
+        };
+
+        let extra_ids: Vec<_> = fids_no_wildcard(&format.extra_attributes_to_retrieve)
+            .difference(&to_retrieve_ids)
+            .copied()
+            .filter_map(|fid| fields_ids_map.name(fid).map(|field| field.to_owned()))
             .collect();
 
         let attr_to_highlight = format.attributes_to_highlight.unwrap_or_default();
@@ -2037,6 +2192,7 @@ impl<'a> HitMaker<'a> {
             rtxn,
             fields_ids_map,
             displayed_ids,
+            extra_ids,
             vectors_fid,
             retrieve_vectors,
             to_retrieve_ids,
@@ -2083,6 +2239,14 @@ impl<'a> HitMaker<'a> {
 
         // Generate a document with all the attributes to retrieve
         let mut document = make_document(obkv, &self.fields_ids_map, &attributes_to_retrieve)?;
+
+        let extra_document = self
+            .extra_ids
+            .is_empty()
+            .not()
+            .then(|| make_document(obkv, &self.fields_ids_map, &self.extra_ids))
+            .transpose()?
+            .unwrap_or_default();
 
         if self.retrieve_vectors == RetrieveVectors::Retrieve {
             // Clippy is wrong
@@ -2147,6 +2311,7 @@ impl<'a> HitMaker<'a> {
 
         let hit = SearchHit {
             document,
+            extra_document,
             formatted,
             matches_position,
             ranking_score_details,
@@ -2328,6 +2493,7 @@ pub fn perform_similar(
 
     let format = AttributesFormat {
         attributes_to_retrieve,
+        extra_attributes_to_retrieve: Default::default(),
         retrieve_vectors,
         attributes_to_highlight: None,
         attributes_to_crop: None,
@@ -2501,21 +2667,26 @@ fn add_non_formatted_ids_to_formatted_options(
     }
 }
 
-fn make_document(
+fn make_document<S, I>(
     obkv: &obkv::KvReaderU16,
     field_ids_map: &FieldsIdsMap,
-    selectors: &[&str],
-) -> milli::Result<Document> {
+    selectors: impl IntoIterator<IntoIter = I>,
+) -> milli::Result<Document>
+where
+    S: AsRef<str>,
+    I: Clone + Iterator<Item = S>,
+{
+    let selectors = selectors.into_iter();
     let mut document = serde_json::Map::new();
 
     for (key, value_bytes) in obkv {
         let key = field_ids_map.name(key).expect("Missing field name");
-        if !selectors.iter().any(|selector| contained_in(selector, key)) {
+        if !selectors.clone().any(|selector| contained_in(selector.as_ref(), key)) {
             // If the key is not part of the selection, skip this value
             continue;
         }
 
-        let visitor = ValuePathsVisitor::new_from_path(selectors, key);
+        let visitor = ValuePathsVisitor::new_from_path(selectors.clone(), key);
         let mut deserializer = serde_json::de::Deserializer::from_slice(value_bytes);
         let value = visitor.deserialize(&mut deserializer).map_err(InternalError::SerdeJson)?;
         document.insert(key.to_string(), value);

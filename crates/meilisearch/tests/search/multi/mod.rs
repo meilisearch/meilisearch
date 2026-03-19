@@ -3693,6 +3693,83 @@ async fn federation_federated_contains_facets() {
 }
 
 #[actix_rt::test]
+async fn federation_contains_two_distincts() {
+    let server = Server::new_shared();
+
+    let index = server.unique_index_with_prefix("fruits");
+
+    let (value, _) = index
+        .update_settings(
+            json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST"]}),
+        )
+        .await;
+
+    server.wait_task(value.uid()).await.succeeded();
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    // fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {"distinct": "BOOST"}, "queries": [
+        {"indexUid": index.uid, "q": "apple red"},
+        {"indexUid": index.uid, "q": "apple red", "distinct": "BOOST"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Inside `.queries[1]`: Using `distinct` options is not allowed in federated queries when it also appears in `.federation.distinct`.\n - Hint: remove `distinct` from query #1 or remove `federation` from the request\n  - Note: `distinct` at the query level is discouraged in federated search.",
+      "code": "invalid_multi_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_distinct"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_distinct_not_filterable() {
+    let server = Server::new_shared();
+
+    let index0 = server.unique_index_with_prefix("fruits");
+    let index1 = server.unique_index_with_prefix("fruits-no-filterable");
+
+    let (value, _) = index0
+        .update_settings(
+            json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST"]}),
+        )
+        .await;
+
+    server.wait_task(value.uid()).await.succeeded();
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index0.add_documents(documents, None).await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index1.add_documents(documents, None).await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    // fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {"distinct": "BOOST"}, "queries": [
+        {"indexUid": index0.uid, "q": "apple red"},
+        {"indexUid": index1.uid, "q": "apple red"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Inside `.queries[1]`: Index `fruits-no-filterable-[uuid]`: Attribute `BOOST` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn federation_non_faceted_for_an_index() {
     let server = Server::new_shared();
 
@@ -4557,6 +4634,296 @@ async fn federation_vector_two_indexes() {
       "estimatedTotalHits": 8,
       "requestUid": "[uuid]",
       "semanticHitCount": 8
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_distinct_one_index() {
+    let server = Server::new_shared();
+    let movies_index = shared_movies_index().await;
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            movies_index.uid.clone():["title", "color"]
+          },
+          "mergeFacets": {},
+          "distinct": "color"
+        }, "queries": [
+          {"indexUid" : movies_index.uid.clone(), "q": "Shazam", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Captain", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Escape", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Dragon", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Glass", "attributesToRetrieve": ["title"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-[uuid]",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.9848484848484848
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "facetDistribution": {
+        "color": {
+          "blue": 1,
+          "green": 1,
+          "red": 1,
+          "yellow": 1
+        },
+        "title": {
+          "Escape Room": 1,
+          "Shazam!": 1
+        }
+      },
+      "facetStats": {},
+      "requestUid": "[uuid]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_distinct_two_indexes() {
+    let server = Server::new_shared();
+    let movies_index = shared_movies_index().await;
+    let other_movies_index = server.unique_index_with_prefix("movies-2");
+
+    let documents = DOCUMENTS.clone();
+    let (response, _code) = other_movies_index.add_documents(documents, None).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (value, _) = other_movies_index
+        .update_settings(json!({
+            "sortableAttributes": ["title"],
+            "filterableAttributes": ["title", "color"],
+            "rankingRules": [
+                "sort",
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "exactness"
+            ]
+        }))
+        .await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            movies_index.uid.clone():["title", "color"],
+            other_movies_index.uid.clone():["title","color"]
+          },
+          "mergeFacets": {},
+          "distinct": "color"
+        }, "queries": [
+          {"indexUid" : movies_index.uid.clone(), "q": "Shazam", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Captain", "attributesToRetrieve": ["title"] },
+          {"indexUid" : other_movies_index.uid.clone(), "q": "Escape", "attributesToRetrieve": ["title"] },
+          {"indexUid" : other_movies_index.uid.clone(), "q": "Dragon", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Glass", "attributesToRetrieve": ["title"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-2-[uuid]",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.9848484848484848
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "facetDistribution": {
+        "color": {
+          "blue": 1,
+          "green": 1,
+          "red": 1,
+          "yellow": 1
+        },
+        "title": {
+          "Escape Room": 1,
+          "Shazam!": 1
+        }
+      },
+      "facetStats": {},
+      "requestUid": "[uuid]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_distinct_two_indexes_nested() {
+    let server = Server::new_shared();
+    let first_index = server.unique_index_with_prefix("test-0");
+    let second_index = server.unique_index_with_prefix("test-1");
+
+    let (response, _code) = first_index
+        .add_documents(
+            json!({
+              "id": 0,
+              "root": {
+                "nested": 0
+              },
+              "root.nested": 1
+            }),
+            None,
+        )
+        .await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (response, _code) = second_index
+        .add_documents(
+            json!({
+              "id": 1,
+              "root": {
+                "nested": 1
+              },
+              "root.nested": 2
+            }),
+            None,
+        )
+        .await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (value, _) = first_index
+        .update_settings(json!({
+            "filterableAttributes": ["root.nested"],
+        }))
+        .await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    let (value, _) = second_index
+        .update_settings(json!({
+            "filterableAttributes": ["root.nested"],
+        }))
+        .await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            first_index.uid.clone():["root.nested"],
+            second_index.uid.clone():["root.nested"]
+          },
+          "mergeFacets": {},
+          "distinct": "root.nested"
+        }, "queries": [
+          {"indexUid" : first_index.uid.clone(), "q": "", "attributesToRetrieve": ["id"] },
+          {"indexUid" : second_index.uid.clone(), "q": "", "attributesToRetrieve": ["id"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": 0,
+          "_federation": {
+            "indexUid": "test-0-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 1,
+      "facetDistribution": {
+        "root.nested": {
+          "0": 1,
+          "1": 1
+        }
+      },
+      "facetStats": {
+        "root.nested": {
+          "min": 0.0,
+          "max": 2.0
+        }
+      },
+      "requestUid": "[uuid]"
+    }
+    "###);
+
+    // since they're placeholder search, reversing the query order should invert which document is picked
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            first_index.uid.clone():["root.nested"],
+            second_index.uid.clone():["root.nested"]
+          },
+          "mergeFacets": {},
+          "distinct": "root.nested"
+        }, "queries": [
+          {"indexUid" : second_index.uid.clone(), "q": "", "attributesToRetrieve": ["id"] },
+          {"indexUid" : first_index.uid.clone(), "q": "", "attributesToRetrieve": ["id"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": 1,
+          "_federation": {
+            "indexUid": "test-1-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 1,
+      "facetDistribution": {
+        "root.nested": {
+          "1": 1,
+          "2": 1
+        }
+      },
+      "facetStats": {
+        "root.nested": {
+          "min": 0.0,
+          "max": 2.0
+        }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 }

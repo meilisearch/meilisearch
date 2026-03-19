@@ -51,8 +51,16 @@ impl Service {
         body: impl AsRef<str>,
         headers: Vec<(&str, &str)>,
     ) -> (Value, StatusCode) {
-        let mut req =
-            test::TestRequest::post().uri(url.as_ref()).set_payload(body.as_ref().to_string());
+        self.post_raw(url, body.as_ref().to_string(), headers).await
+    }
+
+    pub async fn post_raw(
+        &self,
+        url: impl AsRef<str>,
+        body: impl Into<bytes::Bytes>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req = test::TestRequest::post().uri(url.as_ref()).set_payload(body);
         for header in headers {
             req = req.insert_header(header);
         }
@@ -75,8 +83,17 @@ impl Service {
         body: impl AsRef<str>,
         headers: Vec<(&str, &str)>,
     ) -> (Value, StatusCode) {
-        let mut req =
-            test::TestRequest::put().uri(url.as_ref()).set_payload(body.as_ref().to_string());
+        self.put_raw(url, body.as_ref().to_string(), headers).await
+    }
+
+    /// Send a test put request from a bytes.
+    pub async fn put_raw(
+        &self,
+        url: impl AsRef<str>,
+        body: impl Into<bytes::Bytes>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req = test::TestRequest::put().uri(url.as_ref()).set_payload(body);
         for header in headers {
             req = req.insert_header(header);
         }
@@ -94,14 +111,13 @@ impl Service {
         self.request(req).await
     }
 
-    pub async fn patch_str(
+    pub async fn patch_raw(
         &self,
         url: impl AsRef<str>,
-        body: impl AsRef<str>,
+        body: impl Into<bytes::Bytes>,
         headers: Vec<(&str, &str)>,
     ) -> (Value, StatusCode) {
-        let mut req =
-            test::TestRequest::patch().uri(url.as_ref()).set_payload(body.as_ref().to_string());
+        let mut req = test::TestRequest::patch().uri(url.as_ref()).set_payload(body);
         for header in headers {
             req = req.insert_header(header);
         }
