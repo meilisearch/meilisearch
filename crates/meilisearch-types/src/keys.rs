@@ -689,11 +689,12 @@ pub(crate) mod test {
         assert!(WebhooksAll.repr() == 49 && WEBHOOKS_ALL == 49);
         assert!(IndexesCompact.repr() == 50 && INDEXES_COMPACT == 50);
         assert!(FieldsPost.repr() == 51 && FIELDS_POST == 51);
-        assert!(DynamicSearchRulesGet.repr() == 52 && DYNAMIC_SEARCH_RULES_GET == 52);
-        assert!(DynamicSearchRulesCreate.repr() == 53 && DYNAMIC_SEARCH_RULES_CREATE == 53);
-        assert!(DynamicSearchRulesUpdate.repr() == 54 && DYNAMIC_SEARCH_RULES_UPDATE == 54);
-        assert!(DynamicSearchRulesDelete.repr() == 55 && DYNAMIC_SEARCH_RULES_DELETE == 55);
-        assert!(DynamicSearchRulesAll.repr() == 56 && DYNAMIC_SEARCH_RULES_ALL == 56);
+        assert!(TasksCompact.repr() == 52 && TASKS_COMPACT == 52);
+        assert!(DynamicSearchRulesGet.repr() == 53 && DYNAMIC_SEARCH_RULES_GET == 53);
+        assert!(DynamicSearchRulesCreate.repr() == 54 && DYNAMIC_SEARCH_RULES_CREATE == 54);
+        assert!(DynamicSearchRulesUpdate.repr() == 55 && DYNAMIC_SEARCH_RULES_UPDATE == 55);
+        assert!(DynamicSearchRulesDelete.repr() == 56 && DYNAMIC_SEARCH_RULES_DELETE == 56);
+        assert!(DynamicSearchRulesAll.repr() == 57 && DYNAMIC_SEARCH_RULES_ALL == 57);
     }
 
     #[test]
