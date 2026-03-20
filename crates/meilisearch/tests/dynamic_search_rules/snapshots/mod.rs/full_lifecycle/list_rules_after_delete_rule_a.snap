@@ -19,5 +19,8 @@ source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
         }
       ]
     }
-  ]
+  ],
+  "offset": 0,
+  "limit": 20,
+  "total": 1
 }
