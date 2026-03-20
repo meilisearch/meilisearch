@@ -7,6 +7,7 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::dynamic_search_rules::{Condition, DynamicSearchRule, RuleAction};
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::update::Setting;
 use serde::Serialize;
 use tracing::debug;
 use utoipa::ToSchema;
@@ -56,16 +57,20 @@ struct CreateDynamicSearchRuleRequest {
 struct UpdateDynamicSearchRuleRequest {
     /// Human-readable description of the dynamic search rule.
     #[deserr(default)]
-    description: Option<String>,
+    #[schema(value_type = Option<String>)]
+    description: Setting<String>,
     /// Priority of the dynamic search rule. Lower values take precedence over higher ones.
     #[deserr(default)]
-    priority: Option<u64>,
+    #[schema(value_type = Option<u64>)]
+    priority: Setting<u64>,
     /// Whether the dynamic search rule is active.
     #[deserr(default)]
-    active: Option<bool>,
+    #[schema(value_type = Option<bool>)]
+    active: Setting<bool>,
     /// Conditions that must match before the dynamic search rule applies.
     #[deserr(default)]
-    conditions: Option<Vec<Condition>>,
+    #[schema(value_type = Option<Vec<Condition>>)]
+    conditions: Setting<Vec<Condition>>,
     /// Actions to apply when the dynamic search rule matches.
     #[deserr(default)]
     actions: Option<Vec<RuleAction>>,
@@ -384,20 +389,28 @@ async fn update_rule(
     let mut rule =
         rules.get(&uid).cloned().ok_or_else(|| DynamicSearchRulesError::NotFound(uid.clone()))?;
 
-    if let Some(description) = body.description {
-        rule.description = Some(description);
+    match body.description {
+        Setting::Set(description) => rule.description = Some(description),
+        Setting::Reset => rule.description = None,
+        Setting::NotSet => (),
     }
 
-    if let Some(priority) = body.priority {
-        rule.priority = Some(priority);
+    match body.priority {
+        Setting::Set(priority) => rule.priority = Some(priority),
+        Setting::Reset => rule.priority = None,
+        Setting::NotSet => (),
     }
 
-    if let Some(active) = body.active {
-        rule.active = active;
+    match body.active {
+        Setting::Set(active) => rule.active = active,
+        Setting::Reset => rule.active = false,
+        Setting::NotSet => (),
     }
 
-    if let Some(conditions) = body.conditions {
-        rule.conditions = conditions;
+    match body.conditions {
+        Setting::Set(conditions) => rule.conditions = conditions,
+        Setting::Reset => rule.conditions.clear(),
+        Setting::NotSet => (),
     }
 
     if let Some(actions) = body.actions {
