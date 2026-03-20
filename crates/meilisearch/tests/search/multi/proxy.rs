@@ -779,16 +779,18 @@ async fn remote_search_keeps_remote_pins() {
     ms1.wait_task(task.uid()).await.succeeded();
 
     let (_response, code) = ms1
-        .create_dynamic_search_rule(json!({
-            "uid": "pin-remote",
-            "active": true,
-            "actions": [
-                {
-                    "selector": { "id": "remote" },
-                    "action": { "type": "pin", "position": 0 }
-                }
-            ]
-        }))
+        .create_dynamic_search_rule(
+            "pin-remote",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "remote" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
         .await;
     snapshot!(code, @"201 Created");
 

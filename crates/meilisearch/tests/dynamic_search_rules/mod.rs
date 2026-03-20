@@ -27,6 +27,24 @@ async fn dynamic_search_rules_server() -> Server {
     server
 }
 
+async fn create_simple_dynamic_search_rule(server: &Server, uid: &str, active: bool, doc_id: &str) {
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            uid,
+            json!({
+                "active": active,
+                "actions": [
+                    {
+                        "selector": { "id": doc_id },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    assert_eq!(code, 201, "{value}");
+}
+
 #[actix_web::test]
 async fn list_empty() {
     let server = dynamic_search_rules_server().await;
@@ -35,7 +53,205 @@ async fn list_empty() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(value), @r#"
     {
-      "results": []
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
+    }
+    "#);
+}
+
+#[actix_web::test]
+async fn list_supports_pagination() {
+    let server = dynamic_search_rules_server().await;
+
+    create_simple_dynamic_search_rule(&server, "rule-a", false, "0").await;
+    create_simple_dynamic_search_rule(&server, "rule-b", true, "1").await;
+    create_simple_dynamic_search_rule(&server, "rule-c", false, "2").await;
+
+    let (value, code) = server
+        .list_dynamic_search_rules_with(json!({
+            "offset": 1,
+            "limit": 1
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "rule-b",
+          "active": true,
+          "conditions": [],
+          "actions": [
+            {
+              "selector": {
+                "id": "1"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 1,
+      "limit": 1,
+      "total": 3
+    }
+    "#);
+}
+
+#[actix_web::test]
+async fn list_filters_by_attribute_patterns() {
+    let server = dynamic_search_rules_server().await;
+
+    create_simple_dynamic_search_rule(&server, "promo-active", true, "1").await;
+    create_simple_dynamic_search_rule(&server, "promo-inactive", false, "2").await;
+    create_simple_dynamic_search_rule(&server, "standard-active", true, "3").await;
+
+    let (value, code) = server
+        .list_dynamic_search_rules_with(json!({
+            "filter": {
+                "attributePatterns": ["promo*"]
+            }
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "promo-active",
+          "active": true,
+          "conditions": [],
+          "actions": [
+            {
+              "selector": {
+                "id": "1"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        },
+        {
+          "uid": "promo-inactive",
+          "active": false,
+          "conditions": [],
+          "actions": [
+            {
+              "selector": {
+                "id": "2"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "#);
+}
+
+#[actix_web::test]
+async fn list_filters_by_active_and_combines_filters() {
+    let server = dynamic_search_rules_server().await;
+
+    create_simple_dynamic_search_rule(&server, "promo-active", true, "1").await;
+    create_simple_dynamic_search_rule(&server, "promo-inactive", false, "2").await;
+    create_simple_dynamic_search_rule(&server, "standard-active", true, "3").await;
+
+    let (value, code) = server
+        .list_dynamic_search_rules_with(json!({
+            "filter": {
+                "active": true
+            }
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "promo-active",
+          "active": true,
+          "conditions": [],
+          "actions": [
+            {
+              "selector": {
+                "id": "1"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        },
+        {
+          "uid": "standard-active",
+          "active": true,
+          "conditions": [],
+          "actions": [
+            {
+              "selector": {
+                "id": "3"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "#);
+
+    let (value, code) = server
+        .list_dynamic_search_rules_with(json!({
+            "filter": {
+                "attributePatterns": ["promo*"],
+                "active": true
+            }
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "promo-active",
+          "active": true,
+          "conditions": [],
+          "actions": [
+            {
+              "selector": {
+                "id": "1"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
     }
     "#);
 }
@@ -45,15 +261,17 @@ async fn create_and_get() {
     let server = dynamic_search_rules_server().await;
 
     let (value, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "rule-1",
-            "actions": [
-                {
-                    "selector": { "id": "42" },
-                    "action": { "type": "pin", "position": 1 }
-                }
-            ]
-        }))
+        .create_dynamic_search_rule(
+            "rule-1",
+            json!({
+                "actions": [
+                    {
+                        "selector": { "id": "42" },
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
         .await;
     snapshot!(code, @"201 Created");
     snapshot!(json_string!(value), name: "create_rule_1");
@@ -68,8 +286,7 @@ async fn create_full_rule() {
     let server = dynamic_search_rules_server().await;
 
     let (value, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "black-friday",
+        .create_dynamic_search_rule("black-friday", json!({
             "description": "Black Friday 2025 rules",
             "priority": 10,
             "active": true,
@@ -111,16 +328,14 @@ async fn full_lifecycle() {
 
     // Create two rules
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "rule-a",
+        .create_dynamic_search_rule("rule-a", json!({
             "actions": [{ "selector": { "id": "0" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"201 Created");
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "rule-b",
+        .create_dynamic_search_rule("rule-b", json!({
             "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
@@ -156,7 +371,10 @@ async fn full_lifecycle() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(value), @r#"
     {
-      "results": []
+      "results": [],
+      "offset": 0,
+      "limit": 20,
+      "total": 0
     }
     "#);
 }
@@ -166,8 +384,7 @@ async fn patch_rule() {
     let server = dynamic_search_rules_server().await;
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "updatable",
+        .create_dynamic_search_rule("updatable", json!({
             "actions": [{ "selector": { "id": "42" }, "action": { "type": "pin", "position": 1 } }]
         }))
         .await;
@@ -256,16 +473,14 @@ async fn create_duplicate() {
     let server = dynamic_search_rules_server().await;
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "dup",
+        .create_dynamic_search_rule("dup", json!({
             "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
     snapshot!(code, @"201 Created");
 
     let (value, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "dup",
+        .create_dynamic_search_rule("dup", json!({
             "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
@@ -285,8 +500,7 @@ async fn create_unknown_field() {
     let server = dynamic_search_rules_server().await;
 
     let (value, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "rule-x",
+        .create_dynamic_search_rule("rule-x", json!({
             "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }],
             "unknownField": true
         }))
@@ -300,8 +514,7 @@ async fn patch_unknown_field() {
     let server = dynamic_search_rules_server().await;
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "rule-y",
+        .create_dynamic_search_rule("rule-y", json!({
             "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
@@ -317,24 +530,7 @@ async fn patch_unknown_field() {
 async fn create_missing_actions() {
     let server = dynamic_search_rules_server().await;
 
-    let (value, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "no-actions"
-        }))
-        .await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(value));
-}
-
-#[actix_web::test]
-async fn create_missing_uid() {
-    let server = dynamic_search_rules_server().await;
-
-    let (value, code) = server
-        .create_dynamic_search_rule(json!({
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
-        }))
-        .await;
+    let (value, code) = server.create_dynamic_search_rule("no-actions", json!({})).await;
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(value));
 }
@@ -343,7 +539,7 @@ async fn create_missing_uid() {
 async fn create_empty_body() {
     let server = dynamic_search_rules_server().await;
 
-    let (_, code) = server.create_dynamic_search_rule(json!({})).await;
+    let (_, code) = server.create_dynamic_search_rule("empty", json!({})).await;
     snapshot!(code, @"400 Bad Request");
 }
 
@@ -352,8 +548,7 @@ async fn patch_preserves_fields() {
     let server = dynamic_search_rules_server().await;
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "preserve",
+        .create_dynamic_search_rule("preserve", json!({
             "description": "original",
             "priority": 5,
             "active": true,
@@ -374,14 +569,16 @@ async fn patch_replaces_arrays() {
     let server = dynamic_search_rules_server().await;
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "arrays",
-            "conditions": [{ "scope": "query", "isEmpty": true }],
-            "actions": [
-                { "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } },
-                { "selector": { "id": "2" }, "action": { "type": "pin", "position": 2 } }
-            ]
-        }))
+        .create_dynamic_search_rule(
+            "arrays",
+            json!({
+                "conditions": [{ "scope": "query", "isEmpty": true }],
+                "actions": [
+                    { "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } },
+                    { "selector": { "id": "2" }, "action": { "type": "pin", "position": 2 } }
+                ]
+            }),
+        )
         .await;
     snapshot!(code, @"201 Created");
 
@@ -405,8 +602,7 @@ async fn patch_empty_body() {
     let server = dynamic_search_rules_server().await;
 
     let (original, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "no-change",
+        .create_dynamic_search_rule("no-change", json!({
             "active": true,
             "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
@@ -423,8 +619,7 @@ async fn defaults_on_create() {
     let server = dynamic_search_rules_server().await;
 
     let (value, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "minimal",
+        .create_dynamic_search_rule("minimal", json!({
             "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
         }))
         .await;
@@ -450,16 +645,18 @@ async fn disabling_the_feature_stops_applying_rules_to_search() {
     server.wait_task(task.uid()).await.succeeded();
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "pin-remote",
-            "active": true,
-            "actions": [
-                {
-                    "selector": { "id": "remote" },
-                    "action": { "type": "pin", "position": 0 }
-                }
-            ]
-        }))
+        .create_dynamic_search_rule(
+            "pin-remote",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "remote" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
         .await;
     snapshot!(code, @"201 Created");
 
@@ -499,16 +696,18 @@ async fn search_filters_out_pinned_documents_excluded_by_filters() {
     server.wait_task(task.uid()).await.succeeded();
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "pin-filtered",
-            "active": true,
-            "actions": [
-                {
-                    "selector": { "id": "filtered-pin" },
-                    "action": { "type": "pin", "position": 0 }
-                }
-            ]
-        }))
+        .create_dynamic_search_rule(
+            "pin-filtered",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "filtered-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
         .await;
     snapshot!(code, @"201 Created");
 
@@ -538,20 +737,22 @@ async fn search_pumps_pins_when_organic_results_run_out() {
     server.wait_task(task.uid()).await.succeeded();
 
     let (_, code) = server
-        .create_dynamic_search_rule(json!({
-            "uid": "pump-pins",
-            "active": true,
-            "actions": [
-                {
-                    "selector": { "id": "late-pin-1" },
-                    "action": { "type": "pin", "position": 10 }
-                },
-                {
-                    "selector": { "id": "late-pin-2" },
-                    "action": { "type": "pin", "position": 20 }
-                }
-            ]
-        }))
+        .create_dynamic_search_rule(
+            "pump-pins",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "late-pin-1" },
+                        "action": { "type": "pin", "position": 10 }
+                    },
+                    {
+                        "selector": { "id": "late-pin-2" },
+                        "action": { "type": "pin", "position": 20 }
+                    }
+                ]
+            }),
+        )
         .await;
     snapshot!(code, @"201 Created");
 
