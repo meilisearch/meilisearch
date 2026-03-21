@@ -323,6 +323,38 @@ async fn create_full_rule() {
 }
 
 #[actix_web::test]
+async fn create_rejects_query_condition_with_both_is_empty_and_contains() {
+    let server = dynamic_search_rules_server().await;
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "invalid-query-condition",
+            json!({
+                "conditions": [
+                    { "scope": "query", "isEmpty": false, "contains": "batman" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "42" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(value), @r#"
+    {
+      "message": "Invalid value at `.conditions[0]`: either `isEmpty` or `contains` can be used, not all at once",
+      "code": "bad_request",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#bad_request"
+    }
+    "#);
+}
+
+#[actix_web::test]
 async fn full_lifecycle() {
     let server = dynamic_search_rules_server().await;
 
@@ -671,6 +703,58 @@ async fn disabling_the_feature_stops_applying_rules_to_search() {
     let (value, code) = index.search_post(json!({ "q": "batman returns" })).await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(value["hits"]), name: "results_when_dsr_disabled");
+}
+
+#[actix_web::test]
+async fn search_applies_pins_when_query_contains_value() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "local", "title": "Batman Returns" },
+                { "id": "remote", "title": "Batman" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "pin-when-query-contains-returns",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "query", "contains": "returns" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "remote" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (value, code) = index.search_post(json!({ "q": "Batman Returns" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "remote",
+        "title": "Batman"
+      },
+      {
+        "id": "local",
+        "title": "Batman Returns"
+      }
+    ]
+    "#);
 }
 
 #[actix_web::test]
