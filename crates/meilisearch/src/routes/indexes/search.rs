@@ -25,10 +25,10 @@ use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, perform_federated_search, perform_search, resolve_pins, Federation,
-    HybridQuery, MatchingStrategy, NetworkableQuery as _, Partition, Personalize,
-    RankingScoreThreshold, RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult,
-    SemanticRatio, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
+    MatchingStrategy, NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold,
+    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
@@ -640,14 +640,6 @@ pub(crate) async fn search(
             _ => ResponseError::from(err),
         })?;
 
-        let resolved_pins = if features.runtime_features().dynamic_search_rules {
-            let rtxn = index.read_txn()?;
-            let rules = index_scheduler.dynamic_search_rules();
-            resolve_pins(&rules, &query, index_uid.as_str(), &index, &rtxn)?
-        } else {
-            Vec::new()
-        };
-
         let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
@@ -662,7 +654,6 @@ pub(crate) async fn search(
                     features,
                     request_uid,
                     include_metadata,
-                    pins: resolved_pins,
                 },
                 &index_scheduler,
                 &index,

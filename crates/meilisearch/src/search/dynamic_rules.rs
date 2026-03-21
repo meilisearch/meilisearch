@@ -67,9 +67,10 @@ pub fn collect_active_rules<'a>(
     ctx: &DynamicSearchContext<'_>,
 ) -> ActiveRules<'a> {
     let mut positioning_rules = Vec::new();
+    let now = OffsetDateTime::now_utc();
 
     for rule in rules.values() {
-        if !is_rule_active(rule, ctx, OffsetDateTime::now_utc()) {
+        if !is_rule_active(rule, ctx, now) {
             continue;
         }
 

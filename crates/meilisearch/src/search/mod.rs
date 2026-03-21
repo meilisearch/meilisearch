@@ -1775,7 +1775,6 @@ pub struct SearchParams {
     pub features: RoFeatures,
     pub request_uid: Uuid,
     pub include_metadata: bool,
-    pub pins: Vec<(u32, u32)>,
 }
 
 pub fn perform_search(
@@ -1792,7 +1791,6 @@ pub fn perform_search(
         features,
         request_uid,
         include_metadata,
-        pins,
     } = params;
     let before_search = Instant::now();
     let index_uid_for_metadata = index_uid.clone();
@@ -1801,6 +1799,13 @@ pub fn perform_search(
 
     let (mut search, is_finite_pagination, max_total_hits, offset) =
         prepare_search(index, &rtxn, &query, &search_kind, deadline.clone(), features, progress)?;
+
+    let pins = if features.runtime_features().dynamic_search_rules {
+        let rules = index_scheduler.dynamic_search_rules();
+        resolve_pins(&rules, &query, &index_uid, index, &rtxn)?
+    } else {
+        Vec::new()
+    };
 
     if !pins.is_empty() {
         search.pins(pins);
