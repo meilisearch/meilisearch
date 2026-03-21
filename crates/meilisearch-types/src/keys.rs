@@ -648,6 +648,8 @@ pub(crate) mod test {
         assert!(WebhooksCreate.repr() == 48 && WEBHOOKS_CREATE == 48);
         assert!(WebhooksAll.repr() == 49 && WEBHOOKS_ALL == 49);
         assert!(IndexesCompact.repr() == 50 && INDEXES_COMPACT == 50);
+        assert!(FieldsPost.repr() == 51 && FIELDS_POST == 51);
+        assert!(TasksCompact.repr() == 52 && TASKS_COMPACT == 52);
     }
 
     #[test]
