@@ -589,7 +589,7 @@ pub(crate) mod test {
                 priority: Some(1),
                 active: true,
                 conditions: vec![
-                    Condition::Query { is_empty: false },
+                    Condition::Query { is_empty: Some(false), contains: None },
                     Condition::Time {
                         start: Some(datetime!(2025-11-28 00:00:00 UTC)),
                         end: Some(datetime!(2025-11-28 23:59:59 UTC)),

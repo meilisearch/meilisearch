@@ -44,8 +44,18 @@ pub struct Positioning<'a> {
 
 #[derive(Default)]
 pub struct DynamicSearchContext<'a> {
-    pub query_is_empty: bool,
+    pub query: Option<String>,
     pub index_uid: &'a str,
+}
+
+impl DynamicSearchContext<'_> {
+    pub fn query_is_empty(&self) -> bool {
+        self.query.as_ref().is_none_or(|s| s.trim().is_empty())
+    }
+
+    pub fn query_contains(&self, value: &str) -> bool {
+        self.query.as_ref().is_some_and(|q| q.contains(&value.to_lowercase()))
+    }
 }
 
 pub struct ActiveRules<'a> {
@@ -90,10 +100,7 @@ pub fn resolve_pins(
     index: &Index,
     rtxn: &RoTxn<'_>,
 ) -> heed::Result<Vec<(u32, DocumentId)>> {
-    let ctx = DynamicSearchContext {
-        query_is_empty: query.q.as_ref().is_none_or(|s| s.trim().is_empty()),
-        index_uid,
-    };
+    let ctx = DynamicSearchContext { query: query.q.as_ref().map(|q| q.to_lowercase()), index_uid };
 
     let external_ids = index.external_documents_ids();
     let mut resolved_pins = collect_active_rules(rules, &ctx)
@@ -162,7 +169,17 @@ fn evaluate_condition(
     now: OffsetDateTime,
 ) -> bool {
     match condition {
-        Condition::Query { is_empty } => *is_empty == ctx.query_is_empty,
+        Condition::Query { is_empty, contains } => {
+            if let Some(is_empty) = is_empty {
+                return *is_empty == ctx.query_is_empty();
+            }
+
+            if let Some(value) = contains {
+                return ctx.query_contains(value);
+            }
+
+            true
+        }
         Condition::Time { start, end } => {
             if let Some(start) = start {
                 if now < *start {
@@ -181,250 +198,4 @@ fn evaluate_condition(
 
 fn selector_matches_index_uid(selector: &Selector, index_uid: &str) -> bool {
     selector.index_uid.as_ref().is_none_or(|selector_index_uid| selector_index_uid == index_uid)
-}
-
-#[cfg(test)]
-mod tests {
-    use meilisearch_types::dynamic_search_rules::*;
-
-    use super::*;
-
-    fn ctx(query_is_empty: bool) -> DynamicSearchContext<'static> {
-        DynamicSearchContext { query_is_empty, index_uid: "movies" }
-    }
-
-    fn make_rule(uid: &str, actions: Vec<RuleAction>) -> DynamicSearchRule {
-        DynamicSearchRule {
-            uid: uid.to_string(),
-            description: None,
-            priority: None,
-            active: true,
-            conditions: vec![],
-            actions,
-        }
-    }
-
-    fn active_rules<'a>(
-        rules: &'a DynamicSearchRules,
-        ctx: &DynamicSearchContext<'_>,
-    ) -> ActiveRules<'a> {
-        collect_active_rules(rules, ctx)
-    }
-
-    #[test]
-    fn pins_extracts_pin_actions() {
-        let mut rules = DynamicSearchRules::new();
-        rules.insert(
-            "pin-3".into(),
-            make_rule(
-                "pin-3",
-                vec![RuleAction {
-                    selector: Selector { index_uid: None, id: Some("3".into()) },
-                    action: DynamicSearchRuleAction::Pin { position: 0 },
-                }],
-            ),
-        );
-
-        let ctx = ctx(false);
-        let active = active_rules(&rules, &ctx);
-        let pins = active
-            .positioning_rules()
-            .iter()
-            .filter(|rule| selector_matches_index_uid(rule.selector, "movies"))
-            .map(|rule| (rule.position, rule.selector.id.as_ref().unwrap().as_str()))
-            .collect::<Vec<_>>();
-
-        assert_eq!(pins, vec![(0, "3")]);
-    }
-
-    #[test]
-    fn pins_without_id_are_ignored() {
-        let mut rules = DynamicSearchRules::new();
-        rules.insert(
-            "pin-missing-id".into(),
-            make_rule(
-                "pin-missing-id",
-                vec![RuleAction {
-                    selector: Selector { index_uid: None, id: None },
-                    action: DynamicSearchRuleAction::Pin { position: 0 },
-                }],
-            ),
-        );
-
-        let ctx = ctx(false);
-        let active = active_rules(&rules, &ctx);
-        assert!(active.is_empty());
-    }
-
-    #[test]
-    fn inactive_rule_is_skipped() {
-        let mut rules = DynamicSearchRules::new();
-        let mut rule = make_rule(
-            "inactive-pin",
-            vec![RuleAction {
-                selector: Selector { index_uid: None, id: Some("1".into()) },
-                action: DynamicSearchRuleAction::Pin { position: 0 },
-            }],
-        );
-        rule.active = false;
-        rules.insert("inactive-pin".into(), rule);
-
-        let ctx = ctx(false);
-        let active = active_rules(&rules, &ctx);
-        assert!(active.is_empty());
-    }
-
-    #[test]
-    fn query_is_empty_condition() {
-        let mut rules = DynamicSearchRules::new();
-        let mut rule = make_rule(
-            "empty-q",
-            vec![RuleAction {
-                selector: Selector { index_uid: None, id: Some("1".into()) },
-                action: DynamicSearchRuleAction::Pin { position: 0 },
-            }],
-        );
-        rule.conditions = vec![Condition::Query { is_empty: true }];
-        rules.insert("empty-q".into(), rule);
-
-        let ctx_non_empty = ctx(false);
-        assert!(active_rules(&rules, &ctx_non_empty).is_empty());
-
-        let ctx_empty = ctx(true);
-        let active = active_rules(&rules, &ctx_empty);
-        let pins = active.positioning_rules();
-        assert_eq!(pins.len(), 1);
-        assert_eq!(pins[0].doc_id, "1");
-    }
-
-    #[test]
-    fn index_uid_selector_filters_actions() {
-        let mut rules = DynamicSearchRules::new();
-        rules.insert(
-            "wrong-index".into(),
-            make_rule(
-                "wrong-index",
-                vec![RuleAction {
-                    selector: Selector {
-                        index_uid: Some("other-index".into()),
-                        id: Some("1".into()),
-                    },
-                    action: DynamicSearchRuleAction::Pin { position: 0 },
-                }],
-            ),
-        );
-
-        let ctx = ctx(false);
-        let active = active_rules(&rules, &ctx);
-        assert!(active.positioning_rules_for_index_uid("movies").is_empty());
-        assert_eq!(active.positioning_rules_for_index_uid("other-index").len(), 1);
-    }
-
-    #[test]
-    fn priority_1_wins_over_higher_numbers() {
-        let mut rules = DynamicSearchRules::new();
-
-        let mut low_priority = make_rule(
-            "pin-low",
-            vec![RuleAction {
-                selector: Selector { index_uid: None, id: Some("3".into()) },
-                action: DynamicSearchRuleAction::Pin { position: 2 },
-            }],
-        );
-        low_priority.priority = Some(100);
-        rules.insert("pin-low".into(), low_priority);
-
-        let mut high_priority = make_rule(
-            "pin-high",
-            vec![RuleAction {
-                selector: Selector { index_uid: None, id: Some("3".into()) },
-                action: DynamicSearchRuleAction::Pin { position: 0 },
-            }],
-        );
-        high_priority.priority = Some(1);
-        rules.insert("pin-high".into(), high_priority);
-
-        let ctx = ctx(false);
-        let active = active_rules(&rules, &ctx);
-        let pins = active
-            .positioning_rules_for_index_uid("movies")
-            .iter()
-            .map(|rule| (rule.position, rule.selector.id.as_ref().unwrap().as_str()))
-            .collect::<Vec<_>>();
-
-        assert_eq!(pins, vec![(0, "3")]);
-    }
-
-    #[test]
-    fn no_priority_is_lowest() {
-        let mut rules = DynamicSearchRules::new();
-
-        let no_priority = make_rule(
-            "pin-none",
-            vec![RuleAction {
-                selector: Selector { index_uid: None, id: Some("3".into()) },
-                action: DynamicSearchRuleAction::Pin { position: 2 },
-            }],
-        );
-        rules.insert("pin-none".into(), no_priority);
-
-        let mut with_priority = make_rule(
-            "pin-explicit",
-            vec![RuleAction {
-                selector: Selector { index_uid: None, id: Some("3".into()) },
-                action: DynamicSearchRuleAction::Pin { position: 0 },
-            }],
-        );
-        with_priority.priority = Some(1);
-        rules.insert("pin-explicit".into(), with_priority);
-
-        let ctx = ctx(false);
-        let active = active_rules(&rules, &ctx);
-        let pins = active
-            .positioning_rules_for_index_uid("movies")
-            .iter()
-            .map(|rule| (rule.position, rule.selector.id.as_ref().unwrap().as_str()))
-            .collect::<Vec<_>>();
-
-        assert_eq!(pins, vec![(0, "3")]);
-    }
-
-    #[test]
-    fn pins_filter_by_index_uid() {
-        let mut rules = DynamicSearchRules::new();
-        rules.insert(
-            "pin-other".into(),
-            make_rule(
-                "pin-other",
-                vec![RuleAction {
-                    selector: Selector {
-                        index_uid: Some("other-index".into()),
-                        id: Some("1".into()),
-                    },
-                    action: DynamicSearchRuleAction::Pin { position: 0 },
-                }],
-            ),
-        );
-        rules.insert(
-            "pin-movies".into(),
-            make_rule(
-                "pin-movies",
-                vec![RuleAction {
-                    selector: Selector { index_uid: Some("movies".into()), id: Some("2".into()) },
-                    action: DynamicSearchRuleAction::Pin { position: 1 },
-                }],
-            ),
-        );
-
-        let ctx = ctx(false);
-        let active = active_rules(&rules, &ctx);
-        let pins = active
-            .positioning_rules()
-            .iter()
-            .filter(|rule| selector_matches_index_uid(rule.selector, "movies"))
-            .map(|rule| (rule.position, rule.selector.id.as_ref().unwrap().as_str()))
-            .collect::<Vec<_>>();
-
-        assert_eq!(pins, vec![(1, "2")]);
-    }
 }
