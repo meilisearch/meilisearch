@@ -225,7 +225,10 @@ impl Aggregate for DeleteDynamicSearchRuleAnalytics {
                         }
                     ]
                 }
-            ]
+            ],
+            "offset": 0,
+            "limit": 20,
+            "total": 1
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
             "message": "The Authorization header is missing. It must use the bearer authorization method.",
