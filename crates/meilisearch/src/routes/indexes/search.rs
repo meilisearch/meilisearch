@@ -24,6 +24,7 @@ use crate::extractors::authentication::GuardedData;
 use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, SearchPOST};
 use crate::routes::parse_include_metadata_header;
+
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
     MatchingStrategy, Partition, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
@@ -43,6 +44,10 @@ use crate::search_queue::SearchQueue;
 
 - A POST route: this is the preferred route when using API authentication, as it allows [preflight request](https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request) caching and better performance.
 - A GET route: the usage of this route is discouraged, unless you have good reason to do otherwise (specific caching abilities for example)",
+            external_docs(
+                url = "https://www.meilisearch.com/docs/reference/api/search",
+                description = "Search API reference",
+            ),
         ),
     ),
 )]
@@ -616,7 +621,8 @@ pub(crate) async fn search(
         let mut federation = Federation::default();
         let queries = Partition::new(network)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
-            .collect();
+            .collect::<Vec<_>>();
+
         let search_result = perform_federated_search(
             index_scheduler,
             queries,
@@ -666,7 +672,8 @@ pub(crate) async fn search(
         })
         .await;
 
-        search_result??
+        let (result, deadline) = search_result??;
+        (result, deadline)
     };
 
     // Apply personalization if requested

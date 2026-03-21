@@ -466,7 +466,13 @@ ImmutableWebhook                               , InvalidRequest       , BAD_REQU
 InvalidWebhookUuid                             , InvalidRequest       , BAD_REQUEST ;
 WebhookNotFound                                , InvalidRequest       , NOT_FOUND ;
 ImmutableWebhookUuid                           , InvalidRequest       , BAD_REQUEST ;
-ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST
+ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleOffset                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleLimit                  , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilter                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilterAttributePatterns, InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilterActive           , InvalidRequest       , BAD_REQUEST ;
+DynamicSearchRuleNotFound                      , InvalidRequest       , NOT_FOUND
 }
 
 impl ErrorCode for JoinError {
