@@ -9,7 +9,7 @@ use crate::search::new::{distinct_fid, distinct_single_docid};
 use crate::search::steps::SearchStep;
 use crate::search::SemanticSearch;
 use crate::vector::{Embedding, SearchQuery};
-use crate::{Index, MatchingWords, Result, Search, SearchResult};
+use crate::{Index, MatchingWords, PinDoc, Result, Search, SearchResult};
 
 struct ScoreWithRatioResult {
     matching_words: MatchingWords,
@@ -107,14 +107,14 @@ impl ScoreWithRatioResult {
         // Pinned documents carry ScoreDetails::Pin, which is a placement directive, not a score.
         // We extract them before the score-based merge, merge organic results normally, then
         // re-inject pins at their target positions in the final output.
-        let mut pins: Vec<(u32, u32)> = Vec::new();
+        let mut pins: Vec<PinDoc> = Vec::new();
         let mut pinned_doc_ids = RoaringBitmap::new();
 
         for results in [&mut keyword_results.document_scores, &mut vector_results.document_scores] {
             results.retain(|(doc_id, (scores, _))| {
                 if let Some(ScoreDetails::Pin { position }) = scores.first() {
                     if pinned_doc_ids.insert(*doc_id) {
-                        pins.push((*position, *doc_id));
+                        pins.push(PinDoc { pos: *position, doc_id: *doc_id });
                     }
                     false
                 } else {
@@ -122,14 +122,14 @@ impl ScoreWithRatioResult {
                 }
             });
         }
-        pins.sort_by_key(|(pos, _)| *pos);
+        pins.sort_by_key(|pin| pin.pos);
 
         // Adjust pagination to reserve slots for pinned documents like we do in the `bucket_sort`.
-        let pins_before = pins.iter().filter(|&&(pos, _)| (pos as usize) < from).count();
+        let pins_before = pins.iter().filter(|pin| (pin.pos as usize) < from).count();
         let pins_on_page = pins
             .iter()
-            .filter(|&&(pos, _)| {
-                let pos = pos as usize;
+            .filter(|pin| {
+                let pos = pin.pos as usize;
                 pos >= from && pos < from + length
             })
             .count();
@@ -204,13 +204,12 @@ impl ScoreWithRatioResult {
         }
 
         // re-inject pinned documents at their target positions
-        for &(pin_position, doc_id) in &pins {
-            let pos = pin_position as usize;
+        for pin in &pins {
+            let pos = pin.pos as usize;
             if pos >= from && pos < from + length {
                 let insert_at = (pos - from).min(documents_ids.len());
-                documents_ids.insert(insert_at, doc_id);
-                document_scores
-                    .insert(insert_at, vec![ScoreDetails::Pin { position: pin_position }]);
+                documents_ids.insert(insert_at, pin.doc_id);
+                document_scores.insert(insert_at, vec![ScoreDetails::Pin { position: pin.pos }]);
             }
         }
         documents_ids.truncate(length);

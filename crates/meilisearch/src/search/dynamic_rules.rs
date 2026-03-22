@@ -3,7 +3,7 @@ use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRuleAction, DynamicSearchRules, Selector,
 };
 use meilisearch_types::heed::{self, RoTxn};
-use meilisearch_types::milli::DocumentId;
+use meilisearch_types::milli::PinDoc;
 use std::cmp::{Ordering, Reverse};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -100,18 +100,22 @@ pub fn resolve_pins(
     index_uid: &str,
     index: &Index,
     rtxn: &RoTxn<'_>,
-) -> heed::Result<Vec<(u32, DocumentId)>> {
+) -> heed::Result<Vec<PinDoc>> {
     let ctx = DynamicSearchContext { query: query.q.as_ref().map(|q| q.to_lowercase()), index_uid };
 
     let external_ids = index.external_documents_ids();
     let mut resolved_pins = collect_active_rules(rules, &ctx)
         .positioning_rules_for_index_uid(index_uid)
         .into_iter()
-        .map(|act| external_ids.get(rtxn, act.doc_id).map(|res| (act.position, res)))
-        .filter_map_ok(|(pos, res)| res.map(|res| (pos, res)))
+        .map(|act| {
+            external_ids
+                .get(rtxn, act.doc_id)
+                .map(|res| res.map(|doc_id| PinDoc { pos: act.position, doc_id }))
+        })
+        .filter_map_ok(|pin| pin)
         .collect::<heed::Result<Vec<_>>>()?;
 
-    resolved_pins.sort_by_key(|&(pos, _)| pos);
+    resolved_pins.sort_by_key(|pin| pin.pos);
 
     Ok(resolved_pins)
 }

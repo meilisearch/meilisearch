@@ -17,7 +17,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::vector::{Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    Index, Result, SearchContext, UserError,
+    Index, Position, Result, SearchContext, UserError,
 };
 
 // Building these factories is not free.
@@ -39,6 +39,12 @@ pub struct SemanticSearch {
     embedder_name: String,
     embedder: Arc<Embedder>,
     quantized: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PinDoc {
+    pub pos: Position,
+    pub doc_id: DocumentId,
 }
 
 pub struct Search<'a> {
@@ -64,7 +70,7 @@ pub struct Search<'a> {
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
     progress: &'a Progress,
-    pins: Vec<(u32, u32)>,
+    pins: Vec<PinDoc>,
 }
 
 impl<'a> Search<'a> {
@@ -201,7 +207,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn pins(&mut self, pins: Vec<(u32, u32)>) -> &mut Search<'a> {
+    pub fn pins(&mut self, pins: Vec<PinDoc>) -> &mut Search<'a> {
         self.pins = pins;
         self
     }
@@ -250,7 +256,18 @@ impl<'a> Search<'a> {
             }
         }
 
-        let universe = filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)?;
+        let mut universe = filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)?;
+        let pins = self
+            .pins
+            .iter()
+            .filter(|pin| universe.contains(pin.doc_id))
+            .copied()
+            .collect::<Vec<_>>();
+
+        for pin in &pins {
+            universe.remove(pin.doc_id);
+        }
+
         let mut query_vector = None;
         let PartialSearchResult {
             located_query_terms,
@@ -288,7 +305,7 @@ impl<'a> Search<'a> {
                     self.deadline.clone(),
                     self.ranking_score_threshold,
                     self.progress,
-                    &self.pins,
+                    &pins,
                 )?
             }
             _ => execute_search(
@@ -311,7 +328,7 @@ impl<'a> Search<'a> {
                 self.ranking_score_threshold,
                 self.locales.as_ref(),
                 self.progress,
-                &self.pins,
+                &pins,
             )?,
         };
 
