@@ -866,6 +866,106 @@ async fn search_keeps_pins_that_miss_query_but_not_filters() {
 }
 
 #[actix_web::test]
+async fn search_counts_pins_that_miss_query() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+
+    let (task, code) = index.update_settings(json!({ "filterableAttributes": ["kind"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "Batman Returns", "kind": "keep" },
+                { "id": "pinned-query-miss", "title": "The Matrix", "kind": "keep" },
+                { "id": "filtered-pin", "title": "Batman Returns", "kind": "drop" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "pin-query-miss-but-filtered",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "query", "contains": "returns" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "pinned-query-miss" },
+                        "action": { "type": "pin", "position": 0 }
+                    },
+                    {
+                        "selector": { "id": "filtered-pin" },
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (value, code) =
+        index.search_post(json!({ "q": "Batman Returns", "filter": "kind = keep" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r#"
+    {
+      "hits": [
+        {
+          "id": "pinned-query-miss",
+          "title": "The Matrix",
+          "kind": "keep"
+        },
+        {
+          "id": "organic-match",
+          "title": "Batman Returns",
+          "kind": "keep"
+        }
+      ],
+      "query": "Batman Returns",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]"
+    }
+    "#);
+
+    let (value, code) = index
+        .search_post(json!({
+            "q": "Batman Returns",
+            "filter": "kind = keep",
+            "page": 2,
+            "hitsPerPage": 1
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r#"
+    {
+      "hits": [
+        {
+          "id": "organic-match",
+          "title": "Batman Returns",
+          "kind": "keep"
+        }
+      ],
+      "query": "Batman Returns",
+      "processingTimeMs": "[duration]",
+      "hitsPerPage": 1,
+      "page": 2,
+      "totalPages": 2,
+      "totalHits": 2,
+      "requestUid": "[uuid]"
+    }
+    "#);
+}
+
+#[actix_web::test]
 async fn search_pumps_pins_when_organic_results_run_out() {
     let server = dynamic_search_rules_server().await;
     let index = server.index("products");

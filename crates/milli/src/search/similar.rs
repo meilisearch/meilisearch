@@ -133,6 +133,7 @@ impl<'a> Similar<'a> {
         Ok(SearchResult {
             matching_words: Default::default(),
             candidates,
+            surviving_pins: RoaringBitmap::new(),
             documents_ids,
             document_scores,
             degraded: false,

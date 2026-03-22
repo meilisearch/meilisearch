@@ -233,6 +233,7 @@ impl ScoreWithRatioResult {
             SearchResult {
                 matching_words: keyword_results.matching_words,
                 candidates,
+                surviving_pins: pinned_doc_ids,
                 documents_ids,
                 document_scores,
                 degraded: vector_results.degraded | keyword_results.degraded,
@@ -375,6 +376,7 @@ fn return_keyword_results(
     SearchResult {
         matching_words,
         candidates,
+        surviving_pins,
         mut documents_ids,
         mut document_scores,
         degraded,
@@ -402,6 +404,7 @@ fn return_keyword_results(
         SearchResult {
             matching_words,
             candidates,
+            surviving_pins,
             documents_ids,
             document_scores,
             degraded,

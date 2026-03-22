@@ -263,6 +263,7 @@ impl<'a> Search<'a> {
             .filter(|pin| universe.contains(pin.doc_id))
             .copied()
             .collect::<Vec<_>>();
+        let surviving_pins = pins.iter().map(|pin| pin.doc_id).collect::<RoaringBitmap>();
 
         for pin in &pins {
             universe.remove(pin.doc_id);
@@ -347,6 +348,7 @@ impl<'a> Search<'a> {
         Ok(SearchResult {
             matching_words,
             candidates,
+            surviving_pins,
             document_scores,
             documents_ids,
             degraded,
@@ -413,6 +415,7 @@ impl fmt::Debug for Search<'_> {
 pub struct SearchResult {
     pub matching_words: MatchingWords,
     pub candidates: RoaringBitmap,
+    pub surviving_pins: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
     pub document_scores: Vec<Vec<ScoreDetails>>,
     pub degraded: bool,
