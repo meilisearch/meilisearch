@@ -288,18 +288,12 @@ pub async fn perform_federated_search(
         HashSet::new()
     };
 
-    // adjust pagination to reserve slots for pinned documents like we do in bucket_sort
-    // and hybrid merge.
-    let pins_before = pins.iter().filter(|(pos, _)| (*pos as usize) < skip).count();
-    let pins_on_page = pins
-        .iter()
-        .filter(|(pos, _)| {
-            let pos = *pos as usize;
-            pos >= skip && pos < skip + take
-        })
-        .count();
-    let ranked_skip = skip.saturating_sub(pins_before);
-    let ranked_take = take.saturating_sub(pins_on_page);
+    // When pins are present we need the organic prefix up to the end of the requested page,
+    // then we inject pins into that prefix before applying the final slice. This mirrors
+    // milli's bucket_sort behavior and naturally pumps late pins forward when organic
+    // results run out.
+    let (ranked_skip, ranked_take) =
+        if pins.is_empty() { (skip, take) } else { (0, skip.saturating_add(take)) };
     let mut hit_it = merge_index_global_results(&mut results_by_index, &mut remote_results)
         .filter_map(|hit| {
             if let Some(distinct) = federation.distinct.as_deref() {
@@ -368,15 +362,19 @@ pub async fn perform_federated_search(
 
     let mut merged_hits = merged_hits.into_iter().map(|(_, hit)| hit).collect::<Vec<_>>();
 
-    // re-inject pinned documents at their target positions
-    for (pin_position, hit) in pins {
-        let pos = pin_position as usize;
-        if pos >= skip && pos < skip + take {
-            let insert_at = (pos - skip).min(merged_hits.len());
+    if pins.is_empty() {
+        merged_hits.truncate(take);
+    } else {
+        // Inject the surviving pins into the organic prefix, then slice the requested page.
+        for (pin_position, hit) in pins {
+            let insert_at = (pin_position as usize).min(merged_hits.len());
             merged_hits.insert(insert_at, hit);
         }
+
+        let skipped_hits = skip.min(merged_hits.len());
+        merged_hits.drain(..skipped_hits);
+        merged_hits.truncate(take);
     }
-    merged_hits.truncate(take);
 
     // 3.4. merge query vectors
     let query_vectors = if retrieve_vectors {
