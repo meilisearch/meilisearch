@@ -1925,7 +1925,13 @@ pub fn perform_search(
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
             let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
-            compute_facet_distribution_stats(&facets, index, &rtxn, candidates, Route::Search)
+            compute_facet_distribution_stats(
+                &facets,
+                index,
+                &rtxn,
+                candidates | surviving_pins,
+                Route::Search,
+            )
         })
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))

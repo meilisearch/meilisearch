@@ -1030,6 +1030,93 @@ async fn search_distinct_deduplicates_pinned_documents() {
 }
 
 #[actix_web::test]
+async fn search_facet_distribution_counts_pins_that_miss_query() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+
+    let (task, code) =
+        index.update_settings(json!({ "filterableAttributes": ["kind", "color"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "Batman Returns", "kind": "keep", "color": "red" },
+                { "id": "pinned-query-miss", "title": "The Matrix", "kind": "keep", "color": "blue" },
+                { "id": "filtered-pin", "title": "Batman Returns", "kind": "drop", "color": "green" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "pin-query-miss-and-filtered",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "query", "contains": "returns" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "pinned-query-miss" },
+                        "action": { "type": "pin", "position": 0 }
+                    },
+                    {
+                        "selector": { "id": "filtered-pin" },
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (value, code) = index
+        .search_post(json!({
+            "q": "Batman Returns",
+            "filter": "kind = keep",
+            "facets": ["color"]
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r#"
+    {
+      "hits": [
+        {
+          "id": "pinned-query-miss",
+          "title": "The Matrix",
+          "kind": "keep",
+          "color": "blue"
+        },
+        {
+          "id": "organic-match",
+          "title": "Batman Returns",
+          "kind": "keep",
+          "color": "red"
+        }
+      ],
+      "query": "Batman Returns",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "facetDistribution": {
+        "color": {
+          "blue": 1,
+          "red": 1
+        }
+      },
+      "facetStats": {},
+      "requestUid": "[uuid]"
+    }
+    "#);
+}
+
+#[actix_web::test]
 async fn search_pumps_pins_when_organic_results_run_out() {
     let server = dynamic_search_rules_server().await;
     let index = server.index("products");
