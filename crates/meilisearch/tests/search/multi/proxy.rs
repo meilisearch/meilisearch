@@ -826,6 +826,139 @@ async fn remote_search_keeps_remote_pins() {
 }
 
 #[actix_rt::test]
+async fn remote_search_distinct_deduplicates_pinned_documents() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"dynamicSearchRules": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["dynamicSearchRules"]), @"true");
+
+    let index0 = ms0.index("test");
+    let index1 = ms1.index("test");
+
+    let (task, code) = index0.update_settings_filterable_attributes(json!(["series"])).await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index1.update_settings_filterable_attributes(json!(["series"])).await;
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index0
+        .add_documents(
+            json!([
+                { "id": "local-duplicate", "title": "Batman Returns", "series": "batman" },
+                { "id": "local-unique", "title": "Batman Forever", "series": "forever" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    ms0.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index1
+        .add_documents(
+            json!([
+                { "id": "remote-pinned", "title": "The Matrix", "series": "batman" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    ms1.wait_task(task.uid()).await.succeeded();
+
+    let (_response, code) = ms1
+        .create_dynamic_search_rule(
+            "pin-remote-duplicate",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "remote-pinned" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+
+    let network = json!({"remotes": {
+        "ms0": {
+            "url": rms0.url()
+        },
+        "ms1": {
+            "url": rms1.url()
+        }
+    }});
+
+    let (_response, code) = ms0.set_network(network.clone()).await;
+    snapshot!(code, @"200 OK");
+    let (_response, code) = ms1.set_network(network).await;
+    snapshot!(code, @"200 OK");
+
+    let (response, code) = ms0
+        .index("test")
+        .search_post(json!({
+            "q": "batman",
+            "distinct": "series",
+            "useNetwork": true
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": "remote-pinned",
+          "title": "The Matrix",
+          "series": "batman",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 1.0,
+            "weightedScoreValues": [],
+            "extra_document": {},
+            "remote": "ms1"
+          }
+        },
+        {
+          "id": "local-unique",
+          "title": "Batman Forever",
+          "series": "forever",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.9848484848484848,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "query": "batman",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+}
+
+#[actix_rt::test]
 async fn remote_sharding_federated_auto_search() {
     let ms0 = Server::new().await;
     let ms1 = Server::new().await;

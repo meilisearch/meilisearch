@@ -966,6 +966,70 @@ async fn search_counts_pins_that_miss_query() {
 }
 
 #[actix_web::test]
+async fn search_distinct_deduplicates_pinned_documents() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+
+    let (task, code) = index.update_settings(json!({ "filterableAttributes": ["series"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-duplicate", "title": "Batman Returns", "series": "batman" },
+                { "id": "pinned-duplicate", "title": "The Matrix", "series": "batman" },
+                { "id": "organic-unique", "title": "Batman Forever", "series": "forever" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "pin-duplicate-series",
+            json!({
+                "active": true,
+                "actions": [
+                    {
+                        "selector": { "id": "pinned-duplicate" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (value, code) = index.search_post(json!({ "q": "Batman", "distinct": "series" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value, { ".requestUid" => "[uuid]", ".processingTimeMs" => "[duration]" }), @r#"
+    {
+      "hits": [
+        {
+          "id": "pinned-duplicate",
+          "title": "The Matrix",
+          "series": "batman"
+        },
+        {
+          "id": "organic-unique",
+          "title": "Batman Forever",
+          "series": "forever"
+        }
+      ],
+      "query": "Batman",
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]"
+    }
+    "#);
+}
+
+#[actix_web::test]
 async fn search_pumps_pins_when_organic_results_run_out() {
     let server = dynamic_search_rules_server().await;
     let index = server.index("products");
