@@ -273,8 +273,8 @@ impl IndexScheduler {
         progress.update_progress(DumpCreationProgress::DumpDynamicSearchRules);
         let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules()?;
         for result in self.dynamic_search_rules.persisted.iter(&rtxn)? {
-            let (uid, rule) = result?;
-            dump_dynamic_search_rules.push_rule(uid, &rule)?;
+            let (_, rule) = result?;
+            dump_dynamic_search_rules.push_rule(&rule)?;
         }
 
         let dump_uid = started_at.format(format_description!(

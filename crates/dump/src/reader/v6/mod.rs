@@ -312,10 +312,9 @@ impl V6Reader {
                     let path = Path::new(&file_name);
                     if entry.file_type()?.is_file() && path.extension() == Some(OsStr::new("json"))
                     {
-                        let uid = path.file_stem().unwrap().to_str().unwrap().to_string();
                         let file = File::open(entry.path())?;
-                        let rule = serde_json::from_reader(file)?;
-                        Ok(Some((uid, rule)))
+                        let rule: DynamicSearchRule = serde_json::from_reader(file)?;
+                        Ok(Some((rule.uid.clone(), rule)))
                     } else {
                         Ok(None)
                     }

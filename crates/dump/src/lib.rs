@@ -556,8 +556,8 @@ pub(crate) mod test {
 
         // ========== dynamic search rules
         let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules().unwrap();
-        for (uid, rule) in &create_test_dynamic_search_rules() {
-            dump_dynamic_search_rules.push_rule(uid, rule).unwrap();
+        for (_, rule) in create_test_dynamic_search_rules() {
+            dump_dynamic_search_rules.push_rule(&rule).unwrap();
         }
 
         (dump, batch_queue)

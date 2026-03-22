@@ -142,16 +142,19 @@ impl ChatCompletionsSettingsWriter {
 
 pub struct DynamicSearchRulesWriter {
     path: PathBuf,
+    next_file_id: usize,
 }
 
 impl DynamicSearchRulesWriter {
     pub(crate) fn new(path: PathBuf) -> Result<Self> {
         std::fs::create_dir(&path)?;
-        Ok(DynamicSearchRulesWriter { path })
+        Ok(DynamicSearchRulesWriter { path, next_file_id: 0 })
     }
 
-    pub fn push_rule(&mut self, uid: &str, rule: &DynamicSearchRule) -> Result<()> {
-        let mut file = File::create(self.path.join(uid).with_extension("json"))?;
+    pub fn push_rule(&mut self, rule: &DynamicSearchRule) -> Result<()> {
+        let file_name = format!("{}.json", self.next_file_id);
+        self.next_file_id += 1;
+        let mut file = File::create(self.path.join(file_name))?;
         serde_json::to_writer(&mut file, &rule)?;
         file.flush()?;
         Ok(())
@@ -374,7 +377,7 @@ pub(crate) mod test {
         ├---- batches/
         │    └---- queue.jsonl
         ├---- dynamic-search-rules/
-        │    └---- black-friday.json
+        │    └---- 0.json
         ├---- indexes/
         │    └---- doggos/
         │    │    ├---- documents.jsonl
