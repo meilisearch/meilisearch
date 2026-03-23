@@ -26,6 +26,7 @@ use meilisearch_types::milli::{
     AttributeState, Deadline, FacetValueHit, InternalError, OrderBy, PatternMatch,
     SearchForFacetValues, SearchStep,
 };
+use meilisearch_types::network::Network;
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
@@ -372,6 +373,67 @@ pub struct SearchQuery {
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
     pub show_performance_details: bool,
+}
+
+/// Helper trait for queries that can be networked.
+pub trait NetworkableQuery {
+    /// Required method: reference to the `useNetwork` optional boolean.
+    fn use_network_field(&mut self) -> &mut Option<bool>;
+
+    /// Required method: whether this query already explicitly specifies a remote.
+    fn has_remote(&self) -> bool;
+
+    /// Provided method: whether or not the method should be networked.
+    ///
+    /// Factor some logic so that callers don't have to reimplement for federated and single search.
+    fn must_use_network(
+        &mut self,
+        network: &Network,
+        features: &RoFeatures,
+    ) -> Result<bool, ResponseError> {
+        // as `useNetwork` is going to default to `true` if missing in some cases,
+        // taking its value is not sufficient to prevent recursion in all cases.
+        // so we will fix-up its value to explicitly false when needed.
+        let use_network = *self.use_network_field();
+        if use_network.is_some() {
+            features.check_network("passing `useNetwork` in a search query")?
+        }
+
+        // depending on the whether we're in a sharding context or not, we need a different
+        // fixup value for the use network field to prevent recursion,
+        // and we have a different default value.
+
+        let default;
+        (*self.use_network_field(), default) =
+            if network.sharding() { (Some(false), true) } else { (None, false) };
+
+        // **after we fixed-up the network field**, we can return immediately if there's an explicit remote.
+        if self.has_remote() {
+            return Ok(false);
+        }
+
+        Ok(use_network.unwrap_or(default))
+    }
+}
+
+impl NetworkableQuery for SearchQuery {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        false
+    }
+}
+
+impl NetworkableQuery for SearchQueryWithIndex {
+    fn use_network_field(&mut self) -> &mut Option<bool> {
+        &mut self.use_network
+    }
+
+    fn has_remote(&self) -> bool {
+        self.federation_options.as_ref().and_then(|opt| opt.remote.as_ref()).is_some()
+    }
 }
 
 impl From<SearchParameters> for SearchQuery {
