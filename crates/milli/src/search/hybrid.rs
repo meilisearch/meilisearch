@@ -106,7 +106,7 @@ impl ScoreWithRatioResult {
     ) -> Result<(SearchResult, u32)> {
         // Pinned documents carry ScoreDetails::Pin, which is a placement directive, not a score.
         // We extract them before the score-based merge, merge organic results normally, then
-        // re-inject pins at their target positions in the final output.
+        // merge the pins into the requested page in linear time.
         let mut pins: Vec<PinDoc> = Vec::new();
         let mut pinned_doc_ids = RoaringBitmap::new();
 
@@ -124,17 +124,11 @@ impl ScoreWithRatioResult {
         }
         pins.sort_by_key(|pin| pin.pos);
 
-        // Adjust pagination to reserve slots for pinned documents like we do in the `bucket_sort`.
-        let pins_before = pins.iter().filter(|pin| (pin.pos as usize) < from).count();
-        let pins_on_page = pins
-            .iter()
-            .filter(|pin| {
-                let pos = pin.pos as usize;
-                pos >= from && pos < from + length
-            })
-            .count();
-        let ranked_from = from.saturating_sub(pins_before);
-        let ranked_length = length.saturating_sub(pins_on_page);
+        // When pins are present we need the organic prefix up to the end of the
+        // requested page, then we merge pins into that prefix before slicing the
+        // page. This naturally pumps late pins forward when organic results run out.
+        let (ranked_from, ranked_length) =
+            if pins.is_empty() { (from, length) } else { (0, from.saturating_add(length)) };
 
         #[derive(Clone, Copy)]
         enum ResultSource {
@@ -203,17 +197,10 @@ impl ScoreWithRatioResult {
             document_scores.push(main_score);
         }
 
-        // re-inject pinned documents at their target positions
-        for pin in &pins {
-            let pos = pin.pos as usize;
-            if pos >= from && pos < from + length {
-                let insert_at = (pos - from).min(documents_ids.len());
-                documents_ids.insert(insert_at, pin.doc_id);
-                document_scores.insert(insert_at, vec![ScoreDetails::Pin { position: pin.pos }]);
-            }
+        if !pins.is_empty() {
+            (documents_ids, document_scores) =
+                merge_pins_into_page(&pins, from, length, documents_ids, document_scores);
         }
-        documents_ids.truncate(length);
-        document_scores.truncate(length);
 
         // compute the set of candidates from both sets
         let candidates = vector_results.candidates | keyword_results.candidates;
@@ -244,6 +231,53 @@ impl ScoreWithRatioResult {
             semantic_hit_count,
         ))
     }
+}
+
+fn merge_pins_into_page(
+    pins: &[PinDoc],
+    from: usize,
+    length: usize,
+    documents_ids: Vec<u32>,
+    document_scores: Vec<Vec<ScoreDetails>>,
+) -> (Vec<u32>, Vec<Vec<ScoreDetails>>) {
+    if pins.is_empty() {
+        return (documents_ids, document_scores);
+    }
+
+    let page_end = from.saturating_add(length);
+    let capacity = length.min(documents_ids.len().saturating_add(pins.len()));
+    let mut merged_ids = Vec::with_capacity(capacity);
+    let mut merged_scores = Vec::with_capacity(capacity);
+    let mut organic_hits = documents_ids.into_iter().zip(document_scores);
+    let mut pins = pins.iter().copied().peekable();
+    let mut combined_index = 0usize;
+
+    while combined_index < page_end {
+        let next_hit = if let Some(pin) = pins.peek().copied() {
+            if (pin.pos as usize) <= combined_index {
+                pins.next();
+                Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
+            } else if let Some(hit) = organic_hits.next() {
+                Some(hit)
+            } else {
+                pins.next();
+                Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
+            }
+        } else {
+            organic_hits.next()
+        };
+
+        let Some((docid, score)) = next_hit else { break };
+
+        if combined_index >= from {
+            merged_ids.push(docid);
+            merged_scores.push(score);
+        }
+
+        combined_index += 1;
+    }
+
+    (merged_ids, merged_scores)
 }
 
 impl Search<'_> {

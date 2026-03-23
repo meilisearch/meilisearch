@@ -343,35 +343,55 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 }
 
 /// Inject all surviving pins into the organic prefix, then slice the requested
-/// page out of the combined list. This naturally pumps pins forward when there
-/// are fewer organic results than the requested limit.
+/// page out of the combined list using a linear merge. This naturally pumps
+/// pins forward when there are fewer organic results than the requested limit
+/// without repeatedly shifting the organic hits vector.
 fn inject_pins(
     pins: &[PinDoc],
     from: usize,
     length: usize,
-    mut output: BucketSortOutput,
+    output: BucketSortOutput,
 ) -> BucketSortOutput {
     if pins.is_empty() {
         return output;
     }
 
-    for pin in pins {
-        // We insert the pinned document at the right position or at the end if there are not enough hits.
-        let insert_at = (pin.pos as usize).min(output.docids.len());
-        output.docids.insert(insert_at, pin.doc_id);
-        output.scores.insert(insert_at, vec![ScoreDetails::Pin { position: pin.pos }]);
+    let page_end = from.saturating_add(length);
+    let capacity = length.min(output.docids.len().saturating_add(pins.len()));
+    let BucketSortOutput { docids, scores, all_candidates, degraded } = output;
+
+    let mut merged_docids = Vec::with_capacity(capacity);
+    let mut merged_scores = Vec::with_capacity(capacity);
+    let mut organic_hits = docids.into_iter().zip(scores);
+    let mut pins = pins.iter().copied().peekable();
+    let mut combined_index = 0usize;
+
+    while combined_index < page_end {
+        let next_hit = if let Some(pin) = pins.peek().copied() {
+            if (pin.pos as usize) <= combined_index {
+                pins.next();
+                Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
+            } else if let Some(hit) = organic_hits.next() {
+                Some(hit)
+            } else {
+                pins.next();
+                Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
+            }
+        } else {
+            organic_hits.next()
+        };
+
+        let Some((docid, score)) = next_hit else { break };
+
+        if combined_index >= from {
+            merged_docids.push(docid);
+            merged_scores.push(score);
+        }
+
+        combined_index += 1;
     }
 
-    // We remove all the organic prefix to match the pagination requirement. If there is not at last `from` documents,
-    // it means the page is empty.
-    let skip = from.min(output.docids.len());
-    output.docids.drain(..skip);
-    output.scores.drain(..skip);
-
-    output.docids.truncate(length);
-    output.scores.truncate(length);
-
-    output
+    BucketSortOutput { docids: merged_docids, scores: merged_scores, all_candidates, degraded }
 }
 
 /// Add the candidates to the results. Take `distinct`, `from`, `length`, and `cur_offset`

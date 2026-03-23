@@ -234,22 +234,22 @@ pub async fn perform_federated_search(
     };
 
     // 3.3. merge hits
-    // pinned documents are extracted before the score-based merge so
-    // they don't compete with organic results. The merge adjusts pagination to reserve
-    // slots for pins, then re-injects them at their target positions afterward.
+    // Pinned documents are extracted before the score-based merge so they do
+    // not compete with organic results. We keep an organic prefix and then
+    // merge pins into the requested page in linear time.
     let mut pins = Vec::new();
     for result_by_index in &mut results_by_index {
         let prev_hits = std::mem::take(&mut result_by_index.hits);
         for hit in prev_hits {
             if let Some(ScoreDetails::Pin { position }) = hit.score.first() {
-                pins.push((*position, hit.hit));
+                pins.push((*position, hit.query_index, hit.hit));
             } else {
                 result_by_index.hits.push(hit);
             }
         }
     }
     extract_remote_pin_hits(&mut remote_results, &mut pins);
-    pins.sort_by_key(|&(pos, _)| pos);
+    pins.sort_by_key(|&(pos, _, _)| pos);
 
     // store remote rejected hits to fixup the facet distributions
     // ideally could fixup in the iterator,
@@ -260,7 +260,7 @@ pub async fn perform_federated_search(
         let mut distinct_values = HashSet::new();
         let mut surviving_pins = Vec::with_capacity(pins.len());
 
-        for (position, hit) in pins {
+        for (position, query_index, hit) in pins {
             let mut facet_values = Vec::new();
             hit.facet_values(distinct_field, |value| facet_values.push(value));
             let is_rejected =
@@ -279,7 +279,7 @@ pub async fn perform_federated_search(
             }
 
             distinct_values.extend(facet_values.into_iter());
-            surviving_pins.push((position, hit));
+            surviving_pins.push((position, query_index, hit));
         }
 
         pins = surviving_pins;
@@ -325,11 +325,6 @@ pub async fn perform_federated_search(
     let mut merged_hits: Vec<_> = (&mut hit_it)
         .take(ranked_take)
         .inspect(|hit| {
-            if let Some(hydration_cache) = hydration_cache.as_mut() {
-                let query_index = hit.query_index();
-                hydration_cache.register_foreign_docids(hit.as_hit(), query_index);
-            }
-
             if let Some(semantic_hit_count) = &mut semantic_hit_count {
                 if hit.to_score().0.any(|score| matches!(&score, WeightedScoreValue::VectorSort(_)))
                 {
@@ -352,8 +347,17 @@ pub async fn perform_federated_search(
         drop(hit_it);
     }
 
+    if !pins.is_empty() {
+        merged_hits = merge_pinned_hits_into_page(pins, skip, take, merged_hits);
+    }
+
     // 3.3.1. hydrate documents based on the hydration points
     progress.update_progress(FederatingResultsStep::HydrateDocuments);
+    if let Some(hydration_cache) = hydration_cache.as_mut() {
+        for (query_index, hit) in &merged_hits {
+            hydration_cache.register_foreign_docids(hit, *query_index);
+        }
+    }
     if let Some(hydration_cache) = hydration_cache {
         let hydration_formatter =
             FederatedHydrationFormatter::new(hydration_cache, &index_scheduler)?;
@@ -362,19 +366,7 @@ pub async fn perform_federated_search(
 
     let mut merged_hits = merged_hits.into_iter().map(|(_, hit)| hit).collect::<Vec<_>>();
 
-    if pins.is_empty() {
-        merged_hits.truncate(take);
-    } else {
-        // Inject the surviving pins into the organic prefix, then slice the requested page.
-        for (pin_position, hit) in pins {
-            let insert_at = (pin_position as usize).min(merged_hits.len());
-            merged_hits.insert(insert_at, hit);
-        }
-
-        let skipped_hits = skip.min(merged_hits.len());
-        merged_hits.drain(..skipped_hits);
-        merged_hits.truncate(take);
-    }
+    merged_hits.truncate(take);
 
     // 3.4. merge query vectors
     let query_vectors = if retrieve_vectors {
@@ -722,23 +714,70 @@ fn iter_remote_hits(
     })
 }
 
+fn merge_pinned_hits_into_page(
+    pins: Vec<(u32, usize, SearchHit)>,
+    skip: usize,
+    take: usize,
+    organic_hits: Vec<(usize, SearchHit)>,
+) -> Vec<(usize, SearchHit)> {
+    let page_end = skip.saturating_add(take);
+    let capacity = take.min(organic_hits.len().saturating_add(pins.len()));
+    let mut merged_hits = Vec::with_capacity(capacity);
+    let mut organic_hits = organic_hits.into_iter();
+    let mut pins = pins.into_iter().peekable();
+    let mut combined_index = 0usize;
+
+    while combined_index < page_end {
+        let next_hit = if let Some((position, _, _)) = pins.peek() {
+            if (*position as usize) <= combined_index {
+                let (_, query_index, hit) = pins.next().expect("peeked pin must exist");
+                Some((query_index, hit))
+            } else if let Some(hit) = organic_hits.next() {
+                Some(hit)
+            } else {
+                let (_, query_index, hit) = pins.next().expect("peeked pin must exist");
+                Some((query_index, hit))
+            }
+        } else {
+            organic_hits.next()
+        };
+
+        let Some(hit) = next_hit else { break };
+
+        if combined_index >= skip {
+            merged_hits.push(hit);
+        }
+
+        combined_index += 1;
+    }
+
+    merged_hits
+}
+
 fn extract_remote_pin_hits(
     remote_results: &mut [FederatedSearchResult],
-    pins: &mut Vec<(u32, SearchHit)>,
+    pins: &mut Vec<(u32, usize, SearchHit)>,
 ) {
+    fn parse_pin_pos_and_query_idx(
+        federation: &mut serde_json::Map<String, serde_json::Value>,
+    ) -> Option<(u32, usize)> {
+        let pin_pos: u32 = federation.remove(PINNED_POSITION)?.as_u64()?.try_into().ok()?;
+        let query_idx: usize = federation.get(QUERIES_POSITION)?.as_u64()?.try_into().ok()?;
+
+        Some((pin_pos, query_idx))
+    }
+
     for remote_result in remote_results {
         let previous_hits = std::mem::take(&mut remote_result.hits);
         for mut hit in previous_hits {
-            let pin_position = hit
+            let pair = hit
                 .document
                 .get_mut(FEDERATION_HIT)
                 .and_then(|federation| federation.as_object_mut())
-                .and_then(|federation| federation.remove(PINNED_POSITION))
-                .and_then(|position| position.as_u64())
-                .and_then(|position| u32::try_from(position).ok());
+                .and_then(parse_pin_pos_and_query_idx);
 
-            if let Some(position) = pin_position {
-                pins.push((position, hit));
+            if let Some((position, query_index)) = pair {
+                pins.push((position, query_index, hit));
             } else {
                 remote_result.hits.push(hit);
             }
