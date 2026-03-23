@@ -21,7 +21,6 @@ use crate::routes::PAGINATION_DEFAULT_LIMIT;
 
 mod chat_completion_analytics;
 pub mod chat_completions;
-mod chat_completions_types;
 mod config;
 mod errors;
 pub mod settings;

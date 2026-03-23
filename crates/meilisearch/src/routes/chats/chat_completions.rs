@@ -68,7 +68,7 @@ use crate::search_queue::SearchQueue;
         ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
     security(("Bearer" = ["chats.completions", "*"])),
-    request_body(content = super::chat_completions_types::ChatCompletionRequest, content_type = "application/json"),
+    request_body(content = Map<String, Value>),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -86,7 +86,7 @@ use crate::search_queue::SearchQueue;
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
-        (status = 200, description = "Start a conversation.", body = super::chat_completions_types::ChatCompletionResponse, content_type = "application/json", example = json!(
+        (status = 200, description = "Start a conversation.", content_type = "application/json", example = json!(
             {
                 "id": "chatcmpl-abc123",
                 "choices": [
