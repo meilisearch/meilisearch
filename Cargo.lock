@@ -498,6 +498,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "utoipa",
 ]
 
 [[package]]
