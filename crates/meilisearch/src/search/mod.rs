@@ -951,8 +951,7 @@ impl SearchQueryWithIndex {
     }
 
     pub fn has_remote_and_use_network(&self) -> bool {
-        self.federation_options.as_ref().and_then(|opt| opt.remote.as_ref()).is_some()
-            && self.use_network == Some(true)
+        self.has_remote() && (self.use_network == Some(true))
     }
 
     pub fn has_show_performance_details(&self) -> bool {

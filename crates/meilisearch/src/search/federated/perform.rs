@@ -43,7 +43,7 @@ use crate::search::federated::types::{
     FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE,
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
-use crate::search::DEFAULT_SEARCH_LIMIT;
+use crate::search::{NetworkableQuery as _, DEFAULT_SEARCH_LIMIT};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
@@ -863,19 +863,10 @@ impl PartitionedQueries {
             );
         }
 
-        if federated_query.use_network.is_some() {
-            features.check_network("passing `.useNetwork` in a federated search query")?;
-        }
-
         let mut partition = None;
 
         let (index_uid, query, federation_options);
-        let queries = if federated_query
-            .use_network
-            // avoid accidental recursion
-            .take()
-            .unwrap_or_default()
-        {
+        let queries = if federated_query.must_use_network(network, &features)? {
             let partition = partition.get_or_insert_with(|| super::Partition::new(network.clone()));
             (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
