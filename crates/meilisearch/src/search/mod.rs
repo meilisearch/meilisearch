@@ -339,19 +339,22 @@ pub struct SearchQuery {
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
     #[schema(required = false, value_type = Option<Personalize>)]
     pub personalize: Option<Personalize>,
-    /// When `true`, runs the query on the whole network (all shards covered, documents deduplicated across remotes).
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
     ///
-    /// When `false` or omitted, the query runs locally.
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
     ///
     /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
     ///
     /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
     ///
-    /// Values: `true` = use the whole network; `false` or omitted = local (default).
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
     ///
     /// When using the network, the index must exist with compatible settings on all remotes.
-    ///
-    /// Documents with the same id are assumed identical for deduplication.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>)]
     pub use_network: Option<bool>,
@@ -910,7 +913,24 @@ pub struct SearchQueryWithIndex {
     #[deserr(default, error = DeserrJsonError<InvalidSearchPersonalize>, default)]
     #[serde(skip)]
     pub personalize: Option<Personalize>,
+    /// When `true`, runs the query on the whole network (all shards covered exactly once).
+    ///
+    /// When `false`, the query runs locally.
+    ///
+    /// When omitted or `null`, the default value depends on whether the sharding is enabled for the instance:
+    ///
+    /// - If the instance has sharding enabled (has a leader), defaults to `true`.
+    /// - Otherwise defaults to `false`.
+    ///
+    /// **Enterprise Edition only.** This feature is available in the Enterprise Edition.
+    ///
+    /// It also requires the `network` [experimental feature](http://localhost:3000/reference/api/experimental-features/configure-experimental-features).
+    ///
+    /// Values: `true` = use the whole network; `false` = local, default = see above.
+    ///
+    /// When using the network, the index must exist with compatible settings on all remotes.
     #[deserr(default, error = DeserrJsonError<InvalidSearchUseNetwork>, default)]
+    #[schema(required = false)]
     pub use_network: Option<bool>,
     /// Display the global ranking score of a document
     #[deserr(default, error = DeserrJsonError<InvalidSearchShowRankingScore>, default)]
