@@ -15,7 +15,6 @@ use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
 use meilisearch_types::milli::{AttributePatterns, PatternMatch};
 use serde::Serialize;
-use tracing::debug;
 use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
@@ -314,7 +313,6 @@ async fn get_rule(
     let rules = index_scheduler.dynamic_search_rules();
     let rule = rules.get(&uid).ok_or(DynamicSearchRulesError::NotFound(uid))?;
 
-    debug!(returns = ?rule, "get dynamic search rule");
     Ok(HttpResponse::Ok().json(rule))
 }
 
@@ -396,7 +394,6 @@ async fn create_rule(
     index_scheduler.put_dynamic_search_rule(&rule)?;
     analytics.publish(CreateDynamicSearchRuleAnalytics, &req);
 
-    debug!(returns = ?rule, "created dynamic search rule");
     Ok(HttpResponse::Created().json(rule))
 }
 
