@@ -319,7 +319,65 @@ async fn create_full_rule() {
 
     let (get_value, code) = server.get_dynamic_search_rule("black-friday").await;
     snapshot!(code, @"200 OK");
-    assert_eq!(value, get_value);
+    snapshot!(json_string!(get_value), @r#"
+    {
+      "uid": "black-friday",
+      "description": "Black Friday 2025 rules",
+      "priority": 10,
+      "active": true,
+      "conditions": [
+        {
+          "scope": "query",
+          "isEmpty": true
+        },
+        {
+          "scope": "time",
+          "start": "2025-11-28T00:00:00Z",
+          "end": "2025-11-28T23:59:59Z"
+        }
+      ],
+      "actions": [
+        {
+          "selector": {
+            "indexUid": "products",
+            "id": "123"
+          },
+          "action": {
+            "type": "pin",
+            "position": 1
+          }
+        },
+        {
+          "selector": {
+            "indexUid": "products",
+            "id": "456"
+          },
+          "action": {
+            "type": "pin",
+            "position": 0
+          }
+        },
+        {
+          "selector": {
+            "id": "789"
+          },
+          "action": {
+            "type": "pin",
+            "position": 3
+          }
+        },
+        {
+          "selector": {
+            "id": "999"
+          },
+          "action": {
+            "type": "pin",
+            "position": 8
+          }
+        }
+      ]
+    }
+    "#);
 }
 
 #[actix_web::test]
@@ -358,7 +416,6 @@ async fn create_rejects_query_condition_with_both_is_empty_and_contains() {
 async fn full_lifecycle() {
     let server = dynamic_search_rules_server().await;
 
-    // Create two rules
     let (_, code) = server
         .create_dynamic_search_rule("rule-a", json!({
             "actions": [{ "selector": { "id": "0" }, "action": { "type": "pin", "position": 0 } }]
@@ -377,28 +434,22 @@ async fn full_lifecycle() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(value), name: "list_rules");
 
-    // Delete rule-a
     let (_, code) = server.delete_dynamic_search_rule("rule-a").await;
     snapshot!(code, @"204 No Content");
 
-    // List shows 1
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(value), name: "list_rules_after_delete_rule_a");
 
-    // Get deleted returns 404
     let (_, code) = server.get_dynamic_search_rule("rule-a").await;
     snapshot!(code, @"404 Not Found");
 
-    // Get remaining still works
     let (_, code) = server.get_dynamic_search_rule("rule-b").await;
     snapshot!(code, @"200 OK");
 
-    // Delete rule-b
     let (_, code) = server.delete_dynamic_search_rule("rule-b").await;
     snapshot!(code, @"204 No Content");
 
-    // List empty
     let (value, code) = server.list_dynamic_search_rules().await;
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(value), @r#"
@@ -633,7 +684,7 @@ async fn patch_replaces_arrays() {
 async fn patch_empty_body() {
     let server = dynamic_search_rules_server().await;
 
-    let (original, code) = server
+    let (_, code) = server
         .create_dynamic_search_rule("no-change", json!({
             "active": true,
             "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
@@ -643,7 +694,24 @@ async fn patch_empty_body() {
 
     let (value, code) = server.patch_dynamic_search_rule("no-change", json!({})).await;
     snapshot!(code, @"200 OK");
-    assert_eq!(value, original);
+    snapshot!(json_string!(value), @r#"
+    {
+      "uid": "no-change",
+      "active": true,
+      "conditions": [],
+      "actions": [
+        {
+          "selector": {
+            "id": "1"
+          },
+          "action": {
+            "type": "pin",
+            "position": 0
+          }
+        }
+      ]
+    }
+    "#);
 }
 
 #[actix_web::test]
