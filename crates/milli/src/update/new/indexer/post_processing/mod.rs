@@ -35,6 +35,7 @@ pub(super) fn post_process<MSP>(
     indexing_context: IndexingContext<MSP>,
     wtxn: &mut RwTxn<'_>,
     mut global_fields_ids_map: GlobalFieldsIdsMap<'_>,
+    word_delta: &WordDelta,
     facet_field_ids_delta: FacetFieldIdsDelta,
 ) -> Result<()>
 where
@@ -51,15 +52,18 @@ where
     )?;
     compute_facet_search_database(index, wtxn, global_fields_ids_map, indexing_context.progress)?;
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
-    if let Some(prefix_delta) = compute_word_fst(index, wtxn, indexing_context.progress)? {
+    if let Some(prefix_data) = compute_word_fst(index, wtxn, word_delta, indexing_context.progress)?
+    {
         compute_prefix_database(
             index,
             wtxn,
-            prefix_delta,
+            word_delta,
+            &prefix_data,
             indexing_context.grenad_parameters,
             indexing_context.progress,
         )?;
-    };
+    }
+
     Ok(())
 }
 
@@ -72,7 +76,7 @@ where
 fn compute_prefix_database(
     index: &Index,
     wtxn: &mut RwTxn,
-    prefix_delta: PrefixDelta,
+    word_delta: &WordDelta,
     grenad_parameters: &GrenadParameters,
     progress: &Progress,
 ) -> Result<()> {
@@ -95,6 +99,7 @@ fn compute_prefix_database(
 fn compute_word_fst(
     index: &Index,
     wtxn: &mut RwTxn,
+    word_delta: &WordDelta,
     progress: &Progress,
 ) -> Result<Option<PrefixDelta>> {
     let rtxn = index.read_txn()?;

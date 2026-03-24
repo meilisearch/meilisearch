@@ -176,7 +176,8 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let (facet_field_ids_delta, index_embeddings) = extractor_handle.join().unwrap()?;
+        let (facet_field_ids_delta, word_delta, index_embeddings) =
+            extractor_handle.join().unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -199,6 +200,7 @@ where
                 indexing_context,
                 wtxn,
                 global_fields_ids_map,
+                &word_delta,
                 facet_field_ids_delta,
             )
         })
@@ -345,7 +347,7 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let index_embeddings = extractor_handle.join().unwrap()?;
+        let (index_embeddings, word_delta) = extractor_handle.join().unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -370,6 +372,7 @@ where
                 indexing_context,
                 wtxn,
                 global_fields_ids_map,
+                &word_delta,
                 facet_field_ids_delta,
             )
         })

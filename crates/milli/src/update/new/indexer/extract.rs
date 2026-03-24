@@ -46,7 +46,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     document_ids: &mut RoaringBitmap,
     modified_docids: &mut RoaringBitmap,
     embedder_stats: &EmbedderStats,
-) -> Result<(FacetFieldIdsDelta, Vec<IndexEmbeddingConfig>)>
+) -> Result<(FacetFieldIdsDelta, WordDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,
     MSP: Fn() -> bool + Sync,
@@ -91,6 +91,7 @@ where
     }
 
     let facet_field_ids_delta;
+    let word_delta;
 
     {
         let caches = {
@@ -161,11 +162,22 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordFieldIdDocids);
 
-            merge_and_send_docids(
+            word_delta = merge_and_send_docids_with_inspect(
                 word_fid_docids,
                 index.word_fid_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordFidDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let (word, fid) = StrBEU16Codec::bytes_decode(key).unwrap();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word.into(), fid),
+                            EntryStatus::Updated => output.insert_modified(word.into(), fid),
+                        },
+                        Operation::Delete => output.insert_deleted(word.into(), fid),
+                        Operation::Ignore => (),
+                    }
+                },
                 &indexing_context.must_stop_processing,
             )?;
         }
@@ -358,7 +370,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
-    Result::Ok((facet_field_ids_delta, index_embeddings))
+    Result::Ok((facet_field_ids_delta, word_delta, index_embeddings))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -372,7 +384,7 @@ pub(super) fn extract_all_settings_changes<MSP, SD>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     embedder_stats: &EmbedderStats,
-) -> Result<Vec<IndexEmbeddingConfig>>
+) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta)>
 where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
@@ -387,6 +399,8 @@ where
     let span =
         tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
     let _entered = span.enter();
+
+    let word_delta;
 
     update_database_documents(
         &documents,
@@ -437,11 +451,22 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordFieldIdDocids);
 
-            merge_and_send_docids(
+            word_delta = merge_and_send_docids_with_inspect(
                 word_fid_docids,
                 index.word_fid_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordFidDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let (word, fid) = StrBEU16Codec::bytes_decode(key).unwrap();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word.into(), fid),
+                            EntryStatus::Updated => output.insert_modified(word.into(), fid),
+                        },
+                        Operation::Delete => output.insert_deleted(word.into(), fid),
+                        Operation::Ignore => (),
+                    }
+                },
                 &indexing_context.must_stop_processing,
             )?;
         }
@@ -582,7 +607,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
-    Result::Ok(index_embeddings)
+    Result::Ok((index_embeddings, word_delta))
 }
 
 fn primary_key_from_db<'indexer>(
