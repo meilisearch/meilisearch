@@ -26,10 +26,10 @@ use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, Sear
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
-    MatchingStrategy, Partition, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
-    SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    MatchingStrategy, NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold,
+    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -601,18 +601,9 @@ pub(crate) async fn search(
     let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
     let features = index_scheduler.features();
-    if query.use_network.is_some() {
-        features.check_network("passing `useNetwork` in a search query")?
-    }
+    let network = index_scheduler.network();
 
-    let (mut search_result, deadline) = if query
-        .use_network
-        // avoid accidental recursion
-        .take()
-        // false by default for now
-        .unwrap_or_default()
-    {
-        let network = index_scheduler.network();
+    let (mut search_result, deadline) = if query.must_use_network(&network, &features)? {
         let mut federation = Federation::default();
         let queries = Partition::new(network)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
