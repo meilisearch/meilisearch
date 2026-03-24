@@ -151,27 +151,14 @@ fn compute_word_fst(
     let prefix_settings = index.prefix_settings(&rtxn)?;
     word_fst_builder.with_prefix_settings(prefix_settings);
 
-    let previous_words = index.word_docids.iter(&rtxn)?.remap_data_type::<Bytes>();
-    let current_words = index.word_docids.iter(wtxn)?.remap_data_type::<Bytes>();
-    for eob in merge_join_by(previous_words, current_words, |lhs, rhs| match (lhs, rhs) {
-        (Ok((l, _)), Ok((r, _))) => l.cmp(r),
-        (Err(_), _) | (_, Err(_)) => Ordering::Equal,
-    }) {
-        match eob {
-            EitherOrBoth::Both(lhs, rhs) => {
-                let (word, lhs_bytes) = lhs?;
-                let (_, rhs_bytes) = rhs?;
-                if lhs_bytes != rhs_bytes {
-                    word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
-                }
-            }
-            EitherOrBoth::Left(result) => {
-                let (word, _) = result?;
-                word_fst_builder.register_word(DelAdd::Deletion, word.as_ref())?;
-            }
-            EitherOrBoth::Right(result) => {
-                let (word, _) = result?;
+    // we ignore modifications when rebuilding the FST
+    for either in word_delta.added_or_deleted_words() {
+        match either {
+            Either::Left(word) => {
                 word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
+            }
+            Either::Right(word) => {
+                word_fst_builder.register_word(DelAdd::Deletion, word.as_ref())?;
             }
         }
     }
