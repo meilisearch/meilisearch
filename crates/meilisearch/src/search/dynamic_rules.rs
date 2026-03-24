@@ -1,3 +1,4 @@
+use crate::milli::Index;
 use itertools::Itertools;
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRuleAction, DynamicSearchRules, Selector,
@@ -8,8 +9,6 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use time::OffsetDateTime;
-
-use crate::milli::Index;
 
 use super::SearchQuery;
 
@@ -202,5 +201,8 @@ fn evaluate_condition(
 }
 
 fn selector_matches_index_uid(selector: &Selector, index_uid: &str) -> bool {
-    selector.index_uid.as_ref().is_none_or(|selector_index_uid| selector_index_uid == index_uid)
+    selector
+        .index_uid
+        .as_ref()
+        .is_none_or(|selector_index_uid| selector_index_uid.as_str() == index_uid)
 }

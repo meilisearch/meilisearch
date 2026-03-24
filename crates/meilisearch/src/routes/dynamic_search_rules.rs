@@ -4,7 +4,7 @@ use deserr::actix_web::AwebJson;
 use deserr::Deserr;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::dynamic_search_rules::{Condition, DynamicSearchRule, RuleAction};
+use meilisearch_types::dynamic_search_rules::{Condition, DynamicSearchRule, RuleAction, RuleUid};
 use meilisearch_types::error::deserr_codes::{
     InvalidDynamicSearchRuleFilter, InvalidDynamicSearchRuleFilterActive,
     InvalidDynamicSearchRuleFilterAttributePatterns, InvalidDynamicSearchRuleLimit,
@@ -135,11 +135,11 @@ impl ListRules {
 #[derive(Debug, thiserror::Error)]
 enum DynamicSearchRulesError {
     #[error("Dynamic search rule `{0}` not found.")]
-    NotFound(String),
+    NotFound(RuleUid),
     #[error("Dynamic search rule `{0}` already exists.")]
-    AlreadyExists(String),
+    AlreadyExists(RuleUid),
     #[error("Cannot reset Dynamic search rule `{0}` action.")]
-    CannotResetActions(String),
+    CannotResetActions(RuleUid),
 }
 
 impl ErrorCode for DynamicSearchRulesError {
@@ -309,7 +309,7 @@ async fn get_rule(
         ActionPolicy<{ actions::DYNAMIC_SEARCH_RULES_GET }>,
         Data<IndexScheduler>,
     >,
-    uid: Path<String>,
+    uid: Path<RuleUid>,
 ) -> Result<HttpResponse, ResponseError> {
     index_scheduler
         .features()
@@ -372,7 +372,7 @@ async fn create_rule(
         Data<IndexScheduler>,
     >,
     body: AwebJson<CreateDynamicSearchRuleRequest, DeserrJsonError>,
-    uid: Path<String>,
+    uid: Path<RuleUid>,
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
@@ -445,7 +445,7 @@ async fn update_rule(
         ActionPolicy<{ actions::DYNAMIC_SEARCH_RULES_UPDATE }>,
         Data<IndexScheduler>,
     >,
-    uid: Path<String>,
+    uid: Path<RuleUid>,
     body: AwebJson<UpdateDynamicSearchRuleRequest, DeserrJsonError>,
     req: HttpRequest,
     analytics: Data<Analytics>,
@@ -524,7 +524,7 @@ async fn delete_rule(
         ActionPolicy<{ actions::DYNAMIC_SEARCH_RULES_DELETE }>,
         Data<IndexScheduler>,
     >,
-    uid: Path<String>,
+    uid: Path<RuleUid>,
     req: HttpRequest,
     analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {

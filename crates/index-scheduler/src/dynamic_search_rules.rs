@@ -1,6 +1,6 @@
 use std::sync::{Arc, RwLock};
 
-use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules};
+use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules, RuleUid};
 use meilisearch_types::heed;
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
@@ -29,7 +29,9 @@ impl DynamicSearchRulesStore {
         let rules: DynamicSearchRules = persisted
             .iter(wtxn)?
             .map(|entry| {
-                entry.map(|(key, rule): (&str, DynamicSearchRule)| (key.to_string(), rule))
+                entry.map(|(key, rule): (&str, DynamicSearchRule)| {
+                    (key.parse().expect("valid RuleUid format"), rule)
+                })
             })
             .collect::<Result<DynamicSearchRules, heed::Error>>()?;
 
@@ -60,7 +62,7 @@ impl DynamicSearchRulesStore {
         Ok(())
     }
 
-    pub fn delete_one(&self, wtxn: &mut RwTxn, uid: &str) -> Result<bool> {
+    pub fn delete_one(&self, wtxn: &mut RwTxn, uid: &RuleUid) -> Result<bool> {
         let deleted = self.persisted.delete(wtxn, uid)?;
 
         if deleted {

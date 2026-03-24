@@ -582,9 +582,9 @@ pub(crate) mod test {
     fn create_test_dynamic_search_rules() -> DynamicSearchRules {
         let mut rules = DynamicSearchRules::new();
         rules.insert(
-            "black-friday".to_string(),
+            "black-friday".parse().unwrap(),
             DynamicSearchRule {
-                uid: "black-friday".to_string(),
+                uid: "black-friday".parse().unwrap(),
                 description: Some("Black Friday promo".to_string()),
                 priority: Some(1),
                 active: true,
@@ -598,14 +598,14 @@ pub(crate) mod test {
                 actions: vec![
                     RuleAction {
                         selector: Selector {
-                            index_uid: Some("products".to_string()),
+                            index_uid: Some("products".parse().unwrap()),
                             id: Some("42".to_string()),
                         },
                         action: RuleActionKind::Pin { position: 1 },
                     },
                     RuleAction {
                         selector: Selector {
-                            index_uid: Some("products".to_string()),
+                            index_uid: Some("products".parse().unwrap()),
                             id: Some("84".to_string()),
                         },
                         action: RuleActionKind::Pin { position: 3 },

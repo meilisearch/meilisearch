@@ -1,15 +1,15 @@
 use std::fs::File;
 use std::io::{BufReader, Read};
 
-use flate2::bufread::GzDecoder;
-use serde::Deserialize;
-use tempfile::TempDir;
-
 use self::compat::v4_to_v5::CompatV4ToV5;
 use self::compat::v5_to_v6::{CompatIndexV5ToV6, CompatV5ToV6};
 use self::v5::V5Reader;
 use self::v6::{V6IndexReader, V6Reader};
 use crate::{ArchiveExt, Result, Version};
+use flate2::bufread::GzDecoder;
+use meilisearch_types::index_uid::IndexUid;
+use serde::Deserialize;
+use tempfile::TempDir;
 
 mod compat;
 
@@ -148,7 +148,7 @@ impl DumpReader {
 
     pub fn dynamic_search_rules(
         &self,
-    ) -> Result<Box<dyn Iterator<Item = Result<(String, v6::DynamicSearchRule)>> + '_>> {
+    ) -> Result<Box<dyn Iterator<Item = Result<(IndexUid, v6::DynamicSearchRule)>> + '_>> {
         match self {
             DumpReader::Current(current) => current.dynamic_search_rules(),
             DumpReader::Compat(_compat) => Ok(Box::new(std::iter::empty())),

@@ -56,7 +56,7 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
-use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules};
+use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules, RuleUid};
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
@@ -1140,7 +1140,7 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub fn delete_dynamic_search_rule(&self, uid: &str) -> Result<bool> {
+    pub fn delete_dynamic_search_rule(&self, uid: &RuleUid) -> Result<bool> {
         let mut wtxn = self.env.write_txn()?;
         let deleted = self.dynamic_search_rules.delete_one(&mut wtxn, uid)?;
         wtxn.commit()?;

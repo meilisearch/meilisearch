@@ -9,15 +9,18 @@ use utoipa::ToSchema;
 
 use crate::deserr::DeserrJsonError;
 use crate::error::ParseOffsetDateTimeError;
+use crate::index_uid::IndexUid;
 
-pub type DynamicSearchRules = BTreeMap<String, DynamicSearchRule>;
+pub type RuleUid = IndexUid;
+
+pub type DynamicSearchRules = BTreeMap<RuleUid, DynamicSearchRule>;
 
 #[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase)]
 #[serde(rename_all = "camelCase")]
 pub struct DynamicSearchRule {
     /// Unique identifier of the dynamic search rule.
-    pub uid: String,
+    pub uid: RuleUid,
     /// Human-readable description of the dynamic search rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[deserr(default)]
@@ -143,7 +146,7 @@ pub struct RuleAction {
 pub struct Selector {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[deserr(default)]
-    pub index_uid: Option<String>,
+    pub index_uid: Option<IndexUid>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[deserr(default)]
     pub id: Option<String>,
