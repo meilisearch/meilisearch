@@ -358,23 +358,23 @@ fn inject_pins(
 
     let page_end = from.saturating_add(length);
     let capacity = length.min(output.docids.len().saturating_add(pins.len()));
-    let BucketSortOutput { docids, scores, all_candidates, degraded } = output;
+    let BucketSortOutput { docids, scores, mut all_candidates, degraded } = output;
 
     let mut merged_docids = Vec::with_capacity(capacity);
     let mut merged_scores = Vec::with_capacity(capacity);
     let mut organic_hits = docids.into_iter().zip(scores);
-    let mut pins = pins.iter().copied().peekable();
+    let mut pins_iter = pins.iter().copied().peekable();
     let mut combined_index = 0usize;
 
     while combined_index < page_end {
-        let next_hit = if let Some(pin) = pins.peek().copied() {
+        let next_hit = if let Some(pin) = pins_iter.peek().copied() {
             if (pin.pos as usize) <= combined_index {
-                pins.next();
+                pins_iter.next();
                 Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
             } else if let Some(hit) = organic_hits.next() {
                 Some(hit)
             } else {
-                pins.next();
+                pins_iter.next();
                 Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
             }
         } else {
@@ -389,6 +389,10 @@ fn inject_pins(
         }
 
         combined_index += 1;
+    }
+
+    for pin in pins {
+        all_candidates.insert(pin.doc_id);
     }
 
     BucketSortOutput { docids: merged_docids, scores: merged_scores, all_candidates, degraded }

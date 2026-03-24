@@ -347,9 +347,7 @@ pub async fn perform_federated_search(
         drop(hit_it);
     }
 
-    if !pins.is_empty() {
-        merged_hits = merge_pinned_hits_into_page(pins, skip, take, merged_hits);
-    }
+    merged_hits = merge_pinned_hits_into_page(pins, skip, take, merged_hits);
 
     // 3.3.1. hydrate documents based on the hydration points
     progress.update_progress(FederatingResultsStep::HydrateDocuments);
@@ -720,6 +718,10 @@ fn merge_pinned_hits_into_page(
     take: usize,
     organic_hits: Vec<(usize, SearchHit)>,
 ) -> Vec<(usize, SearchHit)> {
+    if pins.is_empty() {
+        return organic_hits;
+    }
+
     let page_end = skip.saturating_add(take);
     let capacity = take.min(organic_hits.len().saturating_add(pins.len()));
     let mut merged_hits = Vec::with_capacity(capacity);
@@ -1301,7 +1303,6 @@ impl SearchByIndex {
         let mut degraded = false;
         let mut used_negative_operator = false;
         let mut candidates = RoaringBitmap::new();
-        let mut pinned_candidates = RoaringBitmap::new();
         let facets_by_index = self.federation.facets_by_index.remove(&index_uid).flatten();
         if let Err(mut error) =
             self.facet_order.check_facet_order(&index_uid, &facets_by_index, &index, &rtxn)
@@ -1451,7 +1452,6 @@ impl SearchByIndex {
                 let milli::SearchResult {
                     matching_words,
                     candidates: query_candidates,
-                    surviving_pins,
                     documents_ids,
                     document_scores,
                     degraded: query_degraded,
@@ -1470,7 +1470,6 @@ impl SearchByIndex {
                 }
 
                 candidates |= query_candidates;
-                pinned_candidates |= surviving_pins;
                 degraded |= query_degraded;
                 used_negative_operator |= query_used_negative_operator;
 
@@ -1594,14 +1593,14 @@ impl SearchByIndex {
                 .take(required_hit_count)
                 .collect();
         let merged_result = merged_result?;
-        let estimated_total_hits = candidates.len() as usize + pinned_candidates.len() as usize;
+        let estimated_total_hits = candidates.len() as usize;
         let facets = facets_by_index
             .map(|facets_by_index| {
                 compute_facet_distribution_stats(
                     &facets_by_index,
                     &index,
                     &rtxn,
-                    candidates | pinned_candidates,
+                    candidates,
                     super::super::Route::MultiSearch,
                 )
             })

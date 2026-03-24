@@ -290,8 +290,9 @@ impl<'a> Search<'a> {
             pins.extend(filtered_pins);
         }
 
-        let surviving_pins = pins.iter().map(|pin| pin.doc_id).collect::<RoaringBitmap>();
-        universe -= &surviving_pins;
+        for pin in &pins {
+            universe.remove(pin.doc_id);
+        }
 
         let mut query_vector = None;
         let PartialSearchResult {
@@ -372,7 +373,6 @@ impl<'a> Search<'a> {
         Ok(SearchResult {
             matching_words,
             candidates,
-            surviving_pins,
             document_scores,
             documents_ids,
             degraded,
@@ -439,7 +439,6 @@ impl fmt::Debug for Search<'_> {
 pub struct SearchResult {
     pub matching_words: MatchingWords,
     pub candidates: RoaringBitmap,
-    pub surviving_pins: RoaringBitmap,
     pub documents_ids: Vec<DocumentId>,
     pub document_scores: Vec<Vec<ScoreDetails>>,
     pub degraded: bool,

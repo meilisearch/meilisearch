@@ -197,10 +197,8 @@ impl ScoreWithRatioResult {
             document_scores.push(main_score);
         }
 
-        if !pins.is_empty() {
-            (documents_ids, document_scores) =
-                merge_pins_into_page(&pins, from, length, documents_ids, document_scores);
-        }
+        (documents_ids, document_scores) =
+            merge_pins_into_page(&pins, from, length, documents_ids, document_scores);
 
         // compute the set of candidates from both sets
         let candidates = vector_results.candidates | keyword_results.candidates;
@@ -220,7 +218,6 @@ impl ScoreWithRatioResult {
             SearchResult {
                 matching_words: keyword_results.matching_words,
                 candidates,
-                surviving_pins: pinned_doc_ids,
                 documents_ids,
                 document_scores,
                 degraded: vector_results.degraded | keyword_results.degraded,
@@ -410,7 +407,6 @@ fn return_keyword_results(
     SearchResult {
         matching_words,
         candidates,
-        surviving_pins,
         mut documents_ids,
         mut document_scores,
         degraded,
@@ -419,7 +415,7 @@ fn return_keyword_results(
     }: SearchResult,
 ) -> (SearchResult, Option<u32>) {
     let (documents_ids, document_scores) = if offset >= documents_ids.len() ||
-    // technically redudant because documents_ids.len() == document_scores.len(),
+    // technically redundant because documents_ids.len() == document_scores.len(),
     // defensive programming
     offset >= document_scores.len()
     {
@@ -438,7 +434,6 @@ fn return_keyword_results(
         SearchResult {
             matching_words,
             candidates,
-            surviving_pins,
             documents_ids,
             document_scores,
             degraded,
