@@ -1,6 +1,6 @@
 use std::io::BufWriter;
 
-use fst::{Set, SetBuilder, Streamer};
+use fst::{Set, SetBuilder};
 use memmap2::Mmap;
 use tempfile::tempfile;
 
@@ -34,9 +34,9 @@ impl<'a> WordFstBuilder<'a> {
             self.registered_words += 1;
         }
 
-        self.word_fst_builder.register(deladd, right, &mut |bytes, deladd, is_modified| {
+        self.word_fst_builder.register(deladd, right, &mut |bytes, deladd| {
             if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
-                prefix_fst_builder.insert_word(bytes, deladd, is_modified)
+                prefix_fst_builder.insert_word(bytes, deladd)
             } else {
                 Ok(())
             }
@@ -45,14 +45,10 @@ impl<'a> WordFstBuilder<'a> {
         Ok(())
     }
 
-    pub fn build(
-        mut self,
-        index: &crate::Index,
-        rtxn: &heed::RoTxn,
-    ) -> Result<(Mmap, Option<PrefixData>)> {
-        let words_fst_mmap = self.word_fst_builder.build(&mut |bytes, deladd, is_modified| {
+    pub fn build(mut self) -> Result<(Mmap, Option<PrefixData>)> {
+        let words_fst_mmap = self.word_fst_builder.build(&mut |bytes, deladd| {
             if let Some(prefix_fst_builder) = &mut self.prefix_fst_builder {
-                prefix_fst_builder.insert_word(bytes, deladd, is_modified)
+                prefix_fst_builder.insert_word(bytes, deladd)
             } else {
                 Ok(())
             }
@@ -60,7 +56,7 @@ impl<'a> WordFstBuilder<'a> {
 
         let prefix_data = self
             .prefix_fst_builder
-            .map(|prefix_fst_builder| prefix_fst_builder.build(index, rtxn))
+            .map(|prefix_fst_builder| prefix_fst_builder.build())
             .transpose()?;
 
         Ok((words_fst_mmap, prefix_data))
@@ -69,13 +65,6 @@ impl<'a> WordFstBuilder<'a> {
 
 pub struct PrefixData {
     pub prefixes_fst_mmap: Mmap,
-    pub prefix_delta: PrefixDelta,
-}
-
-#[derive(Debug)]
-pub struct PrefixDelta {
-    pub modified: BTreeSet<Prefix>,
-    pub deleted: BTreeSet<Prefix>,
 }
 
 struct PrefixFstBuilder {
@@ -85,8 +74,6 @@ struct PrefixFstBuilder {
     prefix_fst_builders: Vec<SetBuilder<Vec<u8>>>,
     current_prefix: Vec<Prefix>,
     current_prefix_count: Vec<usize>,
-    modified_prefixes: BTreeSet<Prefix>,
-    current_prefix_is_modified: Vec<bool>,
 }
 
 impl PrefixFstBuilder {
@@ -109,17 +96,14 @@ impl PrefixFstBuilder {
             prefix_fst_builders,
             current_prefix: vec![Prefix::new(); max_prefix_length],
             current_prefix_count: vec![0; max_prefix_length],
-            modified_prefixes: BTreeSet::new(),
-            current_prefix_is_modified: vec![false; max_prefix_length],
         })
     }
 
-    fn insert_word(&mut self, bytes: &[u8], deladd: DelAdd, is_modified: bool) -> Result<()> {
+    fn insert_word(&mut self, bytes: &[u8], deladd: DelAdd) -> Result<()> {
         for n in 0..self.max_prefix_length {
             let current_prefix = &mut self.current_prefix[n];
             let current_prefix_count = &mut self.current_prefix_count[n];
             let builder = &mut self.prefix_fst_builders[n];
-            let current_prefix_is_modified = &mut self.current_prefix_is_modified[n];
 
             // We try to get the first n bytes out of this string but we only want
             // to split at valid characters bounds. If we try to split in the middle of
@@ -135,35 +119,22 @@ impl PrefixFstBuilder {
             if *current_prefix_count == 0 || prefix != current_prefix.as_str() {
                 *current_prefix = Prefix::from(prefix);
                 *current_prefix_count = 0;
-                *current_prefix_is_modified = false;
             }
 
             if deladd == DelAdd::Addition {
                 *current_prefix_count += 1;
             }
 
-            if is_modified && !*current_prefix_is_modified {
-                if *current_prefix_count > self.prefix_count_threshold {
-                    self.modified_prefixes.insert(current_prefix.clone());
-                }
-
-                *current_prefix_is_modified = true;
-            }
-
             // There is enough words corresponding to this prefix to add it to the cache.
             if *current_prefix_count == self.prefix_count_threshold {
                 builder.insert(prefix)?;
-
-                if *current_prefix_is_modified {
-                    self.modified_prefixes.insert(current_prefix.clone());
-                }
             }
         }
 
         Ok(())
     }
 
-    fn build(self, index: &crate::Index, rtxn: &heed::RoTxn) -> Result<PrefixData> {
+    fn build(self) -> Result<PrefixData> {
         // We merge all of the previously computed prefixes into on final set.
         let mut prefix_fsts = Vec::new();
         for builder in self.prefix_fst_builders.into_iter() {
@@ -177,22 +148,6 @@ impl PrefixFstBuilder {
             InternalError::IndexingMergingKeys { process: "building-words-prefixes-fst" }
         })?;
         let prefix_fst_mmap = unsafe { Mmap::map(&prefix_fst_file)? };
-        let new_prefix_fst = Set::new(&prefix_fst_mmap)?;
-        let old_prefix_fst = index.words_prefixes_fst(rtxn)?;
-        let mut deleted_prefixes = BTreeSet::new();
-        {
-            let mut deleted_prefixes_stream = old_prefix_fst.op().add(&new_prefix_fst).difference();
-            while let Some(prefix) = deleted_prefixes_stream.next() {
-                deleted_prefixes.insert(Prefix::from(std::str::from_utf8(prefix)?));
-            }
-        }
-
-        Ok(PrefixData {
-            prefixes_fst_mmap: prefix_fst_mmap,
-            prefix_delta: PrefixDelta {
-                modified: self.modified_prefixes,
-                deleted: deleted_prefixes,
-            },
-        })
+        Ok(PrefixData { prefixes_fst_mmap: prefix_fst_mmap })
     }
 }

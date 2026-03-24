@@ -130,15 +130,16 @@ fn compute_word_fst(
         }
     }
 
-    let (word_fst_mmap, prefix_data) = word_fst_builder.build(index, &rtxn)?;
+    let (word_fst_mmap, prefix_data) = word_fst_builder.build()?;
     index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
-    if let Some(PrefixData { prefixes_fst_mmap, prefix_delta }) = prefix_data {
+
+    if let Some(PrefixData { prefixes_fst_mmap }) = prefix_data {
         index.main.remap_types::<Str, Bytes>().put(
             wtxn,
             WORDS_PREFIXES_FST_KEY,
             &prefixes_fst_mmap,
         )?;
-        Ok(Some(prefix_delta))
+        Ok(Some(PrefixData { prefixes_fst_mmap }))
     } else {
         Ok(None)
     }
@@ -157,7 +158,7 @@ pub fn recompute_word_fst_from_word_docids_database(
         let (word, _) = res?;
         word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
     }
-    let (word_fst_mmap, _) = word_fst_builder.build(index, wtxn)?;
+    let (word_fst_mmap, _) = word_fst_builder.build()?;
     index.main.remap_types::<Str, Bytes>().put(wtxn, WORDS_FST_KEY, &word_fst_mmap)?;
 
     Ok(())
