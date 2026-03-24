@@ -77,10 +77,13 @@ fn compute_prefix_database(
     index: &Index,
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
+    prefix_data: &PrefixData,
     grenad_parameters: &GrenadParameters,
     progress: &Progress,
 ) -> Result<()> {
-    let PrefixDelta { modified, deleted } = prefix_delta;
+    let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
+    let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
+    let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
 
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
     compute_word_prefix_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
@@ -95,13 +98,51 @@ fn compute_prefix_database(
     compute_word_prefix_position_docids(wtxn, index, &modified, &deleted, grenad_parameters)
 }
 
+fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<BTreeSet<Prefix>>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let mut iter = words.into_iter();
+    let mut prefix_stream = prefix_fst.stream();
+    let mut current_prefix = match prefix_stream.next() {
+        Some(current) => current,
+        None => return Ok(BTreeSet::new()),
+    };
+    let mut current_word = match iter.next() {
+        Some(current) => current,
+        None => return Ok(BTreeSet::new()),
+    };
+
+    let mut output = BTreeSet::new();
+    loop {
+        if current_word.as_bytes().starts_with(current_prefix) {
+            let current_prefix = std::str::from_utf8(current_prefix)?;
+            output.insert(current_prefix.into());
+        }
+
+        if current_word.as_bytes() < current_prefix {
+            current_word = match iter.next() {
+                Some(current) => current,
+                None => break,
+            };
+        } else {
+            current_prefix = match prefix_stream.next() {
+                Some(current) => current,
+                None => break,
+            };
+        }
+    }
+
+    Ok(output)
+}
+
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing")]
 fn compute_word_fst(
     index: &Index,
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
     progress: &Progress,
-) -> Result<Option<PrefixDelta>> {
+) -> Result<Option<PrefixData>> {
     let rtxn = index.read_txn()?;
     progress.update_progress(PostProcessingWords::WordFst);
 
