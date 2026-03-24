@@ -410,9 +410,9 @@ pub trait NetworkableQuery {
             *self.use_network_field() = Some(false);
             true
         } else {
-        	*self.use_network_field() = None;
-        	false
-      	};
+            *self.use_network_field() = None;
+            false
+        };
 
         // **after we fixed-up the network field**, we can return immediately if there's an explicit remote.
         if self.has_remote() {
