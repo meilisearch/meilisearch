@@ -15,27 +15,23 @@ pub type RuleUid = IndexUid;
 
 pub type DynamicSearchRules = BTreeMap<RuleUid, DynamicSearchRule>;
 
-#[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
 pub struct DynamicSearchRule {
     /// Unique identifier of the dynamic search rule.
     pub uid: RuleUid,
     /// Human-readable description of the dynamic search rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[deserr(default)]
     pub description: Option<String>,
     /// Priority of the dynamic search rule. Lower values take precedence over higher ones.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[deserr(default)]
     pub priority: Option<u64>,
     /// Whether the dynamic search rule is active.
     #[serde(default)]
-    #[deserr(default)]
     pub active: bool,
     /// Conditions that must match before the dynamic search rule applies.
     #[serde(default)]
-    #[deserr(default)]
     pub conditions: Vec<Condition>,
     /// Actions to apply when the dynamic search rule matches.
     pub actions: Vec<RuleAction>,
