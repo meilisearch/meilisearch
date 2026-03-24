@@ -43,7 +43,7 @@ jobs:
       matrix:
         edition: [community, enterprise]
         release:
-          [macos-amd64, macos-aarch64, windows, linux-amd64, linux-aarch64]
+          [macos-amd64, macos-aarch64, windows, linux-amd64, linux-aarch64, linux-riscv64]
         include:
           - edition: "community"
             feature-flag: ""
@@ -76,6 +76,11 @@ jobs:
             binary_path: aarch64-unknown-linux-gnu/release/meilisearch
             asset_name: linux-aarch64
             extra-args: "--target aarch64-unknown-linux-gnu"
+          - release: linux-riscv64
+            os: ubuntu-24.04-riscv
+            binary_path: release/meilisearch
+            asset_name: linux-riscv64
+            extra-args: ""
     needs: check-version
     steps:
       - uses: actions/checkout@v5
