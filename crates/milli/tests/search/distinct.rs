@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use big_s::S;
 use milli::progress::Progress;
 use milli::update::Settings;
-use milli::{Criterion, Search, SearchResult, TermsMatchingStrategy};
+use milli::{Criterion, SearchBuilder, SearchResult, TermsMatchingStrategy};
 use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
@@ -34,16 +34,15 @@ macro_rules! test_distinct {
             let rtxn = index.read_txn().unwrap();
 
             let progress = Progress::default();
-            let mut search = Search::new(&rtxn, &index, &progress);
+            let mut search = SearchBuilder::new();
             search.query(search::TEST_QUERY);
             search.limit($limit);
             search.offset($offset);
             search.exhaustive_number_hits($exhaustive);
-
             search.terms_matching_strategy(TermsMatchingStrategy::default());
+            let search = search.build(&rtxn, &index, &progress);
 
             let SearchResult { documents_ids, candidates, .. } = search.execute().unwrap();
-
             assert_eq!(candidates.len(), $n_res);
 
             let mut distinct_values = HashSet::new();

@@ -14,9 +14,9 @@ fn test_kanji_language_detection() {
         .unwrap();
 
     let txn = index.write_txn().unwrap();
-    let mut search = index.search(&txn);
-
-    search.query("東京");
+    let search = index.search(&txn, |builder| {
+        builder.query("東京");
+    });
     let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1]");

@@ -57,10 +57,11 @@ fn test_trap_basic() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("summer holiday");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("summer holiday");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1]");
     insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"

@@ -1,7 +1,7 @@
 use big_s::S;
 use milli::progress::Progress;
 use milli::Criterion::{Attribute, Exactness, Proximity, Typo, Words};
-use milli::{AscDesc, Error, Member, Search, TermsMatchingStrategy, UserError};
+use milli::{AscDesc, Error, Member, SearchBuilder, TermsMatchingStrategy, UserError};
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
 
@@ -13,13 +13,13 @@ fn sort_ranking_rule_missing() {
     let rtxn = index.read_txn().unwrap();
 
     let progress = Progress::default();
-    let mut search = Search::new(&rtxn, &index, &progress);
+    let mut search = SearchBuilder::new();
     search.query(search::TEST_QUERY);
     search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 
     search.terms_matching_strategy(TermsMatchingStrategy::default());
     search.sort_criteria(vec![AscDesc::Asc(Member::Field(S("tag")))]);
-
+    let search = search.build(&rtxn, &index, &progress);
     let result = search.execute();
     assert!(matches!(result, Err(Error::UserError(UserError::SortRankingRuleMissing))));
 }

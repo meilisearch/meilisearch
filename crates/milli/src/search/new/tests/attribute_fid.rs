@@ -119,10 +119,11 @@ fn test_attribute_fid_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     let document_ids_scores: Vec<_> = documents_ids.iter().zip(document_scores).collect();
     insta::assert_snapshot!(format!("{document_ids_scores:#?}"));
@@ -147,10 +148,11 @@ fn test_attribute_fid_ngrams() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 

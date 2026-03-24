@@ -11,7 +11,8 @@ use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
 use milli::{
-    AscDesc, CreateOrOpen, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy,
+    AscDesc, CreateOrOpen, Criterion, Index, Member, SearchBuilder, SearchResult,
+    TermsMatchingStrategy,
 };
 use rand::Rng;
 use Criterion::*;
@@ -31,12 +32,12 @@ macro_rules! test_criterion {
             let rtxn = index.read_txn().unwrap();
 
             let progress = Progress::default();
-            let mut search = Search::new(&rtxn, &index, &progress);
+            let mut search = SearchBuilder::new();
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.terms_matching_strategy($optional_word);
             search.sort_criteria($sort_criteria);
-
+            let search = search.build(&rtxn, &index, &progress);
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
             let expected_external_ids: Vec<_> =
@@ -254,11 +255,11 @@ fn criteria_mixup() {
         let rtxn = index.read_txn().unwrap();
 
         let progress = Progress::default();
-        let mut search = Search::new(&rtxn, &index, &progress);
+        let mut search = SearchBuilder::new();
         search.query(search::TEST_QUERY);
         search.limit(EXTERNAL_DOCUMENTS_IDS.len());
         search.terms_matching_strategy(ALLOW_OPTIONAL_WORDS);
-
+        let search = search.build(&rtxn, &index, &progress);
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
         let expected_external_ids: Vec<_> =
@@ -397,9 +398,9 @@ fn criteria_ascdesc() {
         let rtxn = index.read_txn().unwrap();
 
         let progress = Progress::default();
-        let mut search = Search::new(&rtxn, &index, &progress);
+        let mut search = SearchBuilder::new();
         search.limit(ASC_DESC_CANDIDATES_THRESHOLD + 1);
-
+        let search = search.build(&rtxn, &index, &progress);
         let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
         let expected_document_ids = match criterion {

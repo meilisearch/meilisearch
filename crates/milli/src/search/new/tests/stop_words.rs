@@ -79,10 +79,11 @@ fn test_ignore_stop_words() {
     let txn = index.read_txn().unwrap();
 
     // `the` is treated as a prefix here, so it's not ignored
-    let mut s = index.search(&txn);
-    s.query("xyz to the");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("xyz to the");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
     insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
@@ -132,10 +133,11 @@ fn test_ignore_stop_words() {
     "###);
 
     // `xyz` is treated as a prefix here, so it's not ignored
-    let mut s = index.search(&txn);
-    s.query("to the xyz");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("to the xyz");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
     insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
@@ -185,10 +187,11 @@ fn test_ignore_stop_words() {
     "###);
 
     // `xyz` is not treated as a prefix anymore because of the trailing space, so it's ignored
-    let mut s = index.search(&txn);
-    s.query("to the xyz ");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("to the xyz ");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
     insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
@@ -237,10 +240,11 @@ fn test_ignore_stop_words() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("to the dragon xyz");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("to the dragon xyz");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
     insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
@@ -296,10 +300,11 @@ fn test_stop_words_in_phrase() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.query("\"how to train your dragon\"");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("\"how to train your dragon\"");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 6]");
     insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
@@ -389,10 +394,11 @@ fn test_stop_words_in_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("how \"to\" train \"the");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("how \"to\" train \"the");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
     insta::assert_snapshot!(format!("{document_scores:#?}"), @r###"
@@ -441,18 +447,20 @@ fn test_stop_words_in_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("how \"to\" train \"The dragon");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("how \"to\" train \"The dragon");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[3, 6, 5]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
 
-    let mut s = index.search(&txn);
-    s.query("\"to\"");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("\"to\"");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 4, 5, 6]");
     // The search is handled as a placeholder search because it doesn't have any non-stop words in it.

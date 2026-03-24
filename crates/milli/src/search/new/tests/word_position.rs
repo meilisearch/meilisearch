@@ -134,10 +134,11 @@ fn test_attribute_position_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("quick brown");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("quick brown");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -150,10 +151,11 @@ fn test_attribute_position_repeated() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("a a a a a");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("a a a a a");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -167,10 +169,11 @@ fn test_attribute_position_different_fields() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("quick brown");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("quick brown");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -184,10 +187,11 @@ fn test_attribute_position_ngrams() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("quick brown");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("quick brown");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 

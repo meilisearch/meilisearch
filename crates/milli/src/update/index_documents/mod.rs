@@ -824,7 +824,7 @@ mod tests {
     use crate::update::new::indexer;
     use crate::update::Setting;
     use crate::vector::db::IndexEmbeddingConfig;
-    use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, Search, UserError};
+    use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, UserError};
 
     fn no_cancel() -> bool {
         false
@@ -982,15 +982,30 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // Search for a sub object value
-        let result = index.search(&rtxn).query(r#""value2""#).execute().unwrap();
+        let result = index
+            .search(&rtxn, |builder| {
+                builder.query(r#""value2""#);
+            })
+            .execute()
+            .unwrap();
         assert_eq!(result.documents_ids, vec![0]);
 
         // Search for a sub array value
-        let result = index.search(&rtxn).query(r#""fine""#).execute().unwrap();
+        let result = index
+            .search(&rtxn, |builder| {
+                builder.query(r#""fine""#);
+            })
+            .execute()
+            .unwrap();
         assert_eq!(result.documents_ids, vec![1]);
 
         // Search for a sub array sub object key
-        let result = index.search(&rtxn).query(r#""amazing""#).execute().unwrap();
+        let result = index
+            .search(&rtxn, |builder| {
+                builder.query(r#""amazing""#);
+            })
+            .execute()
+            .unwrap();
         assert_eq!(result.documents_ids, vec![2]);
 
         drop(rtxn);
@@ -1302,71 +1317,108 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // testing the simple query search
-        let mut search = index.search(&rtxn);
-        search.query("document");
-        search.terms_matching_strategy(TermsMatchingStrategy::default());
+        let search = index.search(&rtxn, |builder| {
+            builder.query("document");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         // all documents should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids.len(), 4);
 
-        search.query("zeroth");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("zeroth");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![0]);
-        search.query("first");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("first");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
-        search.query("second");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("second");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![2]);
-        search.query("third");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("third");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![3]);
 
-        search.query("field");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("field");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1, 2]);
 
-        search.query("lol");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("lol");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![2]);
 
-        search.query("object");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("object");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert!(documents_ids.is_empty());
 
-        search.query("array");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("array");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert!(documents_ids.is_empty()); // nested is not searchable
 
-        search.query("lied");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("lied");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert!(documents_ids.is_empty()); // nested is not searchable
 
         // testing the filters
-        let mut search = index.search(&rtxn);
 
         let filter = crate::Filter::from_str(r#"title = "The first document""#).unwrap().unwrap();
-        search.filter(IndexFilter::from(filter));
+        let search = index.search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(filter));
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
 
         let filter = crate::Filter::from_str(r#"nested.object = field"#).unwrap().unwrap();
-        search.filter(IndexFilter::from(filter));
+        let search = index.search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(filter));
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1, 2]);
 
         let filter = crate::Filter::from_str(r#"nested.machin = bidule"#).unwrap().unwrap();
-        search.filter(IndexFilter::from(filter));
+        let search = index.search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(filter));
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
 
         let filter = crate::Filter::from_str(r#"nested = array"#).unwrap().unwrap();
-        search.filter(IndexFilter::from(filter));
+        let search = index.search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(filter));
+        });
         let error = search.execute().map(|_| unreachable!()).unwrap_err(); // nested is not filterable
         assert!(matches!(error, crate::Error::UserError(crate::UserError::InvalidFilter(_))));
 
         let filter = crate::Filter::from_str(r#"nested = "I lied""#).unwrap().unwrap();
-        search.filter(IndexFilter::from(filter));
+        let search = index.search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(filter));
+        });
         let error = search.execute().map(|_| unreachable!()).unwrap_err(); // nested is not filterable
         assert!(matches!(error, crate::Error::UserError(crate::UserError::InvalidFilter(_))));
     }
@@ -1374,7 +1426,6 @@ mod tests {
     #[test]
     fn index_documents_with_nested_primary_key() {
         let index = TempIndex::new();
-        let progress = Progress::default();
 
         index
             .update_settings(|settings| {
@@ -1414,23 +1465,36 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // testing the simple query search
-        let mut search = crate::Search::new(&rtxn, &index, &progress);
-        search.query("document");
-        search.terms_matching_strategy(TermsMatchingStrategy::default());
+        let search = index.search(&rtxn, |builder| {
+            builder.query("document");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         // all documents should be returned
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids.len(), 4);
 
-        search.query("zeroth");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("zeroth");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![0]);
-        search.query("first");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("first");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
-        search.query("second");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("second");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![2]);
-        search.query("third");
+        let search = index.search(&rtxn, |builder| {
+            builder.query("third");
+            builder.terms_matching_strategy(TermsMatchingStrategy::default());
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![3]);
     }
@@ -1470,7 +1534,6 @@ mod tests {
     #[test]
     fn test_facets_generation() {
         let index = TempIndex::new();
-        let progress = Progress::default();
 
         index
             .add_documents(documents!([
@@ -1525,10 +1588,11 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
-            let mut search = crate::Search::new(&rtxn, &index, &progress);
             let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
             let filter = crate::Filter::from_str(&filter).unwrap().unwrap();
-            search.filter(IndexFilter::from(filter));
+            let search = index.search(&rtxn, |builder| {
+                builder.filter(IndexFilter::from(filter));
+            });
             let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
             assert_eq!(documents_ids, vec![i]);
         }
@@ -1564,10 +1628,11 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = crate::Search::new(&rtxn, &index, &progress);
-        search.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
-            "dog.race.bernese mountain",
-        )))]);
+        let search = index.search(&rtxn, |builder| {
+            builder.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
+                "dog.race.bernese mountain",
+            )))]);
+        });
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1, 2, 3, 0]);
     }
@@ -2919,8 +2984,15 @@ mod tests {
             .unwrap(),
         );
         let res = index
-            .search(&rtxn)
-            .semantic(embedder_name, embedder, false, Some([0.0, 1.0, 2.0].to_vec()), None)
+            .search(&rtxn, |builder| {
+                builder.semantic(
+                    embedder_name,
+                    embedder,
+                    false,
+                    Some([0.0, 1.0, 2.0].to_vec()),
+                    None,
+                );
+            })
             .execute()
             .unwrap();
         assert_eq!(res.documents_ids.len(), 3);
@@ -3142,7 +3214,7 @@ mod tests {
 
         // Ensuring all the returned IDs actually exists
         let rtxn = index.read_txn().unwrap();
-        let res = index.search(&rtxn).execute().unwrap();
+        let res = index.search(&rtxn, |_| {}).execute().unwrap();
         index.documents(&rtxn, res.documents_ids).unwrap();
     }
 
@@ -3289,7 +3361,12 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
-        let results = index.search(&rtxn).filter(IndexFilter::from(filter)).execute().unwrap();
+        let results = index
+            .search(&rtxn, |builder| {
+                builder.filter(IndexFilter::from(filter));
+            })
+            .execute()
+            .unwrap();
         assert!(results.documents_ids.is_empty());
 
         db_snap!(index, word_docids);
@@ -3346,7 +3423,7 @@ mod tests {
         // Placeholder search
         let rtxn = index.static_read_txn().unwrap();
 
-        let results = index.search(&rtxn).execute().unwrap();
+        let results = index.search(&rtxn, |_| {}).execute().unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
@@ -3403,7 +3480,12 @@ mod tests {
 
         // search for abstract
         let rtxn = index.read_txn().unwrap();
-        let results = index.search(&rtxn).query("abstract").execute().unwrap();
+        let results = index
+            .search(&rtxn, |builder| {
+                builder.query("abstract");
+            })
+            .execute()
+            .unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
@@ -3461,7 +3543,12 @@ mod tests {
 
         // Placeholder search with geo filter
         let filter = Filter::from_str("_geoRadius(50.6924, 3.1763, 20000)").unwrap().unwrap();
-        let results = index.search(&wtxn).filter(IndexFilter::from(filter)).execute().unwrap();
+        let results = index
+            .search(&wtxn, |builder| {
+                builder.filter(IndexFilter::from(filter));
+            })
+            .execute()
+            .unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
@@ -3653,7 +3740,6 @@ mod tests {
     #[test]
     fn delete_words_exact_attributes() {
         let index = TempIndex::new();
-        let progress = Progress::default();
 
         index
             .update_settings(|settings| {
@@ -3692,8 +3778,9 @@ mod tests {
         let words = index.words_fst(&txn).unwrap().into_stream().into_strs().unwrap();
         insta::assert_snapshot!(format!("{words:?}"), @r###"["hello"]"###);
 
-        let mut s = Search::new(&txn, &index, &progress);
-        s.query("hello");
+        let s = index.search(&txn, |builder| {
+            builder.query("hello");
+        });
         let crate::SearchResult { documents_ids, .. } = s.execute().unwrap();
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");
     }

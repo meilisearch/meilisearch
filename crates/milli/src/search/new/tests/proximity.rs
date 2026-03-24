@@ -268,9 +268,10 @@ fn test_proximity_simple() {
     let index = create_simple_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the quick brown fox jumps over the lazy dog");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("the quick brown fox jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 10, 4, 7, 6, 2, 3, 5, 1, 0]");
     let texts = collect_field_values(&index, &txn, "text", &documents_ids);
@@ -295,10 +296,11 @@ fn test_proximity_split_word() {
     let index = create_edge_cases_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("sunflower wilting");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("sunflower wilting");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 4, 5, 1, 3]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
@@ -315,10 +317,11 @@ fn test_proximity_split_word() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("\"sun flower\" wilting");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("\"sun flower\" wilting");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 4, 1]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
@@ -342,10 +345,11 @@ fn test_proximity_split_word() {
         .unwrap();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("xyz wilting");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("xyz wilting");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[2, 4, 1]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
@@ -365,10 +369,11 @@ fn test_proximity_prefix_db() {
     let index = create_edge_cases_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("best s");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("best s");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 9, 6, 7, 8, 11, 12, 13, 15]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
@@ -390,10 +395,11 @@ fn test_proximity_prefix_db() {
     "###);
 
     // Difference when using the `su` prefix, which is not in the prefix DB
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("best su");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("best su");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[10, 13, 9, 12, 6, 7, 8, 11, 15]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
@@ -417,10 +423,11 @@ fn test_proximity_prefix_db() {
     // **proximity** prefix DB. In that case, its sprximity score will always be
     // the maximum. This happens for prefixes that are larger than 2 bytes.
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("best win");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("best win");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 18, 15, 16, 17, 20, 21, 22]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
@@ -441,10 +448,11 @@ fn test_proximity_prefix_db() {
 
     // Now using `wint`, which is not in the prefix DB:
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("best wint");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("best wint");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 22, 18, 21, 15, 16, 17, 20]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
@@ -465,10 +473,11 @@ fn test_proximity_prefix_db() {
 
     // and using `wi` which is in the prefix DB and proximity prefix DB
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("best wi");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("best wi");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[19, 18, 15, 16, 17, 20, 21, 22]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));

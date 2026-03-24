@@ -131,10 +131,11 @@ fn test_words_tms_last_simple() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("the quick brown fox jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // 6 and 7 have the same score because "the" appears twice
@@ -166,10 +167,11 @@ fn test_words_tms_last_simple() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("extravagant the quick brown fox jumps over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("extravagant the quick brown fox jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");
     insta::assert_snapshot!(format!("{document_scores:?}"), @"[]");
@@ -180,10 +182,11 @@ fn test_words_tms_last_phrase() {
     let index = create_index();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
-    s.query("\"the quick brown fox\" jumps over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("\"the quick brown fox\" jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // "The quick brown fox" is a phrase, not deleted by this term matching strategy
@@ -205,10 +208,11 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("\"the quick brown fox\" jumps over the \"lazy\" dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("\"the quick brown fox\" jumps over the \"lazy\" dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // "lazy" is a phrase, not deleted by this term matching strategy
@@ -227,10 +231,11 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("\"the quick brown fox jumps over the lazy dog\"");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("\"the quick brown fox jumps over the lazy dog\"");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // The whole query is a phrase, no terms are removed
@@ -243,10 +248,11 @@ fn test_words_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("\"the quick brown fox jumps over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("\"the quick brown fox jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // The whole query is still a phrase, even without closing quotes, so no terms are removed
@@ -270,10 +276,11 @@ fn test_words_proximity_tms_last_simple() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("the quick brown fox jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // 7 is better than 6 because of the proximity between "the" and its surrounding terms
@@ -305,10 +312,11 @@ fn test_words_proximity_tms_last_simple() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("the brown quick fox jumps over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("the brown quick fox jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // 10 is better than 9 because of the proximity between "quick" and "brown"
@@ -351,10 +359,11 @@ fn test_words_proximity_tms_last_phrase() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
-    s.query("the \"quick brown\" fox jumps over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("the \"quick brown\" fox jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // "quick brown" is a phrase. The proximity of its first and last words
@@ -382,10 +391,11 @@ fn test_words_proximity_tms_last_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("the \"quick brown\" \"fox jumps\" over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("the \"quick brown\" \"fox jumps\" over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     // "quick brown" is a phrase. The proximity of its first and last words
@@ -421,10 +431,11 @@ fn test_words_tms_all() {
         .unwrap();
 
     let txn = index.read_txn().unwrap();
-    let mut s = index.search(&txn);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("the quick brown fox jumps over the lazy dog");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[9, 21, 14, 17, 13, 10, 18, 16, 19, 15, 20, 22]");
@@ -447,10 +458,11 @@ fn test_words_tms_all() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.query("extravagant");
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("extravagant");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[]");

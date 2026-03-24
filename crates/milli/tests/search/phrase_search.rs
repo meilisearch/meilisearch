@@ -1,7 +1,7 @@
 use http_client::policy::IpPolicy;
 use milli::progress::Progress;
 use milli::update::{IndexerConfig, Settings};
-use milli::{Criterion, Index, Search, TermsMatchingStrategy};
+use milli::{Criterion, Index, SearchBuilder, TermsMatchingStrategy};
 
 use crate::search::Criterion::{Attribute, Exactness, Proximity};
 
@@ -34,11 +34,11 @@ fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
     let txn = index.read_txn().unwrap();
 
     let progress = Progress::default();
-    let mut search = Search::new(&txn, &index, &progress);
+    let mut search = SearchBuilder::new();
     search.query("\"the use of force\"");
     search.limit(10);
     search.terms_matching_strategy(TermsMatchingStrategy::All);
-
+    let search = search.build(&txn, &index, &progress);
     let result = search.execute().unwrap();
     // 1 document should match
     assert_eq!(result.documents_ids.len(), 1);

@@ -11,7 +11,7 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::index::tests::TempIndex;
 use crate::score_details::ScoreDetails;
 use crate::search::new::tests::collect_field_values;
-use crate::{AscDesc, Criterion, GeoSortStrategy, Member, Search, SearchResult};
+use crate::{AscDesc, Criterion, GeoSortStrategy, Member, SearchResult};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -30,14 +30,20 @@ fn create_index() -> TempIndex {
 fn execute_iterative_and_rtree_returns_the_same<'a>(
     rtxn: &RoTxn<'a>,
     index: &TempIndex,
-    search: &mut Search<'a>,
+    builder_fn: impl Fn(&mut crate::search::SearchBuilder),
 ) -> (Vec<usize>, Vec<Vec<ScoreDetails>>) {
-    search.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(2));
+    let search = index.search(rtxn, |builder| {
+        builder_fn(builder);
+        builder.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(2));
+    });
     let SearchResult { documents_ids, document_scores: iterative_scores_bucketed, .. } =
         search.execute().unwrap();
     let iterative_ids_bucketed = collect_field_values(index, rtxn, "id", &documents_ids);
 
-    search.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(1000));
+    let search = index.search(rtxn, |builder| {
+        builder_fn(builder);
+        builder.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(1000));
+    });
     let SearchResult { documents_ids, document_scores: iterative_scores, .. } =
         search.execute().unwrap();
     let iterative_ids = collect_field_values(index, rtxn, "id", &documents_ids);
@@ -45,12 +51,18 @@ fn execute_iterative_and_rtree_returns_the_same<'a>(
     assert_eq!(iterative_ids_bucketed, iterative_ids, "iterative bucket");
     assert_eq!(iterative_scores_bucketed, iterative_scores, "iterative bucket score");
 
-    search.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(2));
+    let search = index.search(rtxn, |builder| {
+        builder_fn(builder);
+        builder.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(2));
+    });
     let SearchResult { documents_ids, document_scores: rtree_scores_bucketed, .. } =
         search.execute().unwrap();
     let rtree_ids_bucketed = collect_field_values(index, rtxn, "id", &documents_ids);
 
-    search.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(1000));
+    let search = index.search(rtxn, |builder| {
+        builder_fn(builder);
+        builder.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(1000));
+    });
     let SearchResult { documents_ids, document_scores: rtree_scores, .. } =
         search.execute().unwrap();
     let rtree_ids = collect_field_values(index, rtxn, "id", &documents_ids);
@@ -82,16 +94,17 @@ fn test_geo_sort() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = index.search(&rtxn);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[0, 1, 2, 3, 4, 5, 6, 8, 7, 10, 9]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
-    s.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 0.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[5, 4, 3, 2, 1, 0, 6, 8, 7, 10, 9]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 }
@@ -118,21 +131,23 @@ fn test_geo_sort_with_following_ranking_rules() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = index.search(&rtxn);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![
-        AscDesc::Asc(Member::Geo([0., 0.])),
-        AscDesc::Desc(Member::Field("score".to_string())),
-    ]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![
+            AscDesc::Asc(Member::Geo([0., 0.])),
+            AscDesc::Desc(Member::Field("score".to_string())),
+        ]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1, 4, 3, 2, 5]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
-    s.sort_criteria(vec![
-        AscDesc::Desc(Member::Geo([0., 0.])),
-        AscDesc::Desc(Member::Field("score".to_string())),
-    ]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![
+            AscDesc::Desc(Member::Geo([0., 0.])),
+            AscDesc::Desc(Member::Field("score".to_string())),
+        ]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[12, 13, 14, 15, 6, 7, 8, 9, 10, 11, 1, 4, 3, 2, 5]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 }
@@ -159,17 +174,17 @@ fn test_geo_sort_reached_max_bucket_size() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = index.search(&rtxn);
-    s.geo_max_bucket_size(2);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![
-        AscDesc::Asc(Member::Geo([0., 0.])),
-        AscDesc::Desc(Member::Field("score".to_string())),
-    ]);
-
     /* We should not expect the results to obey the following ranking rules when the bucket size limit is reached,
      * nor should we expect Iteration and rtree to give exactly the same order for the same bucket in this case.*/
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(1000));
+    let s = index.search(&rtxn, |builder| {
+        builder.geo_max_bucket_size(2);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![
+            AscDesc::Asc(Member::Geo([0., 0.])),
+            AscDesc::Desc(Member::Field("score".to_string())),
+        ]);
+        builder.geo_sort_strategy(GeoSortStrategy::AlwaysIterative(1000));
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     let iterative_ids = collect_field_values(&index, &rtxn, "id", &documents_ids);
 
@@ -185,7 +200,15 @@ fn test_geo_sort_reached_max_bucket_size() {
     let no_geo_ids = iterative_ids[10..].iter().collect_vec();
     insta::assert_snapshot!(format!("{no_geo_ids:?}"), @r#"["1", "4", "3", "2", "5"]"#);
 
-    s.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(1000));
+    let s = index.search(&rtxn, |builder| {
+        builder.geo_max_bucket_size(2);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![
+            AscDesc::Asc(Member::Geo([0., 0.])),
+            AscDesc::Desc(Member::Field("score".to_string())),
+        ]);
+        builder.geo_sort_strategy(GeoSortStrategy::AlwaysRtree(1000));
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     let rtree_ids = collect_field_values(&index, &rtxn, "id", &documents_ids);
 
@@ -219,62 +242,79 @@ fn test_geo_sort_around_the_edge_of_the_flat_earth() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = index.search(&rtxn);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-
     // --- asc
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[0, 1, 2, 3, 4]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
     // ensuring the lat doesn't wrap around
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([85., 0.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([85., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[1, 0, 3, 4, 2]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([-85., 0.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([-85., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[2, 0, 3, 4, 1]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
     // ensuring the lng does wrap around
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 175.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 175.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[3, 4, 2, 1, 0]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., -175.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., -175.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[4, 3, 2, 1, 0]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
     // --- desc
-    s.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 0.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[4, 3, 2, 1, 0]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
     // ensuring the lat doesn't wrap around
-    s.sort_criteria(vec![AscDesc::Desc(Member::Geo([85., 0.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Geo([85., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[2, 4, 3, 0, 1]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
-    s.sort_criteria(vec![AscDesc::Desc(Member::Geo([-85., 0.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Geo([-85., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[1, 4, 3, 0, 2]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
     // ensuring the lng does wrap around
-    s.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 175.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., 175.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[0, 1, 2, 4, 3]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
-    s.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., -175.]))]);
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Geo([0., -175.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[0, 1, 2, 3, 4]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 }
@@ -295,17 +335,19 @@ fn geo_sort_mixed_with_words() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = index.search(&rtxn);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
-
-    s.query("jean");
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.query("jean");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[0, 2, 3]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 
-    s.query("bob");
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.query("bob");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[2, 4]");
     insta::assert_snapshot!(format!("{scores:#?}"), @r###"
     [
@@ -358,8 +400,11 @@ fn geo_sort_mixed_with_words() {
     ]
     "###);
 
-    s.query("intel");
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
+        builder.query("intel");
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[1]");
     insta::assert_snapshot!(format!("{scores:#?}"), @r###"
     [
@@ -406,12 +451,11 @@ fn geo_sort_without_any_geo_faceted_documents() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = index.search(&rtxn);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
-
-    s.query("jean");
-    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, &mut s);
+    let (ids, scores) = execute_iterative_and_rtree_returns_the_same(&rtxn, &index, |builder| {
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
+        builder.query("jean");
+    });
     insta::assert_snapshot!(format!("{ids:?}"), @"[0, 2, 3]");
     insta::assert_snapshot!(format!("{scores:#?}"));
 }

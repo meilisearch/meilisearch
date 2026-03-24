@@ -14,6 +14,7 @@ use crate::error::{Error, InternalError};
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::progress::Progress;
 use crate::search::facet::IndexFilter;
+use crate::search::SearchBuilder;
 use crate::update::new::indexer;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{
@@ -244,8 +245,14 @@ impl TempIndex {
         self.delete_documents(vec![external_document_id.to_string()])
     }
 
-    pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn<'a>) -> Search<'a> {
-        self.inner.search(rtxn, &self.progress)
+    pub fn search<'a>(
+        &'a self,
+        rtxn: &'a heed::RoTxn<'a>,
+        builder_fn: impl FnOnce(&mut SearchBuilder<'a>),
+    ) -> Search<'a> {
+        let mut builder = SearchBuilder::new();
+        builder_fn(&mut builder);
+        builder.build(rtxn, &self.inner, &self.progress)
     }
 }
 
@@ -494,76 +501,91 @@ fn test_basic_geo_bounding_box() {
 
     // ensure we get the right real searchable fields + user defined searchable fields
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
 
     // exact match a document
-    let search_result = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap(),
-        ))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
     // match a document in the middle of the rectangle
-    let search_result = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([10, 10], [-10, -10])").unwrap().unwrap(),
-        ))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([10, 10], [-10, -10])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
     // select everything
-    let search_result = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([90, 180], [-90, -180])").unwrap().unwrap(),
-        ))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([90, 180], [-90, -180])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2, 3, 4]>");
 
     // go on the edge of the longitude
-    let search_result = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([0, -170], [0, 180])").unwrap().unwrap(),
-        ))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([0, -170], [0, 180])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1]>");
 
     // go on the other edge of the longitude
-    let search_result = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([0, -180], [0, 170])").unwrap().unwrap(),
-        ))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([0, -180], [0, 170])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2]>");
 
     // wrap around the longitude
-    let search_result = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([0, -170], [0, 170])").unwrap().unwrap(),
-        ))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([0, -170], [0, 170])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1, 2]>");
 
     // go on the edge of the latitude
-    let search_result = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap(),
-        ))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[3]>");
 
     // go on the edge of the latitude
-    let search_result = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap(),
-        ))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[4]>");
@@ -571,10 +593,12 @@ fn test_basic_geo_bounding_box() {
     // the requests that don't make sense
 
     // try to wrap around the latitude
-    let error = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap(),
-        ))
+    let error = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap_err();
     insta::assert_snapshot!(
@@ -586,10 +610,12 @@ fn test_basic_geo_bounding_box() {
     );
 
     // send a top latitude lower than the bottow latitude
-    let error = search
-        .filter(IndexFilter::from(
-            Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap(),
-        ))
+    let error = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap_err();
     insta::assert_snapshot!(
@@ -623,21 +649,30 @@ fn test_contains() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
-    let search_result = search
-        .filter(IndexFilter::from(Filter::from_str("doggo CONTAINS kefir").unwrap().unwrap()))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("doggo CONTAINS kefir").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1]>");
-    let mut search = index.search(&rtxn);
-    let search_result = search
-        .filter(IndexFilter::from(Filter::from_str("doggo CONTAINS KEF").unwrap().unwrap()))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("doggo CONTAINS KEF").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2]>");
-    let mut search = index.search(&rtxn);
-    let search_result = search
-        .filter(IndexFilter::from(Filter::from_str("doggo NOT CONTAINS fir").unwrap().unwrap()))
+    let search_result = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("doggo NOT CONTAINS fir").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2, 4, 5]>");
@@ -1156,7 +1191,6 @@ fn bug_3021_fourth() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let search = index.search(&rtxn);
     let SearchResult {
         matching_words: _,
         candidates: _,
@@ -1165,7 +1199,7 @@ fn bug_3021_fourth() {
         degraded: _,
         used_negative_operator: _,
         query_vector: _,
-    } = search.execute().unwrap();
+    } = index.search(&rtxn, |_| {}).execute().unwrap();
     let primary_key_id = index.fields_ids_map(&rtxn).unwrap().id("primary_key").unwrap();
     documents_ids.sort_unstable();
     let docs = index.documents(&rtxn, documents_ids).unwrap();
@@ -1324,8 +1358,12 @@ fn attribute_weights_after_swapping_searchable_attributes() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
-    let results = search.query("kefir").execute().unwrap();
+    let results = index
+        .search(&rtxn, |builder| {
+            builder.query("kefir");
+        })
+        .execute()
+        .unwrap();
 
     // We should find kefir the dog first
     insta::assert_debug_snapshot!(results.documents_ids, @r###"
@@ -1342,8 +1380,12 @@ fn attribute_weights_after_swapping_searchable_attributes() {
         .unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
-    let results = search.query("kefir").execute().unwrap();
+    let results = index
+        .search(&rtxn, |builder| {
+            builder.query("kefir");
+        })
+        .execute()
+        .unwrap();
 
     // We should find tamo first
     insta::assert_debug_snapshot!(results.documents_ids, @r###"
@@ -1376,8 +1418,12 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
-    let results = search.query("2345").execute().unwrap();
+    let results = index
+        .search(&rtxn, |builder| {
+            builder.query("2345");
+        })
+        .execute()
+        .unwrap();
     assert!(results.candidates.is_empty());
     drop(rtxn);
 
@@ -1401,13 +1447,20 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
-    let results = search.query("2345").execute().unwrap();
+    let results = index
+        .search(&rtxn, |builder| {
+            builder.query("2345");
+        })
+        .execute()
+        .unwrap();
     assert!(results.candidates.is_empty());
 
-    let mut search = index.search(&rtxn);
-    let results = dbg!(search
-        .filter(IndexFilter::from(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()))
+    let results = dbg!(index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap(),
+            ));
+        })
         .execute())
     .unwrap();
     assert!(results.candidates.is_empty());
@@ -1433,13 +1486,20 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let mut search = index.search(&rtxn);
-    let results = search.query("2345").execute().unwrap();
+    let results = index
+        .search(&rtxn, |builder| {
+            builder.query("2345");
+        })
+        .execute()
+        .unwrap();
     assert!(results.candidates.is_empty());
 
-    let mut search = index.search(&rtxn);
-    let results = search
-        .filter(IndexFilter::from(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()))
+    let results = index
+        .search(&rtxn, |builder| {
+            builder.filter(IndexFilter::from(
+                Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap(),
+            ));
+        })
         .execute()
         .unwrap();
     assert!(results.candidates.is_empty());

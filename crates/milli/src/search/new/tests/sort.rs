@@ -183,10 +183,11 @@ fn test_sort() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("letter")))]);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Field(S("letter")))]);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[21, 22, 23, 20, 18, 19, 15, 16, 17, 9, 10, 11, 12, 13, 14, 8, 5, 6, 7, 2]");
@@ -218,10 +219,11 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("rank")))]);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Field(S("rank")))]);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[14, 13, 12, 4, 7, 11, 17, 23, 1, 3, 6, 10, 16, 19, 22, 0, 2, 5, 8, 9]");
@@ -253,10 +255,11 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![AscDesc::Asc(Member::Field(S("vague")))]);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Asc(Member::Field(S("vague")))]);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2, 4, 5, 22, 23, 13, 1, 3, 12, 21, 11, 20, 6, 7, 8, 9, 10, 14, 15]");
@@ -288,10 +291,11 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("vague")))]);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![AscDesc::Desc(Member::Field(S("vague")))]);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4, 13, 23, 22, 2, 5, 0, 11, 20, 12, 21, 3, 1, 6, 7, 8, 9, 10, 14, 15]");
@@ -337,13 +341,14 @@ fn test_redacted() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.sort_criteria(vec![
-        AscDesc::Asc(Member::Field(S("vague"))),
-        AscDesc::Asc(Member::Field(S("letter"))),
-    ]);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.sort_criteria(vec![
+            AscDesc::Asc(Member::Field(S("vague"))),
+            AscDesc::Asc(Member::Field(S("letter"))),
+        ]);
+    });
 
     let attribute_state = AttributeState::from_criteria(index.criteria(&txn).unwrap());
 

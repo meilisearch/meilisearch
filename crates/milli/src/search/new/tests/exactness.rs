@@ -471,10 +471,11 @@ fn test_exactness_simple_ordered() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -503,10 +504,11 @@ fn test_exactness_simple_reversed() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -526,10 +528,11 @@ fn test_exactness_simple_reversed() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -556,10 +559,11 @@ fn test_exactness_simple_random() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -585,10 +589,11 @@ fn test_exactness_attribute_starts_with_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("this balcony");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("this balcony");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -611,10 +616,11 @@ fn test_exactness_attribute_starts_with_phrase() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("\"overlooking the sea\" is a beautiful balcony");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("\"overlooking the sea\" is a beautiful balcony");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -631,10 +637,11 @@ fn test_exactness_attribute_starts_with_phrase() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("overlooking the sea is a beautiful balcony");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("overlooking the sea is a beautiful balcony");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -660,10 +667,11 @@ fn test_exactness_all_candidates_with_typo() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("overlocking the sea is a beautiful balcony");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("overlocking the sea is a beautiful balcony");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -696,10 +704,11 @@ fn test_exactness_after_words() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -744,10 +753,11 @@ fn test_words_after_exactness() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -792,10 +802,11 @@ fn test_proximity_after_exactness() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -829,10 +840,11 @@ fn test_proximity_after_exactness() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("the quick brown fox jumps over the lazy dog");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("the quick brown fox jumps over the lazy dog");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -862,10 +874,11 @@ fn test_exactness_followed_by_typo_prefer_no_typo_prefix() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("quick brown fox extra");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("quick brown fox extra");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 
@@ -897,10 +910,11 @@ fn test_typo_followed_by_exactness() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::Last);
-    s.query("extraordinarily quick brown fox");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::Last);
+        builder.query("extraordinarily quick brown fox");
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    });
 
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
 

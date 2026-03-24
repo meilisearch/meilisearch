@@ -87,10 +87,11 @@ fn test_trap_basic_and_complex1() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("beautiful summer");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("beautiful summer");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 0, 3, 2]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));
@@ -110,10 +111,11 @@ fn test_trap_complex2() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("delicious sweet dessert");
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("delicious sweet dessert");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[5, 4]");
     insta::assert_snapshot!(format!("{document_scores:#?}"));

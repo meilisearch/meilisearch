@@ -78,10 +78,11 @@ fn test_2gram_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
-    s.query("sun flower");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
+        builder.query("sun flower");
+    });
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     // will also match documents with "sunflower" + prefix tolerance
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 5]");
@@ -109,9 +110,10 @@ fn test_3gram_simple() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sun flower s are");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sun flower s are");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2]");
@@ -129,9 +131,10 @@ fn test_2gram_typo() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sun flawer");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sun flawer");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 4, 5]");
@@ -159,9 +162,10 @@ fn test_no_disable_ngrams() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sun flower ");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sun flower ");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     // documents containing `sunflower`
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 3]");
@@ -185,9 +189,10 @@ fn test_2gram_prefix() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sun flow");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sun flow");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     // documents containing words beginning with `sunflow`
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1, 2, 3, 5]");
@@ -214,9 +219,10 @@ fn test_3gram_prefix() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("su nf l");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("su nf l");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     // documents containing a word beginning with sunfl
@@ -237,9 +243,10 @@ fn test_split_words() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sunflower ");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sunflower ");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     // all the documents with either `sunflower` or `sun flower` + eventual typo
@@ -266,9 +273,10 @@ fn test_disable_split_words() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sunflower ");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sunflower ");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
     // no document containing `sun flower`
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 3]");
@@ -286,9 +294,10 @@ fn test_2gram_split_words() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sunf lower");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sunf lower");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     // all the documents with "sunflower", "sun flower", (sunflower + 1 typo), or (sunflower as prefix)
@@ -310,9 +319,10 @@ fn test_3gram_no_split_words() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sunf lo wer");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sunf lo wer");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     // no document with `sun flower`
@@ -333,9 +343,10 @@ fn test_3gram_no_typos() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("sunf la wer");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("sunf la wer");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[4]");
@@ -352,9 +363,10 @@ fn test_no_ngram_phrases() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("\"sun\" flower");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("\"sun\" flower");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 1]");
@@ -366,9 +378,10 @@ fn test_no_ngram_phrases() {
     ]
     "###);
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("\"sun\" \"flower\"");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("\"sun\" \"flower\"");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1]");
@@ -385,9 +398,10 @@ fn test_short_split_words() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("xyz");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("xyz");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[6]");
@@ -412,9 +426,10 @@ fn test_split_words_never_disabled() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = index.search(&txn);
-    s.terms_matching_strategy(TermsMatchingStrategy::All);
-    s.query("the sunflower is tall");
+    let s = index.search(&txn, |builder| {
+        builder.terms_matching_strategy(TermsMatchingStrategy::All);
+        builder.query("the sunflower is tall");
+    });
     let SearchResult { documents_ids, .. } = s.execute().unwrap();
 
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[1, 3]");

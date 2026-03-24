@@ -242,25 +242,32 @@ fn escaped_quote_in_filter_value_2380() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = index.search(&rtxn);
     // this filter is copy pasted from #2380 with the exact same espace sequence
     let filter = Filter::from_str("monitor_diagonal = '27\" to 30\\''").unwrap().unwrap();
-    search.filter(IndexFilter::from(filter));
+    let search = index.search(&rtxn, |builder| {
+        builder.filter(IndexFilter::from(filter));
+    });
     let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
     assert_eq!(documents_ids, vec![2]);
 
     let filter = Filter::from_str(r#"monitor_diagonal = "27' to 30'" "#).unwrap().unwrap();
-    search.filter(IndexFilter::from(filter));
+    let search = index.search(&rtxn, |builder| {
+        builder.filter(IndexFilter::from(filter));
+    });
     let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
     assert_eq!(documents_ids, vec![0]);
 
     let filter = Filter::from_str(r#"monitor_diagonal = "27\" to 30\"" "#).unwrap().unwrap();
-    search.filter(IndexFilter::from(filter));
+    let search = index.search(&rtxn, |builder| {
+        builder.filter(IndexFilter::from(filter));
+    });
     let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
     assert_eq!(documents_ids, vec![1]);
 
     let filter = Filter::from_str(r#"monitor_diagonal = "27\" to 30'" "#).unwrap().unwrap();
-    search.filter(IndexFilter::from(filter));
+    let search = index.search(&rtxn, |builder| {
+        builder.filter(IndexFilter::from(filter));
+    });
     let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
     assert_eq!(documents_ids, vec![2]);
 }
@@ -306,10 +313,10 @@ fn zero_radius() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = index.search(&rtxn);
-
     let filter = Filter::from_str("_geoRadius(45.4777599, 9.1967508, 0)").unwrap().unwrap();
-    search.filter(IndexFilter::from(filter));
+    let search = index.search(&rtxn, |builder| {
+        builder.filter(IndexFilter::from(filter));
+    });
     let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
     assert_eq!(documents_ids, vec![0]);
 }

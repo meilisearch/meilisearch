@@ -45,12 +45,22 @@ fn set_and_reset_searchable_fields() {
     let rtxn = index.read_txn().unwrap();
     // When we search for something that is not in
     // the searchable fields it must not return any document.
-    let result = index.search(&rtxn).query("23").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("23");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids, Vec::<u32>::new());
 
     // When we search for something that is in the searchable fields
     // we must find the appropriate document.
-    let result = index.search(&rtxn).query(r#""kevin""#).execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query(r#""kevin""#);
+        })
+        .execute()
+        .unwrap();
     let documents = index.documents(&rtxn, result.documents_ids).unwrap();
     let fid_map = index.fields_ids_map(&rtxn).unwrap();
     assert_eq!(documents.len(), 1);
@@ -85,7 +95,12 @@ fn set_and_reset_searchable_fields() {
     // the searchable fields should contain all the fields
     let searchable_fields = index.searchable_fields(&rtxn).unwrap();
     snapshot!(format!("{searchable_fields:?}"), @r###"["id", "name", "age"]"###);
-    let result = index.search(&rtxn).query("23").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("23");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 1);
     let documents = index.documents(&rtxn, result.documents_ids).unwrap();
     assert_eq!(documents[0].1.get(fid_map.id("name").unwrap()), Some(&br#""kevin""#[..]));
@@ -338,7 +353,7 @@ fn set_asc_desc_field() {
 
     // Run an empty query just to ensure that the search results are ordered.
     let rtxn = index.read_txn().unwrap();
-    let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+    let SearchResult { documents_ids, .. } = index.search(&rtxn, |_| {}).execute().unwrap();
     let documents = index.documents(&rtxn, documents_ids).unwrap();
 
     // Fetch the documents "age" field in the ordre in which the documents appear.
@@ -380,7 +395,7 @@ fn set_distinct_field() {
 
     // Run an empty query just to ensure that the search results are ordered.
     let rtxn = index.read_txn().unwrap();
-    let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+    let SearchResult { documents_ids, .. } = index.search(&rtxn, |_| {}).execute().unwrap();
 
     // There must be at least one document with a 34 as the age.
     assert_eq!(documents_ids.len(), 3);
@@ -414,7 +429,7 @@ fn set_nested_distinct_field() {
 
     // Run an empty query just to ensure that the search results are ordered.
     let rtxn = index.read_txn().unwrap();
-    let SearchResult { documents_ids, .. } = index.search(&rtxn).execute().unwrap();
+    let SearchResult { documents_ids, .. } = index.search(&rtxn, |_| {}).execute().unwrap();
 
     // There must be at least one document with a 34 as the age.
     assert_eq!(documents_ids.len(), 3);
@@ -477,16 +492,41 @@ fn set_and_reset_stop_words() {
 
     // when we search for something that is a non prefix stop_words it should be ignored
     // thus we should get a placeholder search (all the results = 3)
-    let result = index.search(&rtxn).query("the ").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("the ");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 3);
-    let result = index.search(&rtxn).query("i ").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("i ");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 3);
-    let result = index.search(&rtxn).query("are ").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("are ");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 3);
 
-    let result = index.search(&rtxn).query("dog").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("dog");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
-    let result = index.search(&rtxn).query("benoît").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("benoît");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
 
     // now we'll reset the stop_words and ensure it's None
@@ -501,17 +541,42 @@ fn set_and_reset_stop_words() {
     assert!(stop_words.is_none());
 
     // now we can search for the stop words
-    let result = index.search(&rtxn).query("the").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("the");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 2);
-    let result = index.search(&rtxn).query("i").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("i");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 1);
-    let result = index.search(&rtxn).query("are").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("are");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 2);
 
     // the rest of the search is still not impacted
-    let result = index.search(&rtxn).query("dog").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("dog");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 2); // we have two maxims talking about doggos
-    let result = index.search(&rtxn).query("benoît").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("benoît");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 1); // there is one benoit in our data
 }
 
@@ -550,11 +615,26 @@ fn set_and_reset_synonyms() {
     assert!(!synonyms.is_empty()); // at this point the index should return something
 
     // Check that we can use synonyms
-    let result = index.search(&rtxn).query("blini").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("blini");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 1);
-    let result = index.search(&rtxn).query("super like").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("super like");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 1);
-    let result = index.search(&rtxn).query("puppies").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("puppies");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 2);
 
     // Reset the synonyms
@@ -570,11 +650,26 @@ fn set_and_reset_synonyms() {
     assert!(synonyms.is_empty());
 
     // Check that synonyms are no longer work
-    let result = index.search(&rtxn).query("blini").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("blini");
+        })
+        .execute()
+        .unwrap();
     assert!(result.documents_ids.is_empty());
-    let result = index.search(&rtxn).query("super like").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("super like");
+        })
+        .execute()
+        .unwrap();
     assert!(result.documents_ids.is_empty());
-    let result = index.search(&rtxn).query("puppies").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("puppies");
+        })
+        .execute()
+        .unwrap();
     assert!(result.documents_ids.is_empty());
 }
 
@@ -610,7 +705,12 @@ fn thai_synonyms() {
     assert!(!synonyms.is_empty()); // at this point the index should return something
 
     // Check that we can use synonyms
-    let result = index.search(&rtxn).query("japanese").execute().unwrap();
+    let result = index
+        .search(&rtxn, |builder| {
+            builder.query("japanese");
+        })
+        .execute()
+        .unwrap();
     assert_eq!(result.documents_ids.len(), 2);
 }
 
@@ -767,7 +867,12 @@ fn setting_impact_relevancy() {
     ])).unwrap();
 
     let rtxn = index.read_txn().unwrap();
-    let SearchResult { documents_ids, .. } = index.search(&rtxn).query("S").execute().unwrap();
+    let SearchResult { documents_ids, .. } = index
+        .search(&rtxn, |builder| {
+            builder.query("S");
+        })
+        .execute()
+        .unwrap();
     let first_id = documents_ids[0];
     let documents = index.documents(&rtxn, documents_ids).unwrap();
     let (_, content) = documents.iter().find(|(id, _)| *id == first_id).unwrap();
