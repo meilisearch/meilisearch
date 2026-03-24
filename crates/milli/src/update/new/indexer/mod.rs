@@ -50,6 +50,7 @@ mod partial_dump;
 mod post_processing;
 pub mod settings_changes;
 mod update_by_function;
+mod word_delta;
 mod write;
 
 static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
