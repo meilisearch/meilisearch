@@ -406,9 +406,13 @@ pub trait NetworkableQuery {
         // fixup value for the use network field to prevent recursion,
         // and we have a different default value.
 
-        let default;
-        (*self.use_network_field(), default) =
-            if network.sharding() { (Some(false), true) } else { (None, false) };
+        let default = if network.sharding() {
+            *self.use_network_field() = Some(false);
+            true
+        } else {
+        	*self.use_network_field() = None;
+        	false
+      	};
 
         // **after we fixed-up the network field**, we can return immediately if there's an explicit remote.
         if self.has_remote() {
