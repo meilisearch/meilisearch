@@ -66,9 +66,31 @@ pub struct Search<'a> {
     progress: &'a Progress,
 }
 
-impl<'a> Search<'a> {
-    pub fn new(rtxn: &'a heed::RoTxn<'a>, index: &'a Index, progress: &'a Progress) -> Search<'a> {
-        Search {
+pub struct SearchBuilder<'a> {
+    query: Option<String>,
+    // this should be linked to the String in the query
+    filter: Option<IndexFilter<'a>>,
+    offset: usize,
+    limit: usize,
+    sort_criteria: Option<Vec<AscDesc>>,
+    distinct: Option<String>,
+    searchable_attributes: Option<&'a [String]>,
+    geo_param: GeoSortParameter,
+    terms_matching_strategy: TermsMatchingStrategy,
+    scoring_strategy: ScoringStrategy,
+    words_limit: usize,
+    retrieve_vectors: bool,
+    exhaustive_number_hits: bool,
+    max_total_hits: Option<usize>,
+    semantic: Option<SemanticSearch>,
+    deadline: Deadline,
+    ranking_score_threshold: Option<f64>,
+    locales: Option<Vec<Language>>,
+}
+
+impl<'a> SearchBuilder<'a> {
+    pub fn new() -> Self {
+        Self {
             query: None,
             filter: None,
             offset: 0,
@@ -83,17 +105,14 @@ impl<'a> Search<'a> {
             exhaustive_number_hits: false,
             max_total_hits: None,
             words_limit: 10,
-            rtxn,
-            index,
             semantic: None,
             locales: None,
             deadline: Deadline::never(),
             ranking_score_threshold: None,
-            progress,
         }
     }
 
-    pub fn query(&mut self, query: impl Into<String>) -> &mut Search<'a> {
+    pub fn query(&mut self, query: impl Into<String>) -> &mut Self {
         self.query = Some(query.into());
         self
     }
@@ -105,100 +124,133 @@ impl<'a> Search<'a> {
         quantized: bool,
         vector: Option<Embedding>,
         media: Option<serde_json::Value>,
-    ) -> &mut Search<'a> {
+    ) -> &mut Self {
         self.semantic = Some(SemanticSearch { embedder_name, embedder, quantized, vector, media });
         self
     }
 
-    pub fn offset(&mut self, offset: usize) -> &mut Search<'a> {
+    pub fn offset(&mut self, offset: usize) -> &mut Self {
         self.offset = offset;
         self
     }
 
-    pub fn limit(&mut self, limit: usize) -> &mut Search<'a> {
+    pub fn limit(&mut self, limit: usize) -> &mut Self {
         self.limit = limit;
         self
     }
 
-    pub fn sort_criteria(&mut self, criteria: Vec<AscDesc>) -> &mut Search<'a> {
+    pub fn sort_criteria(&mut self, criteria: Vec<AscDesc>) -> &mut Self {
         self.sort_criteria = Some(criteria);
         self
     }
 
-    pub fn distinct(&mut self, distinct: String) -> &mut Search<'a> {
+    pub fn distinct(&mut self, distinct: String) -> &mut Self {
         self.distinct = Some(distinct);
         self
     }
 
-    pub fn searchable_attributes(&mut self, searchable: &'a [String]) -> &mut Search<'a> {
+    pub fn searchable_attributes(&mut self, searchable: &'a [String]) -> &mut Self {
         self.searchable_attributes = Some(searchable);
         self
     }
 
-    pub fn terms_matching_strategy(&mut self, value: TermsMatchingStrategy) -> &mut Search<'a> {
+    pub fn terms_matching_strategy(&mut self, value: TermsMatchingStrategy) -> &mut Self {
         self.terms_matching_strategy = value;
         self
     }
 
-    pub fn scoring_strategy(&mut self, value: ScoringStrategy) -> &mut Search<'a> {
+    pub fn scoring_strategy(&mut self, value: ScoringStrategy) -> &mut Self {
         self.scoring_strategy = value;
         self
     }
 
-    pub fn words_limit(&mut self, value: usize) -> &mut Search<'a> {
+    pub fn words_limit(&mut self, value: usize) -> &mut Self {
         self.words_limit = value;
         self
     }
 
-    pub fn filter(&mut self, condition: IndexFilter<'a>) -> &mut Search<'a> {
+    pub fn filter(&mut self, condition: IndexFilter<'a>) -> &mut Self {
         self.filter = Some(condition);
         self
     }
 
     #[cfg(test)]
-    pub fn geo_sort_strategy(&mut self, strategy: crate::GeoSortStrategy) -> &mut Search<'a> {
+    pub fn geo_sort_strategy(&mut self, strategy: crate::GeoSortStrategy) -> &mut Self {
         self.geo_param.strategy = strategy;
         self
     }
 
     #[cfg(test)]
-    pub fn geo_max_bucket_size(&mut self, max_size: u64) -> &mut Search<'a> {
+    pub fn geo_max_bucket_size(&mut self, max_size: u64) -> &mut Self {
         self.geo_param.max_bucket_size = max_size;
         self
     }
 
-    pub fn retrieve_vectors(&mut self, retrieve_vectors: bool) -> &mut Search<'a> {
+    pub fn retrieve_vectors(&mut self, retrieve_vectors: bool) -> &mut Self {
         self.retrieve_vectors = retrieve_vectors;
         self
     }
 
     /// Forces the search to exhaustively compute the number of candidates,
     /// this will increase the search time but allows finite pagination.
-    pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Search<'a> {
+    pub fn exhaustive_number_hits(&mut self, exhaustive_number_hits: bool) -> &mut Self {
         self.exhaustive_number_hits = exhaustive_number_hits;
         self
     }
 
-    pub fn max_total_hits(&mut self, max_total_hits: Option<usize>) -> &mut Search<'a> {
+    pub fn max_total_hits(&mut self, max_total_hits: Option<usize>) -> &mut Self {
         self.max_total_hits = max_total_hits;
         self
     }
 
-    pub fn deadline(&mut self, deadline: Deadline) -> &mut Search<'a> {
+    pub fn deadline(&mut self, deadline: Deadline) -> &mut Self {
         self.deadline = deadline;
         self
     }
 
-    pub fn ranking_score_threshold(&mut self, ranking_score_threshold: f64) -> &mut Search<'a> {
+    pub fn ranking_score_threshold(&mut self, ranking_score_threshold: f64) -> &mut Self {
         self.ranking_score_threshold = Some(ranking_score_threshold);
         self
     }
 
-    pub fn locales(&mut self, locales: Vec<Language>) -> &mut Search<'a> {
+    pub fn locales(&mut self, locales: Vec<Language>) -> &mut Self {
         self.locales = Some(locales);
         self
     }
 
+    pub fn build(
+        self,
+        rtxn: &'a heed::RoTxn<'a>,
+        index: &'a Index,
+        progress: &'a Progress,
+    ) -> Search<'a> {
+        Search {
+            query: self.query,
+            filter: self.filter,
+            offset: self.offset,
+            limit: self.limit,
+            sort_criteria: self.sort_criteria,
+            distinct: self.distinct,
+            searchable_attributes: self.searchable_attributes,
+            geo_param: self.geo_param,
+            terms_matching_strategy: self.terms_matching_strategy,
+            scoring_strategy: self.scoring_strategy,
+            words_limit: self.words_limit,
+            retrieve_vectors: self.retrieve_vectors,
+            exhaustive_number_hits: self.exhaustive_number_hits,
+            max_total_hits: self.max_total_hits,
+            rtxn: rtxn,
+            index: index,
+            semantic: self.semantic,
+            deadline: self.deadline,
+            ranking_score_threshold: self.ranking_score_threshold,
+            locales: self.locales,
+            progress: progress,
+        }
+    }
+}
+
+impl<'a> Search<'a> {
     pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
         if has_vector_search {
             let ctx = SearchContext::new(self.index, self.rtxn)?;
@@ -208,7 +260,7 @@ impl<'a> Search<'a> {
         }
     }
 
-    pub fn execute(&self) -> Result<SearchResult> {
+    pub fn execute<'t>(&self) -> Result<SearchResult> {
         let mut ctx = SearchContext::new(self.index, self.rtxn)?;
 
         if let Some(searchable_attributes) = self.searchable_attributes {

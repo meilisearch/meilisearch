@@ -28,7 +28,6 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
-use crate::progress::Progress;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
 use crate::sharding::{DbShardDocids, Shards};
@@ -39,8 +38,7 @@ use crate::{
     default_criteria, CboRoaringBitmapCodec, Criterion, Deadline, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
     FieldidsWeightsMap, FilterableAttributesRule, GeoPoint, LocalizedAttributesRule, ObkvCodec,
-    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
-    BEU64,
+    Result, RoaringBitmapCodec, RoaringBitmapLenCodec, U8StrStrCodec, Weight, BEU16, BEU32, BEU64,
 };
 
 pub const DEFAULT_MIN_WORD_LEN_ONE_TYPO: u8 = 5;
@@ -1510,10 +1508,6 @@ impl Index {
 
     pub fn facets_distribution<'a>(&'a self, rtxn: &'a RoTxn<'a>) -> FacetDistribution<'a> {
         FacetDistribution::new(rtxn, self)
-    }
-
-    pub fn search<'a>(&'a self, rtxn: &'a RoTxn<'a>, progress: &'a Progress) -> Search<'a> {
-        Search::new(rtxn, self, progress)
     }
 
     /// Returns the index creation time.

@@ -56,6 +56,7 @@ pub use search::new::{
     execute_search, filtered_universe, DefaultSearchLogger, SearchContext, SearchLogger,
     VisualSearchLogger,
 };
+pub use search::SearchBuilder;
 use serde_json::Value;
 pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 pub use {arroy, cellulite, charabia as tokenizer, hannoy, heed, rhai};
