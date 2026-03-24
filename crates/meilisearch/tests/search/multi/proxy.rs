@@ -5044,6 +5044,107 @@ async fn remote_auto_sharding_auto_search() {
       "remoteErrors": {}
     }
     "###);
+
+    // perform search with implicit network
+    let query = "badman returns";
+    let request = json!(
+    {
+        "q": query,
+        // default to useNetwork: true in sharding context
+    });
+
+    let (response, code) = index0.search_post(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman Returns",
+          "id": "C",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.8317901234567902,
+            "remote": "ms2"
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 1",
+          "id": "A",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362,
+            "remote": "ms1"
+          }
+        },
+        {
+          "title": "Batman the dark knight returns: Part 2",
+          "id": "B",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 1,
+            "weightedRankingScore": 0.7028218694885362,
+            "remote": "ms1"
+          }
+        },
+        {
+          "title": "Badman",
+          "id": "E",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.5,
+            "remote": "ms2"
+          }
+        },
+        {
+          "title": "Batman",
+          "id": "D",
+          "_federation": {
+            "indexUid": "test",
+            "queriesPosition": 0,
+            "weightedRankingScore": 0.23106060606060605,
+            "remote": "ms0"
+          }
+        }
+      ],
+      "query": "badman returns",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]",
+      "remoteErrors": {}
+    }
+    "###);
+
+    // perform search with explicitly disabled network
+    let query = "badman returns";
+    let request = json!(
+    {
+        "q": query,
+        "useNetwork": false,
+    });
+
+    let (response, code) = index0.search_post(request.clone()).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Batman",
+          "id": "D"
+        }
+      ],
+      "query": "badman returns",
+      "processingTimeMs": "[time]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 1,
+      "requestUid": "[uuid]"
+    }
+    "###);
 }
 
 #[cfg(not(feature = "enterprise"))]
