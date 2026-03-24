@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
 
 use bumpalo::Bump;
+use heed::BytesDecode;
 use roaring::RoaringBitmap;
 use tracing::Span;
 
@@ -14,11 +15,16 @@ use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use super::settings_changes::settings_change_extract;
 use crate::documents::{FieldIdMapper, PrimaryKey};
+use crate::heed_codec::StrBEU16Codec;
 use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
+use crate::update::new::indexer::WordDelta;
+use crate::update::new::merger::merge_and_send_docids_with_inspect;
+use crate::update::new::merger::EntryStatus;
+use crate::update::new::merger::Operation;
 use crate::update::new::merger::{merge_and_send_cellulite, merge_and_send_rtree};
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;

@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::ops::BitOr;
 
 use hashbrown::HashMap;
 use heed::types::Bytes;

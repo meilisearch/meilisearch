@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::io::BufWriter;
 
 use fst::{Set, SetBuilder, Streamer};

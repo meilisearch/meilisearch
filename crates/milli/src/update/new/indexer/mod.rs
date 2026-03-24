@@ -18,6 +18,7 @@ pub use post_processing::recompute_word_fst_from_word_docids_database;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 pub use settings_changes::settings_change_extract;
 pub use update_by_function::UpdateByFunction;
+pub use word_delta::WordDelta;
 pub use write::ChannelCongestion;
 use write::{build_vectors, update_index, write_to_db};
 

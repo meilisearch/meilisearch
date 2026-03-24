@@ -1,6 +1,9 @@
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 
+use either::Either;
 use facet_bulk::generate_facet_levels;
+use fst::Streamer;
 use heed::types::{Bytes, DecodeIgnore, Str};
 use heed::RwTxn;
 use itertools::{merge_join_by, EitherOrBoth};
@@ -13,16 +16,17 @@ use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
 use crate::update::facet::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::update::new::facet_search_builder::FacetSearchBuilder;
+use crate::update::new::indexer::WordDelta;
 use crate::update::new::merger::FacetFieldIdDelta;
 use crate::update::new::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
-use crate::update::new::word_fst_builder::{PrefixData, PrefixDelta, WordFstBuilder};
+use crate::update::new::word_fst_builder::{PrefixData, WordFstBuilder};
 use crate::update::new::words_prefix_docids::{
     compute_exact_word_prefix_docids, compute_word_prefix_docids, compute_word_prefix_fid_docids,
     compute_word_prefix_position_docids,
 };
 use crate::update::new::FacetFieldIdsDelta;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
-use crate::{GlobalFieldsIdsMap, Index, Result};
+use crate::{GlobalFieldsIdsMap, Index, Prefix, Result};
 
 mod facet_bulk;
 
