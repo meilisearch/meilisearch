@@ -472,6 +472,7 @@ InvalidDynamicSearchRuleLimit                  , InvalidRequest       , BAD_REQU
 InvalidDynamicSearchRuleFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleFilterAttributePatterns, InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleFilterActive           , InvalidRequest       , BAD_REQUEST ;
+CannotResetDynamicSearchRuleActions            , InvalidRequest       , BAD_REQUEST ;
 DynamicSearchRuleNotFound                      , InvalidRequest       , NOT_FOUND
 }
 

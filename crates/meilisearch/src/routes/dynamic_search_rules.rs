@@ -77,7 +77,8 @@ struct UpdateDynamicSearchRuleRequest {
     conditions: Setting<Vec<Condition>>,
     /// Actions to apply when the dynamic search rule matches.
     #[deserr(default)]
-    actions: Option<Vec<RuleAction>>,
+    #[schema(value_type = Option<Vec<RuleAction>>)]
+    actions: Setting<Vec<RuleAction>>,
 }
 
 #[derive(Deserr, Debug, ToSchema)]
@@ -137,6 +138,8 @@ enum DynamicSearchRulesError {
     NotFound(String),
     #[error("Dynamic search rule `{0}` already exists.")]
     AlreadyExists(String),
+    #[error("Cannot reset Dynamic search rule `{0}` action.")]
+    CannotResetActions(String),
 }
 
 impl ErrorCode for DynamicSearchRulesError {
@@ -144,6 +147,9 @@ impl ErrorCode for DynamicSearchRulesError {
         match self {
             DynamicSearchRulesError::NotFound(_) => Code::DynamicSearchRuleNotFound,
             DynamicSearchRulesError::AlreadyExists(_) => Code::BadRequest,
+            DynamicSearchRulesError::CannotResetActions(_) => {
+                Code::CannotResetDynamicSearchRuleActions
+            }
         }
     }
 }
@@ -479,8 +485,10 @@ async fn update_rule(
         Setting::NotSet => (),
     }
 
-    if let Some(actions) = body.actions {
-        rule.actions = actions;
+    match body.actions {
+        Setting::Set(actions) => rule.actions = actions,
+        Setting::Reset => return Err(DynamicSearchRulesError::CannotResetActions(uid).into()),
+        Setting::NotSet => (),
     }
 
     index_scheduler.put_dynamic_search_rule(&rule)?;
