@@ -73,6 +73,8 @@ pub enum Condition {
     },
 }
 
+// We manually check the exclusivity of `is_empty` and `contains` because Deserr does not support
+// untagged enums
 fn validate_condition<E: DeserializeError>(
     condition: Condition,
     location: ValuePointerRef,
