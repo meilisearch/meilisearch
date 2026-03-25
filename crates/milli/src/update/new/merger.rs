@@ -106,7 +106,7 @@ where
         index,
         docids_sender,
         // bool: BitOr + Default + Send + Sync
-        |_: &mut bool, _, _| (),
+        |_: &mut bool, _, _| Ok(()),
         must_stop_processing,
     )
     .map(drop)
@@ -125,7 +125,7 @@ where
     MSP: Fn() -> bool + Sync,
     D: DatabaseType + Sync,
     St: Default + BitOr<Output = St> + Sync + Send,
-    CP: Fn(&mut St, &[u8], &Operation) + Sync + Send,
+    CP: Fn(&mut St, &[u8], &Operation) -> Result<()> + Sync + Send,
 {
     transpose_and_freeze_caches(&mut caches)?
         .into_par_iter()
@@ -139,7 +139,7 @@ where
             merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
                 let current = database.get(&rtxn, key)?;
                 let operation = merge_cbo_bitmaps(current, del, add)?;
-                scan(&mut output, key, &operation);
+                scan(&mut output, key, &operation)?;
                 match operation {
                     Operation::Write { bitmap, status: _ } => docids_sender.write(key, &bitmap),
                     Operation::Delete => docids_sender.delete(key),

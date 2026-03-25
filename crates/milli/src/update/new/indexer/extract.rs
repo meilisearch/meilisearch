@@ -3,7 +3,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
 
 use bumpalo::Bump;
-use heed::BytesDecode;
 use roaring::RoaringBitmap;
 use tracing::Span;
 
@@ -15,7 +14,6 @@ use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use super::settings_changes::settings_change_extract;
 use crate::documents::{FieldIdMapper, PrimaryKey};
-use crate::heed_codec::StrBEU16Codec;
 use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::cellulite::GeoJsonExtractor;
@@ -147,11 +145,23 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordDocids);
 
-            merge_and_send_docids(
+            word_delta = merge_scan_and_send_docids(
                 word_docids,
                 index.word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let word = std::str::from_utf8(key)?.to_string();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word),
+                            EntryStatus::Updated => output.insert_modified(word),
+                        },
+                        Operation::Delete => output.insert_deleted(word),
+                        Operation::Ignore => (),
+                    }
+                    Ok(())
+                },
                 &indexing_context.must_stop_processing,
             )?;
         }
@@ -162,22 +172,11 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordFieldIdDocids);
 
-            word_delta = merge_scan_and_send_docids(
+            merge_and_send_docids(
                 word_fid_docids,
                 index.word_fid_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordFidDocids>(),
-                |output: &mut WordDelta, key, operation| {
-                    let (word, fid) = StrBEU16Codec::bytes_decode(key).unwrap();
-                    match operation {
-                        Operation::Write { bitmap: _, status } => match status {
-                            EntryStatus::Created => output.insert_added(word.into(), fid),
-                            EntryStatus::Updated => output.insert_modified(word.into(), fid),
-                        },
-                        Operation::Delete => output.insert_deleted(word.into(), fid),
-                        Operation::Ignore => (),
-                    }
-                },
                 &indexing_context.must_stop_processing,
             )?;
         }
@@ -436,11 +435,23 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordDocids);
 
-            merge_and_send_docids(
+            word_delta = merge_scan_and_send_docids(
                 word_docids,
                 index.word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let word = std::str::from_utf8(key)?.to_string();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word),
+                            EntryStatus::Updated => output.insert_modified(word),
+                        },
+                        Operation::Delete => output.insert_deleted(word),
+                        Operation::Ignore => (),
+                    }
+                    Ok(())
+                },
                 &indexing_context.must_stop_processing,
             )?;
         }
@@ -451,22 +462,11 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordFieldIdDocids);
 
-            word_delta = merge_scan_and_send_docids(
+            merge_and_send_docids(
                 word_fid_docids,
                 index.word_fid_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordFidDocids>(),
-                |output: &mut WordDelta, key, operation| {
-                    let (word, fid) = StrBEU16Codec::bytes_decode(key).unwrap();
-                    match operation {
-                        Operation::Write { bitmap: _, status } => match status {
-                            EntryStatus::Created => output.insert_added(word.into(), fid),
-                            EntryStatus::Updated => output.insert_modified(word.into(), fid),
-                        },
-                        Operation::Delete => output.insert_deleted(word.into(), fid),
-                        Operation::Ignore => (),
-                    }
-                },
                 &indexing_context.must_stop_processing,
             )?;
         }
