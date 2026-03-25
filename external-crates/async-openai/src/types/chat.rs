@@ -757,6 +757,7 @@ pub struct CreateChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub n: Option<u8>, // min:1, max: 128, default: 1
 
+    /// Output types that you would like the model to generate for this request. Most models are capable of generating text, which is the default: `["text"]`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub modalities: Option<Vec<ChatCompletionModalities>>,
 
@@ -808,6 +809,7 @@ pub struct CreateChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
 
+    /// Options for streaming response. Only set this when you set `stream: true`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream_options: Option<ChatCompletionStreamOptions>,
 
@@ -831,6 +833,7 @@ pub struct CreateChatCompletionRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ChatCompletionTool>>,
 
+    /// Controls which (if any) tool is called by the model. `none` means the model will not call any tool and instead generates a message. `auto` means the model can pick between generating a message or calling one or more tools. `required` means the model must call one or more tools. `none` is the default when no tools are present. `auto` is the default if tools are present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ChatCompletionToolChoiceOption>,
 
@@ -947,6 +950,7 @@ pub struct CreateChatCompletionResponse {
 
     /// The object type, which is always `chat.completion`.
     pub object: String,
+    /// Usage statistics for the completion request.
     pub usage: Option<CompletionUsage>,
 }
 
