@@ -100,7 +100,7 @@ where
     MSP: Fn() -> bool + Sync,
     D: DatabaseType + Sync,
 {
-    merge_and_send_docids_with_inspect(
+    merge_scan_and_send_docids(
         caches,
         database,
         index,
@@ -113,19 +113,19 @@ where
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_docids_with_inspect<MSP, D, CP, O>(
+pub fn merge_scan_and_send_docids<MSP, D, CP, St>(
     mut caches: Vec<BalancedCaches<'_>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
     docids_sender: WordDocidsSender<D>,
-    collect: CP,
+    scan: CP,
     must_stop_processing: &MSP,
-) -> Result<O>
+) -> Result<St>
 where
     MSP: Fn() -> bool + Sync,
     D: DatabaseType + Sync,
-    O: Default + BitOr<Output = O> + Sync + Send,
-    CP: Fn(&mut O, &[u8], &Operation) + Sync + Send,
+    St: Default + BitOr<Output = St> + Sync + Send,
+    CP: Fn(&mut St, &[u8], &Operation) + Sync + Send,
 {
     transpose_and_freeze_caches(&mut caches)?
         .into_par_iter()
@@ -135,11 +135,11 @@ where
                 return Err(InternalError::AbortedIndexation.into());
             }
 
-            let mut output = O::default();
+            let mut output = St::default();
             merge_caches_sorted(frozen, |key, DelAddRoaringBitmap { del, add }| {
                 let current = database.get(&rtxn, key)?;
                 let operation = merge_cbo_bitmaps(current, del, add)?;
-                collect(&mut output, key, &operation);
+                scan(&mut output, key, &operation);
                 match operation {
                     Operation::Write { bitmap, status: _ } => docids_sender.write(key, &bitmap),
                     Operation::Delete => docids_sender.delete(key),

@@ -22,7 +22,7 @@ use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
 use crate::update::new::indexer::WordDelta;
-use crate::update::new::merger::merge_and_send_docids_with_inspect;
+use crate::update::new::merger::merge_scan_and_send_docids;
 use crate::update::new::merger::EntryStatus;
 use crate::update::new::merger::Operation;
 use crate::update::new::merger::{merge_and_send_cellulite, merge_and_send_rtree};
@@ -162,7 +162,7 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordFieldIdDocids);
 
-            word_delta = merge_and_send_docids_with_inspect(
+            word_delta = merge_scan_and_send_docids(
                 word_fid_docids,
                 index.word_fid_docids.remap_types(),
                 index,
@@ -451,7 +451,7 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordFieldIdDocids);
 
-            word_delta = merge_and_send_docids_with_inspect(
+            word_delta = merge_scan_and_send_docids(
                 word_fid_docids,
                 index.word_fid_docids.remap_types(),
                 index,

@@ -154,11 +154,11 @@ fn compute_word_fst(
     // we ignore modifications when rebuilding the FST
     for either in word_delta.added_or_deleted_words() {
         match either {
-            Either::Left(word) => {
-                word_fst_builder.register_word(DelAdd::Addition, word.as_ref())?;
+            Either::Left(added_word) => {
+                word_fst_builder.register_word(DelAdd::Addition, added_word.as_ref())?;
             }
-            Either::Right(word) => {
-                word_fst_builder.register_word(DelAdd::Deletion, word.as_ref())?;
+            Either::Right(deleted_word) => {
+                word_fst_builder.register_word(DelAdd::Deletion, deleted_word.as_ref())?;
             }
         }
     }
