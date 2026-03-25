@@ -26,7 +26,7 @@ use crate::{GlobalFieldsIdsMap, Index, Result};
 
 mod facet_bulk;
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing", name = "post_processing")]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing")]
 pub(super) fn post_process<MSP>(
     indexing_context: IndexingContext<MSP>,
     wtxn: &mut RwTxn<'_>,
