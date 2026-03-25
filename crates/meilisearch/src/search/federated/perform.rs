@@ -715,12 +715,12 @@ fn iter_remote_hits(
     })
 }
 
-fn merge_pinned_hits_into_page(
-    pins: Vec<(u32, usize, SearchHit)>,
+fn merge_pinned_hits_into_page<T>(
+    pins: Vec<(u32, usize, T)>,
     skip: usize,
     take: usize,
-    organic_hits: Vec<(usize, SearchHit)>,
-) -> Vec<(usize, SearchHit)> {
+    organic_hits: Vec<(usize, T)>,
+) -> Vec<(usize, T)> {
     if pins.is_empty() {
         return organic_hits;
     }
@@ -1501,6 +1501,70 @@ impl SearchByIndex {
             }
         }
         let mut documents_seen = RoaringBitmap::new();
+        let mut local_pinned_hits = Vec::new();
+        for result_by_query in &mut results_by_query {
+            let prev_documents_ids = std::mem::take(&mut result_by_query.documents_ids);
+            let prev_scores = std::mem::take(&mut result_by_query.document_scores);
+
+            for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores.into_iter()) {
+                if let Some(ScoreDetails::Pin { position }) = score.first() {
+                    let mut hit = result_by_query.hit_maker.make_hit(doc_id, &score, progress)?;
+                    let weighted_score =
+                        ScoreDetails::global_score(score.iter()) * (*result_by_query.weight);
+                    let mut _federation = serde_json::json!(
+                        {
+                            INDEX_UID: index_uid,
+                            QUERIES_POSITION: result_by_query.query_index,
+                            WEIGHTED_RANKING_SCORE: weighted_score,
+                        }
+                    );
+
+                    if params.has_remote && !params.is_proxy {
+                        _federation.as_object_mut().unwrap().insert(
+                            FEDERATION_REMOTE.to_string(),
+                            params.network.local.clone().into(),
+                        );
+                    }
+
+                    if params.is_proxy {
+                        let _federation = _federation.as_object_mut().unwrap();
+                        _federation.insert(
+                            WEIGHTED_SCORE_VALUES.to_string(),
+                            serde_json::json!(ScoreDetails::weighted_score_values(
+                                score.iter(),
+                                *result_by_query.weight
+                            )
+                            .collect_vec()),
+                        );
+                        _federation.insert(
+                            FEDERATION_EXTRA_DOCUMENT.to_string(),
+                            serde_json::Value::Object(std::mem::take(&mut hit.extra_document)),
+                        );
+                        if let Some(ScoreDetails::Pin { position }) = score.first() {
+                            _federation
+                                .insert(PINNED_POSITION.to_string(), serde_json::json!(position));
+                        }
+                    }
+
+                    hit.document.insert(FEDERATION_HIT.to_string(), _federation);
+                    local_pinned_hits.push((
+                        *position,
+                        result_by_query.query_index,
+                        SearchHitByIndex {
+                            hit,
+                            score,
+                            weight: result_by_query.weight,
+                            query_index: result_by_query.query_index,
+                        },
+                    ));
+                } else {
+                    result_by_query.documents_ids.push(doc_id);
+                    result_by_query.document_scores.push(score);
+                }
+            }
+        }
+
+        local_pinned_hits.sort_by_key(|&(pos, _, _)| pos);
 
         // A set of the seen values for the facet.
         // Whenever we consider a document, we check that its value for the distinct fid has not already been seen.
@@ -1509,93 +1573,88 @@ impl SearchByIndex {
         // If it wasn't seen, it is accepted and we update the list of seen values accordingly.
         let mut distinct_values = HashSet::new();
 
-        let merged_result: Result<Vec<_>, ResponseError> =
-            merge_index_local_results(results_by_query)
-                // skip documents we've already seen & mark that we saw the current document
-                // 2.3 make hits
-                .filter_map(
-                    |SearchResultByQueryIterItem {
-                         docid,
-                         hit_maker,
-                         score,
-                         weight,
-                         query_index,
-                     }| {
-                        let already_seen = !documents_seen.insert(docid);
-                        if already_seen {
-                            return None;
+        let organic_hits = merge_index_local_results(results_by_query)
+            // skip documents we've already seen & mark that we saw the current document
+            // 2.3 make hits
+            .filter_map(
+                |SearchResultByQueryIterItem { docid, hit_maker, score, weight, query_index }| {
+                    let already_seen = !documents_seen.insert(docid);
+                    if already_seen {
+                        return None;
+                    }
+
+                    let hit = (|| {
+                        let mut hit = hit_maker.make_hit(docid, &score, progress)?;
+
+                        if let Some(distinct) = self.federation.distinct.as_deref() {
+                            let mut facet_values = Vec::new();
+                            hit.facet_values(distinct, |value| facet_values.push(value));
+                            let is_rejected = facet_values
+                                .iter()
+                                .any(|facet_value| distinct_values.contains(facet_value));
+
+                            if is_rejected {
+                                candidates.remove(docid);
+
+                                return Ok(None);
+                            }
+
+                            distinct_values.extend(facet_values);
                         }
 
-                        let hit = (|| {
-                            let mut hit = hit_maker.make_hit(docid, &score, progress)?;
+                        let weighted_score = ScoreDetails::global_score(score.iter()) * (*weight);
 
-                            if let Some(distinct) = self.federation.distinct.as_deref() {
-                                let mut facet_values = Vec::new();
-                                hit.facet_values(distinct, |value| facet_values.push(value));
-                                let is_rejected = facet_values
-                                    .iter()
-                                    .any(|facet_value| distinct_values.contains(facet_value));
-
-                                if is_rejected {
-                                    candidates.remove(docid);
-
-                                    return Ok(None);
-                                }
-
-                                distinct_values.extend(facet_values);
+                        let mut _federation = serde_json::json!(
+                            {
+                                INDEX_UID: index_uid,
+                                QUERIES_POSITION: query_index,
+                                WEIGHTED_RANKING_SCORE: weighted_score,
                             }
-
-                            let weighted_score =
-                                ScoreDetails::global_score(score.iter()) * (*weight);
-
-                            let mut _federation = serde_json::json!(
-                                {
-                                    INDEX_UID: index_uid,
-                                    QUERIES_POSITION: query_index,
-                                    WEIGHTED_RANKING_SCORE: weighted_score,
-                                }
+                        );
+                        if params.has_remote && !params.is_proxy {
+                            _federation.as_object_mut().unwrap().insert(
+                                FEDERATION_REMOTE.to_string(),
+                                params.network.local.clone().into(),
                             );
-                            if params.has_remote && !params.is_proxy {
-                                _federation.as_object_mut().unwrap().insert(
-                                    FEDERATION_REMOTE.to_string(),
-                                    params.network.local.clone().into(),
+                        }
+                        if params.is_proxy {
+                            let _federation = _federation.as_object_mut().unwrap();
+                            _federation.insert(
+                                WEIGHTED_SCORE_VALUES.to_string(),
+                                serde_json::json!(ScoreDetails::weighted_score_values(
+                                    score.iter(),
+                                    *weight
+                                )
+                                .collect_vec()),
+                            );
+
+                            // unmount hit.extra_document. See documentation for `SearchHit::extra_document` for details.
+                            _federation.insert(
+                                FEDERATION_EXTRA_DOCUMENT.to_string(),
+                                serde_json::Value::Object(std::mem::take(&mut hit.extra_document)),
+                            );
+
+                            if let Some(ScoreDetails::Pin { position }) = score.first() {
+                                _federation.insert(
+                                    PINNED_POSITION.to_string(),
+                                    serde_json::json!(position),
                                 );
                             }
-                            if params.is_proxy {
-                                let _federation = _federation.as_object_mut().unwrap();
-                                _federation.insert(
-                                    WEIGHTED_SCORE_VALUES.to_string(),
-                                    serde_json::json!(ScoreDetails::weighted_score_values(
-                                        score.iter(),
-                                        *weight
-                                    )
-                                    .collect_vec()),
-                                );
-
-                                // unmount hit.extra_document. See documentation for `SearchHit::extra_document` for details.
-                                _federation.insert(
-                                    FEDERATION_EXTRA_DOCUMENT.to_string(),
-                                    serde_json::Value::Object(std::mem::take(
-                                        &mut hit.extra_document,
-                                    )),
-                                );
-
-                                if let Some(ScoreDetails::Pin { position }) = score.first() {
-                                    _federation.insert(
-                                        PINNED_POSITION.to_string(),
-                                        serde_json::json!(position),
-                                    );
-                                }
-                            }
-                            hit.document.insert(FEDERATION_HIT.to_string(), _federation);
-                            Ok(Some(SearchHitByIndex { hit, score, weight, query_index }))
-                        })();
-                        hit.transpose()
-                    },
-                )
-                .take(required_hit_count)
+                        }
+                        hit.document.insert(FEDERATION_HIT.to_string(), _federation);
+                        Ok(Some(SearchHitByIndex { hit, score, weight, query_index }))
+                    })();
+                    hit.transpose()
+                },
+            )
+            .take(required_hit_count)
+            .map_ok(|hit| (hit.query_index, hit))
+            .collect::<Result<Vec<_>, ResponseError>>()?;
+        let merged_result =
+            merge_pinned_hits_into_page(local_pinned_hits, 0, required_hit_count, organic_hits)
+                .into_iter()
+                .map(|(_, hit)| hit)
                 .collect();
-        let merged_result = merged_result?;
         let estimated_total_hits = candidates.len() as usize;
         let facets = facets_by_index
             .map(|facets_by_index| {
