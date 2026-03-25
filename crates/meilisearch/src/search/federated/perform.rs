@@ -259,37 +259,7 @@ pub async fn perform_federated_search(
     // but we cannot double borrows of `remote_results` (from `hit` and `facets_by_index`).
     let mut rejected_hits: BTreeMap<String, Vec<SearchHit>> = Default::default();
 
-    let mut distinct_values = if let Some(distinct_field) = federation.distinct.as_deref() {
-        let mut distinct_values = HashSet::new();
-        let mut surviving_pins = Vec::with_capacity(pins.len());
-
-        for (position, query_index, hit) in pins {
-            let mut facet_values = Vec::new();
-            hit.facet_values(distinct_field, |value| facet_values.push(value));
-            let is_rejected =
-                facet_values.iter().any(|facet_value| distinct_values.contains(facet_value));
-
-            if is_rejected {
-                hit_number = hit_number.saturating_sub(1);
-
-                if let Some(index_uid) = hit.document.get(FEDERATION_HIT).and_then(|federation| {
-                    federation.get(INDEX_UID).and_then(serde_json::Value::as_str)
-                }) {
-                    rejected_hits.entry(index_uid.to_string()).or_default().push(hit);
-                }
-
-                continue;
-            }
-
-            distinct_values.extend(facet_values.into_iter());
-            surviving_pins.push((position, query_index, hit));
-        }
-
-        pins = surviving_pins;
-        distinct_values
-    } else {
-        HashSet::new()
-    };
+    let mut distinct_values = HashSet::new();
 
     // When pins are present we need the organic prefix up to the end of the requested page,
     // then we inject pins into that prefix before applying the final slice. This mirrors

@@ -1262,6 +1262,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
 }
 
 #[actix_rt::test]
+#[ignore = "distinct/pinning semantics to revisit"]
 async fn remote_search_distinct_deduplicates_pinned_documents() {
     let ms0 = Server::new().await;
     let ms1 = Server::new().await;

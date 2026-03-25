@@ -8,10 +8,7 @@ use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
-use self::new::{
-    distinct_fid, distinct_single_docid, execute_vector_search, PartialSearchResult,
-    VectorStoreStats,
-};
+use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::documents::GeoSortParameter;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::index::MatchingStrategy;
@@ -260,35 +257,12 @@ impl<'a> Search<'a> {
         }
 
         let mut universe = filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)?;
-        let mut pins = Vec::new();
-        let mut filtered_pins =
-            self.pins.iter().filter(|pin| universe.contains(pin.doc_id)).copied();
-
-        if let Some(distinct_fid) = distinct_fid(self.distinct.as_deref(), ctx.index, ctx.txn)? {
-            let mut excluded_by_distinct = RoaringBitmap::new();
-
-            filtered_pins.try_for_each(|pin| -> Result<()> {
-                if excluded_by_distinct.contains(pin.doc_id) {
-                    return Ok(());
-                }
-
-                distinct_single_docid(
-                    ctx.index,
-                    ctx.txn,
-                    distinct_fid,
-                    pin.doc_id,
-                    &mut excluded_by_distinct,
-                )?;
-
-                pins.push(pin);
-
-                Ok(())
-            })?;
-
-            universe -= &excluded_by_distinct;
-        } else {
-            pins.extend(filtered_pins);
-        }
+        let pins = self
+            .pins
+            .iter()
+            .filter(|pin| universe.contains(pin.doc_id))
+            .copied()
+            .collect::<Vec<_>>();
 
         for pin in &pins {
             universe.remove(pin.doc_id);
