@@ -653,9 +653,10 @@ async fn get_task(
     }
 }
 
-/// Get task's documents
+/// Get task's document payload
 ///
-/// Retrieve the list of documents that were processed or affected by a given [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations). Only available for document-related tasks.
+/// Retrieve the document payload that was sent with this [task](https://www.meilisearch.com/docs/learn/async/asynchronous_operations).
+/// Only available for document-related tasks that are enqueued or processing.
 #[routes::path(
     security(("Bearer" = ["tasks.get", "tasks.*", "*"])),
     params(("task_id" = u32, format = UInt32, example = 0, description = "The task identifier.", nullable = false)),
