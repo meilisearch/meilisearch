@@ -254,6 +254,25 @@ impl Pagination {
         self.format_with(total, content)
     }
 
+    pub fn auto_paginate_counting<T, I>(self, content: I) -> PaginationView<T>
+    where
+        I: IntoIterator<Item = T>,
+        T: Serialize,
+    {
+        let mut total = 0;
+        let mut results = Vec::with_capacity(self.limit);
+
+        for item in content {
+            if total >= self.offset && results.len() < self.limit {
+                results.push(item);
+            }
+
+            total += 1;
+        }
+
+        self.format_with(total, results)
+    }
+
     /// Given an iterator and the total number of elements, returns the
     /// selected section.
     pub fn auto_paginate_unsized<T>(

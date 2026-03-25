@@ -254,15 +254,10 @@ async fn list_rules(
         .features()
         .check_dynamic_search_rules("Using the `/dynamic-search-rules` routes")?;
 
-    let rules = index_scheduler
-        .dynamic_search_rules()
-        .values()
-        .filter(|rule| body.0.apply_filter(rule))
-        .cloned()
-        .collect::<Vec<_>>();
-
+    let rules = index_scheduler.dynamic_search_rules();
     let pagination = Pagination { offset: body.0.offset, limit: body.0.limit };
-    let pagination_view = pagination.auto_paginate_sized(rules.into_iter());
+    let pagination_view =
+        pagination.auto_paginate_counting(rules.values().filter(|rule| body.0.apply_filter(rule)));
 
     Ok(HttpResponse::Ok().json(pagination_view))
 }
