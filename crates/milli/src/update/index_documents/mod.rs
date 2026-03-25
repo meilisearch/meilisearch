@@ -580,7 +580,7 @@ where
     #[tracing::instrument(
         level = "trace",
         skip_all,
-        target = "indexing::prefix",
+        target = "indexing::post_processing::prefix",
         name = "index_documents_prefix_databases"
     )]
     pub fn execute_prefix_databases(
@@ -781,7 +781,7 @@ where
 #[tracing::instrument(
     level = "trace",
     skip_all,
-    target = "indexing::prefix",
+    target = "indexing::post_processing::prefix",
     name = "index_documents_word_prefix_docids"
 )]
 fn execute_word_prefix_docids(

@@ -26,6 +26,7 @@ use crate::{GlobalFieldsIdsMap, Index, Result};
 
 mod facet_bulk;
 
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing")]
 pub(super) fn post_process<MSP>(
     indexing_context: IndexingContext<MSP>,
     wtxn: &mut RwTxn<'_>,
@@ -58,7 +59,12 @@ where
     Ok(())
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::post_processing",
+    name = "prefix"
+)]
 fn compute_prefix_database(
     index: &Index,
     wtxn: &mut RwTxn,
@@ -81,7 +87,7 @@ fn compute_prefix_database(
     compute_word_prefix_position_docids(wtxn, index, &modified, &deleted, grenad_parameters)
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing")]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing")]
 fn compute_word_fst(
     index: &Index,
     wtxn: &mut RwTxn,
@@ -153,7 +159,12 @@ pub fn recompute_word_fst_from_word_docids_database(
     Ok(())
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_search")]
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::post_processing",
+    name = "facet_search"
+)]
 fn compute_facet_search_database(
     index: &Index,
     wtxn: &mut RwTxn,
@@ -213,7 +224,12 @@ fn compute_facet_search_database(
     facet_search_builder.merge_and_write(index, wtxn, &rtxn)
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::facet_field_ids")]
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::post_processing",
+    name = "facet_field_ids"
+)]
 fn compute_facet_level_database(
     index: &Index,
     wtxn: &mut RwTxn,
@@ -237,7 +253,8 @@ fn compute_facet_level_database(
             continue;
         }
 
-        let span = tracing::trace_span!(target: "indexing::facet_field_ids", "string");
+        let span =
+            tracing::trace_span!(target: "indexing::post_processing::facet_field_ids", "string");
         let _entered = span.enter();
         match delta {
             FacetFieldIdDelta::Bulk => {
@@ -267,7 +284,8 @@ fn compute_facet_level_database(
     deltas.sort_by_key(|(_, delta)| if let FacetFieldIdDelta::Bulk = delta { 0 } else { 1 });
 
     for (fid, delta) in deltas {
-        let span = tracing::trace_span!(target: "indexing::facet_field_ids", "number");
+        let span =
+            tracing::trace_span!(target: "indexing::post_processing::facet_field_ids", "number");
         let _entered = span.enter();
         match delta {
             FacetFieldIdDelta::Bulk => {
