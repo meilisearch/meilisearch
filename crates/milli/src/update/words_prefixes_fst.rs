@@ -41,7 +41,7 @@ impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
     #[tracing::instrument(
         level = "trace",
         skip_all,
-        target = "indexing::prefix",
+        target = "indexing::post_processing::prefix",
         name = "words_prefix_fst"
     )]
     pub fn execute(self) -> Result<()> {

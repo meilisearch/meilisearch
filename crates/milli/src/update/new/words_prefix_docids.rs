@@ -45,7 +45,7 @@ impl<'i> WordPrefixDocids<'i> {
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
     }
 
-    #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
     fn recompute_modified_prefixes_no_frozen(
         &self,
         wtxn: &mut RwTxn,
@@ -155,7 +155,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
     /// ...but without aggregating the prefixes mmap pointers into a static HashMap
     /// beforehand and rather use an experimental LMDB feature to read the subset
     /// of prefixes in parallel from the uncommitted transaction.
-    #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
     fn recompute_modified_prefixes_no_frozen(
         &self,
         wtxn: &mut RwTxn,
@@ -278,7 +278,7 @@ struct PrefixIntegerEntry<'a> {
     serialized_length: Option<usize>,
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
 fn delete_prefixes(
     wtxn: &mut RwTxn,
     prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
@@ -296,7 +296,7 @@ fn delete_prefixes(
     Ok(())
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
 pub fn compute_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
@@ -313,7 +313,7 @@ pub fn compute_word_prefix_docids(
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
 pub fn compute_exact_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
@@ -330,7 +330,7 @@ pub fn compute_exact_word_prefix_docids(
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
 pub fn compute_word_prefix_fid_docids(
     wtxn: &mut RwTxn,
     index: &Index,
@@ -347,7 +347,7 @@ pub fn compute_word_prefix_fid_docids(
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
 
-#[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
 pub fn compute_word_prefix_position_docids(
     wtxn: &mut RwTxn,
     index: &Index,
