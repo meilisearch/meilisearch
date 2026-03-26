@@ -1184,8 +1184,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             "indexUid": "test",
             "queriesPosition": 1,
             "weightedRankingScore": "[score]",
-            "remote": "ms1",
-            "extra_document": {}
+            "remote": "ms1"
           }
         },
         {
@@ -1195,8 +1194,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             "indexUid": "test",
             "queriesPosition": 1,
             "weightedRankingScore": "[score]",
-            "remote": "ms1",
-            "extra_document": {}
+            "remote": "ms1"
           }
         }
       ],
@@ -1230,8 +1228,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             "indexUid": "test",
             "queriesPosition": 1,
             "weightedRankingScore": "[score]",
-            "remote": "ms1",
-            "extra_document": {}
+            "remote": "ms1"
           }
         },
         {
@@ -1241,8 +1238,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             "indexUid": "test",
             "queriesPosition": 1,
             "weightedRankingScore": "[score]",
-            "remote": "ms1",
-            "extra_document": {}
+            "remote": "ms1"
           }
         }
       ],
@@ -1498,8 +1494,7 @@ async fn remote_search_facet_distribution_counts_pins_that_miss_query() {
             "indexUid": "test",
             "queriesPosition": 1,
             "weightedRankingScore": 1.0,
-            "remote": "ms1",
-            "extra_document": {}
+            "remote": "ms1"
           }
         },
         {

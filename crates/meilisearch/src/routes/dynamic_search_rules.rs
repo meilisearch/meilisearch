@@ -45,7 +45,11 @@ struct UpdateOrCreateDynamicSearchRuleRequest {
     #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleDescription>)]
     #[schema(value_type = Option<String>)]
     description: Setting<String>,
-    /// Priority of the dynamic search rule. Lower values take precedence over higher ones.
+    /// Precedence of the dynamic search rule. Lower numeric values take precedence over higher
+    /// ones. If omitted, the rule is treated as having the lowest precedence. This precedence is
+    /// used to resolve conflicts between matching rules:
+    /// - If the same document is selected by multiple rules, the smallest `priority` number wins
+    /// - If different documents are pinned to the same position, they are ordered by ascending `priority`
     #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRulePriority>)]
     #[schema(value_type = Option<u64>)]
     priority: Setting<u64>,
@@ -120,8 +124,10 @@ enum DynamicSearchRulesError {
     NotFound(RuleUid),
     #[error("Cannot reset the actions of a dynamic search rule.\n - Note: for rule `{0}`.")]
     CannotResetActions(RuleUid),
-    #[error("Cannot create a new dynamic search rule with no actions.\n - Note: for rule `{0}`.")]
-    EmptyActionsOnCreate(RuleUid),
+    #[error(
+        "Cannot set an empty list of actions to a dynamic search rule.\n - Note: for rule `{0}`."
+    )]
+    EmptyActions(RuleUid),
 }
 
 impl ErrorCode for DynamicSearchRulesError {
@@ -129,9 +135,7 @@ impl ErrorCode for DynamicSearchRulesError {
         match self {
             DynamicSearchRulesError::NotFound(_) => Code::DynamicSearchRuleNotFound,
             DynamicSearchRulesError::CannotResetActions(_) => Code::InvalidDynamicSearchRuleActions,
-            DynamicSearchRulesError::EmptyActionsOnCreate(_) => {
-                Code::InvalidDynamicSearchRuleActions
-            }
+            DynamicSearchRulesError::EmptyActions(_) => Code::InvalidDynamicSearchRuleActions,
         }
     }
 }
@@ -394,11 +398,12 @@ async fn update_or_create_rule(
     }
 
     match new_actions {
+        Setting::Set(new_actions) if new_actions.is_empty() => {
+            return Err(DynamicSearchRulesError::EmptyActions(uid).into())
+        }
         Setting::Set(new_actions) => *actions = new_actions,
         Setting::Reset => return Err(DynamicSearchRulesError::CannotResetActions(uid).into()),
-        Setting::NotSet if is_new => {
-            return Err(DynamicSearchRulesError::EmptyActionsOnCreate(uid).into())
-        }
+        Setting::NotSet if is_new => return Err(DynamicSearchRulesError::EmptyActions(uid).into()),
         Setting::NotSet => (),
     }
 

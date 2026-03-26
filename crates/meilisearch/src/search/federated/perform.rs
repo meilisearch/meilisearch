@@ -711,6 +711,7 @@ fn extract_remote_pin_hits(
     ) -> Option<(u32, usize)> {
         let pin_pos: u32 = federation.remove(PINNED_POSITION)?.as_u64()?.try_into().ok()?;
         let _ = federation.remove(WEIGHTED_SCORE_VALUES);
+        let _ = federation.remove(FEDERATION_EXTRA_DOCUMENT);
         let query_idx: usize = federation.get(QUERIES_POSITION)?.as_u64()?.try_into().ok()?;
 
         Some((pin_pos, query_idx))

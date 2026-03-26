@@ -34,7 +34,7 @@ impl DynamicSearchRulesStore {
                     .map(|(key, rule)| match key.parse::<IndexUid>() {
                         Ok(key) => Some((key, rule)),
                         Err(err) => {
-                            tracing::error!("Error when deserializing form DB: {err}");
+                            tracing::error!("Error when deserializing from DB: {err}");
                             None
                         }
                     })
