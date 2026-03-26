@@ -7,7 +7,7 @@ use crate::score_details::{ScoreDetails, ScoringStrategy};
 use crate::search::new::distinct::{
     apply_distinct_rule, distinct_fid, distinct_single_docid, DistinctOutput,
 };
-use crate::{Deadline, PinDoc, Result};
+use crate::{merge_positioned_hits_into_page, Deadline, PinDoc, Result};
 
 pub struct BucketSortOutput {
     pub docids: Vec<u32>,
@@ -34,7 +34,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     ranking_score_threshold: Option<f64>,
     exhaustive_number_hits: bool,
     max_total_hits: Option<usize>,
-    pins: &[PinDoc],
+    pins: Vec<PinDoc>,
 ) -> Result<BucketSortOutput> {
     logger.initial_query(query);
     logger.ranking_rules(&ranking_rules);
@@ -347,7 +347,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
 /// pins forward when there are fewer organic results than the requested limit
 /// without repeatedly shifting the organic hits vector.
 fn inject_pins(
-    pins: &[PinDoc],
+    pins: Vec<PinDoc>,
     from: usize,
     length: usize,
     output: BucketSortOutput,
@@ -356,44 +356,22 @@ fn inject_pins(
         return output;
     }
 
-    let page_end = from.saturating_add(length);
-    let capacity = length.min(output.docids.len().saturating_add(pins.len()));
     let BucketSortOutput { docids, scores, mut all_candidates, degraded } = output;
 
-    let mut merged_docids = Vec::with_capacity(capacity);
-    let mut merged_scores = Vec::with_capacity(capacity);
-    let mut organic_hits = docids.into_iter().zip(scores);
-    let mut pins_iter = pins.iter().copied().peekable();
-    let mut combined_index = 0usize;
-
-    while combined_index < page_end {
-        let next_hit = if let Some(pin) = pins_iter.peek().copied() {
-            if (pin.pos as usize) <= combined_index {
-                pins_iter.next();
-                Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
-            } else if let Some(hit) = organic_hits.next() {
-                Some(hit)
-            } else {
-                pins_iter.next();
-                Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
-            }
-        } else {
-            organic_hits.next()
-        };
-
-        let Some((docid, score)) = next_hit else { break };
-
-        if combined_index >= from {
-            merged_docids.push(docid);
-            merged_scores.push(score);
-        }
-
-        combined_index += 1;
-    }
-
-    for pin in pins {
+    for pin in &pins {
         all_candidates.insert(pin.doc_id);
     }
+
+    let organic_hits = docids.into_iter().zip(scores).collect();
+    let merged_hits = merge_positioned_hits_into_page(
+        pins,
+        from,
+        length,
+        organic_hits,
+        |pin| pin.pos,
+        |pin| (pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]),
+    );
+    let (merged_docids, merged_scores): (Vec<_>, Vec<_>) = merged_hits.into_iter().unzip();
 
     BucketSortOutput { docids: merged_docids, scores: merged_scores, all_candidates, degraded }
 }

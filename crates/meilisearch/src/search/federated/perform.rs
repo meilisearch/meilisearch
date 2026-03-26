@@ -37,8 +37,8 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, Deadline, DocumentId, FederatingResultsStep, ForeignKey, OrderBy,
-    DEFAULT_VALUES_PER_FACET,
+    self, merge_positioned_hits_into_page, Deadline, DocumentId, FederatingResultsStep, ForeignKey,
+    OrderBy, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -692,42 +692,14 @@ fn merge_pinned_hits_into_page<T>(
     take: usize,
     organic_hits: Vec<(usize, T)>,
 ) -> Vec<(usize, T)> {
-    if pins.is_empty() {
-        return organic_hits;
-    }
-
-    let page_end = skip.saturating_add(take);
-    let capacity = take.min(organic_hits.len().saturating_add(pins.len()));
-    let mut merged_hits = Vec::with_capacity(capacity);
-    let mut organic_hits = organic_hits.into_iter();
-    let mut pins = pins.into_iter().peekable();
-    let mut combined_index = 0usize;
-
-    while combined_index < page_end {
-        let next_hit = if let Some((position, _, _)) = pins.peek() {
-            if (*position as usize) <= combined_index {
-                let (_, query_index, hit) = pins.next().expect("peeked pin must exist");
-                Some((query_index, hit))
-            } else if let Some(hit) = organic_hits.next() {
-                Some(hit)
-            } else {
-                let (_, query_index, hit) = pins.next().expect("peeked pin must exist");
-                Some((query_index, hit))
-            }
-        } else {
-            organic_hits.next()
-        };
-
-        let Some(hit) = next_hit else { break };
-
-        if combined_index >= skip {
-            merged_hits.push(hit);
-        }
-
-        combined_index += 1;
-    }
-
-    merged_hits
+    merge_positioned_hits_into_page(
+        pins,
+        skip,
+        take,
+        organic_hits,
+        |&(position, _, _)| position,
+        |(_, query_index, hit)| (query_index, hit),
+    )
 }
 
 fn extract_remote_pin_hits(

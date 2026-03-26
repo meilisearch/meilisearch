@@ -305,7 +305,7 @@ impl<'a> Search<'a> {
                     self.deadline.clone(),
                     self.ranking_score_threshold,
                     self.progress,
-                    &pins,
+                    pins,
                 )?
             }
             _ => execute_search(
@@ -328,7 +328,7 @@ impl<'a> Search<'a> {
                 self.ranking_score_threshold,
                 self.locales.as_ref(),
                 self.progress,
-                &pins,
+                pins,
             )?,
         };
 
@@ -460,6 +460,54 @@ pub fn build_dfa(word: &str, typos: u8, is_prefix: bool) -> DFA {
     } else {
         lev.build_dfa(word)
     }
+}
+
+pub fn merge_positioned_hits_into_page<P, T, FPos, FMap>(
+    pins: Vec<P>,
+    skip: usize,
+    take: usize,
+    organic_hits: Vec<T>,
+    pin_position: FPos,
+    mut pin_into_hit: FMap,
+) -> Vec<T>
+where
+    FPos: Fn(&P) -> Position,
+    FMap: FnMut(P) -> T,
+{
+    if pins.is_empty() {
+        return organic_hits;
+    }
+
+    let page_end = skip.saturating_add(take);
+    let capacity = take.min(organic_hits.len().saturating_add(pins.len()));
+    let mut merged_hits = Vec::with_capacity(capacity);
+    let mut organic_hits = organic_hits.into_iter();
+    let mut pins = pins.into_iter().peekable();
+    let mut combined_index = 0usize;
+
+    while combined_index < page_end {
+        let next_hit = if let Some(pin) = pins.peek() {
+            if (pin_position(pin) as usize) <= combined_index {
+                Some(pin_into_hit(pins.next().expect("peeked pin must exist")))
+            } else if let Some(hit) = organic_hits.next() {
+                Some(hit)
+            } else {
+                Some(pin_into_hit(pins.next().expect("peeked pin must exist")))
+            }
+        } else {
+            organic_hits.next()
+        };
+
+        let Some(hit) = next_hit else { break };
+
+        if combined_index >= skip {
+            merged_hits.push(hit);
+        }
+
+        combined_index += 1;
+    }
+
+    merged_hits
 }
 
 #[cfg(test)]

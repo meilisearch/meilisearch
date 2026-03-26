@@ -538,7 +538,7 @@ mod tests {
                 None,
                 None,
                 &progress,
-                &[],
+                vec![],
             )
             .unwrap();
 

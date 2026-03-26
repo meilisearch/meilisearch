@@ -9,7 +9,9 @@ use crate::search::new::{distinct_fid, distinct_single_docid};
 use crate::search::steps::SearchStep;
 use crate::search::SemanticSearch;
 use crate::vector::{Embedding, SearchQuery};
-use crate::{Index, MatchingWords, PinDoc, Result, Search, SearchResult};
+use crate::{
+    merge_positioned_hits_into_page, Index, MatchingWords, PinDoc, Result, Search, SearchResult,
+};
 
 struct ScoreWithRatioResult {
     matching_words: MatchingWords,
@@ -241,40 +243,17 @@ fn merge_pins_into_page(
         return (documents_ids, document_scores);
     }
 
-    let page_end = from.saturating_add(length);
-    let capacity = length.min(documents_ids.len().saturating_add(pins.len()));
-    let mut merged_ids = Vec::with_capacity(capacity);
-    let mut merged_scores = Vec::with_capacity(capacity);
-    let mut organic_hits = documents_ids.into_iter().zip(document_scores);
-    let mut pins = pins.iter().copied().peekable();
-    let mut combined_index = 0usize;
+    let organic_hits = documents_ids.into_iter().zip(document_scores).collect();
+    let merged_hits = merge_positioned_hits_into_page(
+        pins.to_vec(),
+        from,
+        length,
+        organic_hits,
+        |pin| pin.pos,
+        |pin| (pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]),
+    );
 
-    while combined_index < page_end {
-        let next_hit = if let Some(pin) = pins.peek().copied() {
-            if (pin.pos as usize) <= combined_index {
-                pins.next();
-                Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
-            } else if let Some(hit) = organic_hits.next() {
-                Some(hit)
-            } else {
-                pins.next();
-                Some((pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]))
-            }
-        } else {
-            organic_hits.next()
-        };
-
-        let Some((docid, score)) = next_hit else { break };
-
-        if combined_index >= from {
-            merged_ids.push(docid);
-            merged_scores.push(score);
-        }
-
-        combined_index += 1;
-    }
-
-    (merged_ids, merged_scores)
+    merged_hits.into_iter().unzip()
 }
 
 impl Search<'_> {
