@@ -520,17 +520,55 @@ async fn get_not_found() {
 }
 
 #[actix_web::test]
-async fn patch_not_found() {
+async fn patch_creates_rule_when_missing() {
     let server = dynamic_search_rules_server().await;
 
-    let (value, code) = server.patch_dynamic_search_rule("ghost", json!({ "active": true })).await;
-    snapshot!(code, @"404 Not Found");
+    let (value, code) = server
+        .patch_dynamic_search_rule(
+            "foobar",
+            json!({
+                "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
     snapshot!(json_string!(value), @r#"
     {
-      "message": "Dynamic search rule `ghost` not found.",
-      "code": "dynamic_search_rule_not_found",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#dynamic_search_rule_not_found"
+      "uid": "foobar",
+      "active": true,
+      "conditions": [],
+      "actions": [
+        {
+          "selector": {
+            "id": "1"
+          },
+          "action": {
+            "type": "pin",
+            "position": 0
+          }
+        }
+      ]
+    }
+    "#);
+
+    let (value, code) = server.get_dynamic_search_rule("foobar").await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "uid": "foobar",
+      "active": true,
+      "conditions": [],
+      "actions": [
+        {
+          "selector": {
+            "id": "1"
+          },
+          "action": {
+            "type": "pin",
+            "position": 0
+          }
+        }
+      ]
     }
     "#);
 }

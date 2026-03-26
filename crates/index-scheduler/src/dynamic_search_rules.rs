@@ -4,6 +4,7 @@ use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRu
 use meilisearch_types::heed;
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
+use meilisearch_types::index_uid::IndexUid;
 
 use crate::Result;
 
@@ -28,10 +29,16 @@ impl DynamicSearchRulesStore {
         let persisted = env.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
         let rules: DynamicSearchRules = persisted
             .iter(wtxn)?
-            .map(|entry| {
-                entry.map(|(key, rule): (&str, DynamicSearchRule)| {
-                    (key.parse().expect("valid RuleUid format"), rule)
-                })
+            .filter_map(|entry: Result<(&str, DynamicSearchRule), heed::Error>| {
+                entry
+                    .map(|(key, rule)| match key.parse::<IndexUid>() {
+                        Ok(key) => Some((key, rule)),
+                        Err(err) => {
+                            tracing::error!("Error when deserializing form DB: {err}");
+                            None
+                        }
+                    })
+                    .transpose()
             })
             .collect::<Result<DynamicSearchRules, heed::Error>>()?;
 

@@ -6,9 +6,11 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::dynamic_search_rules::{Condition, DynamicSearchRule, RuleAction, RuleUid};
 use meilisearch_types::error::deserr_codes::{
+    InvalidDynamicSearchRuleActions, InvalidDynamicSearchRuleActive,
+    InvalidDynamicSearchRuleConditions, InvalidDynamicSearchRuleDescription,
     InvalidDynamicSearchRuleFilter, InvalidDynamicSearchRuleFilterActive,
     InvalidDynamicSearchRuleFilterAttributePatterns, InvalidDynamicSearchRuleLimit,
-    InvalidDynamicSearchRuleOffset,
+    InvalidDynamicSearchRuleOffset, InvalidDynamicSearchRulePriority,
 };
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
@@ -25,7 +27,7 @@ use crate::routes::{Pagination, PaginationView, PAGINATION_DEFAULT_LIMIT};
 #[routes::routes(
     routes(
         "" => [post(list_rules)],
-        "/{uid}" => [get(get_rule), post(create_rule), patch(update_rule), delete(delete_rule)],
+        "/{uid}" => [get(get_rule), post(create_rule), patch(update_or_create_rule), delete(delete_rule)],
     ),
     tag = "Dynamic search rules",
     tags((
@@ -40,18 +42,19 @@ pub struct DynamicSearchRulesApi;
 #[schema(rename_all = "camelCase")]
 struct CreateDynamicSearchRuleRequest {
     /// Human-readable description of the dynamic search rule.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleDescription>)]
     description: Option<String>,
     /// Priority of the dynamic search rule. Lower values take precedence over higher ones.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRulePriority>)]
     priority: Option<u64>,
     /// Whether the dynamic search rule is active.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleActive>)]
     active: bool,
     /// Conditions that must match before the dynamic search rule applies.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
     conditions: Vec<Condition>,
     /// Actions to apply when the dynamic search rule matches.
+    #[deserr(error = DeserrJsonError<InvalidDynamicSearchRuleActions>)]
     actions: Vec<RuleAction>,
 }
 
@@ -60,23 +63,23 @@ struct CreateDynamicSearchRuleRequest {
 #[schema(rename_all = "camelCase")]
 struct UpdateDynamicSearchRuleRequest {
     /// Human-readable description of the dynamic search rule.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleDescription>)]
     #[schema(value_type = Option<String>)]
     description: Setting<String>,
     /// Priority of the dynamic search rule. Lower values take precedence over higher ones.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRulePriority>)]
     #[schema(value_type = Option<u64>)]
     priority: Setting<u64>,
     /// Whether the dynamic search rule is active.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleActive>)]
     #[schema(value_type = Option<bool>)]
     active: Setting<bool>,
     /// Conditions that must match before the dynamic search rule applies.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleConditions>)]
     #[schema(value_type = Option<Vec<Condition>>)]
     conditions: Setting<Vec<Condition>>,
     /// Actions to apply when the dynamic search rule matches.
-    #[deserr(default)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleActions>)]
     #[schema(value_type = Option<Vec<RuleAction>>)]
     actions: Setting<Vec<RuleAction>>,
 }
@@ -138,8 +141,10 @@ enum DynamicSearchRulesError {
     NotFound(RuleUid),
     #[error("Dynamic search rule `{0}` already exists.")]
     AlreadyExists(RuleUid),
-    #[error("Cannot reset Dynamic search rule `{0}` action.")]
+    #[error("Cannot reset the actions of a dynamic search rule.\n - Note: for rule `{0}`.")]
     CannotResetActions(RuleUid),
+    #[error("Cannot create a new dynamic search rule with no actions.\n - Note: for rule `{0}`.")]
+    EmptyActionsOnCreate(RuleUid),
 }
 
 impl ErrorCode for DynamicSearchRulesError {
@@ -147,8 +152,9 @@ impl ErrorCode for DynamicSearchRulesError {
         match self {
             DynamicSearchRulesError::NotFound(_) => Code::DynamicSearchRuleNotFound,
             DynamicSearchRulesError::AlreadyExists(_) => Code::BadRequest,
-            DynamicSearchRulesError::CannotResetActions(_) => {
-                Code::CannotResetDynamicSearchRuleActions
+            DynamicSearchRulesError::CannotResetActions(_) => Code::InvalidDynamicSearchRuleActions,
+            DynamicSearchRulesError::EmptyActionsOnCreate(_) => {
+                Code::InvalidDynamicSearchRuleActions
             }
         }
     }
@@ -435,7 +441,7 @@ async fn create_rule(
         })),
     ),
 )]
-async fn update_rule(
+async fn update_or_create_rule(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::DYNAMIC_SEARCH_RULES_UPDATE }>,
         Data<IndexScheduler>,
@@ -450,46 +456,66 @@ async fn update_rule(
         .check_dynamic_search_rules("Using the `/dynamic-search-rules` routes")?;
 
     let uid = uid.into_inner();
-    let body = body.into_inner();
+    let UpdateDynamicSearchRuleRequest {
+        description: new_description,
+        priority: new_priority,
+        active: new_active,
+        conditions: new_conditions,
+        actions: new_actions,
+    } = body.into_inner();
+
     let rules = index_scheduler.dynamic_search_rules();
+    let (mut rule, is_new) = rules
+        .get(&uid)
+        .cloned()
+        .map(|r| (r, false))
+        .unwrap_or_else(|| (private_default_dynamic_search_rule(uid.clone()), true));
 
-    let mut rule =
-        rules.get(&uid).cloned().ok_or_else(|| DynamicSearchRulesError::NotFound(uid.clone()))?;
+    let DynamicSearchRule { uid: _, description, priority, active, conditions, actions } =
+        &mut rule;
 
-    match body.description {
-        Setting::Set(description) => rule.description = Some(description),
-        Setting::Reset => rule.description = None,
+    match new_description {
+        Setting::Set(new_description) => *description = Some(new_description),
+        Setting::Reset => *description = None,
         Setting::NotSet => (),
     }
 
-    match body.priority {
-        Setting::Set(priority) => rule.priority = Some(priority),
-        Setting::Reset => rule.priority = None,
+    match new_priority {
+        Setting::Set(new_priority) => *priority = Some(new_priority),
+        Setting::Reset => *priority = None,
         Setting::NotSet => (),
     }
 
-    match body.active {
-        Setting::Set(active) => rule.active = active,
-        Setting::Reset => rule.active = false,
+    match new_active {
+        Setting::Set(new_active) => *active = new_active,
+        Setting::Reset => *active = true,
         Setting::NotSet => (),
     }
 
-    match body.conditions {
-        Setting::Set(conditions) => rule.conditions = conditions,
-        Setting::Reset => rule.conditions.clear(),
+    match new_conditions {
+        Setting::Set(new_conditions) => *conditions = new_conditions,
+        Setting::Reset => conditions.clear(),
         Setting::NotSet => (),
     }
 
-    match body.actions {
-        Setting::Set(actions) => rule.actions = actions,
+    match new_actions {
+        Setting::Set(new_actions) => *actions = new_actions,
         Setting::Reset => return Err(DynamicSearchRulesError::CannotResetActions(uid).into()),
+        Setting::NotSet if is_new => {
+            return Err(DynamicSearchRulesError::EmptyActionsOnCreate(uid).into())
+        }
         Setting::NotSet => (),
     }
 
     index_scheduler.put_dynamic_search_rule(&rule)?;
-    analytics.publish(UpdateDynamicSearchRuleAnalytics, &req);
 
-    Ok(HttpResponse::Ok().json(rule))
+    if is_new {
+        analytics.publish(CreateDynamicSearchRuleAnalytics, &req);
+        Ok(HttpResponse::Created().json(rule))
+    } else {
+        analytics.publish(UpdateDynamicSearchRuleAnalytics, &req);
+        Ok(HttpResponse::Ok().json(rule))
+    }
 }
 
 /// Delete a dynamic search rule
@@ -537,4 +563,15 @@ async fn delete_rule(
     analytics.publish(DeleteDynamicSearchRuleAnalytics, &req);
 
     Ok(HttpResponse::NoContent().finish())
+}
+
+fn private_default_dynamic_search_rule(uid: RuleUid) -> DynamicSearchRule {
+    DynamicSearchRule {
+        uid,
+        description: None,
+        priority: None,
+        active: true,
+        conditions: vec![],
+        actions: vec![],
+    }
 }

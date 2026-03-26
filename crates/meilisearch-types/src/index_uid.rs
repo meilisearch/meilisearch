@@ -1,18 +1,19 @@
 use std::borrow::Borrow;
 use std::error::Error;
 use std::fmt;
-use std::fmt::Formatter;
 use std::str::FromStr;
 
 use deserr::Deserr;
-use serde::de::Visitor;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::error::{Code, ErrorCode};
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserr, PartialOrd, Ord, Serialize, ToSchema)]
+#[derive(
+    Debug, Clone, Deserialize, PartialEq, Eq, Deserr, PartialOrd, Ord, Serialize, ToSchema,
+)]
 #[deserr(try_from(String) = IndexUid::try_from -> IndexUidFormatError)]
+#[serde(try_from = "String")]
 #[schema(value_type = String, example = "movies")]
 pub struct IndexUid(String);
 
@@ -103,38 +104,5 @@ impl Error for IndexUidFormatError {}
 impl ErrorCode for IndexUidFormatError {
     fn error_code(&self) -> Code {
         Code::InvalidIndexUid
-    }
-}
-
-struct IndexUidVisitor;
-
-impl<'de> Visitor<'de> for IndexUidVisitor {
-    type Value = IndexUid;
-
-    fn expecting(&self, f: &mut Formatter) -> fmt::Result {
-        f.write_str("a valid index_uid")
-    }
-
-    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        v.parse::<IndexUid>().map_err(E::custom)
-    }
-
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        IndexUid::try_from(v).map_err(E::custom)
-    }
-}
-
-impl<'de> Deserialize<'de> for IndexUid {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_string(IndexUidVisitor)
     }
 }

@@ -9,9 +9,8 @@ source: crates/meilisearch/tests/search/multi/proxy.rs
       "indexUid": "test",
       "queriesPosition": 1,
       "weightedRankingScore": 1.0,
-      "weightedScoreValues": [],
-      "extra_document": {},
-      "remote": "ms1"
+      "remote": "ms1",
+      "extra_document": {}
     }
   },
   {

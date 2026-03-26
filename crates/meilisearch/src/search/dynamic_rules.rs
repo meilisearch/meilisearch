@@ -1,16 +1,16 @@
+use super::SearchQuery;
 use crate::milli::Index;
 use itertools::Itertools;
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRuleAction, DynamicSearchRules, Selector,
 };
 use meilisearch_types::heed::{self, RoTxn};
+use meilisearch_types::milli;
 use meilisearch_types::milli::PinDoc;
 use std::cmp::{Ordering, Reverse};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use time::OffsetDateTime;
-
-use super::SearchQuery;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Priority(u64);
@@ -53,7 +53,7 @@ impl DynamicSearchContext<'_> {
     }
 
     pub fn query_contains(&self, value: &str) -> bool {
-        self.query.as_ref().is_some_and(|q| q.contains(&value.to_lowercase()))
+        self.query.as_ref().is_some_and(|q| q.contains(&milli::normalize_facet(value)))
     }
 }
 

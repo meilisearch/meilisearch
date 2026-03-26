@@ -611,7 +611,7 @@ pub(crate) async fn search(
         let mut federation = Federation::default();
         let queries = Partition::new(network)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
-            .collect::<Vec<_>>();
+            .collect();
 
         let search_result = perform_federated_search(
             index_scheduler,
@@ -662,8 +662,7 @@ pub(crate) async fn search(
         })
         .await;
 
-        let (result, deadline) = search_result??;
-        (result, deadline)
+        search_result??
     };
 
     // Apply personalization if requested

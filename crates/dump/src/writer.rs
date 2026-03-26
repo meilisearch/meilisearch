@@ -152,7 +152,8 @@ impl DynamicSearchRulesWriter {
     }
 
     pub fn push_rule(&mut self, rule: &DynamicSearchRule) -> Result<()> {
-        let file_name = format!("{}.json", self.next_file_id);
+        // e.g. "dynamic-search-rules/000000101.json"
+        let file_name = format!("{:09}.json", self.next_file_id);
         self.next_file_id += 1;
         let mut file = File::create(self.path.join(file_name))?;
         serde_json::to_writer(&mut file, &rule)?;
@@ -377,7 +378,7 @@ pub(crate) mod test {
         ├---- batches/
         │    └---- queue.jsonl
         ├---- dynamic-search-rules/
-        │    └---- 0.json
+        │    └---- 000000000.json
         ├---- indexes/
         │    └---- doggos/
         │    │    ├---- documents.jsonl

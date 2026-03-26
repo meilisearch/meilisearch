@@ -42,6 +42,7 @@ use meilisearch_types::milli::{
 };
 use meilisearch_types::network::{Network, Remote};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
+use meilisearch_types::Document;
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
@@ -737,6 +738,7 @@ fn extract_remote_pin_hits(
         federation: &mut serde_json::Map<String, serde_json::Value>,
     ) -> Option<(u32, usize)> {
         let pin_pos: u32 = federation.remove(PINNED_POSITION)?.as_u64()?.try_into().ok()?;
+        let _ = federation.remove(WEIGHTED_SCORE_VALUES);
         let query_idx: usize = federation.get(QUERIES_POSITION)?.as_u64()?.try_into().ok()?;
 
         Some((pin_pos, query_idx))
@@ -758,6 +760,49 @@ fn extract_remote_pin_hits(
             }
         }
     }
+}
+
+fn build_federation_hit(
+    params: &SearchByIndexParams,
+    index_uid: &str,
+    query_index: usize,
+    score: &[ScoreDetails],
+    weight: Weight,
+    extra_document: &mut Document,
+) -> serde_json::Value {
+    let weighted_score = ScoreDetails::global_score(score.iter()) * *weight;
+    let mut federation = serde_json::json!({
+        INDEX_UID: index_uid,
+        QUERIES_POSITION: query_index,
+        WEIGHTED_RANKING_SCORE: weighted_score,
+    });
+
+    if params.has_remote && !params.is_proxy {
+        federation
+            .as_object_mut()
+            .unwrap()
+            .insert(FEDERATION_REMOTE.to_string(), params.network.local.clone().into());
+    }
+
+    if params.is_proxy {
+        let federation = federation.as_object_mut().unwrap();
+        federation.insert(
+            WEIGHTED_SCORE_VALUES.to_string(),
+            serde_json::json!(
+                ScoreDetails::weighted_score_values(score.iter(), *weight).collect_vec()
+            ),
+        );
+        federation.insert(
+            FEDERATION_EXTRA_DOCUMENT.to_string(),
+            serde_json::Value::Object(std::mem::take(extra_document)),
+        );
+
+        if let Some(ScoreDetails::Pin { position }) = score.first() {
+            federation.insert(PINNED_POSITION.to_string(), serde_json::json!(position));
+        }
+    }
+
+    federation
 }
 
 impl<'a> Iterator for SearchResultByQueryIter<'a> {
@@ -1479,42 +1524,14 @@ impl SearchByIndex {
             for (doc_id, score) in prev_documents_ids.into_iter().zip(prev_scores.into_iter()) {
                 if let Some(ScoreDetails::Pin { position }) = score.first() {
                     let mut hit = result_by_query.hit_maker.make_hit(doc_id, &score, progress)?;
-                    let weighted_score =
-                        ScoreDetails::global_score(score.iter()) * (*result_by_query.weight);
-                    let mut _federation = serde_json::json!(
-                        {
-                            INDEX_UID: index_uid,
-                            QUERIES_POSITION: result_by_query.query_index,
-                            WEIGHTED_RANKING_SCORE: weighted_score,
-                        }
+                    let _federation = build_federation_hit(
+                        params,
+                        &index_uid,
+                        result_by_query.query_index,
+                        &score,
+                        result_by_query.weight,
+                        &mut hit.extra_document,
                     );
-
-                    if params.has_remote && !params.is_proxy {
-                        _federation.as_object_mut().unwrap().insert(
-                            FEDERATION_REMOTE.to_string(),
-                            params.network.local.clone().into(),
-                        );
-                    }
-
-                    if params.is_proxy {
-                        let _federation = _federation.as_object_mut().unwrap();
-                        _federation.insert(
-                            WEIGHTED_SCORE_VALUES.to_string(),
-                            serde_json::json!(ScoreDetails::weighted_score_values(
-                                score.iter(),
-                                *result_by_query.weight
-                            )
-                            .collect_vec()),
-                        );
-                        _federation.insert(
-                            FEDERATION_EXTRA_DOCUMENT.to_string(),
-                            serde_json::Value::Object(std::mem::take(&mut hit.extra_document)),
-                        );
-                        if let Some(ScoreDetails::Pin { position }) = score.first() {
-                            _federation
-                                .insert(PINNED_POSITION.to_string(), serde_json::json!(position));
-                        }
-                    }
 
                     hit.document.insert(FEDERATION_HIT.to_string(), _federation);
                     local_pinned_hits.push((
@@ -1572,45 +1589,15 @@ impl SearchByIndex {
                             distinct_values.extend(facet_values);
                         }
 
-                        let weighted_score = ScoreDetails::global_score(score.iter()) * (*weight);
-
-                        let mut _federation = serde_json::json!(
-                            {
-                                INDEX_UID: index_uid,
-                                QUERIES_POSITION: query_index,
-                                WEIGHTED_RANKING_SCORE: weighted_score,
-                            }
+                        let _federation = build_federation_hit(
+                            params,
+                            &index_uid,
+                            query_index,
+                            &score,
+                            weight,
+                            &mut hit.extra_document,
                         );
-                        if params.has_remote && !params.is_proxy {
-                            _federation.as_object_mut().unwrap().insert(
-                                FEDERATION_REMOTE.to_string(),
-                                params.network.local.clone().into(),
-                            );
-                        }
-                        if params.is_proxy {
-                            let _federation = _federation.as_object_mut().unwrap();
-                            _federation.insert(
-                                WEIGHTED_SCORE_VALUES.to_string(),
-                                serde_json::json!(ScoreDetails::weighted_score_values(
-                                    score.iter(),
-                                    *weight
-                                )
-                                .collect_vec()),
-                            );
 
-                            // unmount hit.extra_document. See documentation for `SearchHit::extra_document` for details.
-                            _federation.insert(
-                                FEDERATION_EXTRA_DOCUMENT.to_string(),
-                                serde_json::Value::Object(std::mem::take(&mut hit.extra_document)),
-                            );
-
-                            if let Some(ScoreDetails::Pin { position }) = score.first() {
-                                _federation.insert(
-                                    PINNED_POSITION.to_string(),
-                                    serde_json::json!(position),
-                                );
-                            }
-                        }
                         hit.document.insert(FEDERATION_HIT.to_string(), _federation);
                         Ok(Some(SearchHitByIndex { hit, score, weight, query_index }))
                     })();

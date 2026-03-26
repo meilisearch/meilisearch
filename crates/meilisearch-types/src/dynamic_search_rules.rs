@@ -24,11 +24,15 @@ pub struct DynamicSearchRule {
     /// Human-readable description of the dynamic search rule.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Priority of the dynamic search rule. Lower values take precedence over higher ones.
+    /// Precedence of the dynamic search rule. Lower numeric values take precedence over higher
+    /// ones. If omitted, the rule is treated as having the lowest precedence. This precedence is
+    /// used to resolve conflicts between matching rules:
+    /// - If the same document is selected by multiple rules, the smallest `priority` number wins
+    /// - If different documents are pinned to the same position, they are ordered by ascending `priority`
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<u64>,
     /// Whether the dynamic search rule is active.
-    #[serde(default)]
+    #[serde(default = "default_dynamic_search_rule_active")]
     pub active: bool,
     /// Conditions that must match before the dynamic search rule applies.
     #[serde(default)]
@@ -37,8 +41,12 @@ pub struct DynamicSearchRule {
     pub actions: Vec<RuleAction>,
 }
 
+const fn default_dynamic_search_rule_active() -> bool {
+    true
+}
+
 #[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[deserr(error = DeserrJsonError, tag = "scope", rename_all = camelCase, validate = validate_condition -> DeserrJsonError)]
+#[deserr(tag = "scope", rename_all = camelCase, validate = validate_condition -> DeserrJsonError)]
 #[serde(tag = "scope", rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub enum Condition {
@@ -124,7 +132,11 @@ fn validate_condition<E: DeserializeError>(
 }
 
 #[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(
+    rename_all = camelCase,
+    deny_unknown_fields,
+    where_predicate = __Deserr_E: deserr::MergeWithError<crate::index_uid::IndexUidFormatError>
+)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct RuleAction {
@@ -138,7 +150,11 @@ pub struct RuleAction {
 }
 
 #[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
+#[deserr(
+    rename_all = camelCase,
+    deny_unknown_fields,
+    where_predicate = __Deserr_E: deserr::MergeWithError<crate::index_uid::IndexUidFormatError>
+)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub struct Selector {
@@ -151,7 +167,7 @@ pub struct Selector {
 }
 
 #[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
-#[deserr(error = DeserrJsonError, tag = "type", rename_all = camelCase, deny_unknown_fields)]
+#[deserr(tag = "type", rename_all = camelCase, deny_unknown_fields)]
 #[serde(tag = "type", rename_all = "camelCase", deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 pub enum DynamicSearchRuleAction {
@@ -161,6 +177,9 @@ pub enum DynamicSearchRuleAction {
 fn parse_optional_rfc3339_datetime(
     value: Option<String>,
 ) -> Result<Option<OffsetDateTime>, ParseOffsetDateTimeError> {
-    let Some(value) = value else { return Ok(None) };
-    OffsetDateTime::parse(&value, &Rfc3339).map(Some).map_err(|_| ParseOffsetDateTimeError(value))
+    value
+        .map(|value| {
+            OffsetDateTime::parse(&value, &Rfc3339).map_err(|_| ParseOffsetDateTimeError(value))
+        })
+        .transpose()
 }
