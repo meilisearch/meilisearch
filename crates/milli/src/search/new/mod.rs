@@ -62,8 +62,8 @@ use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, Deadline, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy,
-    UserError, Weight,
+    AscDesc, Deadline, DocumentId, FieldId, Filter, Index, Member, PinDoc, Result,
+    TermsMatchingStrategy, UserError, Weight,
 };
 
 /// Cache for synonyms to avoid repeated database access
@@ -692,6 +692,7 @@ pub fn execute_vector_search(
     deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     progress: &Progress,
+    pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -727,6 +728,7 @@ pub fn execute_vector_search(
         ranking_score_threshold,
         exhaustive_number_hits,
         max_total_hits,
+        pins,
     )?;
 
     Ok(PartialSearchResult {
@@ -761,6 +763,7 @@ pub fn execute_search(
     ranking_score_threshold: Option<f64>,
     locales: Option<&Vec<Language>>,
     progress: &Progress,
+    pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -895,6 +898,7 @@ pub fn execute_search(
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
+            pins,
         )?
     } else {
         let ranking_rules =
@@ -914,6 +918,7 @@ pub fn execute_search(
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
+            pins,
         )?
     };
 

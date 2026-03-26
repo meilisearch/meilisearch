@@ -43,6 +43,10 @@ use crate::search_queue::SearchQueue;
 
 - A POST route: this is the preferred route when using API authentication, as it allows [preflight request](https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request) caching and better performance.
 - A GET route: the usage of this route is discouraged, unless you have good reason to do otherwise (specific caching abilities for example)",
+            external_docs(
+                url = "https://www.meilisearch.com/docs/reference/api/search",
+                description = "Search API reference",
+            ),
         ),
     ),
 )]
@@ -608,6 +612,7 @@ pub(crate) async fn search(
         let queries = Partition::new(network)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
             .collect();
+
         let search_result = perform_federated_search(
             index_scheduler,
             queries,

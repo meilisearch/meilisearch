@@ -59,6 +59,7 @@ mod api_key;
 pub mod batches;
 pub mod chats;
 mod dump;
+mod dynamic_search_rules;
 mod export;
 mod export_analytics;
 pub mod features;
@@ -97,6 +98,7 @@ mod webhooks;
         "/export"=> sub(export::ExportApi),
         "/network"=> sub(network::NetworkApi),
         "/webhooks"=> sub(webhooks::WebhooksApi),
+        "/dynamic-search-rules"=> sub(dynamic_search_rules::DynamicSearchRulesApi),
     ),
     tag = "Root",
     tags(
@@ -250,6 +252,25 @@ impl Pagination {
         let total = content.len();
         let content: Vec<_> = content.into_iter().skip(self.offset).take(self.limit).collect();
         self.format_with(total, content)
+    }
+
+    pub fn auto_paginate_counting<T, I>(self, content: I) -> PaginationView<T>
+    where
+        I: IntoIterator<Item = T>,
+        T: Serialize,
+    {
+        let mut total = 0;
+        let mut results = Vec::with_capacity(self.limit);
+
+        for item in content {
+            if total >= self.offset && results.len() < self.limit {
+                results.push(item);
+            }
+
+            total += 1;
+        }
+
+        self.format_with(total, results)
     }
 
     /// Given an iterator and the total number of elements, returns the

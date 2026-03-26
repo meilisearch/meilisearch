@@ -53,6 +53,9 @@ pub use federated::{
     FederationOptions, MergeFacets, Partition, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 
+mod dynamic_rules;
+pub use dynamic_rules::{collect_active_rules, resolve_pins, DynamicSearchContext};
+
 mod hydration;
 mod value_paths_visitor;
 use hydration::hydrate_documents;
@@ -1794,8 +1797,19 @@ pub fn perform_search(
     let rtxn = index.read_txn()?;
     let deadline = index.search_deadline(&rtxn)?;
 
-    let (search, is_finite_pagination, max_total_hits, offset) =
+    let (mut search, is_finite_pagination, max_total_hits, offset) =
         prepare_search(index, &rtxn, &query, &search_kind, deadline.clone(), features, progress)?;
+
+    let pins = if features.runtime_features().dynamic_search_rules {
+        let rules = index_scheduler.dynamic_search_rules();
+        resolve_pins(&rules, &query, &index_uid, index, &rtxn)?
+    } else {
+        Vec::new()
+    };
+
+    if !pins.is_empty() {
+        search.pins(pins);
+    }
 
     let (
         milli::SearchResult {
