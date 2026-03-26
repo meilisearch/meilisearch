@@ -3,7 +3,7 @@ source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
 ---
 {
   "uid": "minimal",
-  "active": false,
+  "active": true,
   "conditions": [],
   "actions": [
     {

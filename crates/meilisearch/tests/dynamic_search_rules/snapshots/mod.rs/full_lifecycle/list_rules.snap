@@ -5,7 +5,7 @@ source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
   "results": [
     {
       "uid": "rule-a",
-      "active": false,
+      "active": true,
       "conditions": [],
       "actions": [
         {
@@ -21,7 +21,7 @@ source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
     },
     {
       "uid": "rule-b",
-      "active": false,
+      "active": true,
       "conditions": [],
       "actions": [
         {

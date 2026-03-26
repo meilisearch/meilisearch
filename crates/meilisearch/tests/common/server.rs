@@ -211,7 +211,7 @@ impl Server<Owned> {
         value: Value,
     ) -> (Value, StatusCode) {
         let url = format!("/dynamic-search-rules/{}", uid.as_ref());
-        self.service.post(url, value).await
+        self.service.patch(url, value).await
     }
 
     pub async fn get_dynamic_search_rule(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {

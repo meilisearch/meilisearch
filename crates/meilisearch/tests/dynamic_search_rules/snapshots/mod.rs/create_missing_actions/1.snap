@@ -2,8 +2,8 @@
 source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
 ---
 {
-  "message": "Missing field `actions`",
-  "code": "bad_request",
+  "message": "Cannot create a new dynamic search rule with no actions.\n - Note: for rule `no-actions`.",
+  "code": "invalid_dynamic_search_rule_actions",
   "type": "invalid_request",
-  "link": "https://docs.meilisearch.com/errors#bad_request"
+  "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
 }

@@ -1220,7 +1220,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".**.weightedRankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".**.weightedRankingScore" => "[score]" }), @r#"
     {
       "hits": [
         {
@@ -1230,9 +1230,8 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             "indexUid": "test",
             "queriesPosition": 1,
             "weightedRankingScore": "[score]",
-            "weightedScoreValues": [],
-            "extra_document": {},
-            "remote": "ms1"
+            "remote": "ms1",
+            "extra_document": {}
           }
         },
         {
@@ -1242,9 +1241,8 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
             "indexUid": "test",
             "queriesPosition": 1,
             "weightedRankingScore": "[score]",
-            "weightedScoreValues": [],
-            "extra_document": {},
-            "remote": "ms1"
+            "remote": "ms1",
+            "extra_document": {}
           }
         }
       ],
@@ -1256,7 +1254,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
       "requestUid": "[uuid]",
       "remoteErrors": {}
     }
-    "###);
+    "#);
 }
 
 #[actix_rt::test]

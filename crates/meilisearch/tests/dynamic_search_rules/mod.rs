@@ -590,33 +590,6 @@ async fn delete_not_found() {
 }
 
 #[actix_web::test]
-async fn create_duplicate() {
-    let server = dynamic_search_rules_server().await;
-
-    let (_, code) = server
-        .create_dynamic_search_rule("dup", json!({
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
-        }))
-        .await;
-    snapshot!(code, @"201 Created");
-
-    let (value, code) = server
-        .create_dynamic_search_rule("dup", json!({
-            "actions": [{ "selector": { "id": "1" }, "action": { "type": "pin", "position": 0 } }]
-        }))
-        .await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(value), @r#"
-    {
-      "message": "Dynamic search rule `dup` already exists.",
-      "code": "bad_request",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#bad_request"
-    }
-    "#);
-}
-
-#[actix_web::test]
 async fn create_unknown_field() {
     let server = dynamic_search_rules_server().await;
 
