@@ -67,7 +67,7 @@ use crate::search_queue::SearchQueue;
     params(
         ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
-    security(("Bearer" = ["chats.completions", "*"])),
+    security(("Bearer" = ["chatsCompletions", "*"])),
     request_body(content = async_openai::types::CreateChatCompletionRequest, content_type = "application/json"),
     responses(
         (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
