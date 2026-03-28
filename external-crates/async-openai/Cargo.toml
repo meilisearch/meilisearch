@@ -33,6 +33,7 @@ tokio-stream = "0.1.17"
 tokio-util = { version = "0.7.13", features = ["codec", "io-util"] }
 tracing = "0.1.41"
 derive_builder = "0.20.2"
+utoipa = { version = "5.4.0", features = ["preserve_order"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 bytes = "1.11.1"
 eventsource-stream = "0.2.3"
