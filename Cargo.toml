@@ -44,6 +44,7 @@ mimalloc = { version = "0.1.48", default-features = false, features = ["v3", "ov
 
 [profile.release]
 codegen-units = 1
+lto = true
 
 [profile.release-with-debug]
 inherits = "release"
