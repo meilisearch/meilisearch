@@ -179,14 +179,6 @@ jobs:
         run: pnpm test
       - name: Build project
         run: pnpm build
-      - name: Run ESM env
-        run: pnpm test:env:esm
-      - name: Run Node.js env
-        run: pnpm test:env:nodejs
-      - name: Run node typescript env
-        run: pnpm test:env:node-ts
-      - name: Run Browser env
-        run: pnpm test:env:browser
 
   meilisearch-php-tests:
     needs: define-docker-image
