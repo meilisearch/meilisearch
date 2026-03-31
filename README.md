@@ -41,7 +41,6 @@
 - [**Movies**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=organization) — An application to help you find streaming platforms to watch movies using [hybrid search](https://www.meilisearch.com/solutions/hybrid-search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos).
 - [**Flickr**](https://flickr.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=organization) — Search and explore one hundred million Flickr images with semantic search.
 - [**Ecommerce**](https://ecommerce.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Ecommerce website using disjunctive [facets](https://www.meilisearch.com/docs/learn/fine_tuning_results/faceted_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos), range and rating filtering, and pagination.
-
 - [**Chat Home Booking**](https://www.meilisearch.com/docs/resources/demos/home_booking) — A conversational search demo for finding holiday rentals using natural language.
 - [**Search Playground**](https://www.meilisearch.com/docs/resources/demos/playground) — An interactive playground to explore Meilisearch search features.
 - [**Personalization**](https://www.meilisearch.com/docs/resources/demos/personalized_search) — A demo showcasing personalized search results tailored to individual users.
