@@ -29,10 +29,10 @@ use crate::routes::{Pagination, PaginationView, PAGINATION_DEFAULT_LIMIT};
         "" => [post(list_rules)],
         "/{uid}" => [get(get_rule), patch(update_or_create_rule), delete(delete_rule)],
     ),
-    tag = "Dynamic search rules",
+    tag = "Search rules",
     tags((
-        name = "Dynamic search rules",
-        description = "The `/dynamic-search-rules` route allows you to configure dynamic search rules.",
+        name = "Search rules",
+        description = "The `/dynamic-search-rules` route allows you to configure search rules.",
     ))
 )]
 pub struct DynamicSearchRulesApi;
@@ -191,9 +191,9 @@ impl Aggregate for DeleteDynamicSearchRuleAnalytics {
     }
 }
 
-/// List dynamic search rules
+/// List search rules
 ///
-/// Return all dynamic search rules configured on the instance.
+/// Return all search rules configured on the instance.
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.get", "dynamicSearchRules.*", "*.get", "*"])),
     request_body = ListRules,
@@ -248,12 +248,12 @@ async fn list_rules(
     Ok(HttpResponse::Ok().json(pagination_view))
 }
 
-/// Get a dynamic search rule
+/// Get a search rule
 ///
-/// Retrieve a single dynamic search rule by its unique identifier.
+/// Retrieve a single search rule by its unique identifier.
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.get", "dynamicSearchRules.*", "*.get", "*"])),
-    params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the dynamic search rule.", nullable = false)),
+    params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the search rule.", nullable = false)),
     responses(
         (status = OK, description = "Dynamic search rule returned.", body = DynamicSearchRule, content_type = "application/json", example = json!({
             "uid": "black-friday",
@@ -303,13 +303,13 @@ async fn get_rule(
     Ok(HttpResponse::Ok().json(rule))
 }
 
-/// Update a dynamic search rule or create a new one if it doesn't exist
+/// Create or update a search rule
 ///
-/// Partially update a dynamic search rule by replacing the provided fields.
+/// Partially update a search rule by replacing the provided fields. If the rule doesn't exist, it will be created.
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.update", "dynamicSearchRules.*", "*"])),
     request_body = UpdateOrCreateDynamicSearchRuleRequest,
-    params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the dynamic search rule.", nullable = false)),
+    params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the search rule.", nullable = false)),
     responses(
         (status = OK, description = "Dynamic search rule updated.", body = DynamicSearchRule, content_type = "application/json", example = json!({
             "uid": "black-friday",
@@ -418,12 +418,12 @@ async fn update_or_create_rule(
     }
 }
 
-/// Delete a dynamic search rule
+/// Delete a search rule
 ///
-/// Delete a dynamic search rule by its unique identifier.
+/// Delete a search rule by its unique identifier.
 #[routes::path(
     security(("Bearer" = ["dynamicSearchRules.delete", "dynamicSearchRules.*", "*.delete", "*"])),
-    params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the dynamic search rule.", nullable = false)),
+    params(("uid" = String, Path, example = "black-friday", description = "Unique identifier of the search rule.", nullable = false)),
     responses(
         (status = NO_CONTENT, description = "Dynamic search rule deleted."),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
