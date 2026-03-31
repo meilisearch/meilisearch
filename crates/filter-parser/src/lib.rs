@@ -282,6 +282,46 @@ impl<'a> FilterCondition<'a> {
         }
     }
 
+    pub fn list_foreign_filters(&self, foreign_filters: &mut Vec<FilterCondition<'a>>) {
+        match self {
+            FilterCondition::Foreign { .. } => {
+                // TODO: clone is not efficient
+                foreign_filters.push(self.clone());
+            }
+            FilterCondition::Not(op) => {
+                op.list_foreign_filters(foreign_filters);
+            }
+            FilterCondition::Or(subfilters) | FilterCondition::And(subfilters) => {
+                for filter in subfilters.iter() {
+                    filter.list_foreign_filters(foreign_filters);
+                }
+            }
+            _ => (),
+        }
+    }
+
+    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token<'a>> + '_> {
+        if depth == 0 {
+            return Box::new(std::iter::empty());
+        }
+        match self {
+            Self::Condition { fid, .. } | Self::In { fid, .. } => Box::new(std::iter::once(fid)),
+            Self::Not(filter) => {
+                let depth = depth.saturating_sub(1);
+                filter.fids(depth)
+            }
+            Self::And(subfilters) | Self::Or(subfilters) => {
+                let depth = depth.saturating_sub(1);
+                Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
+            }
+            FilterCondition::Foreign { fid, op } => {
+                let depth = depth.saturating_sub(1);
+                Box::new(std::iter::once(fid).chain(op.fids(depth)))
+            }
+            _ => Box::new(std::iter::empty()),
+        }
+    }
+
     /// Returns the first token found at the specified depth, `None` if no token at this depth.
     pub fn token_at_depth(&self, depth: usize) -> Option<&Token<'a>> {
         match self {

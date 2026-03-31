@@ -3004,3 +3004,138 @@ fn parse_filter_array(arr: &'_ [Value]) -> Result<Option<Filter<'_>>, Meilisearc
 
     Filter::from_array(ands).map_err(|e| MeilisearchHttpError::from_milli(e, None))
 }
+
+pub fn filters_into_index_filter<'a>(
+    filter: Filter<'a>,
+    index: &Index,
+    rtxn: &RoTxn,
+    index_scheduler: &IndexScheduler,
+    progress: &Progress,
+) -> Result<IndexFilter<'a>, ResponseError> {
+    filters_into_index_filters(vec![filter], index, rtxn, index_scheduler, progress)
+        .map(|mut filters| filters.pop().unwrap())
+}
+
+pub fn filters_into_index_filters<'a>(
+    filters: Vec<Filter<'a>>,
+    index: &Index,
+    rtxn: &RoTxn,
+    index_scheduler: &IndexScheduler,
+    progress: &Progress,
+) -> Result<Vec<IndexFilter<'a>>, ResponseError> {
+    // list all the foreign filters
+    let mut foreign_filters = Vec::new();
+    for filter in filters.iter() {
+        filter.condition.list_foreign_filters(&mut foreign_filters);
+    }
+
+    // group the foreign filters by foreign index
+    let foreign_keys = index.foreign_keys(rtxn).map_err(milli::Error::from)?;
+    let mut filters_per_foreign_index: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, filter) in foreign_filters.iter().enumerate() {
+        let FilterCondition::Foreign { fid, .. } = filter else { unreachable!() };
+        let foreign_key = foreign_keys.iter().find(|fk| fk.field_name == fid.value()).ok_or(
+            ResponseError::from_msg(
+                format!("Field `{}` is not a foreign key", fid),
+                Code::InvalidSearchFilter,
+            ),
+        )?;
+
+        filters_per_foreign_index.entry(foreign_key.foreign_index_uid.clone()).or_default().push(i);
+    }
+
+    // open each foreign index once and process the filters
+    // TODO: do remote document filtering here
+    // local
+    for (foreign_index_uid, filter_indices) in filters_per_foreign_index.iter() {
+        let foreign_index = index_scheduler.index(foreign_index_uid)?;
+        let foreign_rtxn = foreign_index.read_txn()?;
+        let foreign_external_docids = foreign_index.external_documents_ids();
+        for filter_index in filter_indices.iter() {
+            // TODO: avoid cloning
+            let FilterCondition::Foreign { fid, op } = foreign_filters[*filter_index].clone()
+            else {
+                unreachable!()
+            };
+
+            let docids = filtered_universe(
+                &foreign_index,
+                &foreign_rtxn,
+                &Some(IndexFilter::from(condition_to_index_condition(*op, &|_| {
+                    Err(ResponseError::from_msg(
+                        "Nested foreign filters are not supported".to_string(),
+                        Code::InvalidSearchFilter,
+                    ))
+                })?)),
+                &progress,
+            )?;
+
+            let mut inner = Vec::new();
+            // TODO: remove DB scan
+            for result in foreign_external_docids.iter(&foreign_rtxn)? {
+                let (external, internal) = result?;
+                if docids.contains(internal) {
+                    inner.push(Token::new(fid.original_span(), Some(external.to_owned())));
+                }
+            }
+
+            foreign_filters[*filter_index] = FilterCondition::In { fid, els: inner };
+        }
+    }
+
+    let mut in_iter = foreign_filters.into_iter();
+    filters
+        .into_iter()
+        .map(|filter| {
+            condition_to_index_condition(filter.condition, &|_| {
+                let Some(FilterCondition::In { fid, els }) = in_iter.next() else { unreachable!() };
+                Ok(IndexFilterCondition::In { fid, els })
+            })
+            .map(|condition| IndexFilter { condition })
+        })
+        .collect()
+}
+
+fn condition_to_index_condition<'a, F>(
+    filter: FilterCondition<'a>,
+    foreign_filter: &F,
+) -> Result<IndexFilterCondition<'a>, ResponseError>
+where
+    F: FnMut(FilterCondition<'a>) -> Result<IndexFilterCondition<'a>, ResponseError>,
+{
+    match filter {
+        FilterCondition::Not(filter) => condition_to_index_condition(*filter, foreign_filter)
+            .map(Box::new)
+            .map(IndexFilterCondition::Not),
+        FilterCondition::Condition { fid, op } => Ok(IndexFilterCondition::Condition { fid, op }),
+        FilterCondition::In { fid, els } => Ok(IndexFilterCondition::In { fid, els }),
+        FilterCondition::Or(filters) => filters
+            .into_iter()
+            .map(|filter| condition_to_index_condition(filter, foreign_filter))
+            .collect::<Result<_, ResponseError>>()
+            .map(IndexFilterCondition::Or),
+
+        FilterCondition::And(filters) => filters
+            .into_iter()
+            .map(|filter| condition_to_index_condition(filter, foreign_filter))
+            .collect::<Result<_, ResponseError>>()
+            .map(IndexFilterCondition::And),
+
+        FilterCondition::VectorExists { fid, embedder, filter } => {
+            Ok(IndexFilterCondition::VectorExists { fid, embedder, filter })
+        }
+        FilterCondition::GeoLowerThan { point, radius, resolution } => {
+            Ok(IndexFilterCondition::GeoLowerThan { point, radius, resolution })
+        }
+        FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
+            Ok(IndexFilterCondition::GeoBoundingBox { top_right_point, bottom_left_point })
+        }
+        FilterCondition::GeoPolygon { points } => Ok(IndexFilterCondition::GeoPolygon { points }),
+        FilterCondition::Foreign { .. } => {
+            return Err(ResponseError::from_msg(
+                "Nested foreign filters are not supported".to_string(),
+                Code::InvalidSearchFilter,
+            ));
+        }
+    }
+}
