@@ -63,7 +63,7 @@ See the list of all our example apps in our [demos repository](https://github.co
 - **[RESTful API](https://www.meilisearch.com/docs/reference/api/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** integrate Meilisearch in your technical stack with our plugins and SDKs
 - **[Conversational search](https://www.meilisearch.com/docs/capabilities/conversational_search/overview):** let users ask questions in natural language and get AI-generated answers grounded in your search results
 - **[Personalization](https://www.meilisearch.com/docs/capabilities/personalization/overview):** tailor search results to individual users based on their preferences and behavior
-- **Dynamic search rules:** define custom rules to dynamically adjust search behavior based on context
+- **Search rules:** define custom rules to dynamically adjust search behavior based on context
 - **[Document relations](https://www.meilisearch.com/docs/capabilities/indexing/how_to/document_relations):** link documents across indexes to enrich search results with related data
 - **[Replication & sharding](https://www.meilisearch.com/docs/resources/self_hosting/sharding/overview):** scale horizontally by distributing your data across multiple nodes
 - **AI-ready:** works out of the box with [LangChain](https://www.meilisearch.com/with/LangChain) and the [Model Context Protocol (MCP)](https://github.com/meilisearch/meilisearch-mcp)
