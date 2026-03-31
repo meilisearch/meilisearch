@@ -577,12 +577,7 @@ where
         Ok(number_of_documents)
     }
 
-    #[tracing::instrument(
-        level = "trace",
-        skip_all,
-        target = "indexing::prefix",
-        name = "index_documents_prefix_databases"
-    )]
+    #[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
     pub fn execute_prefix_databases(
         &mut self,
         word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
@@ -778,12 +773,7 @@ where
 
 /// Run the word prefix docids update operation.
 #[allow(clippy::too_many_arguments)]
-#[tracing::instrument(
-    level = "trace",
-    skip_all,
-    target = "indexing::prefix",
-    name = "index_documents_word_prefix_docids"
-)]
+#[tracing::instrument(level = "trace", skip_all, target = "indexing::prefix")]
 fn execute_word_prefix_docids(
     txn: &mut heed::RwTxn<'_>,
     merger: Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>,
@@ -2991,6 +2981,7 @@ mod tests {
                     false,
                     Some([0.0, 1.0, 2.0].to_vec()),
                     None,
+                    false,
                 );
             })
             .execute()

@@ -34,13 +34,13 @@ macro_rules! test_distinct {
             let rtxn = index.read_txn().unwrap();
 
             let progress = Progress::default();
-            let mut search = SearchBuilder::new();
+            let mut search = SearchBuilder::new("test_index".to_string());
             search.query(search::TEST_QUERY);
             search.limit($limit);
             search.offset($offset);
             search.exhaustive_number_hits($exhaustive);
             search.terms_matching_strategy(TermsMatchingStrategy::default());
-            let search = search.build(&rtxn, &index, &progress);
+            let search = search.build(&rtxn, &index, &progress, milli::Deadline::never()).unwrap();
 
             let SearchResult { documents_ids, candidates, .. } = search.execute().unwrap();
             assert_eq!(candidates.len(), $n_res);

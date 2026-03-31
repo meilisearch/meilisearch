@@ -16,20 +16,18 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, Deadline, DocumentId, FederatingResultsStep, ForeignKey, OrderBy,
-    DEFAULT_VALUES_PER_FACET,
+    self, Deadline, DocumentId, FederatingResultsStep, ForeignKey, IndexFilter, OrderBy,
+    SearchBuilder, DEFAULT_PAGINATION_MAX_TOTAL_HITS, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
-use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
 
 use super::super::ranking_rules::{self, RankingRules};
 use super::super::{
-    compute_facet_distribution_stats, prepare_search, AttributesFormat, ComputedFacets, HitMaker,
-    HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata, SearchQuery,
-    SearchQueryWithIndex,
+    compute_facet_distribution_stats, AttributesFormat, ComputedFacets, HitMaker, HitsInfo,
+    RetrieveVectors, SearchHit, SearchKind, SearchMetadata, SearchQuery, SearchQueryWithIndex,
 };
 use super::proxy::{proxy_search, ProxySearchError, ProxySearchParams};
 use super::types::{
@@ -382,8 +380,8 @@ pub async fn perform_federated_search(
     ))
 }
 
-struct QueryByIndex {
-    query: SearchQuery,
+struct QueryByIndex<'a> {
+    query: SearchBuilder<'a, IndexFilter<'a>>,
     weight: Weight,
     query_index: usize,
 }
@@ -799,17 +797,17 @@ fn merge_metadata(
     (estimated_total_hits, degraded, used_negative_operator, facets, max_remote_duration)
 }
 
-type LocalQueriesByIndex = BTreeMap<String, Vec<QueryByIndex>>;
+type LocalQueriesByIndex<'a> = BTreeMap<String, Vec<QueryByIndex<'a>>>;
 type RemoteQueriesByHost = BTreeMap<String, (Remote, Vec<SearchQueryWithIndex>)>;
 
-struct PartitionedQueries {
-    local_queries_by_index: LocalQueriesByIndex,
+struct PartitionedQueries<'a> {
+    local_queries_by_index: LocalQueriesByIndex<'a>,
     remote_queries_by_host: RemoteQueriesByHost,
     has_remote: bool,
 }
 
-impl PartitionedQueries {
-    fn new() -> PartitionedQueries {
+impl<'a> PartitionedQueries<'a> {
+    fn new() -> PartitionedQueries<'a> {
         PartitionedQueries {
             local_queries_by_index: Default::default(),
             remote_queries_by_host: Default::default(),

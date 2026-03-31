@@ -51,12 +51,12 @@ macro_rules! test_filter {
                 Filter::from_array::<Vec<Either<Vec<&str>, &str>>, _>($filter).unwrap().unwrap();
 
             let progress = Progress::default();
-            let mut search = SearchBuilder::new();
+            let mut search = SearchBuilder::new("test_index".to_string());
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.terms_matching_strategy(TermsMatchingStrategy::default());
             search.filter(from_filter(filter_conditions));
-            let search = search.build(&rtxn, &index, &progress);
+            let search = search.build(&rtxn, &index, &progress, milli::Deadline::never()).unwrap();
 
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 

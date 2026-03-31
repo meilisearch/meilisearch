@@ -16,7 +16,7 @@ use milli::update::Setting;
 use milli::vector::db::IndexEmbeddingConfig;
 use milli::{
     Criterion, CriterionError, FilterableAttributesRule, ForeignKey, Index,
-    DEFAULT_VALUES_PER_FACET,
+    DEFAULT_PAGINATION_MAX_TOTAL_HITS, DEFAULT_VALUES_PER_FACET,
 };
 use serde::{Deserialize, Serialize, Serializer};
 use utoipa::ToSchema;
@@ -25,10 +25,6 @@ use crate::deserr::DeserrJsonError;
 use crate::error::deserr_codes::*;
 use crate::facet_values_sort::FacetValuesSort;
 use crate::locales::LocalizedAttributesRuleView;
-
-/// The maximum number of results that the engine
-/// will be able to return in one search call.
-pub const DEFAULT_PAGINATION_MAX_TOTAL_HITS: usize = 1000;
 
 fn serialize_with_wildcard<S>(
     field: &Setting<Vec<String>>,

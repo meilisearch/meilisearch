@@ -13,13 +13,13 @@ fn sort_ranking_rule_missing() {
     let rtxn = index.read_txn().unwrap();
 
     let progress = Progress::default();
-    let mut search = SearchBuilder::new();
+    let mut search = SearchBuilder::new("test_index".to_string());
     search.query(search::TEST_QUERY);
     search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 
     search.terms_matching_strategy(TermsMatchingStrategy::default());
     search.sort_criteria(vec![AscDesc::Asc(Member::Field(S("tag")))]);
-    let search = search.build(&rtxn, &index, &progress);
+    let search = search.build(&rtxn, &index, &progress, milli::Deadline::never()).unwrap();
     let result = search.execute();
     assert!(matches!(result, Err(Error::UserError(UserError::SortRankingRuleMissing))));
 }

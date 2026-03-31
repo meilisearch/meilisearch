@@ -32,7 +32,8 @@ use meilisearch_types::{milli, Document};
 use milli::tokenizer::{Language, TokenizerBuilder};
 use milli::{
     AscDesc, FieldId, FieldsIdsMap, Filter, FormatOptions, Index, LocalizedAttributesRule,
-    MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    MatchBounds, MatcherBuilder, SortError, TermsMatchingStrategy,
+    DEFAULT_PAGINATION_MAX_TOTAL_HITS, DEFAULT_VALUES_PER_FACET,
 };
 use permissive_json_pointer::contained_in;
 use regex::Regex;
@@ -46,6 +47,8 @@ use uuid::Uuid;
 
 use crate::error::MeilisearchHttpError;
 use crate::search::value_paths_visitor::ValuePathsVisitor;
+use crate::routes::indexes::search::search_kind;
+use crate::search::preprocessing::{filters_into_index_filters, search_builder};
 
 mod federated;
 pub use federated::{
@@ -56,6 +59,8 @@ pub use federated::{
 mod hydration;
 mod value_paths_visitor;
 use hydration::hydrate_documents;
+mod preprocessing;
+use preprocessing::prepare_searches;
 mod ranking_rules;
 
 type MatchesPosition = BTreeMap<String, Vec<MatchBounds>>;
@@ -1783,20 +1788,34 @@ pub fn perform_search(
     let SearchParams {
         index_uid,
         query,
-        search_kind,
         retrieve_vectors,
         features,
         request_uid,
         include_metadata,
     } = params;
+
     let before_search = Instant::now();
+    // TODO: search_kind should not need index read
+    let search_kind = search_kind(&query, index_scheduler, index_uid.to_string(), index)?;
     let index_uid_for_metadata = index_uid.clone();
+
+    let mut builder = search_builder(index_uid.clone(), &query, &search_kind, features)?;
+
     let rtxn = index.read_txn()?;
+    // handle foreign filters
+    let filters = builder.take_filters();
+    let filters = filters
+        .map(|filters| {
+            filters_into_index_filters(vec![filters], index, &rtxn, index_scheduler, progress)
+                .map(|mut filters| filters.pop().unwrap())
+        })
+        .transpose()?;
+    let builder = builder.rebuild_with_index_filters(filters);
+
     let deadline = index.search_deadline(&rtxn)?;
-
-    let (search, is_finite_pagination, max_total_hits, offset) =
-        prepare_search(index, &rtxn, &query, &search_kind, deadline.clone(), features, progress)?;
-
+    let search = builder.build(&rtxn, index, progress, deadline.clone())?;
+    let offset = search.offset();
+    let max_total_hits = search.max_total_hits();
     let (
         milli::SearchResult {
             documents_ids,
@@ -1889,6 +1908,7 @@ pub fn perform_search(
     }
 
     let number_of_hits = min(candidates.len() as usize, max_total_hits);
+    let is_finite_pagination = hits_per_page.or(page).is_some();
     let hits_info = if is_finite_pagination {
         let hits_per_page = hits_per_page.unwrap_or_else(DEFAULT_SEARCH_LIMIT);
         // If hit_per_page is 0, then pages can't be computed and so we respond 0.
@@ -2472,8 +2492,8 @@ pub fn perform_facet_search(
             .collect()
     });
 
-    let (search, _, _, _) =
-        prepare_search(index, &rtxn, &search_query, &search_kind, deadline, features, &progress)?;
+    let builder = prepare_searches(Some((&search_query, &search_kind)), features)?.pop().unwrap();
+    let search = builder.build(&rtxn, index, &progress, deadline)?;
     let mut facet_search = SearchForFacetValues::new(
         facet_name,
         search,
@@ -2553,7 +2573,8 @@ pub fn perform_similar(
 
     if let Some(ref filter) = query.filter {
         if let Some(facets) = parse_filter(filter, Code::InvalidSimilarFilter, features)? {
-            similar.filter(facets);
+            /// TODO: handle foreign filters
+            todo!("handle foreign filters");
         }
     }
 
@@ -2920,13 +2941,6 @@ pub(crate) fn parse_filter(
         ResponseError::from_msg(err.to_string(), filter_parsing_error_code)
     })?;
 
-    check_filter_experimental_features(filter, features)
-}
-
-fn check_filter_experimental_features(
-    filter: Option<Filter<'_>>,
-    features: RoFeatures,
-) -> Result<Option<Filter<'_>>, ResponseError> {
     if let Some(ref filter) = filter {
         // If the contains operator is used while the contains filter feature is not enabled, errors out
         if let Some((token, error)) =
@@ -2937,19 +2951,9 @@ fn check_filter_experimental_features(
                 Code::FeatureNotEnabled,
             ));
         }
+    }
 
-        // If a foreign filter is used while the foreign keys feature is not enabled, errors out
-        if let Some((token, error)) = filter
-            .use_foreign_filter()
-            .zip(features.check_foreign_keys_setting("using a foreign filter").err())
-        {
-            return Err(ResponseError::from_msg(
-                token.as_external_error(error).to_string(),
-                Code::FeatureNotEnabled,
-            ));
-        }
-
-        // If a shard filter is used while the network feature is not enabled, errors out
+    if let Some(ref filter) = filter {
         if let Some((token, error)) =
             filter.use_shard_filter().zip(features.check_network("using a shard filter").err())
         {
@@ -2958,7 +2962,9 @@ fn check_filter_experimental_features(
                 Code::FeatureNotEnabled,
             ));
         }
+    }
 
+    if let Some(ref filter) = filter {
         // If a vector filter is used while the multi modal feature is not enabled, errors out
         if let Some((token, error)) =
             filter.use_vector_filter().zip(features.check_multimodal("using a vector filter").err())

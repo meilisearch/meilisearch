@@ -11,7 +11,7 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::index::tests::TempIndex;
 use crate::score_details::ScoreDetails;
 use crate::search::new::tests::collect_field_values;
-use crate::{AscDesc, Criterion, GeoSortStrategy, Member, SearchResult};
+use crate::{AscDesc, Criterion, GeoSortStrategy, IndexFilter, Member, SearchResult};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -30,7 +30,7 @@ fn create_index() -> TempIndex {
 fn execute_iterative_and_rtree_returns_the_same<'a>(
     rtxn: &RoTxn<'a>,
     index: &TempIndex,
-    builder_fn: impl Fn(&mut crate::search::SearchBuilder),
+    builder_fn: impl Fn(&mut crate::search::SearchBuilder<IndexFilter>),
 ) -> (Vec<usize>, Vec<Vec<ScoreDetails>>) {
     let search = index.search(rtxn, |builder| {
         builder_fn(builder);

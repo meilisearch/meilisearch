@@ -34,11 +34,11 @@ fn test_phrase_search_with_stop_words_given_criteria(criteria: &[Criterion]) {
     let txn = index.read_txn().unwrap();
 
     let progress = Progress::default();
-    let mut search = SearchBuilder::new();
+    let mut search = SearchBuilder::new("test_index".to_string());
     search.query("\"the use of force\"");
     search.limit(10);
     search.terms_matching_strategy(TermsMatchingStrategy::All);
-    let search = search.build(&txn, &index, &progress);
+    let search = search.build(&txn, &index, &progress, milli::Deadline::never()).unwrap();
     let result = search.execute().unwrap();
     // 1 document should match
     assert_eq!(result.documents_ids.len(), 1);

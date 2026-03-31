@@ -63,11 +63,14 @@ fn basic_degraded_search() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(3);
-        builder.deadline(Deadline::from_budget(Duration::from_millis(0)));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(3);
+        },
+        Deadline::from_budget(Duration::from_millis(0)),
+    );
 
     let result = search.execute().unwrap();
     assert!(result.degraded);
@@ -78,12 +81,15 @@ fn degraded_search_cannot_skip_filter() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(100);
-        builder.deadline(Deadline::from_budget(Duration::from_millis(0)));
-        builder.filter(IndexFilter::from(Filter::from_str("id > 2").unwrap().unwrap()));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(100);
+            builder.filter(IndexFilter::from(Filter::from_str("id > 2").unwrap().unwrap()));
+        },
+        Deadline::from_budget(Duration::from_millis(0)),
+    );
 
     let result = search.execute().unwrap();
     assert!(result.degraded);
@@ -99,12 +105,15 @@ fn degraded_search_and_score_details() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never());
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never(),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -172,12 +181,15 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do ONE loop iteration. Not much can be deduced, almost everyone matched the words first bucket.
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(1));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(1),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -219,12 +231,15 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do TWO loop iterations. The first document should be entirely sorted
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(2));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(2),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -271,12 +286,15 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do THREE loop iterations. The second document should be entirely sorted as well
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(3));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(3),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -329,12 +347,15 @@ fn degraded_search_and_score_details() {
 
     // Do FOUR loop iterations. The third document should be entirely sorted as well
     // The words bucket have still not progressed thus the last document doesn't have any info yet.
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(4));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(4),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -391,12 +412,15 @@ fn degraded_search_and_score_details() {
     "###);
 
     // After FIVE loop iterations. The words ranking rule gave us a new bucket.
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(5));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(5),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -460,12 +484,15 @@ fn degraded_search_and_score_details() {
 
     // After SIX loop iterations.
     // we finished
-    let search = index.search(&rtxn, |builder| {
-        builder.query("hello puppy kefir");
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(6));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.query("hello puppy kefir");
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(6),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -609,12 +636,22 @@ fn degraded_search_and_score_details_vector() {
         .unwrap(),
     );
 
-    let search = index.search(&rtxn, |builder| {
-        builder.semantic("default".into(), embedder.clone(), false, Some(vec![1., -1.]), None);
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never());
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.semantic(
+                "default".into(),
+                embedder.clone(),
+                false,
+                Some(vec![1., -1.]),
+                None,
+                false,
+            );
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never(),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -662,12 +699,22 @@ fn degraded_search_and_score_details_vector() {
     "###);
 
     // Do ONE loop iteration. Not much can be deduced, almost everyone matched the words first bucket.
-    let search = index.search(&rtxn, |builder| {
-        builder.semantic("default".into(), embedder.clone(), false, Some(vec![1., -1.]), None);
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(1));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.semantic(
+                "default".into(),
+                embedder.clone(),
+                false,
+                Some(vec![1., -1.]),
+                None,
+                false,
+            );
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(1),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -696,12 +743,22 @@ fn degraded_search_and_score_details_vector() {
     ]
     "###);
 
-    let search = index.search(&rtxn, |builder| {
-        builder.semantic("default".into(), embedder.clone(), false, Some(vec![1., -1.]), None);
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(2));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.semantic(
+                "default".into(),
+                embedder.clone(),
+                false,
+                Some(vec![1., -1.]),
+                None,
+                false,
+            );
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(2),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -736,12 +793,22 @@ fn degraded_search_and_score_details_vector() {
     ]
     "###);
 
-    let search = index.search(&rtxn, |builder| {
-        builder.semantic("default".into(), embedder.clone(), false, Some(vec![1., -1.]), None);
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(3));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.semantic(
+                "default".into(),
+                embedder.clone(),
+                false,
+                Some(vec![1., -1.]),
+                None,
+                false,
+            );
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(3),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -782,12 +849,22 @@ fn degraded_search_and_score_details_vector() {
     ]
     "###);
 
-    let search = index.search(&rtxn, |builder| {
-        builder.semantic("default".into(), embedder.clone(), false, Some(vec![1., -1.]), None);
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(4));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.semantic(
+                "default".into(),
+                embedder.clone(),
+                false,
+                Some(vec![1., -1.]),
+                None,
+                false,
+            );
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(4),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -834,12 +911,22 @@ fn degraded_search_and_score_details_vector() {
     ]
     "###);
 
-    let search = index.search(&rtxn, |builder| {
-        builder.semantic("default".into(), embedder.clone(), false, Some(vec![1., -1.]), None);
-        builder.limit(4);
-        builder.scoring_strategy(ScoringStrategy::Detailed);
-        builder.deadline(Deadline::never().with_stop_after(5));
-    });
+    let search = index.search_with_deadline(
+        &rtxn,
+        |builder| {
+            builder.semantic(
+                "default".into(),
+                embedder.clone(),
+                false,
+                Some(vec![1., -1.]),
+                None,
+                false,
+            );
+            builder.limit(4);
+            builder.scoring_strategy(ScoringStrategy::Detailed);
+        },
+        Deadline::never().with_stop_after(5),
+    );
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"

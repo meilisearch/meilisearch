@@ -4,7 +4,7 @@ mod distinct;
 pub(crate) mod geo_sort;
 mod graph_based_ranking_rule;
 mod interner;
-mod limits;
+pub mod limits;
 mod logger;
 pub mod matches;
 mod query_graph;

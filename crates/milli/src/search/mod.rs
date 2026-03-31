@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::fmt;
 use std::sync::Arc;
 
@@ -14,10 +15,10 @@ use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_fe
 use crate::index::MatchingStrategy;
 use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
-use crate::vector::{Embedder, Embedding};
+use crate::vector::{self, Embedder, Embedding};
 use crate::{
     execute_search, filtered_universe, AscDesc, Deadline, DefaultSearchLogger, DocumentId, Error,
-    Index, Result, SearchContext, UserError,
+    Index, Result, SearchContext, SearchStep, UserError, DEFAULT_PAGINATION_MAX_TOTAL_HITS,
 };
 
 // Building these factories is not free.
@@ -56,7 +57,7 @@ pub struct Search<'a> {
     words_limit: usize,
     retrieve_vectors: bool,
     exhaustive_number_hits: bool,
-    max_total_hits: Option<usize>,
+    max_total_hits: usize,
     rtxn: &'a heed::RoTxn<'a>,
     index: &'a Index,
     semantic: Option<SemanticSearch>,
@@ -66,10 +67,11 @@ pub struct Search<'a> {
     progress: &'a Progress,
 }
 
-pub struct SearchBuilder<'a> {
+pub struct SearchBuilder<'a, F> {
+    index_uid: String,
     query: Option<String>,
     // this should be linked to the String in the query
-    filter: Option<IndexFilter<'a>>,
+    filter: Option<F>,
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
@@ -81,16 +83,15 @@ pub struct SearchBuilder<'a> {
     words_limit: usize,
     retrieve_vectors: bool,
     exhaustive_number_hits: bool,
-    max_total_hits: Option<usize>,
-    semantic: Option<SemanticSearch>,
-    deadline: Deadline,
+    semantic: Option<(bool, SemanticSearch)>,
     ranking_score_threshold: Option<f64>,
     locales: Option<Vec<Language>>,
 }
 
-impl<'a> SearchBuilder<'a> {
-    pub fn new() -> Self {
+impl<'a, F> SearchBuilder<'a, F> {
+    pub fn new(index_uid: String) -> Self {
         Self {
+            index_uid,
             query: None,
             filter: None,
             offset: 0,
@@ -103,11 +104,9 @@ impl<'a> SearchBuilder<'a> {
             scoring_strategy: Default::default(),
             retrieve_vectors: false,
             exhaustive_number_hits: false,
-            max_total_hits: None,
             words_limit: 10,
             semantic: None,
             locales: None,
-            deadline: Deadline::never(),
             ranking_score_threshold: None,
         }
     }
@@ -124,8 +123,12 @@ impl<'a> SearchBuilder<'a> {
         quantized: bool,
         vector: Option<Embedding>,
         media: Option<serde_json::Value>,
+        precompute_vector: bool,
     ) -> &mut Self {
-        self.semantic = Some(SemanticSearch { embedder_name, embedder, quantized, vector, media });
+        self.semantic = Some((
+            precompute_vector,
+            SemanticSearch { embedder_name, embedder, quantized, vector, media },
+        ));
         self
     }
 
@@ -169,7 +172,7 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn filter(&mut self, condition: IndexFilter<'a>) -> &mut Self {
+    pub fn filter(&mut self, condition: F) -> &mut Self {
         self.filter = Some(condition);
         self
     }
@@ -198,16 +201,6 @@ impl<'a> SearchBuilder<'a> {
         self
     }
 
-    pub fn max_total_hits(&mut self, max_total_hits: Option<usize>) -> &mut Self {
-        self.max_total_hits = max_total_hits;
-        self
-    }
-
-    pub fn deadline(&mut self, deadline: Deadline) -> &mut Self {
-        self.deadline = deadline;
-        self
-    }
-
     pub fn ranking_score_threshold(&mut self, ranking_score_threshold: f64) -> &mut Self {
         self.ranking_score_threshold = Some(ranking_score_threshold);
         self
@@ -217,18 +210,114 @@ impl<'a> SearchBuilder<'a> {
         self.locales = Some(locales);
         self
     }
+}
 
+impl<'a> SearchBuilder<'a, Filter<'a>> {
+    pub fn take_filters(&mut self) -> Option<Filter<'a>> {
+        self.filter.take()
+    }
+
+    pub fn rebuild_with_index_filters(
+        self,
+        filter: Option<IndexFilter<'a>>,
+    ) -> SearchBuilder<'a, IndexFilter<'a>> {
+        let SearchBuilder {
+            index_uid,
+            query,
+            filter: _,
+            offset,
+            limit,
+            sort_criteria,
+            distinct,
+            searchable_attributes,
+            geo_param,
+            terms_matching_strategy,
+            scoring_strategy,
+            words_limit,
+            retrieve_vectors,
+            exhaustive_number_hits,
+            semantic,
+            ranking_score_threshold,
+            locales,
+        } = self;
+
+        SearchBuilder {
+            index_uid,
+            query,
+            filter,
+            offset,
+            limit,
+            sort_criteria,
+            distinct,
+            searchable_attributes,
+            geo_param,
+            terms_matching_strategy,
+            scoring_strategy,
+            words_limit,
+            retrieve_vectors,
+            exhaustive_number_hits,
+            semantic,
+            ranking_score_threshold,
+            locales,
+        }
+    }
+}
+
+impl<'a> SearchBuilder<'a, IndexFilter<'a>> {
+    /// Building a search is only allowed for IndexFilter filters.
+    /// Foreign filters are not supported in index conditions and must be handled during a pre-processing step.
     pub fn build(
         self,
         rtxn: &'a heed::RoTxn<'a>,
         index: &'a Index,
         progress: &'a Progress,
-    ) -> Search<'a> {
-        Search {
+        deadline: Deadline,
+    ) -> Result<Search<'a>> {
+        let max_total_hits = index
+            .pagination_max_total_hits(rtxn)?
+            .map(|x| x as usize)
+            .unwrap_or(DEFAULT_PAGINATION_MAX_TOTAL_HITS);
+
+        // Make sure that a user can't get more documents than the hard limit,
+        // we align that on the offset too.
+        let offset = min(self.offset, max_total_hits);
+        let limit = min(self.limit, max_total_hits.saturating_sub(offset));
+
+        let semantic = match self.semantic {
+            Some((true, mut semantic)) if semantic.vector.is_none() => {
+                let _step = progress.update_progress_scoped(SearchStep::Embed);
+                let span = tracing::trace_span!(target: "search::vector", "embed_one");
+                let _entered = span.enter();
+
+                let q = self.query.as_deref();
+                let media = semantic.media.as_ref();
+
+                let search_query = match (q, media) {
+                    (Some(text), None) => vector::SearchQuery::Text(text),
+                    (q, media) => vector::SearchQuery::Media { q, media },
+                };
+
+                /// TODO: use the deadline from the search builder
+                /// this is computed in the case we only have semantic search,
+                /// so if we don't wait enough, we will return an empty result
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+
+                let vector = semantic
+                    .embedder
+                    .embed_search(search_query, Some(deadline))
+                    .map_err(vector::Error::from)?;
+                semantic.vector = Some(vector);
+
+                Some(semantic)
+            }
+            _ => self.semantic.map(|(_, semantic)| semantic),
+        };
+
+        Ok(Search {
             query: self.query,
             filter: self.filter,
-            offset: self.offset,
-            limit: self.limit,
+            offset,
+            limit,
             sort_criteria: self.sort_criteria,
             distinct: self.distinct,
             searchable_attributes: self.searchable_attributes,
@@ -238,15 +327,15 @@ impl<'a> SearchBuilder<'a> {
             words_limit: self.words_limit,
             retrieve_vectors: self.retrieve_vectors,
             exhaustive_number_hits: self.exhaustive_number_hits,
-            max_total_hits: self.max_total_hits,
+            max_total_hits: max_total_hits,
             rtxn: rtxn,
             index: index,
-            semantic: self.semantic,
-            deadline: self.deadline,
+            semantic,
+            deadline,
             ranking_score_threshold: self.ranking_score_threshold,
             locales: self.locales,
             progress: progress,
-        }
+        })
     }
 }
 
@@ -320,7 +409,7 @@ impl<'a> Search<'a> {
                     vector,
                     self.scoring_strategy,
                     self.exhaustive_number_hits,
-                    self.max_total_hits,
+                    Some(self.max_total_hits),
                     universe,
                     &self.sort_criteria,
                     &self.distinct,
@@ -341,7 +430,7 @@ impl<'a> Search<'a> {
                 self.terms_matching_strategy,
                 self.scoring_strategy,
                 self.exhaustive_number_hits,
-                self.max_total_hits,
+                Some(self.max_total_hits),
                 universe,
                 &self.sort_criteria,
                 &self.distinct,
@@ -379,6 +468,18 @@ impl<'a> Search<'a> {
             used_negative_operator,
             query_vector,
         })
+    }
+
+    pub fn max_total_hits(&self) -> usize {
+        self.max_total_hits
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
+
+    pub fn limit(&self) -> usize {
+        self.limit
     }
 }
 

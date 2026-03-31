@@ -15,3 +15,7 @@ pub const MAX_SYNONYM_PHRASE_COUNT: usize = 50;
 ///
 /// This limit is meant to gracefully handle the case where a word would have very long phrases as synonyms.
 pub const MAX_SYNONYM_WORD_COUNT: usize = 100;
+
+/// The maximum number of results that the engine
+/// will be able to return in one search call.
+pub const DEFAULT_PAGINATION_MAX_TOTAL_HITS: usize = 1000;

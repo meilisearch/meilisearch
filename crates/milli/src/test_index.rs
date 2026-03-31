@@ -24,7 +24,7 @@ use crate::update::{
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
 use crate::{
-    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index, Search,
+    db_snap, obkv_to_json, CreateOrOpen, Deadline, Filter, FilterableAttributesRule, Index, Search,
     SearchResult,
 };
 
@@ -248,11 +248,20 @@ impl TempIndex {
     pub fn search<'a>(
         &'a self,
         rtxn: &'a heed::RoTxn<'a>,
-        builder_fn: impl FnOnce(&mut SearchBuilder<'a>),
+        builder_fn: impl FnOnce(&mut SearchBuilder<'a, IndexFilter<'a>>),
     ) -> Search<'a> {
-        let mut builder = SearchBuilder::new();
+        self.search_with_deadline(rtxn, builder_fn, Deadline::never())
+    }
+
+    pub fn search_with_deadline<'a>(
+        &'a self,
+        rtxn: &'a heed::RoTxn<'a>,
+        builder_fn: impl FnOnce(&mut SearchBuilder<'a, IndexFilter<'a>>),
+        deadline: Deadline,
+    ) -> Search<'a> {
+        let mut builder = SearchBuilder::new("test_index".to_string());
         builder_fn(&mut builder);
-        builder.build(rtxn, &self.inner, &self.progress)
+        builder.build(rtxn, &self.inner, &self.progress, deadline).unwrap()
     }
 }
 

@@ -635,7 +635,6 @@ pub(crate) async fn search(
             _ => ResponseError::from(err),
         })?;
 
-        let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
         let progress_clone = progress.clone();
@@ -644,7 +643,6 @@ pub(crate) async fn search(
                 SearchParams {
                     index_uid: index_uid.to_string(),
                     query,
-                    search_kind,
                     retrieve_vectors: retrieve_vector,
                     features,
                     request_uid,

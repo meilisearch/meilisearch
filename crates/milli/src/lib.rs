@@ -48,7 +48,7 @@ use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
 pub use documents::GeoSortStrategy;
-pub use filter_parser::{Condition, FilterCondition, Span, Token};
+pub use filter_parser::{Condition, FilterCondition, IndexFilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 pub use must_stop_processing::MustStopProcessing;
@@ -87,6 +87,7 @@ pub use self::heed_codec::{
 pub use self::index::{CreateOrOpen, Index};
 pub use self::localized_attributes_rules::LocalizedAttributesRule;
 pub use self::search::facet::{FacetValueHit, SearchForFacetValues, SHARD_FIELD};
+pub use self::search::new::limits::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 pub use self::search::similar::Similar;
 pub use self::search::steps::{FederatingResultsStep, SearchStep, TotalProcessingTimeStep};
 pub use self::search::{
