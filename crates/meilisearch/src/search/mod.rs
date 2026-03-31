@@ -2920,6 +2920,13 @@ pub(crate) fn parse_filter(
         ResponseError::from_msg(err.to_string(), filter_parsing_error_code)
     })?;
 
+    check_filter_experimental_features(filter, features)
+}
+
+fn check_filter_experimental_features(
+    filter: Option<Filter<'_>>,
+    features: RoFeatures,
+) -> Result<Option<Filter<'_>>, ResponseError> {
     if let Some(ref filter) = filter {
         // If the contains operator is used while the contains filter feature is not enabled, errors out
         if let Some((token, error)) =
@@ -2930,9 +2937,19 @@ pub(crate) fn parse_filter(
                 Code::FeatureNotEnabled,
             ));
         }
-    }
 
-    if let Some(ref filter) = filter {
+        // If a foreign filter is used while the foreign keys feature is not enabled, errors out
+        if let Some((token, error)) = filter
+            .use_foreign_filter()
+            .zip(features.check_foreign_keys_setting("using a foreign filter").err())
+        {
+            return Err(ResponseError::from_msg(
+                token.as_external_error(error).to_string(),
+                Code::FeatureNotEnabled,
+            ));
+        }
+
+        // If a shard filter is used while the network feature is not enabled, errors out
         if let Some((token, error)) =
             filter.use_shard_filter().zip(features.check_network("using a shard filter").err())
         {
@@ -2941,9 +2958,7 @@ pub(crate) fn parse_filter(
                 Code::FeatureNotEnabled,
             ));
         }
-    }
 
-    if let Some(ref filter) = filter {
         // If a vector filter is used while the multi modal feature is not enabled, errors out
         if let Some((token, error)) =
             filter.use_vector_filter().zip(features.check_multimodal("using a vector filter").err())

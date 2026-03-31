@@ -148,4 +148,8 @@ impl<'a> Filter<'a> {
     pub fn use_shard_filter(&self) -> Option<&Token<'_>> {
         self.condition.use_field(SHARD_FIELD)
     }
+
+    pub fn use_foreign_filter(&self) -> Option<&Token<'_>> {
+        self.condition.use_foreign_operator()
+    }
 }
