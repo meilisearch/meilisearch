@@ -4,7 +4,7 @@ use std::io::ErrorKind;
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::settings::{Settings, Unchecked};
-use meilisearch_types::tasks::network::{NetworkTopologyState, Origin};
+use meilisearch_types::tasks::network::{DbTaskNetwork, NetworkTopologyState, Origin};
 use meilisearch_types::tasks::{BatchStopReason, Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
@@ -823,11 +823,12 @@ impl IndexScheduler {
                             return true;
                         }
 
-                        // 1. skip tasks without version
-                        let Some(task_version) =
-                            task.network.as_ref().map(|network| network.network_version())
-                        else {
-                            return true;
+                        // 1. skip tasks without version and non-import tasks
+                        let task_version = match task.network.as_ref() {
+                            Some(task_network @ DbTaskNetwork::Import { .. }) => {
+                                task_network.network_version()
+                            }
+                            _ => return true,
                         };
 
                         // 2. skip tasks with a version different from the network task version
