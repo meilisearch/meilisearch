@@ -338,7 +338,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                 if let Ok(Some((docids, _point))) = next_bucket(
                     index,
                     rtxn,
-                    &fields_ids_map,
+                    fields_ids_map,
                     &candidates,
                     ascending,
                     target_point,

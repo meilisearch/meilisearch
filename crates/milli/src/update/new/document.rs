@@ -92,17 +92,14 @@ pub trait Document<'doc> {
         Self: Sized,
     {
         let mut optional_original_value = None;
-        self.facet_values(field_name, &bump, |value| {
+        self.facet_values(field_name, bump, |value| {
             if optional_original_value.is_some() {
                 return Ok(());
             }
-            match value {
-                RawFacetValue::OriginalString(original) => {
-                    if crate::normalize_facet(original) == normalized_facet_value {
-                        optional_original_value = Some(original);
-                    }
+            if let RawFacetValue::OriginalString(original) = value {
+                if crate::normalize_facet(original) == normalized_facet_value {
+                    optional_original_value = Some(original);
                 }
-                _ => (),
             }
             Ok(())
         })?;
@@ -167,25 +164,22 @@ where
     }
 
     for (root, suffix) in permissive_json_pointer::root_dot_suffixes(permissive_json_pointer) {
-        match doc.top_level_field(root)? {
-            Some(value) => {
-                match bumparaw_collections::Value::from_raw_value(value, bump).unwrap() {
-                    bumparaw_collections::Value::Array(raw_vec) => {
-                        for value in raw_vec {
-                            if let bumparaw_collections::Value::Object(value) =
-                                bumparaw_collections::Value::from_raw_value(value, bump).unwrap()
-                            {
-                                visit_leaf_values(value, suffix, bump, visit)?
-                            }
+        if let Some(value) = doc.top_level_field(root)? {
+            match bumparaw_collections::Value::from_raw_value(value, bump).unwrap() {
+                bumparaw_collections::Value::Array(raw_vec) => {
+                    for value in raw_vec {
+                        if let bumparaw_collections::Value::Object(value) =
+                            bumparaw_collections::Value::from_raw_value(value, bump).unwrap()
+                        {
+                            visit_leaf_values(value, suffix, bump, visit)?
                         }
                     }
-                    bumparaw_collections::Value::Object(value) => {
-                        visit_leaf_values(value, suffix, bump, visit)?
-                    }
-                    _ => (),
                 }
+                bumparaw_collections::Value::Object(value) => {
+                    visit_leaf_values(value, suffix, bump, visit)?
+                }
+                _ => (),
             }
-            None => (),
         }
     }
 
@@ -210,25 +204,22 @@ where
     }
 
     for (root, suffix) in permissive_json_pointer::root_dot_suffixes(permissive_json_pointer) {
-        match value.get(root) {
-            Some(value) => {
-                match bumparaw_collections::Value::from_raw_value(value, bump).unwrap() {
-                    bumparaw_collections::Value::Array(raw_vec) => {
-                        for value in raw_vec {
-                            if let bumparaw_collections::Value::Object(value) =
-                                bumparaw_collections::Value::from_raw_value(value, bump).unwrap()
-                            {
-                                visit_leaf_values(value, suffix, bump, visit)?;
-                            }
+        if let Some(value) = value.get(root) {
+            match bumparaw_collections::Value::from_raw_value(value, bump).unwrap() {
+                bumparaw_collections::Value::Array(raw_vec) => {
+                    for value in raw_vec {
+                        if let bumparaw_collections::Value::Object(value) =
+                            bumparaw_collections::Value::from_raw_value(value, bump).unwrap()
+                        {
+                            visit_leaf_values(value, suffix, bump, visit)?;
                         }
                     }
-                    bumparaw_collections::Value::Object(raw_map) => {
-                        visit_leaf_values(raw_map, suffix, bump, visit)?;
-                    }
-                    _ => (),
                 }
+                bumparaw_collections::Value::Object(raw_map) => {
+                    visit_leaf_values(raw_map, suffix, bump, visit)?;
+                }
+                _ => (),
             }
-            None => (),
         }
     }
     Ok(())
