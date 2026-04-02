@@ -241,7 +241,8 @@ pub(crate) fn geo_value(
     let doc = DocumentFromDb::new(docid, rtxn, index, fields_ids_map)?
         .ok_or(crate::error::UserError::UnknownInternalDocumentId { document_id: docid })?;
     let geo = doc.geo_field()?.expect("A geo faceted document doesn't contain the _geo field");
-    let geo = bumparaw_collections::RawMap::from_raw_value(geo, &bump).expect("_geo does not parse as an object");
+    let geo = bumparaw_collections::RawMap::from_raw_value(geo, &bump)
+        .expect("_geo does not parse as an object");
 
     let extract_geo = |geo_field: &str| -> crate::Result<f64> {
         let mut facet = None;

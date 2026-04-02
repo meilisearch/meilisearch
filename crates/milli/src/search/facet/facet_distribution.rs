@@ -18,7 +18,8 @@ use crate::search::facet::facet_distribution_iter::{
 };
 use crate::update::new::document::RawFacetValue;
 use crate::{
-    Document, DocumentFromDb, Error, FieldId, FieldsIdsMap, FilterableAttributesRule, Index, PatternMatch, Result, UserError
+    Document, DocumentFromDb, Error, FieldId, FieldsIdsMap, FilterableAttributesRule, Index,
+    PatternMatch, Result, UserError,
 };
 
 /// The default number of values by facets that will
@@ -203,7 +204,7 @@ impl<'a> FacetDistribution<'a> {
 
         let mut bump = Bump::new();
 
-        Ok(search_function(
+        search_function(
             self.rtxn,
             self.index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>(),
             field_id,
@@ -244,7 +245,7 @@ impl<'a> FacetDistribution<'a> {
                     Ok(ControlFlow::Continue(()))
                 }
             },
-        )?)
+        )
     }
 
     fn facet_values(
