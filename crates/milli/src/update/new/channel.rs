@@ -14,7 +14,7 @@ use bbqueue::BBBuffer;
 use bytemuck::{checked, CheckedBitPattern, NoUninit};
 use flume::{RecvTimeoutError, SendError};
 use heed::types::Bytes;
-use heed::{BytesDecode, MdbError};
+use heed::MdbError;
 use memmap2::{Mmap, MmapMut};
 use roaring::RoaringBitmap;
 
@@ -22,7 +22,6 @@ use super::extract::FacetKind;
 use super::ref_cell_ext::RefCellExt;
 use super::thread_local::{FullySend, ThreadLocal};
 use super::StdResult;
-use crate::heed_codec::facet::{FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec};
 use crate::index::db_name;
 use crate::index::main_key::{GEO_FACETED_DOCUMENTS_IDS_KEY, GEO_RTREE_KEY};
 use crate::update::new::KvReaderFieldId;
@@ -495,8 +494,6 @@ pub enum Database {
     FacetIdExistsDocids,
     FacetIdF64Docids,
     FacetIdStringDocids,
-    FieldIdDocidFacetStrings,
-    FieldIdDocidFacetF64s,
     VectorEmbedderCategoryId,
 }
 
@@ -517,8 +514,6 @@ impl Database {
             Database::FacetIdExistsDocids => index.facet_id_exists_docids.remap_types(),
             Database::FacetIdF64Docids => index.facet_id_f64_docids.remap_types(),
             Database::FacetIdStringDocids => index.facet_id_string_docids.remap_types(),
-            Database::FieldIdDocidFacetStrings => index.field_id_docid_facet_strings.remap_types(),
-            Database::FieldIdDocidFacetF64s => index.field_id_docid_facet_f64s.remap_types(),
             Database::VectorEmbedderCategoryId => index.embedder_category_id.remap_types(),
         }
     }
@@ -539,8 +534,6 @@ impl Database {
             Database::FacetIdExistsDocids => db_name::FACET_ID_EXISTS_DOCIDS,
             Database::FacetIdF64Docids => db_name::FACET_ID_F64_DOCIDS,
             Database::FacetIdStringDocids => db_name::FACET_ID_STRING_DOCIDS,
-            Database::FieldIdDocidFacetStrings => db_name::FIELD_ID_DOCID_FACET_STRINGS,
-            Database::FieldIdDocidFacetF64s => db_name::FIELD_ID_DOCID_FACET_F64S,
             Database::VectorEmbedderCategoryId => db_name::VECTOR_EMBEDDER_CATEGORY_ID,
         }
     }
@@ -565,10 +558,6 @@ impl<'b> ExtractorBbqueueSender<'b> {
 
     pub fn facet_docids<'a>(&'a self) -> FacetDocidsSender<'a, 'b> {
         FacetDocidsSender { sender: self }
-    }
-
-    pub fn field_id_docid_facet_sender<'a>(&'a self) -> FieldIdDocidFacetSender<'a, 'b> {
-        FieldIdDocidFacetSender(self)
     }
 
     pub fn documents<'a>(&'a self) -> DocumentsSender<'a, 'b> {
@@ -1052,31 +1041,6 @@ impl FacetDocidsSender<'_, '_> {
         let (facet_kind, key) = FacetKind::extract_from_key(key);
         let database = Database::from(facet_kind);
         self.sender.delete_entry(database, key)
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct FieldIdDocidFacetSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
-
-impl FieldIdDocidFacetSender<'_, '_> {
-    pub fn write_facet_string(&self, key: &[u8], value: &[u8]) -> crate::Result<()> {
-        debug_assert!(FieldDocIdFacetStringCodec::bytes_decode(key).is_ok());
-        self.0.write_key_value(Database::FieldIdDocidFacetStrings, key, value)
-    }
-
-    pub fn write_facet_f64(&self, key: &[u8]) -> crate::Result<()> {
-        debug_assert!(FieldDocIdFacetF64Codec::bytes_decode(key).is_ok());
-        self.0.write_key_value(Database::FieldIdDocidFacetF64s, key, &[])
-    }
-
-    pub fn delete_facet_string(&self, key: &[u8]) -> crate::Result<()> {
-        debug_assert!(FieldDocIdFacetStringCodec::bytes_decode(key).is_ok());
-        self.0.delete_entry(Database::FieldIdDocidFacetStrings, key)
-    }
-
-    pub fn delete_facet_f64(&self, key: &[u8]) -> crate::Result<()> {
-        debug_assert!(FieldDocIdFacetF64Codec::bytes_decode(key).is_ok());
-        self.0.delete_entry(Database::FieldIdDocidFacetF64s, key)
     }
 }
 

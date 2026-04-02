@@ -1,13 +1,14 @@
 use std::collections::VecDeque;
 
-use heed::types::{Bytes, Unit};
-use heed::{RoPrefix, RoTxn};
+use heed::RoTxn;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 
-use crate::heed_codec::facet::{FieldDocIdFacetCodec, OrderedF64Codec};
-use crate::search::new::{facet_string_values, facet_values_prefix_key};
-use crate::{distance_between_two_points, lat_lng_to_xyz, GeoPoint, Index};
+use crate::update::new::document::RawFacetValue;
+use crate::{
+    distance_between_two_points, lat_lng_to_xyz, Document, DocumentFromDb, FieldsIdsMap, GeoPoint,
+    Index,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct GeoSortParameter {
@@ -66,10 +67,10 @@ impl GeoSortStrategy {
 pub fn fill_cache(
     index: &Index,
     txn: &RoTxn<heed::AnyTls>,
+    fields_ids_map: &FieldsIdsMap,
     strategy: GeoSortStrategy,
     ascending: bool,
     target_point: [f64; 2],
-    field_ids: &Option<[u16; 2]>,
     rtree: &mut Option<RTree<GeoPoint>>,
     geo_candidates: &RoaringBitmap,
     cached_sorted_docids: &mut VecDeque<(u32, [f64; 2])>,
@@ -118,11 +119,10 @@ pub fn fill_cache(
         }
     } else {
         // the iterative version
-        let [lat, lng] = field_ids.expect("fill_buffer can't be called without the lat&lng");
 
         let mut documents = geo_candidates
             .iter()
-            .map(|id| -> crate::Result<_> { Ok((id, geo_value(id, lat, lng, index, txn)?)) })
+            .map(|id| -> crate::Result<_> { Ok((id, geo_value(id, index, txn, fields_ids_map)?)) })
             .collect::<crate::Result<Vec<(u32, [f64; 2])>>>()?;
         // computing the distance between two points is expensive thus we cache the result
         documents
@@ -137,10 +137,10 @@ pub fn fill_cache(
 pub fn next_bucket(
     index: &Index,
     txn: &RoTxn<heed::AnyTls>,
+    fields_ids_map: &FieldsIdsMap,
     universe: &RoaringBitmap,
     ascending: bool,
     target_point: [f64; 2],
-    field_ids: &Option<[u16; 2]>,
     rtree: &mut Option<RTree<GeoPoint>>,
     cached_sorted_docids: &mut VecDeque<(u32, [f64; 2])>,
     geo_candidates: &RoaringBitmap,
@@ -206,10 +206,10 @@ pub fn next_bucket(
             fill_cache(
                 index,
                 txn,
+                fields_ids_map,
                 parameter.strategy,
                 ascending,
                 target_point,
-                field_ids,
                 rtree,
                 &geo_candidates,
                 cached_sorted_docids,
@@ -227,51 +227,44 @@ pub fn next_bucket(
     }
 }
 
-/// Return an iterator over each number value in the given field of the given document.
-fn facet_number_values<'a>(
-    docid: u32,
-    field_id: u16,
-    index: &Index,
-    txn: &'a RoTxn<'a>,
-) -> crate::Result<RoPrefix<'a, FieldDocIdFacetCodec<OrderedF64Codec>, Unit>> {
-    let key = facet_values_prefix_key(field_id, docid);
-
-    let iter = index
-        .field_id_docid_facet_f64s
-        .remap_key_type::<Bytes>()
-        .prefix_iter(txn, &key)?
-        .remap_key_type();
-
-    Ok(iter)
-}
-
 /// Extracts the lat and long values from a single document.
 ///
 /// If it is not able to find it in the facet number index it will extract it
 /// from the facet string index and parse it as f64 (as the geo extraction behaves).
 pub(crate) fn geo_value(
     docid: u32,
-    field_lat: u16,
-    field_lng: u16,
     index: &Index,
     rtxn: &RoTxn<'_>,
+    fields_ids_map: &FieldsIdsMap,
 ) -> crate::Result<[f64; 2]> {
-    let extract_geo = |geo_field: u16| -> crate::Result<f64> {
-        match facet_number_values(docid, geo_field, index, rtxn)?.next() {
-            Some(Ok(((_, _, geo), ()))) => Ok(geo),
-            Some(Err(e)) => Err(e.into()),
-            None => match facet_string_values(docid, geo_field, index, rtxn)?.next() {
-                Some(Ok((_, geo))) => {
-                    Ok(geo.parse::<f64>().expect("cannot parse geo field as f64"))
+    let bump = bumpalo::Bump::new();
+    let doc = DocumentFromDb::new(docid, rtxn, index, fields_ids_map)?
+        .ok_or(crate::error::UserError::UnknownInternalDocumentId { document_id: docid })?;
+    let geo = doc.geo_field()?.expect("A geo faceted document doesn't contain the _geo field");
+    let geo = bumparaw_collections::RawMap::from_raw_value(geo, &bump)
+        .expect("_geo does not parse as an object");
+
+    let extract_geo = |geo_field: &str| -> crate::Result<f64> {
+        let mut facet = None;
+
+        geo.facet_values(geo_field, &bump, |facet_value| {
+            facet = match facet_value {
+                RawFacetValue::OriginalString(s) => {
+                    Some(s.parse::<f64>().expect("cannot parse geo field as f64"))
                 }
-                Some(Err(e)) => Err(e.into()),
-                None => panic!("A geo faceted document doesn't contain any lat or lng"),
-            },
-        }
+                RawFacetValue::Number(number) => Some(number.to_f64()),
+                RawFacetValue::Bool(_) => None,
+            };
+
+            Ok(())
+        })?;
+
+        let facet = facet.expect("A geo faceted document doesn't contain any lat or lng");
+        Ok(facet)
     };
 
-    let lat = extract_geo(field_lat)?;
-    let lng = extract_geo(field_lng)?;
+    let lat = extract_geo("lat")?;
+    let lng = extract_geo("lng")?;
 
     Ok([lat, lng])
 }

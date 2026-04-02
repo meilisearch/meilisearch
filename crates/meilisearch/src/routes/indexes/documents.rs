@@ -1818,6 +1818,7 @@ fn retrieve_documents<S: AsRef<str>>(
     sort_criteria: Option<Vec<AscDesc>>,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
     let rtxn = index.read_txn()?;
+    let fields_ids_map = index.fields_ids_map(&rtxn)?;
     let filter = &filter;
     let filter = if let Some(filter) = filter {
         parse_filter(filter, Code::InvalidDocumentFilter, features)?
@@ -1850,7 +1851,7 @@ fn retrieve_documents<S: AsRef<str>>(
 
     let (it, number_of_documents) = if let Some(sort) = sort_criteria {
         let number_of_documents = candidates.len();
-        let facet_sort = recursive_sort(index, &rtxn, sort, &candidates)?;
+        let facet_sort = recursive_sort(index, &rtxn, &fields_ids_map, sort, &candidates)?;
         let iter = facet_sort.iter()?;
         let mut documents = Vec::with_capacity(limit);
         for result in iter.skip(offset).take(limit) {

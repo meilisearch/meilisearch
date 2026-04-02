@@ -59,6 +59,170 @@ pub trait Document<'doc> {
     ///
     /// This method is meant as a convenience for implementors of [`super::geo_document::GeoDocument`].
     fn geojson_field(&self) -> Result<Option<&'doc RawValue>>;
+
+    /// Visit all facet values for a given field.
+    ///
+    /// The field may contain `.`, in which case all candidates for this field will be visited,
+    /// e.g. for `doggo.name`, the facet values stored in `doggo: { name }` and `doggo.name` will both be visited.
+    fn facet_values<F>(
+        &self,
+        permissive_json_pointer: &str,
+        bump: &'doc Bump,
+        mut visit: F,
+    ) -> Result<()>
+    where
+        F: FnMut(RawFacetValue<'doc>) -> Result<()>,
+        Self: Sized,
+    {
+        facet_values(self, permissive_json_pointer, bump, &mut |raw_value| {
+            for facet_value in RawFacetValue::from_value(raw_value, bump) {
+                visit(facet_value)?;
+            }
+            Ok(())
+        })
+    }
+
+    fn original_facet_value_of(
+        &self,
+        normalized_facet_value: &str,
+        field_name: &str,
+        bump: &'doc Bump,
+    ) -> Result<Option<&'doc str>>
+    where
+        Self: Sized,
+    {
+        let mut optional_original_value = None;
+        self.facet_values(field_name, bump, |value| {
+            if optional_original_value.is_some() {
+                return Ok(());
+            }
+            if let RawFacetValue::OriginalString(original) = value {
+                if crate::normalize_facet(original) == normalized_facet_value {
+                    optional_original_value = Some(original);
+                }
+            }
+            Ok(())
+        })?;
+        Ok(optional_original_value)
+    }
+}
+
+/// A facet value referencing the original data.
+///
+/// Visited by [`Document::facet_values`].
+#[derive(Clone, Copy)]
+pub enum RawFacetValue<'a> {
+    OriginalString(&'a str),
+    Number(bumparaw_collections::value::Number),
+    Bool(bool),
+}
+
+impl<'doc> RawFacetValue<'doc> {
+    fn from_value(
+        raw_value: &'doc RawValue,
+        bump: &'doc Bump,
+    ) -> impl Iterator<Item = Self> + 'doc {
+        /// FIXME: unwrapS
+        match bumparaw_collections::Value::from_raw_value(raw_value, bump).unwrap() {
+            bumparaw_collections::Value::Array(values) => {
+                either::Either::Left(values.into_iter().flat_map(|raw_value| {
+                    let raw_value =
+                        bumparaw_collections::Value::from_raw_value(raw_value, bump).unwrap();
+                    Self::from_leaf_value(raw_value)
+                }))
+            }
+            value => either::Either::Right(Self::from_leaf_value(value).into_iter()),
+        }
+    }
+
+    fn from_leaf_value(raw_value: bumparaw_collections::Value<'doc>) -> Option<Self> {
+        match raw_value {
+            bumparaw_collections::Value::Bool(b) => Some(Self::Bool(b)),
+            bumparaw_collections::Value::Number(n) => Some(Self::Number(n)),
+            bumparaw_collections::Value::String(s) => Some(Self::OriginalString(s)),
+            _ => None,
+        }
+    }
+}
+
+fn facet_values<'doc, D, F>(
+    doc: &D,
+    permissive_json_pointer: &str,
+    bump: &'doc Bump,
+    visit: &mut F,
+) -> Result<()>
+where
+    D: Document<'doc>,
+    F: FnMut(&'doc RawValue) -> Result<()>,
+{
+    if doc.top_level_fields_count() == 0 {
+        return Ok(());
+    }
+
+    if let Some(value) = doc.top_level_field(permissive_json_pointer)? {
+        visit(value)?;
+    }
+
+    for (root, suffix) in permissive_json_pointer::root_dot_suffixes(permissive_json_pointer) {
+        if let Some(value) = doc.top_level_field(root)? {
+            match bumparaw_collections::Value::from_raw_value(value, bump).unwrap() {
+                bumparaw_collections::Value::Array(raw_vec) => {
+                    for value in raw_vec {
+                        if let bumparaw_collections::Value::Object(value) =
+                            bumparaw_collections::Value::from_raw_value(value, bump).unwrap()
+                        {
+                            visit_leaf_values(value, suffix, bump, visit)?
+                        }
+                    }
+                }
+                bumparaw_collections::Value::Object(value) => {
+                    visit_leaf_values(value, suffix, bump, visit)?
+                }
+                _ => (),
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn visit_leaf_values<'doc, F>(
+    value: RawMap<'doc>,
+    permissive_json_pointer: &str,
+    bump: &'doc Bump,
+    visit: &mut F,
+) -> Result<()>
+where
+    F: FnMut(&'doc RawValue) -> Result<()>,
+{
+    if value.is_empty() {
+        return Ok(());
+    }
+
+    if let Some(value) = value.get(permissive_json_pointer) {
+        visit(value)?;
+    }
+
+    for (root, suffix) in permissive_json_pointer::root_dot_suffixes(permissive_json_pointer) {
+        if let Some(value) = value.get(root) {
+            match bumparaw_collections::Value::from_raw_value(value, bump).unwrap() {
+                bumparaw_collections::Value::Array(raw_vec) => {
+                    for value in raw_vec {
+                        if let bumparaw_collections::Value::Object(value) =
+                            bumparaw_collections::Value::from_raw_value(value, bump).unwrap()
+                        {
+                            visit_leaf_values(value, suffix, bump, visit)?;
+                        }
+                    }
+                }
+                bumparaw_collections::Value::Object(raw_map) => {
+                    visit_leaf_values(raw_map, suffix, bump, visit)?;
+                }
+                _ => (),
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -303,7 +467,7 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
     }
 }
 
-impl<'doc, D> Document<'doc> for &D
+impl<'doc, D: ?Sized> Document<'doc> for &D
 where
     D: Document<'doc>,
 {
@@ -751,5 +915,51 @@ impl<
             data,
             doc_allocs,
         })
+    }
+}
+
+impl<'doc> Document<'doc> for RawMap<'doc> {
+    fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>> {
+        self.iter().filter_map(|(k, v)| {
+            if k == RESERVED_VECTORS_FIELD_NAME
+                || k == RESERVED_GEO_FIELD_NAME
+                || k == RESERVED_GEOJSON_FIELD_NAME
+            {
+                return None;
+            }
+
+            Some(Ok((k, v)))
+        })
+    }
+
+    fn top_level_fields_count(&self) -> usize {
+        let has_vectors_field = self.vectors_field().unwrap_or(None).is_some();
+        let has_geo_field = self.geo_field().unwrap_or(None).is_some();
+        let has_geojson_field = self.geojson_field().unwrap_or(None).is_some();
+        let count = self.len();
+
+        count - has_vectors_field as usize - has_geo_field as usize - has_geojson_field as usize
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>> {
+        if k == RESERVED_VECTORS_FIELD_NAME
+            || k == RESERVED_GEO_FIELD_NAME
+            || k == RESERVED_GEOJSON_FIELD_NAME
+        {
+            return Ok(None);
+        }
+        Ok(self.get(k))
+    }
+
+    fn vectors_field(&self) -> Result<Option<&'doc RawValue>> {
+        Ok(self.get(RESERVED_VECTORS_FIELD_NAME))
+    }
+
+    fn geo_field(&self) -> Result<Option<&'doc RawValue>> {
+        Ok(self.get(RESERVED_GEO_FIELD_NAME))
+    }
+
+    fn geojson_field(&self) -> Result<Option<&'doc RawValue>> {
+        Ok(self.get(RESERVED_GEOJSON_FIELD_NAME))
     }
 }
