@@ -23,6 +23,7 @@ pub struct DistinctOutput {
 pub fn apply_distinct_rule(
     ctx: &mut SearchContext<'_>,
     field_id: u16,
+    field_name: &str,
     candidates: &RoaringBitmap,
 ) -> Result<DistinctOutput> {
     let mut excluded = RoaringBitmap::new();
@@ -31,7 +32,15 @@ pub fn apply_distinct_rule(
         if excluded.contains(docid) {
             continue;
         }
-        distinct_single_docid(ctx.index, ctx.txn, field_id, docid, &mut excluded)?;
+        distinct_single_docid(
+            ctx.index,
+            ctx.txn,
+            field_id,
+            field_name,
+            &ctx.fields_ids_map,
+            docid,
+            &mut excluded,
+        )?;
         remaining.push(docid);
     }
     Ok(DistinctOutput { remaining, excluded })
@@ -42,28 +51,45 @@ pub fn distinct_single_docid(
     index: &Index,
     txn: &RoTxn<'_>,
     field_id: u16,
+    field_name: &str,
+    fields_ids_map: &FieldsIdsMap,
     docid: u32,
     excluded: &mut RoaringBitmap,
 ) -> Result<()> {
-    for item in facet_string_values(docid, field_id, index, txn)? {
-        let ((_, _, facet_value), _) = item?;
-        if let Some(facet_docids) = facet_value_docids(
-            index.facet_id_string_docids.remap_types(),
-            txn,
-            field_id,
-            facet_value,
-        )? {
-            *excluded |= facet_docids;
-        }
-    }
-    for item in facet_number_values(docid, field_id, index, txn)? {
-        let ((_, _, facet_value), _) = item?;
-        if let Some(facet_docids) =
-            facet_value_docids(index.facet_id_f64_docids.remap_types(), txn, field_id, facet_value)?
-        {
-            *excluded |= facet_docids;
-        }
-    }
+    let bump = Bump::new();
+    let Some(doc) = DocumentFromDb::new(docid, txn, index, fields_ids_map)? else { return Ok(()) };
+
+    doc.facet_values(
+        field_name,
+        &bump,
+        |facet_value| {
+            let mut bytes = [0; 16];
+            let normalized;
+            let (facet_value, db) = match facet_value {
+                RawFacetValue::Bool(b) => {
+                    normalized = b.to_string();
+                    (normalized.as_bytes(), index.facet_id_string_docids.remap_types())
+                }
+                RawFacetValue::Number(number) => {
+                    // unwrap: as number was obtained from JSON parsing, it is a finite-non-NaN f64
+                    // so the OrderedF64Codec cannot fail
+                    OrderedF64Codec::serialize_into(number.to_f64(), &mut bytes).unwrap();
+                    (bytes.as_slice(), index.facet_id_f64_docids.remap_types())
+                }
+                RawFacetValue::OriginalString(original_facet_value) => {
+                    normalized = crate::normalize_facet(original_facet_value);
+                    (normalized.as_bytes(), index.facet_id_string_docids.remap_types())
+                }
+            };
+            if let Some(facet_docids) = facet_value_docids(db, txn, field_id, facet_value)? {
+                *excluded |= facet_docids;
+            }
+
+            Ok(())
+        },
+        |err| crate::InternalError::SerdeJson(err).into(),
+    )?;
+
     Ok(())
 }
 
@@ -79,58 +105,20 @@ fn facet_value_docids(
         .map(|opt| opt.map(|v| v.bitmap))
 }
 
-/// Return an iterator over each number value in the given field of the given document.
-pub(crate) fn facet_number_values<'a>(
-    docid: u32,
-    field_id: u16,
+pub fn distinct_fid<'a>(
+    query_distinct_field: Option<&'a str>,
     index: &Index,
-    txn: &'a RoTxn<'a>,
-) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<BytesRefCodec>, Unit>> {
-    let key = facet_values_prefix_key(field_id, docid);
-
-    let iter = index
-        .field_id_docid_facet_f64s
-        .remap_key_type::<Bytes>()
-        .prefix_iter(txn, &key)?
-        .remap_key_type();
-
-    Ok(iter)
-}
-
-/// Return an iterator over each string value in the given field of the given document.
-pub fn facet_string_values<'a>(
-    docid: u32,
-    field_id: u16,
-    index: &Index,
-    txn: &'a RoTxn<'a>,
-) -> Result<RoPrefix<'a, FieldDocIdFacetCodec<BytesRefCodec>, Str>> {
-    let key = facet_values_prefix_key(field_id, docid);
-
-    let iter = index
-        .field_id_docid_facet_strings
-        .remap_key_type::<Bytes>()
-        .prefix_iter(txn, &key)?
-        .remap_types();
-
-    Ok(iter)
-}
-
-#[allow(clippy::drop_non_drop)]
-pub(crate) fn facet_values_prefix_key(distinct: u16, id: u32) -> [u8; FID_SIZE + DOCID_SIZE] {
-    concat_arrays::concat_arrays!(distinct.to_be_bytes(), id.to_be_bytes())
-}
-
-pub fn distinct_fid(
-    query_distinct_field: Option<&str>,
-    index: &Index,
-    rtxn: &RoTxn<'_>,
-) -> Result<Option<FieldId>> {
-    let distinct_field = match query_distinct_field {
+    rtxn: &'a RoTxn<'a>,
+    fields_ids_map: &FieldsIdsMap,
+) -> Result<Option<(FieldId, &'a str)>> {
+    let Some(distinct_field) = (match query_distinct_field {
         Some(distinct) => Some(distinct),
         None => index.distinct_field(rtxn)?,
+    }) else {
+        return Ok(None);
     };
 
-    let distinct_fid =
-        if let Some(field) = distinct_field { index.fields_ids_map(rtxn)?.id(field) } else { None };
-    Ok(distinct_fid)
+    let Some(distinct_field_id) = fields_ids_map.id(distinct_field) else { return Ok(None) };
+
+    Ok(Some((distinct_field_id, distinct_field)))
 }

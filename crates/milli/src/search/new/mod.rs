@@ -46,7 +46,6 @@ use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
 
-pub(crate) use self::distinct::{facet_string_values, facet_values_prefix_key};
 use self::geo_sort::GeoSort;
 use self::graph_based_ranking_rule::Words;
 use self::interner::Interned;
@@ -63,7 +62,7 @@ use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, Deadline, DocumentId, FieldId, Index, Member, PinDoc, Result, TermsMatchingStrategy,
+    AscDesc, Deadline, DocumentId, FieldId, FieldsIdsMap, Index, Member, PinDoc, Result, TermsMatchingStrategy,
     UserError, Weight,
 };
 
@@ -86,12 +85,14 @@ pub struct SearchContext<'ctx> {
     pub restricted_fids: Option<RestrictedFids>,
     pub prefix_search: PrefixSearch,
     pub vector_store_stats: Option<VectorStoreStats>,
+    pub fields_ids_map: FieldsIdsMap,
 }
 
 impl<'ctx> SearchContext<'ctx> {
     pub fn new(index: &'ctx Index, txn: &'ctx RoTxn<'ctx>) -> Result<Self> {
-        let searchable_fids = index.searchable_fields_and_weights(txn)?;
-        let exact_attributes_ids = index.exact_attributes_ids(txn)?;
+        let fields_ids_map = index.fields_ids_map(txn)?;
+        let searchable_fids = index.searchable_fields_and_weights(&fields_ids_map, txn)?;
+        let exact_attributes_ids = index.exact_attributes_ids(&fields_ids_map, txn)?;
 
         let mut exact = Vec::new();
         let mut tolerant = Vec::new();
@@ -117,6 +118,7 @@ impl<'ctx> SearchContext<'ctx> {
             restricted_fids: None,
             prefix_search,
             vector_store_stats: None,
+            fields_ids_map,
         })
     }
 
@@ -140,8 +142,10 @@ impl<'ctx> SearchContext<'ctx> {
         attributes_to_search_on: &'ctx [String],
     ) -> Result<()> {
         let user_defined_searchable = self.index.user_defined_searchable_fields(self.txn)?;
-        let searchable_fields_weights = self.index.searchable_fields_and_weights(self.txn)?;
-        let exact_attributes_ids = self.index.exact_attributes_ids(self.txn)?;
+        let searchable_fields_weights =
+            self.index.searchable_fields_and_weights(&self.fields_ids_map, self.txn)?;
+        let exact_attributes_ids =
+            self.index.exact_attributes_ids(&self.fields_ids_map, self.txn)?;
 
         let mut universal_wildcard = false;
 
@@ -936,7 +940,8 @@ pub fn execute_search(
 
         if let Some(f) = distinct_field {
             if let Some(distinct_fid) = fields_ids_map.id(f) {
-                all_candidates = apply_distinct_rule(ctx, distinct_fid, &all_candidates)?.remaining;
+                all_candidates =
+                    apply_distinct_rule(ctx, distinct_fid, f, &all_candidates)?.remaining;
             }
         }
     }

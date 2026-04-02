@@ -40,7 +40,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
     logger.ranking_rules(&ranking_rules);
     logger.initial_universe(universe);
 
-    let distinct_fid = distinct_fid(distinct, ctx.index, ctx.txn)?;
+    let distinct_field = distinct_fid(distinct, ctx.index, ctx.txn, &ctx.fields_ids_map)?;
 
     // When pins are present we need the organic prefix up to the end of the
     // requested page. Injecting the surviving pins into that prefix and slicing
@@ -63,7 +63,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
         ));
     }
     if ranking_rules.is_empty() {
-        if let Some(distinct_fid) = distinct_fid {
+        if let Some((distinct_fid, distinct_field_name)) = distinct_field {
             let mut excluded = RoaringBitmap::new();
             let mut results = vec![];
             for docid in universe.iter() {
@@ -74,7 +74,15 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                     continue;
                 }
 
-                distinct_single_docid(ctx.index, ctx.txn, distinct_fid, docid, &mut excluded)?;
+                distinct_single_docid(
+                    ctx.index,
+                    ctx.txn,
+                    distinct_fid,
+                    distinct_field_name,
+                    &ctx.fields_ids_map,
+                    docid,
+                    &mut excluded,
+                )?;
                 results.push(docid);
             }
 
@@ -177,7 +185,7 @@ pub fn bucket_sort<'ctx, Q: RankingRuleQueryTrait>(
                 &mut ranking_rules,
                 cur_ranking_rule_index,
                 &mut cur_offset,
-                distinct_fid,
+                distinct_field,
                 &ranking_rule_scores,
                 $candidates,
             )?;
@@ -396,14 +404,14 @@ fn maybe_add_to_results<'ctx, Q: RankingRuleQueryTrait>(
 
     cur_offset: &mut usize,
 
-    distinct_fid: Option<u16>,
+    distinct_field: Option<(u16, &str)>,
     ranking_rule_scores: &[ScoreDetails],
     candidates: RoaringBitmap,
 ) -> Result<()> {
     // First apply the distinct rule on the candidates, reducing the universes if necessary
-    let candidates = if let Some(distinct_fid) = distinct_fid {
+    let candidates = if let Some((distinct_fid, distinct_field_name)) = distinct_field {
         let DistinctOutput { remaining, excluded } =
-            apply_distinct_rule(ctx, distinct_fid, &candidates)?;
+            apply_distinct_rule(ctx, distinct_fid, distinct_field_name, &candidates)?;
         for universe in ranking_rule_universes.iter_mut() {
             *universe -= &excluded;
             *all_candidates -= &excluded;

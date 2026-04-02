@@ -1833,6 +1833,8 @@ fn retrieve_documents<S: AsRef<str>>(
     retrieve_vectors: RetrieveVectors,
     sort_criteria: Option<Vec<AscDesc>>,
 ) -> Result<(u64, Vec<Document>), ResponseError> {
+    let fields_ids_map = index.fields_ids_map(rtxn)?;
+
     let mut candidates = if let Some(ids) = ids {
         let external_document_ids = index.external_documents_ids();
         let mut candidates = RoaringBitmap::new();
@@ -1858,7 +1860,7 @@ fn retrieve_documents<S: AsRef<str>>(
 
     let (it, number_of_documents) = if let Some(sort) = sort_criteria {
         let number_of_documents = candidates.len();
-        let facet_sort = recursive_sort(index, rtxn, sort, &candidates)?;
+        let facet_sort = recursive_sort(index, rtxn, &fields_ids_map, sort, &candidates)?;
         let iter = facet_sort.iter()?;
         let mut documents = Vec::with_capacity(limit);
         for result in iter.skip(offset).take(limit) {
