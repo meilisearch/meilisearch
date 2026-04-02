@@ -926,3 +926,49 @@ impl<
         })
     }
 }
+
+impl<'doc> Document<'doc> for RawMap<'doc> {
+    fn iter_top_level_fields(&self) -> impl Iterator<Item = Result<(&'doc str, &'doc RawValue)>> {
+        self.iter().filter_map(|(k, v)| {
+            if k == RESERVED_VECTORS_FIELD_NAME
+                || k == RESERVED_GEO_FIELD_NAME
+                || k == RESERVED_GEOJSON_FIELD_NAME
+            {
+                return None;
+            }
+
+            Some(Ok((k, v)))
+        })
+    }
+
+    fn top_level_fields_count(&self) -> usize {
+        let has_vectors_field = self.vectors_field().unwrap_or(None).is_some();
+        let has_geo_field = self.geo_field().unwrap_or(None).is_some();
+        let has_geojson_field = self.geojson_field().unwrap_or(None).is_some();
+        let count = self.len();
+
+        count - has_vectors_field as usize - has_geo_field as usize - has_geojson_field as usize
+    }
+
+    fn top_level_field(&self, k: &str) -> Result<Option<&'doc RawValue>> {
+        if k == RESERVED_VECTORS_FIELD_NAME
+            || k == RESERVED_GEO_FIELD_NAME
+            || k == RESERVED_GEOJSON_FIELD_NAME
+        {
+            return Ok(None);
+        }
+        Ok(self.get(k))
+    }
+
+    fn vectors_field(&self) -> Result<Option<&'doc RawValue>> {
+        Ok(self.get(RESERVED_VECTORS_FIELD_NAME))
+    }
+
+    fn geo_field(&self) -> Result<Option<&'doc RawValue>> {
+        Ok(self.get(RESERVED_GEO_FIELD_NAME))
+    }
+
+    fn geojson_field(&self) -> Result<Option<&'doc RawValue>> {
+        Ok(self.get(RESERVED_GEOJSON_FIELD_NAME))
+    }
+}
