@@ -22,7 +22,7 @@ jobs:
         runner: [ubuntu-22.04, ubuntu-22.04-arm]
         features: ["", "--features enterprise"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: check free space before
         run: df -h
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
@@ -60,7 +60,7 @@ jobs:
         features: ["", "--features enterprise"]
     if: github.event_name != 'merge_group'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
       - uses: dtolnay/rust-toolchain@1.91.1
@@ -85,7 +85,7 @@ jobs:
         features: ["", "--features enterprise"]
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2.8.0
       - uses: dtolnay/rust-toolchain@1.91.1
@@ -105,7 +105,7 @@ jobs:
     runs-on: ubuntu-22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -126,7 +126,7 @@ jobs:
     env:
       MEILI_TEST_OLLAMA_SERVER: "http://localhost:11434"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -163,7 +163,7 @@ jobs:
     runs-on: ubuntu-22.04
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -185,7 +185,7 @@ jobs:
     name: Build in release
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -205,7 +205,7 @@ jobs:
       matrix:
         features: ["", "--features enterprise"]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -227,7 +227,7 @@ jobs:
     name: Run Rustfmt
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
@@ -253,7 +253,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
         run: |
           sudo rm -rf "/opt/ghc" || true
