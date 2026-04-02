@@ -26,8 +26,7 @@ use crate::update::new::DocumentChange;
 use crate::update::GrenadParameters;
 use crate::{DocumentId, FieldId, FilterableAttributesRule, Result, MAX_FACET_VALUE_LENGTH};
 
-pub struct FacetedExtractorData<'a, 'b> {
-    sender: &'a FieldIdDocidFacetSender<'a, 'b>,
+pub struct FacetedExtractorData<'a> {
     grenad_parameters: &'a GrenadParameters,
     buckets: usize,
     filterable_attributes: &'a [FilterableAttributesRule],
@@ -37,7 +36,7 @@ pub struct FacetedExtractorData<'a, 'b> {
     is_geo_enabled: bool,
 }
 
-impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_, '_> {
+impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_> {
     type Data = RefCell<BalancedCaches<'extractor>>;
 
     fn init_data(&self, extractor_alloc: &'extractor Bump) -> Result<Self::Data> {
@@ -63,7 +62,6 @@ impl<'extractor> Extractor<'extractor> for FacetedExtractorData<'_, '_> {
                 self.distinct_field,
                 self.is_geo_enabled,
                 change,
-                self.sender,
             )?
         }
         Ok(())
@@ -82,7 +80,6 @@ impl FacetedDocidsExtractor {
         distinct_field: &Option<String>,
         is_geo_enabled: bool,
         document_change: DocumentChange,
-        sender: &FieldIdDocidFacetSender,
     ) -> Result<()> {
         let index = context.index;
         let rtxn = &context.rtxn;
@@ -233,8 +230,6 @@ impl FacetedDocidsExtractor {
                 }
             }
         };
-
-        del_add_facet_value.send_data(docid, sender, &context.doc_alloc).unwrap();
         Ok(())
     }
 
@@ -423,38 +418,6 @@ impl<'doc> DelAddFacetValue<'doc> {
             _ => (),
         }
     }
-
-    fn send_data(
-        self,
-        docid: DocumentId,
-        sender: &FieldIdDocidFacetSender,
-        doc_alloc: &Bump,
-    ) -> crate::Result<()> {
-        let mut buffer = bumpalo::collections::Vec::new_in(doc_alloc);
-        for ((fid, truncated), value) in self.strings {
-            buffer.clear();
-            buffer.extend_from_slice(&fid.to_be_bytes());
-            buffer.extend_from_slice(&docid.to_be_bytes());
-            buffer.extend_from_slice(truncated.as_bytes());
-            match &value {
-                Some(value) => sender.write_facet_string(&buffer, value)?,
-                None => sender.delete_facet_string(&buffer)?,
-            }
-        }
-
-        for ((fid, value), deladd) in self.f64s {
-            buffer.clear();
-            buffer.extend_from_slice(&fid.to_be_bytes());
-            buffer.extend_from_slice(&docid.to_be_bytes());
-            buffer.extend_from_slice(&value);
-            match deladd {
-                DelAdd::Deletion => sender.delete_facet_f64(&buffer)?,
-                DelAdd::Addition => sender.write_facet_f64(&buffer)?,
-            }
-        }
-
-        Ok(())
-    }
 }
 
 /// Truncates a string to the biggest valid LMDB key size.
@@ -475,7 +438,6 @@ impl FacetedDocidsExtractor {
         document_changes: &DC,
         indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
-        sender: &FieldIdDocidFacetSender,
         step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
@@ -498,7 +460,6 @@ impl FacetedDocidsExtractor {
             let extractor = FacetedExtractorData {
                 grenad_parameters: indexing_context.grenad_parameters,
                 buckets: rayon::current_num_threads(),
-                sender,
                 filterable_attributes: &filterable_attributes,
                 sortable_fields: &sortable_fields,
                 asc_desc_fields: &asc_desc_fields,
