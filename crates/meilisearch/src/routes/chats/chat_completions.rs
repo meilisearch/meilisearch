@@ -246,7 +246,7 @@ fn setup_search_tool(
         let index_description = chat_config.description;
         let _ = writeln!(&mut function_description, "\n\n - {name}: {index_description}\n");
         index_uids.push(name.to_string());
-        let facet_distributions = format_facet_distributions(index, &rtxn, 10).unwrap(); // TODO do not unwrap
+        let facet_distributions = format_facet_distributions(index, &rtxn, 10)?;
         let _ = writeln!(&mut filter_description, "\n## Facet distributions of the {name} index");
         let _ = writeln!(&mut filter_description, "{facet_distributions}");
 
