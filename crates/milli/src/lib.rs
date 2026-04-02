@@ -68,9 +68,9 @@ pub use self::error::{
 };
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
+pub use self::fields_ids_map::metadata::Metadata;
 pub use self::fields_ids_map::{
-    metadata::Metadata, FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap,
-    MetadataBuilder,
+    FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
 };
 pub use self::filterable_attributes_rules::{
     FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
@@ -117,6 +117,9 @@ pub type Prefix = smallstr::SmallString<[u8; 16]>;
 pub type SmallVec16<T> = smallvec::SmallVec<[T; 16]>;
 pub type SmallVec32<T> = smallvec::SmallVec<[T; 32]>;
 pub type SmallVec8<T> = smallvec::SmallVec<[T; 8]>;
+
+/// FIXME: move document module to another file as it is way too deep in the update hierarchy
+pub use update::new::document::{Document, DocumentFromDb};
 
 /// A GeoPoint is a point in cartesian plan, called xyz_point in the code. Its metadata
 /// is a tuple composed of 1. the DocumentId of the associated document and 2. the original point

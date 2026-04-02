@@ -44,13 +44,12 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
-            field_id_docid_facet_f64s,
-            field_id_docid_facet_strings,
             vector_store,
             embedder_category_id: _,
             cellulite,
             documents,
             shard_docids: _,
+            removed_dbs: _,
         } = self.index;
 
         let empty_roaring = RoaringBitmap::default();
@@ -91,8 +90,6 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         facet_id_is_null_docids.clear(self.wtxn)?;
         facet_id_is_empty_docids.clear(self.wtxn)?;
         facet_id_string_docids.clear(self.wtxn)?;
-        field_id_docid_facet_f64s.clear(self.wtxn)?;
-        field_id_docid_facet_strings.clear(self.wtxn)?;
         // vector
         vector_store.clear(self.wtxn)?;
         cellulite.clear(self.wtxn)?;
@@ -153,8 +150,6 @@ mod tests {
         assert!(index.field_id_word_count_docids.is_empty(&rtxn).unwrap());
         assert!(index.facet_id_f64_docids.is_empty(&rtxn).unwrap());
         assert!(index.facet_id_string_docids.is_empty(&rtxn).unwrap());
-        assert!(index.field_id_docid_facet_f64s.is_empty(&rtxn).unwrap());
-        assert!(index.field_id_docid_facet_strings.is_empty(&rtxn).unwrap());
         assert!(index.documents.is_empty(&rtxn).unwrap());
 
         // Verify that the statistics are correctly updated after clearing documents

@@ -22,7 +22,8 @@ use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
-    FacetGroupKeyCodec, FacetGroupValueCodec, FieldIdCodec, OrderedF64Codec,
+    FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
+    FieldIdCodec, OrderedF64Codec,
 };
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
@@ -114,15 +115,19 @@ pub mod db_name {
     pub const FACET_ID_STRING_DOCIDS: &str = "facet-id-string-docids";
     pub const FACET_ID_NORMALIZED_STRING_STRINGS: &str = "facet-id-normalized-string-strings";
     pub const FACET_ID_STRING_FST: &str = "facet-id-string-fst";
-    pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
-    pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
     pub const SHARD_DOCIDS: &str = "shard-docids";
     pub const VECTOR_STORE: &str = "vector-arroy";
     pub const CELLULITE: &str = "cellulite"; // used as a prefix, counted as `Cellulite::nb_dbs`
     pub const DOCUMENTS: &str = "documents";
 }
-const NUMBER_OF_DBS: u32 = 26 + Cellulite::nb_dbs();
+
+pub mod removed_db_name {
+    pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
+    pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
+}
+
+const NUMBER_OF_DBS: u32 = 24 + RemovedDbs::NUMBER_OF_DBS + Cellulite::nb_dbs();
 
 #[derive(Clone)]
 pub struct Index {
@@ -178,11 +183,6 @@ pub struct Index {
     /// Maps the facet field id of the string facets with an FST containing all the facets values.
     pub facet_id_string_fst: Database<BEU16, FstSetCodec>,
 
-    /// Maps the document id, the facet field id and the numbers.
-    pub field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
-    /// Maps the document id, the facet field id and the strings.
-    pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
-
     /// Maps an embedder name to its id in the vector store.
     pub(crate) embedder_category_id: Database<Unspecified, Unspecified>,
     /// Vector store based on hannoy™.
@@ -196,6 +196,9 @@ pub struct Index {
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
+
+    // Removed DBs
+    pub removed_dbs: RemovedDbs,
 }
 
 pub enum CreateOrOpen {
@@ -253,10 +256,12 @@ impl Index {
             env.create_database(&mut wtxn, Some(FACET_ID_IS_NULL_DOCIDS))?;
         let facet_id_is_empty_docids =
             env.create_database(&mut wtxn, Some(FACET_ID_IS_EMPTY_DOCIDS))?;
+
         let field_id_docid_facet_f64s =
-            env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_F64S))?;
+            env.create_database(&mut wtxn, Some(removed_db_name::FIELD_ID_DOCID_FACET_F64S))?;
         let field_id_docid_facet_strings =
-            env.create_database(&mut wtxn, Some(FIELD_ID_DOCID_FACET_STRINGS))?;
+            env.create_database(&mut wtxn, Some(removed_db_name::FIELD_ID_DOCID_FACET_STRINGS))?;
+
         // vector stuff
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
@@ -291,13 +296,12 @@ impl Index {
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
-            field_id_docid_facet_f64s,
-            field_id_docid_facet_strings,
             vector_store,
             embedder_category_id,
             shard_docids,
             cellulite,
             documents,
+            removed_dbs: RemovedDbs { field_id_docid_facet_f64s, field_id_docid_facet_strings },
         };
 
         if let CreateOrOpen::Create { shards } = create_or_open {
@@ -698,19 +702,20 @@ impl Index {
 
     pub fn searchable_fields_and_weights<'a>(
         &self,
+        fields_ids_map: &FieldsIdsMap,
         rtxn: &'a RoTxn<'a>,
     ) -> Result<Vec<(Cow<'a, str>, FieldId, Weight)>> {
-        let fid_map = self.fields_ids_map(rtxn)?;
         let weight_map = self.fieldids_weights_map(rtxn)?;
         let searchable = self.searchable_fields(rtxn)?;
 
         searchable
             .into_iter()
             .map(|field| -> Result<_> {
-                let fid = fid_map.id(&field).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
-                    field_name: field.to_string(),
-                    process: "searchable_fields_and_weights",
-                })?;
+                let fid =
+                    fields_ids_map.id(&field).ok_or_else(|| FieldIdMapMissingEntry::FieldName {
+                        field_name: field.to_string(),
+                        process: "searchable_fields_and_weights",
+                    })?;
                 let weight = weight_map
                     .weight(fid)
                     .ok_or(InternalError::FieldidsWeightsMapMissingEntry { key: fid })?;
@@ -1649,10 +1654,13 @@ impl Index {
     }
 
     /// Returns the list of exact attributes field ids.
-    pub fn exact_attributes_ids(&self, txn: &RoTxn<'_>) -> Result<HashSet<FieldId>> {
+    pub fn exact_attributes_ids(
+        &self,
+        fields_ids_map: &FieldsIdsMap,
+        txn: &RoTxn<'_>,
+    ) -> Result<HashSet<FieldId>> {
         let attrs = self.exact_attributes(txn)?;
-        let fid_map = self.fields_ids_map(txn)?;
-        Ok(attrs.iter().filter_map(|attr| fid_map.id(attr)).collect())
+        Ok(attrs.iter().filter_map(|attr| fields_ids_map.id(attr)).collect())
     }
 
     /// Writes the exact attributes to the database.
@@ -1945,13 +1953,12 @@ impl Index {
             facet_id_exists_docids,
             facet_id_is_null_docids,
             facet_id_is_empty_docids,
-            field_id_docid_facet_f64s,
-            field_id_docid_facet_strings,
             vector_store,
             embedder_category_id,
             shard_docids,
             cellulite,
             documents,
+            removed_dbs: _,
         } = self;
 
         fn compute_size(stats: DatabaseStat) -> usize {
@@ -2012,14 +2019,6 @@ impl Index {
             "facet_id_is_empty_docids",
             facet_id_is_empty_docids.stat(rtxn).map(compute_size)?,
         );
-        sizes.insert(
-            "field_id_docid_facet_f64s",
-            field_id_docid_facet_f64s.stat(rtxn).map(compute_size)?,
-        );
-        sizes.insert(
-            "field_id_docid_facet_strings",
-            field_id_docid_facet_strings.stat(rtxn).map(compute_size)?,
-        );
         sizes.insert("vector_store", vector_store.stat(rtxn).map(compute_size)?);
         sizes.insert("embedder_category_id", embedder_category_id.stat(rtxn).map(compute_size)?);
         sizes.insert("shard_docids", shard_docids.stat(rtxn).map(compute_size)?);
@@ -2037,6 +2036,30 @@ impl Index {
         sizes.insert("cellulite_metadata", cellulite.metadata_db_stats(rtxn).map(compute_size)?);
 
         Ok(sizes)
+    }
+}
+
+/// DBs that no longer exist in Meilisearch.
+///
+/// These are FIELD_ID_DOCID_FACET_F64S and FIELD_ID_DOCID_FACET_STRINGS
+///
+/// We **MUST** still create them when opening the index to defeat MDB_BAD_DBI errors.
+///
+/// As increasing the number of DBs is not a very high performance concern, this is acceptable for now.
+#[derive(Debug, Clone, Copy)]
+pub struct RemovedDbs {
+    /// Maps the document id, the facet field id and the numbers. Removed in <https://github.com/meilisearch/meilisearch/pull/6307>
+    field_id_docid_facet_f64s: Database<FieldDocIdFacetF64Codec, Unit>,
+    /// Maps the document id, the facet field id and the strings. Removed in <https://github.com/meilisearch/meilisearch/pull/6307>
+    field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
+}
+
+impl RemovedDbs {
+    pub const NUMBER_OF_DBS: u32 = 2;
+
+    pub fn clear_field_id_docid_facet_dbs(&self, wtxn: &mut RwTxn) -> Result<()> {
+        self.field_id_docid_facet_f64s.clear(wtxn)?;
+        Ok(self.field_id_docid_facet_strings.clear(wtxn)?)
     }
 }
 
