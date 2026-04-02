@@ -221,8 +221,6 @@ async fn patch_network_without_origin(
         }
     }
 
-    index_scheduler.put_network(merged_network.clone())?;
-
     analytics.publish(
         PatchNetworkAnalytics {
             network_size: merged_network.remotes.len(),
@@ -237,8 +235,9 @@ async fn patch_network_without_origin(
         let task = KindWithContent::NetworkTopologyChange(network_topology_change);
         let mut task = {
             let index_scheduler = index_scheduler.clone();
+            let merged_network = merged_network.clone();
             tokio::task::spawn_blocking(move || {
-                index_scheduler.register_with_custom_metadata(
+                index_scheduler.register_with_custom_metadata_and_network(
                     task,
                     None,
                     None,
@@ -247,6 +246,7 @@ async fn patch_network_without_origin(
                         remote_tasks: Default::default(),
                         network_version: merged_network.version,
                     }),
+                    Some(merged_network),
                 )
             })
             .await??
@@ -305,6 +305,14 @@ async fn patch_network_without_origin(
         debug!("returns: {:?}", task);
         Ok(HttpResponse::Accepted().json(task))
     } else {
+        tokio::task::spawn_blocking({
+            let merged_network = merged_network.clone();
+            move || {
+                let wtxn = index_scheduler.env.write_txn()?;
+                index_scheduler.put_network(wtxn, merged_network)
+            }
+        })
+        .await??;
         Ok(HttpResponse::Ok().json(merged_network))
     }
 }
@@ -368,7 +376,6 @@ async fn patch_network_with_origin(
         version: origin.network_version,
         shards,
     };
-    index_scheduler.put_network(new_network.clone())?;
 
     analytics.publish(
         PatchNetworkAnalytics {
@@ -378,16 +385,17 @@ async fn patch_network_with_origin(
         &req,
     );
 
-    let network_topology_change = NetworkTopologyChange::new(old_network, new_network);
+    let network_topology_change = NetworkTopologyChange::new(old_network, new_network.clone());
     let task = KindWithContent::NetworkTopologyChange(network_topology_change);
     let task = {
         tokio::task::spawn_blocking(move || {
-            index_scheduler.register_with_custom_metadata(
+            index_scheduler.register_with_custom_metadata_and_network(
                 task,
                 None,
                 None,
                 false,
                 Some(TaskNetwork::Origin { origin }),
+                Some(new_network),
             )
         })
         .await??

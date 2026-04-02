@@ -62,7 +62,7 @@ use meilisearch_types::features::{
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::json_template::JsonTemplate;
@@ -790,7 +790,25 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
-        self.register_with_custom_metadata(kind, task_id, None, dry_run, None)
+        self.register_with_custom_metadata_and_network(kind, task_id, None, dry_run, None, None)
+    }
+
+    pub fn register_with_custom_metadata(
+        &self,
+        kind: KindWithContent,
+        task_id: Option<TaskId>,
+        custom_metadata: Option<String>,
+        dry_run: bool,
+        task_network: Option<TaskNetwork>,
+    ) -> Result<Task> {
+        self.register_with_custom_metadata_and_network(
+            kind,
+            task_id,
+            custom_metadata,
+            dry_run,
+            task_network,
+            None,
+        )
     }
 
     /// Register a new task in the scheduler, with metadata.
@@ -807,13 +825,14 @@ impl IndexScheduler {
     /// 2. The task to register matches the network version of the network topology change task
     ///
     /// Always accept the task if it is not an import task.
-    pub fn register_with_custom_metadata(
+    pub fn register_with_custom_metadata_and_network(
         &self,
         kind: KindWithContent,
         task_id: Option<TaskId>,
         custom_metadata: Option<String>,
         dry_run: bool,
         task_network: Option<TaskNetwork>,
+        new_network: Option<Network>,
     ) -> Result<Task> {
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
@@ -855,9 +874,14 @@ impl IndexScheduler {
             }
         }
 
-        if let Err(e) = wtxn.commit() {
+        let result = match new_network {
+            Some(new_network) => self.put_network(wtxn, new_network),
+            None => wtxn.commit().map_err(Into::into),
+        };
+
+        if let Err(e) = result {
             self.queue.delete_persisted_task_data(&task)?;
-            return Err(e.into());
+            return Err(e);
         }
 
         // notify the scheduler loop to execute a new tick
@@ -1113,10 +1137,8 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub fn put_network(&self, network: Network) -> Result<()> {
-        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.features.put_network(wtxn, network)?;
-        Ok(())
+    pub fn put_network(&self, wtxn: RwTxn, network: Network) -> Result<()> {
+        self.features.put_network(wtxn, network)
     }
 
     pub fn network(&self) -> Network {

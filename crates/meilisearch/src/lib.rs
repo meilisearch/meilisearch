@@ -569,7 +569,8 @@ fn import_dump(
     index_scheduler.put_runtime_features(features)?;
 
     let network = dump_reader.network()?.cloned().unwrap_or_default();
-    index_scheduler.put_network(network)?;
+    let wtxn = index_scheduler.env.write_txn()?;
+    index_scheduler.put_network(wtxn, network)?;
 
     let mut dynamic_search_rules = DynamicSearchRules::new();
     for result in dump_reader.dynamic_search_rules()? {
