@@ -320,7 +320,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
     SerdeJson(serde_json::Error),
     #[error("{error}")]
     SortError { error: SortError, search: bool },
-    #[error("An unknown internal document id have been used: `{document_id}`.")]
+    #[error("An unknown internal document id has been used: `{document_id}`.")]
     UnknownInternalDocumentId { document_id: DocumentId },
     #[error("`minWordSizeForTypos` setting is invalid. `oneTypo` and `twoTypos` fields should be between `0` and `255`, and `twoTypos` should be greater or equals to `oneTypo` but found `oneTypo: {0}` and twoTypos: {1}`.")]
     InvalidMinTypoWordLenSetting(u8, u8),
