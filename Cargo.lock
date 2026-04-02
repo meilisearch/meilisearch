@@ -866,9 +866,9 @@ dependencies = [
 
 [[package]]
 name = "bumparaw-collections"
-version = "0.1.4"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ce682bdc86c2e25ef5cd95881d9d6a1902214eddf74cf9ffea88fe1464377e8"
+checksum = "34e44a2b18eed9c2756442a0a16bf95e91ae2130a5d79d12e4323c634ba37012"
 dependencies = [
  "allocator-api2",
  "bitpacking",
@@ -4653,6 +4653,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "ordered-float 5.1.0",
+ "permissive-json-pointer",
  "rand 0.8.5",
  "rayon",
  "rhai",
