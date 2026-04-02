@@ -166,8 +166,15 @@ pub fn expected_order(
                     new_groups
                         .extend(group.linear_group_by_key(|d| d.attribute_rank).map(Vec::from));
                 }
-                Criterion::AttributeRank | Criterion::WordPosition => {
-                    unreachable!("documents do not have attribute rank or position")
+                Criterion::AttributeRank => {
+                    group.sort_by_key(|d| d.attribute_rank);
+                    new_groups
+                        .extend(group.linear_group_by_key(|d| d.attribute_rank).map(Vec::from));
+                }
+                Criterion::WordPosition => {
+                    group.sort_by_key(|d| d.attribute_rank);
+                    new_groups
+                        .extend(group.linear_group_by_key(|d| d.attribute_rank).map(Vec::from));
                 }
                 Criterion::Exactness => {
                     group.sort_by_key(|d| d.exact_rank);
