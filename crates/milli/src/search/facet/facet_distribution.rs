@@ -1,25 +1,25 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fmt;
 use std::fmt::Display;
 use std::ops::ControlFlow;
-use std::{fmt, mem};
 
-use heed::types::Bytes;
+use bumpalo::Bump;
 use heed::BytesDecode;
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
 use crate::attribute_patterns::match_field_legacy;
-use crate::facet::FacetType;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
-use crate::heed_codec::facet::{
-    FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
-};
+use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::search::facet::facet_distribution_iter::{
     count_iterate_over_facet_distribution, lexicographically_iterate_over_facet_distribution,
 };
-use crate::{Error, FieldId, FilterableAttributesRule, Index, PatternMatch, Result, UserError};
+use crate::update::new::document::RawFacetValue;
+use crate::{
+    Document, DocumentFromDb, Error, FieldId, FieldsIdsMap, FilterableAttributesRule, Index, PatternMatch, Result, UserError
+};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.

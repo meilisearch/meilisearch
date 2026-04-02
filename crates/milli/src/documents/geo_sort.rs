@@ -1,13 +1,14 @@
 use std::collections::VecDeque;
 
-use heed::types::{Bytes, Unit};
-use heed::{RoPrefix, RoTxn};
+use heed::RoTxn;
 use roaring::RoaringBitmap;
 use rstar::RTree;
 
-use crate::heed_codec::facet::{FieldDocIdFacetCodec, OrderedF64Codec};
-use crate::search::new::{facet_string_values, facet_values_prefix_key};
-use crate::{distance_between_two_points, lat_lng_to_xyz, GeoPoint, Index};
+use crate::update::new::document::RawFacetValue;
+use crate::{
+    distance_between_two_points, lat_lng_to_xyz, Document, DocumentFromDb, FieldsIdsMap, GeoPoint,
+    Index,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct GeoSortParameter {

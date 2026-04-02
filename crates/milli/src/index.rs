@@ -22,8 +22,7 @@ use crate::error::{InternalError, UserError};
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::fields_ids_map::FieldsIdsMap;
 use crate::heed_codec::facet::{
-    FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec,
-    FieldIdCodec, OrderedF64Codec,
+    FacetGroupKeyCodec, FacetGroupValueCodec, FieldIdCodec, OrderedF64Codec,
 };
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
