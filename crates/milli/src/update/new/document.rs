@@ -476,7 +476,7 @@ impl<'d, 'doc: 'd, 't: 'd, Mapper: FieldIdMapper> Document<'d>
     }
 }
 
-impl<'doc, D> Document<'doc> for &D
+impl<'doc, D: ?Sized> Document<'doc> for &D
 where
     D: Document<'doc>,
 {
