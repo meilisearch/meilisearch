@@ -14,7 +14,6 @@ use crate::fields_ids_map::metadata::Metadata;
 use crate::filterable_attributes_rules::match_faceted_field;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
-use crate::update::new::channel::FieldIdDocidFacetSender;
 use crate::update::new::document::DocumentContext;
 use crate::update::new::extract::perm_json_p;
 use crate::update::new::indexer::document_changes::{

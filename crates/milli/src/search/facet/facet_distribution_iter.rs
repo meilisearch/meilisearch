@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::ops::ControlFlow;
 
-use heed::Result;
+use crate::Result;
 use roaring::RoaringBitmap;
 
 use super::{get_first_facet_value, get_highest_level};

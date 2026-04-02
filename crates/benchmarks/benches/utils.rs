@@ -215,11 +215,13 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                 group.bench_with_input(BenchmarkId::from_parameter(parameter), &(), |b, &()| {
                     b.iter(|| {
                         let rtxn = index.read_txn().unwrap();
+                        let fields_ids_map = index.fields_ids_map(&rtxn).unwrap();
                         if let Some(sort) = &conf.sort {
                             let sort = sort.iter().map(|sort| sort.parse().unwrap()).collect();
                             let all_docs = index.documents_ids(&rtxn).unwrap();
                             let facet_sort =
-                                recursive_sort(&index, &rtxn, sort, &all_docs).unwrap();
+                                recursive_sort(&index, &rtxn, &fields_ids_map, sort, &all_docs)
+                                    .unwrap();
                             let iter = facet_sort.iter().unwrap();
                             if let Some((offset, limit)) = offset {
                                 let _results = iter.skip(*offset).take(*limit).collect::<Vec<_>>();

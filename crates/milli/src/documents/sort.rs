@@ -9,7 +9,7 @@ use crate::documents::GeoSortParameter;
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::BytesRefCodec;
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
-use crate::{is_faceted, AscDesc, DocumentId, Member, UserError};
+use crate::{is_faceted, AscDesc, DocumentId, FieldsIdsMap, Member, UserError};
 
 #[derive(Debug, Clone, Copy)]
 enum AscDescId {

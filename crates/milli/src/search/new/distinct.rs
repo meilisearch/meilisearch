@@ -1,15 +1,13 @@
-use heed::types::{Bytes, Str, Unit};
-use heed::{Database, RoPrefix, RoTxn};
+use bumpalo::Bump;
+use heed::{Database, RoTxn};
 use roaring::RoaringBitmap;
 
-const FID_SIZE: usize = 2;
-const DOCID_SIZE: usize = 4;
-
 use crate::heed_codec::facet::{
-    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, FieldDocIdFacetCodec,
+    FacetGroupKey, FacetGroupKeyCodec, FacetGroupValueCodec, OrderedF64Codec,
 };
 use crate::heed_codec::BytesRefCodec;
-use crate::{FieldId, Index, Result, SearchContext};
+use crate::update::new::document::RawFacetValue;
+use crate::{Document, DocumentFromDb, FieldId, FieldsIdsMap, Index, Result, SearchContext};
 
 pub struct DistinctOutput {
     pub remaining: RoaringBitmap,
