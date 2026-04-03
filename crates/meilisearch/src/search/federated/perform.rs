@@ -40,7 +40,7 @@ use meilisearch_types::milli::{
     self, merge_positioned_hits_into_page, Deadline, DocumentId, FederatingResultsStep, ForeignKey,
     OrderBy, DEFAULT_VALUES_PER_FACET,
 };
-use meilisearch_types::network::{Network, Remote};
+use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
 use meilisearch_types::Document;
 use roaring::RoaringBitmap;
@@ -124,9 +124,13 @@ pub async fn perform_federated_search(
             query_index,
             &network,
             features,
+            index_scheduler.remote_availability(),
         )?
     }
     let federation = federation;
+
+    let remotes_to_query: HashSet<_> =
+        partitioned_queries.remote_queries_by_host.keys().cloned().collect();
 
     // 2. perform queries, merge and make hits index by index
     // 2.1. start remote queries
@@ -391,6 +395,17 @@ pub async fn perform_federated_search(
 
     let performance_details =
         federation.show_performance_details.then(|| progress.accumulated_durations());
+
+    if index_scheduler.features().check_network("Track remotes availability").is_ok() {
+        for remote_name in remotes_to_query {
+            match remote_errors.get(&remote_name) {
+                Some(error) if error.code.is_server_error() => {
+                    index_scheduler.mark_remote_unavailable(remote_name)?
+                }
+                _ => index_scheduler.mark_remote_available(&remote_name)?,
+            }
+        }
+    }
 
     Ok((
         FederatedSearchResult {
@@ -950,6 +965,7 @@ impl PartitionedQueries {
         query_index: usize,
         network: &Network,
         features: RoFeatures,
+        remote_availability: &RemoteAvailability,
     ) -> Result<(), ResponseError> {
         if let Some(pagination_field) = federated_query.has_pagination() {
             return Err(MeilisearchHttpError::PaginationInFederatedQuery(
@@ -993,7 +1009,8 @@ impl PartitionedQueries {
 
         let (index_uid, query, federation_options);
         let queries = if federated_query.must_use_network(network, &features)? {
-            let partition = partition.get_or_insert_with(|| super::Partition::new(network.clone()));
+            let partition = partition
+                .get_or_insert_with(|| super::Partition::new(network.clone(), remote_availability));
             (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
             either::Left(partition.to_query_partition(
