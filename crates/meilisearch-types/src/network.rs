@@ -57,8 +57,11 @@ impl RemoteAvailability {
     }
 
     /// Returns `true` if the remote is available, `false` otherwise.
+    ///
+    /// Note that this method modifies the internal state by removing
+    /// any expired unavailability periods.
     pub fn is_available(&self, remote: &str) -> bool {
-        self.0.pin().get(remote).is_none_or(Unavailability::is_available)
+        self.0.pin().remove_if(remote, |_, u| Unavailability::is_available(u)).is_ok()
     }
 
     /// Marks a remote as unavailable indefinitely, removing any existing unavailability period.
