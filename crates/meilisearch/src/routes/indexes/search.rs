@@ -606,10 +606,11 @@ pub(crate) async fn search(
 
     let features = index_scheduler.features();
     let network = index_scheduler.network();
+    let remote_availability = index_scheduler.remote_availability();
 
     let (mut search_result, deadline) = if query.must_use_network(&network, &features)? {
         let mut federation = Federation::default();
-        let queries = Partition::new(network)
+        let queries = Partition::new(network, remote_availability)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
             .collect();
 
