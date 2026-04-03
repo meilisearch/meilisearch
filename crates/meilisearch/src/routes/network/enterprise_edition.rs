@@ -417,6 +417,9 @@ pub async fn post_network_change(
         route::Message::ImportFinishedForRemote { remote, successful } => {
             index_scheduler.network_import_finished_for_remote(remote, successful, payload.origin)
         }
+        route::Message::StatusChangeForRemote { remote, status } => {
+            index_scheduler.network_status_change_for_remote(remote, status)
+        }
     })
     .await
     .map_err(|e| ResponseError::from_msg(e.to_string(), Code::Internal))??;
