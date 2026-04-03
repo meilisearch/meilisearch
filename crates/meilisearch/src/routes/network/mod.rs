@@ -263,6 +263,7 @@ impl Remote {
                 })?,
             search_api_key: self.search_api_key.set(),
             write_api_key: self.write_api_key.set(),
+            status: route::Status::default(),
         })
     }
 }
@@ -440,6 +441,7 @@ fn merge_networks(
                             url: old_url,
                             search_api_key: old_search_api_key,
                             write_api_key: old_write_api_key,
+                            status: _,
                         } = old;
 
                         let Remote {
@@ -479,6 +481,7 @@ fn merge_networks(
                                 Setting::Reset => None,
                                 Setting::NotSet => old_write_api_key,
                             },
+                            status: Default::default(),
                         };
                         merged_remotes.insert(key, merged);
                     }
