@@ -70,7 +70,8 @@ use meilisearch_types::milli::vector::{
     Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
 use meilisearch_types::milli::{self, Index};
-use meilisearch_types::network::Network;
+use meilisearch_types::network::route::Status;
+use meilisearch_types::network::{Network, RemoteAvailability};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
@@ -928,6 +929,17 @@ impl IndexScheduler {
         Ok(())
     }
 
+    pub fn network_status_change_for_remote(
+        &self,
+        remote_name: String,
+        status: Status,
+    ) -> Result<(), Error> {
+        match status {
+            Status::Available => self.mark_remote_available(&remote_name),
+            Status::Unavailable => self.mark_remote_unavailable_indefinitely(remote_name),
+        }
+    }
+
     fn update_network_task<F, O>(
         &self,
         wtxn: &mut heed::RwTxn<'_>,
@@ -1129,6 +1141,10 @@ impl IndexScheduler {
 
     pub fn features(&self) -> RoFeatures {
         self.features.features()
+    }
+
+    pub fn remote_availability(&self) -> &RemoteAvailability {
+        self.features.remote_availability()
     }
 
     pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
