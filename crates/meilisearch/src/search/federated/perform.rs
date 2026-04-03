@@ -432,10 +432,10 @@ pub async fn perform_federated_search(
     let performance_details =
         federation.show_performance_details.then(|| progress.accumulated_durations());
 
-    if index_scheduler.features().check_network("Track remotes availability").is_ok() {
+    if !network.shards.is_empty() {
         for (remote_name, error) in &remote_errors {
             if error.code.is_server_error() {
-                index_scheduler.mark_remote_unavailable(remote_name.clone())?
+                index_scheduler.mark_remote_unavailable(remote_name.clone())?;
             }
         }
     }
