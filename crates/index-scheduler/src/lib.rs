@@ -72,6 +72,7 @@ use meilisearch_types::milli::vector::{
 };
 use meilisearch_types::milli::{self, Index};
 use meilisearch_types::network::Network;
+use meilisearch_types::network::{Network, RemoteAvailability};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
@@ -1130,6 +1131,10 @@ impl IndexScheduler {
 
     pub fn features(&self) -> RoFeatures {
         self.features.features()
+    }
+
+    pub fn remote_availability(&self) -> &RemoteAvailability {
+        self.features.remote_availability()
     }
 
     pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
