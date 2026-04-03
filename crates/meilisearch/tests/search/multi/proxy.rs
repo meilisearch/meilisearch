@@ -4690,17 +4690,20 @@ async fn remote_auto_sharding() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
@@ -4734,17 +4737,20 @@ async fn remote_auto_sharding() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
@@ -4778,17 +4784,20 @@ async fn remote_auto_sharding() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
@@ -5489,17 +5498,20 @@ async fn remote_auto_sharding_auto_search() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
@@ -5533,17 +5545,20 @@ async fn remote_auto_sharding_auto_search() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
@@ -5577,17 +5592,20 @@ async fn remote_auto_sharding_auto_search() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
@@ -6040,17 +6058,20 @@ async fn remote_auto_sharding_with_custom_metadata() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
@@ -6084,17 +6105,20 @@ async fn remote_auto_sharding_with_custom_metadata() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
@@ -6128,17 +6152,20 @@ async fn remote_auto_sharding_with_custom_metadata() {
         "ms0": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms1": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "ms2": {
           "url": "[url]",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {
