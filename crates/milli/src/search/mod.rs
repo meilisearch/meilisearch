@@ -6,7 +6,7 @@ use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-pub use self::facet::{FacetDistribution, Filter, OrderBy, DEFAULT_VALUES_PER_FACET};
+pub use self::facet::{FacetDistribution, Filter, IndexFilter, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::documents::GeoSortParameter;
@@ -50,7 +50,7 @@ pub struct PinDoc {
 pub struct Search<'a> {
     query: Option<String>,
     // this should be linked to the String in the query
-    filter: Option<Filter<'a>>,
+    filter: Option<IndexFilter<'a>>,
     offset: usize,
     limit: usize,
     sort_criteria: Option<Vec<AscDesc>>,
@@ -158,7 +158,7 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn filter(&mut self, condition: Filter<'a>) -> &mut Search<'a> {
+    pub fn filter(&mut self, condition: IndexFilter<'a>) -> &mut Search<'a> {
         self.filter = Some(condition);
         self
     }

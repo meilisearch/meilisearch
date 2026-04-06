@@ -1,9 +1,43 @@
 use either::{Either, Left, Right};
+use filter_parser::{FilterCondition, IndexFilterCondition};
 use milli::progress::Progress;
-use milli::{Criterion, Filter, Search, SearchResult, TermsMatchingStrategy};
+use milli::{Criterion, Filter, IndexFilter, Search, SearchResult, TermsMatchingStrategy};
 use Criterion::*;
 
 use crate::search::{self, EXTERNAL_DOCUMENTS_IDS};
+
+fn from_filter(filter: Filter) -> IndexFilter {
+    IndexFilter { condition: condition_to_index_condition(filter.condition) }
+}
+
+fn condition_to_index_condition(filter: FilterCondition) -> IndexFilterCondition {
+    match filter {
+        FilterCondition::Not(filter) => {
+            IndexFilterCondition::Not(Box::new(condition_to_index_condition(*filter)))
+        }
+        FilterCondition::Condition { fid, op } => IndexFilterCondition::Condition { fid, op },
+        FilterCondition::In { fid, els } => IndexFilterCondition::In { fid, els },
+        FilterCondition::Or(filters) => IndexFilterCondition::Or(
+            filters.into_iter().map(condition_to_index_condition).collect(),
+        ),
+        FilterCondition::And(filters) => IndexFilterCondition::And(
+            filters.into_iter().map(condition_to_index_condition).collect(),
+        ),
+        FilterCondition::VectorExists { fid, embedder, filter } => {
+            IndexFilterCondition::VectorExists { fid, embedder, filter }
+        }
+        FilterCondition::GeoLowerThan { point, radius, resolution } => {
+            IndexFilterCondition::GeoLowerThan { point, radius, resolution }
+        }
+        FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
+            IndexFilterCondition::GeoBoundingBox { top_right_point, bottom_left_point }
+        }
+        FilterCondition::GeoPolygon { points } => IndexFilterCondition::GeoPolygon { points },
+        FilterCondition::Foreign { .. } => {
+            unreachable!("Foreign filters are not supported in index conditions")
+        }
+    }
+}
 
 macro_rules! test_filter {
     ($func:ident, $filter:expr) => {
@@ -22,7 +56,7 @@ macro_rules! test_filter {
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 
             search.terms_matching_strategy(TermsMatchingStrategy::default());
-            search.filter(filter_conditions);
+            search.filter(from_filter(filter_conditions));
 
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 
