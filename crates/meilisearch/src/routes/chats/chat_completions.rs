@@ -20,6 +20,7 @@ use async_openai::types::{
 use async_openai::Client;
 use bumpalo::Bump;
 use futures::StreamExt;
+use index_scheduler::filter::{filter_into_index_filter, filters_into_index_filters_unchecked};
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::{Code, ResponseError};
@@ -59,7 +60,9 @@ use crate::metrics::{
 };
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
-use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
+use crate::search::{
+    add_search_rules, parse_filter, prepare_search, search_from_kind, SearchQuery,
+};
 use crate::search_queue::SearchQueue;
 
 /// Request a chat completion
@@ -355,6 +358,36 @@ async fn process_search_request(
     progress.update_progress(TotalProcessingTimeStep::Search);
     let features = index_scheduler.features();
     let index_cloned = index.clone();
+
+    let filter = match &query.filter {
+        Some(filter) => {
+            let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
+            filter
+                .map(|f| {
+                    if features.runtime_features().foreign_keys && f.use_foreign_filter().is_some()
+                    {
+                        filter_into_index_filter(
+                            f,
+                            &index,
+                            &rtxn,
+                            index_scheduler,
+                            &progress,
+                            &index_uid,
+                        )
+                    } else {
+                        filters_into_index_filters_unchecked(vec![Some(f)]).map(|mut filters| {
+                            // there is exactly one filter that can't be None
+                            filters.pop().unwrap().unwrap()
+                        })
+                    }
+                })
+                .transpose()?
+                // we need to own the filter because it's sent to spawn_blocking
+                .map(|f| f.into_owned())
+        }
+        None => None,
+    };
+
     let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
         let deadline = index_cloned
             .search_deadline(&rtxn)
@@ -364,6 +397,7 @@ async fn process_search_request(
             &index_cloned,
             &rtxn,
             &query,
+            filter,
             &search_kind,
             deadline,
             features,

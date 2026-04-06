@@ -15,6 +15,7 @@ use meilisearch_types::Index;
 use roaring::RoaringBitmap;
 
 use super::create_batch::{DocumentOperation, IndexOperation};
+use crate::filter::filter_into_index_filter;
 use crate::processing::{
     DocumentDeletionProgress, DocumentEditionProgress, DocumentOperationProgress, SettingsProgress,
 };
@@ -222,9 +223,15 @@ impl IndexScheduler {
                 };
 
                 let candidates = match filter.as_ref().map(Filter::from_json) {
-                    Some(Ok(Some(filter))) => filter
-                        .evaluate(index_wtxn, index)
-                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    Some(Ok(Some(filter))) => {
+                        let filter = filter_into_index_filter(
+                            filter, index, index_wtxn, self, progress, &index_uid,
+                        )?;
+
+                        filter
+                            .evaluate(index_wtxn, index)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?
+                    }
                     None | Some(Ok(None)) => index.documents_ids(index_wtxn)?,
                     Some(Err(e)) => return Err(Error::from_milli(e, Some(index_uid.clone()))),
                 };
@@ -381,6 +388,9 @@ impl IndexScheduler {
                                 }
                             };
                             if let Some(filter) = filter {
+                                let filter = filter_into_index_filter(
+                                    filter, index, index_wtxn, self, progress, index_uid,
+                                )?;
                                 let candidates = filter
                                     .evaluate(index_wtxn, index)
                                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())));
