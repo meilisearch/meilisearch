@@ -1,8 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use index_scheduler::filter::{
-    ForeignIndexUid, ForeignKeysPerIndex, SourceIndexUid,
-};
+use index_scheduler::filter::{ForeignIndexUid, ForeignKeysPerIndex, SourceIndexUid};
 use index_scheduler::IndexScheduler;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::RoTxn;

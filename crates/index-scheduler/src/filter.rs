@@ -117,7 +117,9 @@ pub fn filters_into_index_filters<'a>(
     for (i, (source_index_uid, filter)) in foreign_filters.iter().enumerate() {
         let Some(FilterCondition::Foreign { fid, .. }) = filter else { unreachable!() };
         let foreign_keys = foreign_keys_per_index.get(source_index_uid).ok_or(Error::Milli {
-            error: milli::Error::UserError(milli::UserError::InvalidFilter("Index does not have foreign keys".to_string())),
+            error: milli::Error::UserError(milli::UserError::InvalidFilter(
+                "Index does not have foreign keys".to_string(),
+            )),
             index_uid: Some(source_index_uid.as_ref().to_string()),
         })?;
 

@@ -63,8 +63,8 @@ use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, Deadline, DocumentId, FieldId, Index, Member, PinDoc, Result,
-    TermsMatchingStrategy, UserError, Weight,
+    AscDesc, Deadline, DocumentId, FieldId, Index, Member, PinDoc, Result, TermsMatchingStrategy,
+    UserError, Weight,
 };
 
 /// Cache for synonyms to avoid repeated database access
