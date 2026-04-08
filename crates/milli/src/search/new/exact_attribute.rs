@@ -7,7 +7,7 @@ use crate::score_details::{self, ScoreDetails};
 use crate::search::new::query_graph::QueryNodeData;
 use crate::search::new::query_term::ExactTerm;
 use crate::search::new::ranking_rules::RankingRuleId;
-use crate::{CboRoaringBitmapCodec, Deadline, Result, SearchContext, SearchLogger};
+use crate::{DeCboRoaringBitmapCodec, Deadline, Result, SearchContext, SearchLogger};
 
 /// A ranking rule that produces 3 disjoint buckets:
 ///
@@ -194,6 +194,7 @@ impl State {
         let searchable_fields_ids = ctx.index.searchable_fields_ids(ctx.txn)?;
 
         let mut candidates_per_attribute = Vec::with_capacity(searchable_fields_ids.len());
+        let mut tmp_buffer = Vec::new();
         // then check that there exists at least one attribute that has all of the terms
         for fid in searchable_fields_ids {
             let intersection = MultiOps::intersection(
@@ -219,9 +220,11 @@ impl State {
                         .get(ctx.txn, &(fid, count_all_positions as u8))?;
 
                     match bitmap_bytes {
-                        Some(bytes) => {
-                            CboRoaringBitmapCodec::intersection_with_serialized(bytes, universe)?
-                        }
+                        Some(bytes) => DeCboRoaringBitmapCodec::intersection_with_serialized(
+                            bytes,
+                            universe,
+                            &mut tmp_buffer,
+                        )?,
                         None => RoaringBitmap::default(),
                     }
                 } else {

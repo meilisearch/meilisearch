@@ -29,7 +29,7 @@ use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::db::{EmbeddingStatusDelta, IndexEmbeddingConfig};
 use crate::vector::VectorStore;
 use crate::{
-    lat_lng_to_xyz, CboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
+    lat_lng_to_xyz, DeCboRoaringBitmapCodec, DocumentId, FieldId, GeoPoint, Index, InternalError,
     Result, SerializationError, U8StrStrCodec, UserError,
 };
 
@@ -866,7 +866,7 @@ where
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::write_db")]
 fn write_proximity_entries_into_database_additional_searchables<R, MF>(
     merger: Merger<R, MF>,
-    database: &heed::Database<U8StrStrCodec, CboRoaringBitmapCodec>,
+    database: &heed::Database<U8StrStrCodec, DeCboRoaringBitmapCodec>,
     wtxn: &mut RwTxn<'_>,
 ) -> Result<()>
 where
@@ -881,7 +881,7 @@ where
                 U8StrStrCodec::bytes_decode(key).map_err(heed::Error::Decoding)?;
             let data_to_insert = match KvReaderDelAdd::from_slice(value).get(DelAdd::Addition) {
                 Some(value) => {
-                    CboRoaringBitmapCodec::bytes_decode(value).map_err(heed::Error::Decoding)?
+                    DeCboRoaringBitmapCodec::bytes_decode(value).map_err(heed::Error::Decoding)?
                 }
                 None => continue,
             };

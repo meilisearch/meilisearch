@@ -19,7 +19,7 @@ use crate::facet::value_encoding::f64_into_bytes;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd, KvWriterDelAdd};
 use crate::update::index_documents::{create_writer, writer_into_reader};
 use crate::update::settings::InnerIndexSettingsDiff;
-use crate::{CboRoaringBitmapCodec, DocumentId, FieldId, Result, MAX_FACET_VALUE_LENGTH};
+use crate::{DeCboRoaringBitmapCodec, DocumentId, FieldId, Result, MAX_FACET_VALUE_LENGTH};
 
 /// The length of the elements that are always in the buffer when inserting new values.
 const TRUNCATE_SIZE: usize = size_of::<FieldId>() + size_of::<DocumentId>();
@@ -311,8 +311,8 @@ fn deladd_obkv_cbo_roaring_bitmaps(
 ) -> io::Result<()> {
     buffer.clear();
     let mut obkv = KvWriterDelAdd::new(buffer);
-    let del_bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(del_bitmap).unwrap();
-    let add_bitmap_bytes = CboRoaringBitmapCodec::bytes_encode(add_bitmap).unwrap();
+    let del_bitmap_bytes = DeCboRoaringBitmapCodec::bytes_encode(del_bitmap).unwrap();
+    let add_bitmap_bytes = DeCboRoaringBitmapCodec::bytes_encode(add_bitmap).unwrap();
     obkv.insert(DelAdd::Deletion, del_bitmap_bytes)?;
     obkv.insert(DelAdd::Addition, add_bitmap_bytes)?;
     obkv.finish()

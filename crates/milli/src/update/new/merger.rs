@@ -14,7 +14,7 @@ use super::extract::{
     FacetKind, GeoExtractorData,
 };
 use crate::update::facet::new_incremental::FacetFieldIdChange;
-use crate::{CboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, Result};
+use crate::{DeCboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, Result};
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
 pub fn merge_and_send_rtree<'extractor, MSP>(
@@ -344,7 +344,7 @@ fn merge_cbo_bitmaps(
 ) -> Result<Operation> {
     use EntryStatus::{Created, Updated};
 
-    let current = current.map(CboRoaringBitmapCodec::deserialize_from).transpose()?;
+    let current = current.map(DeCboRoaringBitmapCodec::deserialize_from).transpose()?;
     match (current, del, add) {
         (None, None, None) => Ok(Operation::Ignore), // but it's strange
         (None, None, Some(add)) => Ok(Operation::Write { bitmap: add, status: Created }),

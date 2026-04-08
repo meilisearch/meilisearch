@@ -8,7 +8,7 @@ use heed::types::{Bytes, DecodeIgnore, Str};
 use heed::{Database, RoTxn, RwTxn};
 use roaring::RoaringBitmap;
 
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::{DeCboRoaringBitmapCodec, Index, Result};
 
 #[derive(Debug, Clone)]
 pub struct Shards(Vec<Shard>);
@@ -27,7 +27,7 @@ impl Shards {
 }
 
 /// View over the `shard_docids` DB of an index
-pub struct DbShardDocids(Database<Str, CboRoaringBitmapCodec>);
+pub struct DbShardDocids(Database<Str, DeCboRoaringBitmapCodec>);
 
 impl DbShardDocids {
     /// Create the view from the index.
@@ -48,7 +48,12 @@ impl DbShardDocids {
     ) -> Result<Option<RoaringBitmap>> {
         let db = self.0.remap_data_type::<Bytes>();
         let Some(docids) = db.get(rtxn, shard)? else { return Ok(None) };
-        Ok(Some(CboRoaringBitmapCodec::intersection_with_serialized(docids, universe)?))
+        let mut tmp_buffer = Vec::new();
+        Ok(Some(DeCboRoaringBitmapCodec::intersection_with_serialized(
+            docids,
+            universe,
+            &mut tmp_buffer,
+        )?))
     }
 
     pub fn docids(&self, rtxn: &RoTxn<'_>, shard: &str) -> Result<Option<RoaringBitmap>> {

@@ -10,7 +10,7 @@ use crate::heed_codec::facet::{
     FacetGroupKey, FacetGroupKeyCodec, FacetGroupLazyValueCodec, FacetGroupValueCodec,
 };
 use crate::heed_codec::BytesRefCodec;
-use crate::{CboRoaringBitmapCodec, DocumentId};
+use crate::{DeCboRoaringBitmapCodec, DocumentId};
 
 /// Call the given closure on the facet distribution of the candidate documents.
 ///
@@ -81,6 +81,7 @@ where
         // We first fill the heap with values from the highest level
         let starting_key =
             FacetGroupKey { field_id, level: highest_level, left_bound: first_bound };
+        let mut tmp_buffer = Vec::new();
         for el in db.range(rtxn, &(&starting_key..))?.take(usize::MAX) {
             let (key, value) = el?;
             // The range is unbounded on the right and the group size for the highest level is MAX,
@@ -88,9 +89,10 @@ where
             if key.field_id != field_id {
                 break;
             }
-            let intersection = CboRoaringBitmapCodec::intersection_with_serialized(
+            let intersection = DeCboRoaringBitmapCodec::intersection_with_serialized(
                 value.bitmap_bytes,
                 candidates,
+                &mut tmp_buffer,
             )?;
             let count = intersection.len();
             if count != 0 {
@@ -120,9 +122,10 @@ where
                     if key.field_id != field_id {
                         break;
                     }
-                    let intersection = CboRoaringBitmapCodec::intersection_with_serialized(
+                    let intersection = DeCboRoaringBitmapCodec::intersection_with_serialized(
                         value.bitmap_bytes,
                         candidates,
+                        &mut tmp_buffer,
                     )?;
                     let count = intersection.len();
                     if count != 0 {
@@ -165,6 +168,7 @@ where
     ) -> Result<ControlFlow<()>> {
         let starting_key =
             FacetGroupKey { field_id: self.field_id, level: 0, left_bound: starting_bound };
+        let mut tmp_buffer = Vec::new();
         let iter = self.db.range(self.rtxn, &(starting_key..))?.take(group_size);
         for el in iter {
             let (key, value) = el?;
@@ -173,9 +177,10 @@ where
             if key.field_id != self.field_id {
                 return Ok(ControlFlow::Break(()));
             }
-            let docids_in_common = CboRoaringBitmapCodec::intersection_with_serialized(
+            let docids_in_common = DeCboRoaringBitmapCodec::intersection_with_serialized(
                 value.bitmap_bytes,
                 candidates,
+                &mut tmp_buffer,
             )?;
             if !docids_in_common.is_empty() {
                 let any_docid_in_common = docids_in_common.min().unwrap();
@@ -201,6 +206,7 @@ where
         }
         let starting_key =
             FacetGroupKey { field_id: self.field_id, level, left_bound: starting_bound };
+        let mut tmp_buffer = Vec::new();
         let iter = self.db.range(self.rtxn, &(&starting_key..))?.take(group_size);
 
         for el in iter {
@@ -210,9 +216,10 @@ where
             if key.field_id != self.field_id {
                 return Ok(ControlFlow::Break(()));
             }
-            let docids_in_common = CboRoaringBitmapCodec::intersection_with_serialized(
+            let docids_in_common = DeCboRoaringBitmapCodec::intersection_with_serialized(
                 value.bitmap_bytes,
                 candidates,
+                &mut tmp_buffer,
             )?;
             if !docids_in_common.is_empty() {
                 let cf = self.iterate(

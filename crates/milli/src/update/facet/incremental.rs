@@ -16,7 +16,7 @@ use crate::search::facet::get_highest_level;
 use crate::update::del_add::DelAdd;
 use crate::update::index_documents::valid_lmdb_key;
 use crate::update::MergeDeladdCboRoaringBitmaps;
-use crate::{CboRoaringBitmapCodec, Index, Result};
+use crate::{DeCboRoaringBitmapCodec, Index, Result};
 
 /// Enum used as a return value for the facet incremental indexing.
 ///
@@ -112,13 +112,13 @@ impl FacetsUpdateIncremental {
             let value = KvReader::from_slice(value);
             let docids_to_delete = value
                 .get(DelAdd::Deletion)
-                .map(CboRoaringBitmapCodec::bytes_decode)
+                .map(DeCboRoaringBitmapCodec::bytes_decode)
                 .map(|o| o.map_err(heed::Error::Encoding))
                 .transpose()?;
 
             let docids_to_add = value
                 .get(DelAdd::Addition)
-                .map(CboRoaringBitmapCodec::bytes_decode)
+                .map(DeCboRoaringBitmapCodec::bytes_decode)
                 .map(|o| o.map_err(heed::Error::Encoding))
                 .transpose()?;
 

@@ -10,7 +10,7 @@ use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::heed::CompactionOption;
 use meilisearch_types::milli::progress::{Progress, VariableNameStep};
-use meilisearch_types::milli::{self, CboRoaringBitmapCodec, ChannelCongestion};
+use meilisearch_types::milli::{self, ChannelCongestion, DeCboRoaringBitmapCodec};
 use meilisearch_types::network::Network;
 use meilisearch_types::tasks::{Details, IndexSwap, Kind, KindWithContent, Status, Task};
 use meilisearch_types::versioning::{VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
@@ -716,7 +716,7 @@ impl IndexScheduler {
         fn remove_task_datetimes(
             wtxn: &mut RwTxn<'_>,
             mut to_remove: HashMap<i128, RoaringBitmap>,
-            db: Database<BEI128, CboRoaringBitmapCodec>,
+            db: Database<BEI128, DeCboRoaringBitmapCodec>,
         ) -> Result<()> {
             let Some((&min, &max)) = to_remove.keys().min().zip(to_remove.keys().max()) else {
                 return Ok(());
@@ -766,7 +766,7 @@ impl IndexScheduler {
         fn remove_batch_datetimes(
             wtxn: &mut RwTxn<'_>,
             to_remove: &RoaringBitmap,
-            db: Database<BEI128, CboRoaringBitmapCodec>,
+            db: Database<BEI128, DeCboRoaringBitmapCodec>,
         ) -> Result<()> {
             if to_remove.is_empty() {
                 return Ok(());
