@@ -552,6 +552,8 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             .map(|x| FromStr::from_str(&x.into_string().unwrap()).unwrap())
             .unwrap_or(false),
             experimental_no_edition_2024_for_dumps: false,
+            // It has no effect to set the delta encoding here as the toggle is done in try_main
+            experimental_disable_delta_encoding: false,
         },
         experimental_enable_metrics: false,
         experimental_allowed_ip_networks: vec![cidr::AnyIpCidr::Any],
