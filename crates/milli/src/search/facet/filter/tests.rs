@@ -609,3 +609,113 @@ fn filter_number() {
     let result = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap();
     assert_eq!(result, RoaringBitmap::from_iter((0..100).filter(|x| x % 10 != 0)));
 }
+
+#[test]
+fn test_serialize_index_filter_to_filter_string() {
+    use crate::search::facet::filter::index_filter::serialize_index_filter_to_filter_string;
+
+    // Simple equal
+    let filter = Filter::from_str("price = 42").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"'price' = '42'"#);
+
+    // Simple range
+    let filter = Filter::from_str("id 1 TO 10").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"'id' '1' TO '10'"#);
+
+    // Not equal
+    let filter = Filter::from_str("name != 'Alice'").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"'name' != 'Alice'"#);
+
+    // Contains
+    let filter = Filter::from_str("description CONTAINS 'rust'").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"'description' CONTAINS 'rust'"#);
+
+    // Null
+    let filter = Filter::from_str("deleted IS NULL").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"'deleted' IS NULL"#);
+
+    // Exists
+    let filter = Filter::from_str("deleted EXISTS").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"'deleted' EXISTS"#);
+
+    // AND
+    let filter = Filter::from_str("foo = bar AND fizz = buzz").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"('foo' = 'bar') AND ('fizz' = 'buzz')"#);
+
+    // OR
+    let filter = Filter::from_str("foo = bar OR fizz = buzz").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"('foo' = 'bar') OR ('fizz' = 'buzz')"#);
+
+    // Nested AND/OR
+    let filter = Filter::from_str("(foo = bar OR abc = xyz) AND count < 100").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"(('foo' = 'bar') OR ('abc' = 'xyz')) AND ('count' < '100')"#);
+
+    // Vector exists
+    let filter =
+        Filter::from_str(r#"_vectors."my_embedder".fragments."frag" EXISTS"#).unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"_vectors."my_embedder".fragments."frag" EXISTS"#);
+
+    // _geoRadius
+    let filter = Filter::from_str("_geoRadius(1.1, 2.2, 3.3)").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"_geoRadius(1.1, 2.2, 3.3)"#);
+
+    // _geoBoundingBox
+    let filter = Filter::from_str("_geoBoundingBox([1, 2], [3, 4])").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @r#"_geoBoundingBox([1, 2], [3, 4])"#);
+
+    // _geoPolygon
+    let filter = Filter::from_str("_geoPolygon([1, 2], [3, 4], [5, 6])").unwrap().unwrap();
+    let index_filter = IndexFilter::from(filter);
+    let serialized = serialize_index_filter_to_filter_string(&index_filter).unwrap();
+    // ensure we can deserialize the serialized filter
+    let _ = Filter::from_str(&serialized).unwrap().unwrap();
+    insta::assert_snapshot!(serialized, @"_geoPolygon([1, 2], [3, 4], [5, 6])");
+}

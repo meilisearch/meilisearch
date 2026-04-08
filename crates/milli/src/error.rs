@@ -108,6 +108,8 @@ pub enum SerializationError {
     Encoding { db_name: Option<&'static str> },
     #[error("number is not a valid finite number")]
     InvalidNumberSerialization,
+    #[error("failed to serialize index filter to filter string")]
+    FailedToSerializeFilter,
 }
 
 impl From<cellulite::Error> for Error {

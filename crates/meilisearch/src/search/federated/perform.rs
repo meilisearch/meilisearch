@@ -41,8 +41,8 @@ use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
 use meilisearch_types::milli::vector::Embedding;
 use meilisearch_types::milli::{
-    self, merge_positioned_hits_into_page, Deadline, DocumentId, FederatingResultsStep,
-    IndexFilter, OrderBy, DEFAULT_VALUES_PER_FACET,
+    self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, Deadline,
+    DocumentId, FederatingResultsStep, IndexFilter, OrderBy, DEFAULT_VALUES_PER_FACET,
 };
 use meilisearch_types::network::{Network, Remote};
 use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
@@ -1076,9 +1076,11 @@ impl PartitionedQueries {
                                 };
 
                                 // Insert back the filter into the query as a string before sending it to the remote
-                                query.filter = precomputed_filter
-                                    .as_ref()
-                                    .map(|f| serde_json::Value::String(f.condition.to_string()));
+                                query.filter = precomputed_filter.as_ref().map(|f| {
+                                    serde_json::Value::String(
+                                        serialize_index_filter_to_filter_string(f).unwrap(),
+                                    )
+                                });
 
                                 let query = SearchQueryWithIndex::from_index_query_federation(
                                     index_uid,

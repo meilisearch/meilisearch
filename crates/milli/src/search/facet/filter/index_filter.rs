@@ -1,9 +1,9 @@
 use std::borrow::Cow;
-use std::fmt::Debug;
+use std::fmt::{Debug, Write as FmtWrite};
 use std::ops::Bound::{self, Excluded, Included, Unbounded};
 
 pub use filter_parser::Condition;
-use filter_parser::IndexFilterCondition;
+use filter_parser::{IndexFilterCondition, VectorFilter};
 use heed::types::LazyDecode;
 use heed::BytesEncode;
 use memchr::memmem::Finder;
@@ -813,5 +813,140 @@ fn generate_filter_error(
             })
         }
         Err(e) => e.into(),
+    }
+}
+
+pub fn serialize_index_filter_to_filter_string(filter: &IndexFilter<'_>) -> Result<String> {
+    let mut s = String::new();
+    serialize_index_filter_condition(&mut s, &filter.condition)
+        .map_err(|_| SerializationError::FailedToSerializeFilter)?;
+    Ok(s)
+}
+
+fn serialize_index_filter_condition(
+    f: &mut impl FmtWrite,
+    condition: &IndexFilterCondition<'_>,
+) -> std::fmt::Result {
+    match condition {
+        IndexFilterCondition::Not(filter) => {
+            write!(f, "NOT (")?;
+            serialize_index_filter_condition(f, filter)?;
+            write!(f, ")")?;
+        }
+        IndexFilterCondition::Condition { fid, op } => {
+            write!(f, "'{}' ", fid.fragment())?;
+            serialize_condition(f, op)?;
+        }
+        IndexFilterCondition::In { fid, els } => {
+            write!(f, "'{}' IN [", fid.fragment())?;
+            for (i, el) in els.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "'{}'", el.fragment())?;
+            }
+            write!(f, "]")?;
+        }
+        IndexFilterCondition::Or(els) => {
+            for (i, el) in els.iter().enumerate() {
+                if i > 0 {
+                    write!(f, " OR ")?;
+                }
+                write!(f, "(")?;
+                serialize_index_filter_condition(f, el)?;
+                write!(f, ")")?;
+            }
+        }
+        IndexFilterCondition::And(els) => {
+            for (i, el) in els.iter().enumerate() {
+                if i > 0 {
+                    write!(f, " AND ")?;
+                }
+                write!(f, "(")?;
+                serialize_index_filter_condition(f, el)?;
+                write!(f, ")")?;
+            }
+        }
+        IndexFilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
+            write!(f, "_vectors")?;
+            if let Some(embedder) = embedder {
+                write!(f, ".{:?}", embedder.fragment())?;
+            }
+            match inner {
+                VectorFilter::Fragment(fragment) => {
+                    write!(f, ".fragments.{:?}", fragment.fragment())?
+                }
+                VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
+                VectorFilter::UserProvided => write!(f, ".userProvided")?,
+                VectorFilter::Regenerate => write!(f, ".regenerate")?,
+                VectorFilter::None => (),
+            }
+            write!(f, " EXISTS")?;
+        }
+        IndexFilterCondition::GeoLowerThan { point, radius, resolution: None } => {
+            write!(
+                f,
+                "_geoRadius({}, {}, {})",
+                point[0].fragment(),
+                point[1].fragment(),
+                radius.fragment()
+            )?;
+        }
+        IndexFilterCondition::GeoLowerThan { point, radius, resolution: Some(resolution) } => {
+            write!(
+                f,
+                "_geoRadius({}, {}, {}, {})",
+                point[0].fragment(),
+                point[1].fragment(),
+                radius.fragment(),
+                resolution.fragment()
+            )?;
+        }
+        IndexFilterCondition::GeoBoundingBox {
+            top_right_point: top_left_point,
+            bottom_left_point: bottom_right_point,
+        } => {
+            write!(
+                f,
+                "_geoBoundingBox([{}, {}], [{}, {}])",
+                top_left_point[0].fragment(),
+                top_left_point[1].fragment(),
+                bottom_right_point[0].fragment(),
+                bottom_right_point[1].fragment()
+            )?;
+        }
+        IndexFilterCondition::GeoPolygon { points } => {
+            write!(f, "_geoPolygon(")?;
+            for (i, point) in points.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "[{}, {}]", point[0].fragment(), point[1].fragment())?;
+            }
+            write!(f, ")")?;
+        }
+    }
+
+    Ok(())
+}
+
+fn serialize_condition(f: &mut impl FmtWrite, condition: &Condition<'_>) -> std::fmt::Result {
+    match condition {
+        Condition::GreaterThan(token) => write!(f, "> '{}'", token.fragment()),
+        Condition::GreaterThanOrEqual(token) => write!(f, ">= '{}'", token.fragment()),
+        Condition::Equal(token) => write!(f, "= '{}'", token.fragment()),
+        Condition::NotEqual(token) => write!(f, "!= '{}'", token.fragment()),
+        Condition::Null => write!(f, "IS NULL"),
+        Condition::Empty => write!(f, "IS EMPTY"),
+        Condition::Exists => write!(f, "EXISTS"),
+        Condition::LowerThan(token) => write!(f, "< '{}'", token.fragment()),
+        Condition::LowerThanOrEqual(token) => write!(f, "<= '{}'", token.fragment()),
+        Condition::Between { from, to } => {
+            write!(f, "'{}' TO '{}'", from.fragment(), to.fragment())
+        }
+        Condition::Contains { word, keyword: _ } => write!(f, "CONTAINS '{}'", word.fragment()),
+        Condition::StartsWith { word, keyword: _ } => {
+            write!(f, "STARTS WITH '{}'", word.fragment())
+        }
     }
 }

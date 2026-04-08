@@ -7,7 +7,7 @@ use super::facet_range_search;
 use crate::error::{Error, UserError};
 
 mod index_filter;
-pub use self::index_filter::IndexFilter;
+pub use self::index_filter::{serialize_index_filter_to_filter_string, IndexFilter};
 mod parser;
 mod vector;
 

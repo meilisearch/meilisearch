@@ -6,7 +6,10 @@ use levenshtein_automata::{LevenshteinAutomatonBuilder as LevBuilder, DFA};
 use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
-pub use self::facet::{FacetDistribution, Filter, IndexFilter, OrderBy, DEFAULT_VALUES_PER_FACET};
+pub use self::facet::{
+    serialize_index_filter_to_filter_string, FacetDistribution, Filter, IndexFilter, OrderBy,
+    DEFAULT_VALUES_PER_FACET,
+};
 pub use self::new::matches::{FormatOptions, MatchBounds, MatcherBuilder, MatchingWords};
 use self::new::{execute_vector_search, PartialSearchResult, VectorStoreStats};
 use crate::documents::GeoSortParameter;
