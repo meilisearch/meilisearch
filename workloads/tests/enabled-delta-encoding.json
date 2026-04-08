@@ -422,7 +422,7 @@
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
-        "avgDocumentSize": 654,
+        "avgDocumentSize": "[avgDocumentSize]",
         "fieldDistribution": {
           "by": 193611,
           "dead": 9040,

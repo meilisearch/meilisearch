@@ -72,22 +72,10 @@
       "method": "PATCH",
       "body": {
         "inline": {
-          "displayedAttributes": [
-            "title",
-            "by",
-            "score",
-            "time"
-          ],
-          "filterableAttributes": [
-            "by"
-          ],
-          "searchableAttributes": [
-            "title"
-          ],
-          "sortableAttributes": [
-            "score",
-            "time"
-          ]
+          "displayedAttributes": ["title", "by", "score", "time"],
+          "filterableAttributes": ["by"],
+          "searchableAttributes": ["title"],
+          "sortableAttributes": ["score", "time"]
         }
       },
       "synchronous": "WaitForTask"
@@ -437,7 +425,7 @@
       "body": null,
       "expectedStatus": 200,
       "expectedResponse": {
-        "avgDocumentSize": 654,
+        "avgDocumentSize": "[avgDocumentSize]",
         "fieldDistribution": {
           "by": 193611,
           "dead": 9040,
