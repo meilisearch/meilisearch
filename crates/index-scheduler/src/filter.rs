@@ -138,7 +138,7 @@ pub fn filters_into_index_filters<'a>(
     }
 
     // open each foreign index once and process the filters
-    // TODO: do remote document filtering here
+    // TODO: do remote document filtering here (linear: EXP-1027)
     // local
     for (foreign_index_uid, filter_indices) in filters_per_foreign_index.iter() {
         let foreign_index = index_scheduler.index(foreign_index_uid.as_ref())?;
