@@ -1292,7 +1292,7 @@ where
     T: AsRef<OsStr>,
 {
     if let Err(VarError::NotPresent) = std::env::var(key) {
-        std::env::set_var(key, value);
+        unsafe { std::env::set_var(key, value) }
     }
 }
 

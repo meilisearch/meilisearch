@@ -5,6 +5,10 @@ use roaring::RoaringBitmap;
 
 use crate::heed_codec::BytesDecodeOwned;
 
+/// A codec that encodes and decodes RoaringBitmaps using the default codec.
+///
+/// This codec is here more for retrocompatibility with previous engine versions
+/// as it is less performant than the equivalent DeCboRoaringBitmapCodec.
 pub struct RoaringBitmapCodec;
 
 impl heed::BytesDecode<'_> for RoaringBitmapCodec {

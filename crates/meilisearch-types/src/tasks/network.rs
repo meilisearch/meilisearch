@@ -602,7 +602,8 @@ impl Serialize for TaskKeys {
     {
         let TaskKeys(task_keys) = self;
         let mut bytes = Vec::new();
-        CboRoaringBitmapCodec::serialize_into_vec(task_keys, &mut bytes);
+        DeCboRoaringBitmapCodec::serialize_into(task_keys, &mut bytes)
+            .map_err(serde::ser::Error::custom)?;
         let encoded = base64::prelude::BASE64_STANDARD.encode(&bytes);
         serializer.serialize_str(&encoded)
     }

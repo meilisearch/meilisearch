@@ -122,8 +122,8 @@ pub fn fill_cache(
 
         let mut documents = geo_candidates
             .iter()
-            .map(|id| -> crate::Result<_> { Ok((id, geo_value(id, lat, lng, index, txn)?)) })
-            .collect::<crate::Result<Vec<(u32, [f64; 2])>>>()?;
+            .map(|id| Ok((id, geo_value(id, lat, lng, index, txn)?)))
+            .collect::<crate::Result<Vec<_>>>()?;
         // computing the distance between two points is expensive thus we cache the result
         documents
             .sort_by_cached_key(|(_, p)| distance_between_two_points(&target_point, p) as usize);
