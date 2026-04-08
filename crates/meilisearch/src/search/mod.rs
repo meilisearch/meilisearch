@@ -1624,19 +1624,16 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prepare_search<'t, 'q>(
+pub fn prepare_search<'t>(
     index: &'t Index,
     rtxn: &'t RoTxn,
-    query: &'q SearchQuery,
-    filter: Option<IndexFilter<'q>>,
+    query: &'t SearchQuery,
+    filter: Option<IndexFilter<'t>>,
     search_kind: &SearchKind,
     deadline: Deadline,
     features: RoFeatures,
     progress: &'t Progress,
-) -> Result<(milli::Search<'q>, bool, usize, usize), ResponseError>
-where
-    't: 'q,
-{
+) -> Result<(milli::Search<'t>, bool, usize, usize), ResponseError> {
     if query.media.is_some() {
         features.check_multimodal("passing `media` in a search query")?;
     }
