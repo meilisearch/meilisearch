@@ -1654,7 +1654,7 @@ pub fn prepare_search<'t>(
             let vector = match query.vector.clone() {
                 Some(vector) => vector,
                 None => {
-                    let _step = progress.update_progress_scoped(SearchStep::Embed);
+                    let _step = progress.update_progress_scoped(SearchStep::EmbedQuery);
                     let span = tracing::trace_span!(target: "search::vector", "embed_one");
                     let _entered = span.enter();
 

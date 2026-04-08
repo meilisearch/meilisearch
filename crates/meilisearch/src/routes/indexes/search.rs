@@ -546,7 +546,7 @@ pub async fn search_with_url_query(
     let request_uid = Uuid::now_v7();
     debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
     let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -749,7 +749,7 @@ pub async fn search_with_post(
     let request_uid = Uuid::now_v7();
 
     let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
 

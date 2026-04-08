@@ -350,7 +350,7 @@ async fn process_search_request(
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
 
-    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
     let features = index_scheduler.features();
