@@ -369,7 +369,7 @@ mod tests {
             let rhs = RoaringBitmap::from_iter(rhs);
             DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(&lhs, &mut compressed, &mut tmp_buffer).unwrap();
 
-            let intersection = DeCboRoaringBitmapCodec::intersection_with_serialized(&compressed, &rhs).unwrap();
+            let intersection = DeCboRoaringBitmapCodec::intersection_with_serialized(&compressed, &rhs, &mut tmp_buffer).unwrap();
             let expected_intersection = lhs & rhs;
 
             intersection == expected_intersection
