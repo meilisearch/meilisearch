@@ -75,7 +75,7 @@ jobs:
           cargo xtask bench --api-key "${{ secrets.BENCHMARK_API_KEY }}" \
              --dashboard-url "${{ vars.BENCHMARK_DASHBOARD_URL }}" \
              --reason "[Comment](${{ github.event.comment.html_url }}) on [#${{ github.event.issue.number }}](${{ github.event.issue.html_url }})" \
-             -- "$BENCH_ARGS" > benchlinks.txt
+             -- $BENCH_ARGS > benchlinks.txt
 
       - name: Send comment in PR
         run: |
