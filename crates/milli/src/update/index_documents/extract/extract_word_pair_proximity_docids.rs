@@ -7,7 +7,7 @@ use obkv::KvReaderU16;
 
 use super::helpers::{
     create_sorter, create_writer, try_split_array_at, writer_into_reader, GrenadParameters,
-    MergeDeladdCboRoaringBitmaps,
+    MergeDeladdDeCboRoaringBitmaps,
 };
 use crate::error::SerializationError;
 use crate::index::db_name::DOCID_WORD_POSITIONS;
@@ -44,7 +44,7 @@ pub fn extract_word_pair_proximity_docids<R: io::Read + io::Seek>(
         .map(|_| {
             create_sorter(
                 grenad::SortAlgorithm::Unstable,
-                MergeDeladdCboRoaringBitmaps,
+                MergeDeladdDeCboRoaringBitmaps,
                 indexer.chunk_compression_type,
                 indexer.chunk_compression_level,
                 indexer.max_nb_chunks,
@@ -198,7 +198,7 @@ fn document_word_positions_into_sorter(
     document_id: DocumentId,
     del_word_pair_proximity: &BTreeMap<(String, String), u8>,
     add_word_pair_proximity: &BTreeMap<(String, String), u8>,
-    word_pair_proximity_docids_sorters: &mut [grenad::Sorter<MergeDeladdCboRoaringBitmaps>],
+    word_pair_proximity_docids_sorters: &mut [grenad::Sorter<MergeDeladdDeCboRoaringBitmaps>],
 ) -> Result<()> {
     use itertools::merge_join_by;
     use itertools::EitherOrBoth::{Both, Left, Right};
