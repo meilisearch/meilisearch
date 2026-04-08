@@ -3,7 +3,7 @@ use std::mem;
 use heed::{BoxedError, BytesDecode};
 
 use super::{BoRoaringBitmapLenCodec, RoaringBitmapLenCodec};
-use crate::heed_codec::roaring_bitmap::cbo_roaring_bitmap_codec::THRESHOLD;
+use crate::heed_codec::roaring_bitmap::THRESHOLD;
 use crate::heed_codec::BytesDecodeOwned;
 
 pub struct CboRoaringBitmapLenCodec;
