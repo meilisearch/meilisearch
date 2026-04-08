@@ -96,7 +96,7 @@ jobs:
           BASELINE_NAME: ${{ steps.file.outputs.basename }}
         run: |
           cd crates/benchmarks
-          cargo bench --bench "$BENCH_DATASET" -- --save-baseline "$BASELINE_NAME"
+          cargo bench --bench $BENCH_DATASET -- --save-baseline "$BASELINE_NAME"
 
       # Generate critcmp files
       - name: Install critcmp
