@@ -1,0 +1,685 @@
+{
+  "type": "test",
+  "name": "movies",
+  "binary": {
+    "source": "release",
+    "edition": "community",
+    "version": "1.12.0"
+  },
+  "assets": {
+    "hackernews-100_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-100_000.ndjson",
+      "sha256": "60ecd23485d560edbd90d9ca31f0e6dba1455422f2a44e402600fbb5f7f1b213"
+    },
+    "hackernews-200_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-200_000.ndjson",
+      "sha256": "785b0271fdb47cba574fab617d5d332276b835c05dd86e4a95251cf7892a1685"
+    },
+    "hackernews-300_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-300_000.ndjson",
+      "sha256": "de73c7154652eddfaf69cdc3b2f824d5c452f095f40a20a1c97bb1b5c4d80ab2"
+    },
+    "hackernews-400_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-400_000.ndjson",
+      "sha256": "c1b00a24689110f366447e434c201c086d6f456d54ed1c4995894102794d8fe7"
+    },
+    "hackernews-500_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-500_000.ndjson",
+      "sha256": "ae98f9dbef8193d750e3e2dbb6a91648941a1edca5f6e82c143e7996f4840083"
+    },
+    "hackernews-600_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-600_000.ndjson",
+      "sha256": "b495fdc72c4a944801f786400f22076ab99186bee9699f67cbab2f21f5b74dbe"
+    },
+    "hackernews-700_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-700_000.ndjson",
+      "sha256": "4b2c63974f3dabaa4954e3d4598b48324d03c522321ac05b0d583f36cb78a28b"
+    },
+    "hackernews-800_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-800_000.ndjson",
+      "sha256": "cb7b6afe0e6caa1be111be256821bc63b0771b2a0e1fad95af7aaeeffd7ba546"
+    },
+    "hackernews-900_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-900_000.ndjson",
+      "sha256": "e1154ddcd398f1c867758a93db5bcb21a07b9e55530c188a2917fdef332d3ba9"
+    },
+    "hackernews-1_000_000.ndjson": {
+      "local_location": null,
+      "remote_location": "https://milli-benchmarks.fra1.digitaloceanspaces.com/bench/datasets/hackernews/hackernews-1_000_000.ndjson",
+      "sha256": "27e25efd0b68b159b8b21350d9af76938710cb29ce0393fa71b41c4f3c630ffe"
+    }
+  },
+  "commands": [
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-100_000.ndjson"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/settings",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "displayedAttributes": ["title", "by", "score", "time"],
+          "filterableAttributes": ["by"],
+          "searchableAttributes": ["title"],
+          "sortableAttributes": ["score", "time"]
+        }
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-200_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "extraCliArgs": [
+          "--experimental-dumpless-upgrade",
+          "--experimental-max-number-of-batched-tasks=0"
+        ]
+      }
+    },
+    {
+      "route": "indexes/movies/search?q=bitcoin",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 77,
+        "hits": [
+          {
+            "by": "arv_coolcat",
+            "score": 1,
+            "time": 1438706951,
+            "title": "Bitcoin in India: Profitable remittance corridors worth billions"
+          },
+          {
+            "by": "edward",
+            "score": 1,
+            "time": 1438708159,
+            "title": "Bitcoin and Remittances: Can It Work?"
+          },
+          {
+            "by": "miralabs",
+            "score": 3,
+            "time": 1438709699,
+            "title": "BITCOIN USERS ARE ALL TECH ENTHUSIASTS OR CRIMINALS, STUDY CONCLUDES"
+          },
+          {
+            "by": "jsnathan",
+            "score": 1,
+            "time": 1438790075,
+            "title": "Bitcoin deemed regular currency by Australian Senate Committee"
+          },
+          {
+            "by": "RustyRussell",
+            "score": 1,
+            "time": 1438896728,
+            "title": "Bitcoin Blocksize: Debate Summary"
+          },
+          {
+            "by": "timsaunders",
+            "score": 2,
+            "time": 1439234198,
+            "title": "Bitcoin’s Largest Publicly Traded Company Bridges Gaps to the Banking Industry"
+          },
+          {
+            "by": "SQL2219",
+            "score": 3,
+            "time": 1439247642,
+            "title": "Bitcoin startup funding soars as value dives"
+          },
+          {
+            "by": "morpheous",
+            "score": 2,
+            "time": 1439372313,
+            "title": "Bitcoin startup 37 coins annouces closure"
+          },
+          {
+            "by": "gizi",
+            "score": 2,
+            "time": 1439537131,
+            "title": "Bitcoin: what exactly is money?"
+          },
+          {
+            "by": "lobo_tuerto",
+            "score": 2,
+            "time": 1439561827,
+            "title": "Bitcoin and Cryptocurrency Technologies"
+          },
+          {
+            "by": "sktrdie",
+            "score": 5,
+            "time": 1439660724,
+            "title": "Bitcoin XT (a fork of Bitcoin Core) is released with larger block size limit"
+          },
+          {
+            "by": "zmanian",
+            "score": 19,
+            "time": 1439665472,
+            "title": "Bitcoin XT Fork"
+          },
+          {
+            "by": "Andrew_Quentin",
+            "score": 60,
+            "time": 1439673485,
+            "title": "Bitcoin XT 0.11A"
+          },
+          {
+            "by": "notsony",
+            "score": 1,
+            "time": 1439687735,
+            "title": "Bitcoin Reddit moderators deleting all threads and comments about BitcoinXT"
+          },
+          {
+            "by": "doener",
+            "score": 3,
+            "time": 1439750688,
+            "title": "Bitcoin XT Fork Debate Gets Ugly, Reddit Mods Accused of Censorship"
+          },
+          {
+            "by": "doener",
+            "score": 1,
+            "time": 1439764692,
+            "title": "Bitcoin XT now running 7.5% of nodes and growing"
+          },
+          {
+            "by": "ghosh",
+            "score": 5,
+            "time": 1439792182,
+            "title": "Bitcoin creator Satoshi Nakamoto would never have qualified for a license"
+          },
+          {
+            "by": "kushti",
+            "score": 3,
+            "time": 1439822574,
+            "title": "Bitcoin 'Forked' in Controversial Bid to Resolve Scalability Question"
+          },
+          {
+            "by": "edward",
+            "score": 10,
+            "time": 1439844781,
+            "title": "Bitcoin's forked: chief scientist launches alternative proposal for the currency"
+          },
+          {
+            "by": "EthanJJackson",
+            "score": 3,
+            "time": 1439851983,
+            "title": "Bitcoin Forks"
+          }
+        ],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "bitcoin",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/stats",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "avgDocumentSize": 0,
+        "fieldDistribution": {
+          "by": 96779,
+          "dead": 4376,
+          "deleted": 2965,
+          "descendants": 14167,
+          "id": 100000,
+          "kids": 41641,
+          "parent": 81856,
+          "score": 17029,
+          "text": 91893,
+          "time": 99744,
+          "title": 17029,
+          "type": 100000,
+          "url": 16880
+        },
+        "isIndexing": false,
+        "numberOfDocuments": 100000,
+        "rawDocumentDbSize": 0
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "binary": {
+        "source": "build",
+        "edition": "community",
+        "extraCliArgs": ["--experimental-dumpless-upgrade"]
+      }
+    },
+    {
+      "route": "health",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "status": "available"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/search?q=bitcoin",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 178,
+        "hits": [
+          {
+            "by": "arv_coolcat",
+            "score": 1,
+            "time": 1438706951,
+            "title": "Bitcoin in India: Profitable remittance corridors worth billions"
+          },
+          {
+            "by": "edward",
+            "score": 1,
+            "time": 1438708159,
+            "title": "Bitcoin and Remittances: Can It Work?"
+          },
+          {
+            "by": "miralabs",
+            "score": 3,
+            "time": 1438709699,
+            "title": "BITCOIN USERS ARE ALL TECH ENTHUSIASTS OR CRIMINALS, STUDY CONCLUDES"
+          },
+          {
+            "by": "jsnathan",
+            "score": 1,
+            "time": 1438790075,
+            "title": "Bitcoin deemed regular currency by Australian Senate Committee"
+          },
+          {
+            "by": "RustyRussell",
+            "score": 1,
+            "time": 1438896728,
+            "title": "Bitcoin Blocksize: Debate Summary"
+          },
+          {
+            "by": "timsaunders",
+            "score": 2,
+            "time": 1439234198,
+            "title": "Bitcoin’s Largest Publicly Traded Company Bridges Gaps to the Banking Industry"
+          },
+          {
+            "by": "SQL2219",
+            "score": 3,
+            "time": 1439247642,
+            "title": "Bitcoin startup funding soars as value dives"
+          },
+          {
+            "by": "morpheous",
+            "score": 2,
+            "time": 1439372313,
+            "title": "Bitcoin startup 37 coins annouces closure"
+          },
+          {
+            "by": "gizi",
+            "score": 2,
+            "time": 1439537131,
+            "title": "Bitcoin: what exactly is money?"
+          },
+          {
+            "by": "lobo_tuerto",
+            "score": 2,
+            "time": 1439561827,
+            "title": "Bitcoin and Cryptocurrency Technologies"
+          },
+          {
+            "by": "sktrdie",
+            "score": 5,
+            "time": 1439660724,
+            "title": "Bitcoin XT (a fork of Bitcoin Core) is released with larger block size limit"
+          },
+          {
+            "by": "zmanian",
+            "score": 19,
+            "time": 1439665472,
+            "title": "Bitcoin XT Fork"
+          },
+          {
+            "by": "Andrew_Quentin",
+            "score": 60,
+            "time": 1439673485,
+            "title": "Bitcoin XT 0.11A"
+          },
+          {
+            "by": "notsony",
+            "score": 1,
+            "time": 1439687735,
+            "title": "Bitcoin Reddit moderators deleting all threads and comments about BitcoinXT"
+          },
+          {
+            "by": "doener",
+            "score": 3,
+            "time": 1439750688,
+            "title": "Bitcoin XT Fork Debate Gets Ugly, Reddit Mods Accused of Censorship"
+          },
+          {
+            "by": "doener",
+            "score": 1,
+            "time": 1439764692,
+            "title": "Bitcoin XT now running 7.5% of nodes and growing"
+          },
+          {
+            "by": "ghosh",
+            "score": 5,
+            "time": 1439792182,
+            "title": "Bitcoin creator Satoshi Nakamoto would never have qualified for a license"
+          },
+          {
+            "by": "kushti",
+            "score": 3,
+            "time": 1439822574,
+            "title": "Bitcoin 'Forked' in Controversial Bid to Resolve Scalability Question"
+          },
+          {
+            "by": "edward",
+            "score": 10,
+            "time": 1439844781,
+            "title": "Bitcoin's forked: chief scientist launches alternative proposal for the currency"
+          },
+          {
+            "by": "EthanJJackson",
+            "score": 3,
+            "time": 1439851983,
+            "title": "Bitcoin Forks"
+          }
+        ],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "bitcoin",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "indexes/movies/stats",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "avgDocumentSize": 654,
+        "fieldDistribution": {
+          "by": 193611,
+          "dead": 9040,
+          "deleted": 5953,
+          "descendants": 27817,
+          "id": 200000,
+          "kids": 82938,
+          "parent": 163865,
+          "parts": 2,
+          "poll": 24,
+          "score": 34058,
+          "text": 184682,
+          "time": 199564,
+          "title": 34034,
+          "type": 200000,
+          "url": 33748
+        },
+        "isIndexing": false,
+        "numberOfDocuments": 200000,
+        "numberOfEmbeddedDocuments": 0,
+        "numberOfEmbeddings": 0,
+        "rawDocumentDbSize": "[rawDbSize]"
+      },
+      "synchronous": "DontWait"
+    },
+    {
+      "route": "tasks?types=upgradeDatabase",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "from": 3,
+        "limit": 20,
+        "next": null,
+        "results": [
+          {
+            "batchUid": 2,
+            "canceledBy": null,
+            "details": {
+              "upgradeFrom": "v1.12.0",
+              "upgradeTo": "[latest]"
+            },
+            "duration": "[duration]",
+            "enqueuedAt": "[timestamp]",
+            "error": null,
+            "finishedAt": "[timestamp]",
+            "indexUid": null,
+            "startedAt": "[timestamp]",
+            "status": "succeeded",
+            "type": "upgradeDatabase",
+            "uid": 3
+          }
+        ],
+        "total": 1
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-300_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-400_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-500_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-600_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-700_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-800_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-900_000.ndjson"
+      },
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "indexes/movies/documents",
+      "method": "POST",
+      "body": {
+        "asset": "hackernews-1_000_000.ndjson"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "indexes/movies/search?q=bitcoin",
+      "method": "GET",
+      "body": null,
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "estimatedTotalHits": 871,
+        "hits": [
+          {
+            "by": "tasnim_ss",
+            "score": 8,
+            "time": 1451750817,
+            "title": "Bitcoin"
+          },
+          {
+            "by": "arv_coolcat",
+            "score": 1,
+            "time": 1438706951,
+            "title": "Bitcoin in India: Profitable remittance corridors worth billions"
+          },
+          {
+            "by": "edward",
+            "score": 1,
+            "time": 1438708159,
+            "title": "Bitcoin and Remittances: Can It Work?"
+          },
+          {
+            "by": "miralabs",
+            "score": 3,
+            "time": 1438709699,
+            "title": "BITCOIN USERS ARE ALL TECH ENTHUSIASTS OR CRIMINALS, STUDY CONCLUDES"
+          },
+          {
+            "by": "jsnathan",
+            "score": 1,
+            "time": 1438790075,
+            "title": "Bitcoin deemed regular currency by Australian Senate Committee"
+          },
+          {
+            "by": "RustyRussell",
+            "score": 1,
+            "time": 1438896728,
+            "title": "Bitcoin Blocksize: Debate Summary"
+          },
+          {
+            "by": "timsaunders",
+            "score": 2,
+            "time": 1439234198,
+            "title": "Bitcoin’s Largest Publicly Traded Company Bridges Gaps to the Banking Industry"
+          },
+          {
+            "by": "SQL2219",
+            "score": 3,
+            "time": 1439247642,
+            "title": "Bitcoin startup funding soars as value dives"
+          },
+          {
+            "by": "morpheous",
+            "score": 2,
+            "time": 1439372313,
+            "title": "Bitcoin startup 37 coins annouces closure"
+          },
+          {
+            "by": "gizi",
+            "score": 2,
+            "time": 1439537131,
+            "title": "Bitcoin: what exactly is money?"
+          },
+          {
+            "by": "lobo_tuerto",
+            "score": 2,
+            "time": 1439561827,
+            "title": "Bitcoin and Cryptocurrency Technologies"
+          },
+          {
+            "by": "sktrdie",
+            "score": 5,
+            "time": 1439660724,
+            "title": "Bitcoin XT (a fork of Bitcoin Core) is released with larger block size limit"
+          },
+          {
+            "by": "zmanian",
+            "score": 19,
+            "time": 1439665472,
+            "title": "Bitcoin XT Fork"
+          },
+          {
+            "by": "Andrew_Quentin",
+            "score": 60,
+            "time": 1439673485,
+            "title": "Bitcoin XT 0.11A"
+          },
+          {
+            "by": "notsony",
+            "score": 1,
+            "time": 1439687735,
+            "title": "Bitcoin Reddit moderators deleting all threads and comments about BitcoinXT"
+          },
+          {
+            "by": "doener",
+            "score": 3,
+            "time": 1439750688,
+            "title": "Bitcoin XT Fork Debate Gets Ugly, Reddit Mods Accused of Censorship"
+          },
+          {
+            "by": "doener",
+            "score": 1,
+            "time": 1439764692,
+            "title": "Bitcoin XT now running 7.5% of nodes and growing"
+          },
+          {
+            "by": "ghosh",
+            "score": 5,
+            "time": 1439792182,
+            "title": "Bitcoin creator Satoshi Nakamoto would never have qualified for a license"
+          },
+          {
+            "by": "kushti",
+            "score": 3,
+            "time": 1439822574,
+            "title": "Bitcoin 'Forked' in Controversial Bid to Resolve Scalability Question"
+          },
+          {
+            "by": "edward",
+            "score": 10,
+            "time": 1439844781,
+            "title": "Bitcoin's forked: chief scientist launches alternative proposal for the currency"
+          }
+        ],
+        "limit": 20,
+        "offset": 0,
+        "processingTimeMs": "[duration]",
+        "query": "bitcoin",
+        "requestUid": "[uuid]"
+      },
+      "synchronous": "DontWait"
+    }
+  ]
+}
