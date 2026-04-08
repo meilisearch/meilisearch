@@ -529,6 +529,9 @@ impl ErrorCode for milli::Error {
                 | UserError::TooManyEmbedders(_)
                 | UserError::TooManyFragments(_)
                 | UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
+                UserError::InvalidChatSettingsDocumentTemplate(_) => {
+                    Code::InvalidChatSettingDocumentTemplate
+                }
                 UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
                 UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
                     Code::IndexPrimaryKeyMultipleCandidatesFound
