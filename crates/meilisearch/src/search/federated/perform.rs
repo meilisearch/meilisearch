@@ -7,25 +7,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::vec::{IntoIter, Vec};
 
-use super::super::ranking_rules::{self, RankingRules};
-use super::super::{
-    compute_facet_distribution_stats, prepare_search, resolve_pins, AttributesFormat,
-    ComputedFacets, HitMaker, HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata,
-    SearchQuery, SearchQueryWithIndex,
-};
-use super::proxy::{proxy_search, ProxySearchError, ProxySearchParams};
-use super::types::{
-    FederatedFacets, FederatedSearchResult, Federation, FederationOptions, MergeFacets, Weight,
-    FEDERATION_HIT, FEDERATION_REMOTE, PINNED_POSITION, WEIGHTED_SCORE_VALUES,
-};
-use super::weighted_scores;
-use crate::error::MeilisearchHttpError;
-use crate::routes::indexes::search::search_kind;
-use crate::search::federated::types::{
-    FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE,
-};
-use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
-use crate::search::{parse_filter, NetworkableQuery as _, DEFAULT_SEARCH_LIMIT};
 use actix_http::StatusCode;
 use actix_web::web::Data;
 use index_scheduler::filter::{
@@ -50,6 +31,26 @@ use meilisearch_types::Document;
 use roaring::RoaringBitmap;
 use tokio::task::JoinHandle;
 use uuid::Uuid;
+
+use super::super::ranking_rules::{self, RankingRules};
+use super::super::{
+    compute_facet_distribution_stats, prepare_search, resolve_pins, AttributesFormat,
+    ComputedFacets, HitMaker, HitsInfo, RetrieveVectors, SearchHit, SearchKind, SearchMetadata,
+    SearchQuery, SearchQueryWithIndex,
+};
+use super::proxy::{proxy_search, ProxySearchError, ProxySearchParams};
+use super::types::{
+    FederatedFacets, FederatedSearchResult, Federation, FederationOptions, MergeFacets, Weight,
+    FEDERATION_HIT, FEDERATION_REMOTE, PINNED_POSITION, WEIGHTED_SCORE_VALUES,
+};
+use super::weighted_scores;
+use crate::error::MeilisearchHttpError;
+use crate::routes::indexes::search::search_kind;
+use crate::search::federated::types::{
+    FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE,
+};
+use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
+use crate::search::{parse_filter, NetworkableQuery as _, DEFAULT_SEARCH_LIMIT};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
@@ -433,7 +434,7 @@ pub async fn perform_federated_search(
         federation.show_performance_details.then(|| progress.accumulated_durations());
 
     if !network.shards.is_empty() {
-        for (remote_name, error) in &remote_errors {
+        for (remote_name, error) in remote_errors.iter().flatten() {
             if error.code.is_server_error() {
                 index_scheduler.mark_remote_unavailable(remote_name.clone())?;
             }
@@ -990,6 +991,7 @@ impl PartitionedQueries {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn partition(
         &mut self,
         federation: &mut Federation,
