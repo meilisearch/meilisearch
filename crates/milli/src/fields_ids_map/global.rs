@@ -39,6 +39,13 @@ impl LocalFieldsIdsMap {
         self.ids_names.get(&id).map(String::as_str)
     }
 
+    fn iter(&self) -> impl Iterator<Item = (FieldId, &str, Metadata)> + '_ {
+        self.metadata.iter().map(|(field_id, metadata)| {
+            let name = self.ids_names.get(field_id).unwrap();
+            (*field_id, name.as_str(), *metadata)
+        })
+    }
+
     fn id(&self, name: &str) -> Option<FieldId> {
         self.names_ids.get(name).copied()
     }
@@ -116,6 +123,21 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
         }
 
         self.local.metadata(id)
+    }
+
+    /// Iterate over all fields with their metadata.
+    ///
+    /// This first iterates over the global fields, then over
+    /// the local fields so you should take care of possible duplicates.
+    pub fn for_each_metadata(&self, mut f: impl FnMut(FieldId, &str, Metadata)) {
+        let global = self.global.read().unwrap();
+        for (field_id, field_name, metadata) in global.iter() {
+            f(field_id, field_name, metadata);
+        }
+        drop(global);
+        for (field_id, field_name, metadata) in self.local.iter() {
+            f(field_id, field_name, metadata);
+        }
     }
 }
 
