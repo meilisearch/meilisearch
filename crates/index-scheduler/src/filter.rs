@@ -60,6 +60,9 @@ impl AsRef<str> for SourceIndexUid {
 
 pub type ForeignKeysPerIndex = HashMap<SourceIndexUid, Vec<(ForeignIndexUid, SourceFieldName)>>;
 
+/// Convert a filter into an index filter by evaluating the foreign filters
+///
+/// this function is a wrapper around the `filters_into_index_filters`.
 pub fn filter_into_index_filter<'a>(
     filter: Filter<'a>,
     index: &Index,
@@ -97,6 +100,9 @@ pub fn filter_into_index_filter<'a>(
     })
 }
 
+/// Convert a vector of filters into a vector of index filters by evaluating the foreign filters
+///
+/// This function will open each foreign index once and process the filters.
 pub fn filters_into_index_filters<'a>(
     filters: Vec<(SourceIndexUid, Option<Filter<'a>>)>,
     foreign_keys_per_index: &ForeignKeysPerIndex,
@@ -228,6 +234,9 @@ pub fn filters_into_index_filters<'a>(
         .collect()
 }
 
+/// Convert a vector of filters into a vector of index filters without evaluating the foreign filters
+///
+/// This function will not open any foreign index but will panic if a foreign filter is encountered.
 pub fn filters_into_index_filters_unchecked<'a>(
     filters: Vec<Option<Filter<'a>>>,
 ) -> Result<Vec<Option<IndexFilter<'a>>>> {
@@ -280,6 +289,9 @@ where
     }
 }
 
+/// Retrieve the foreign keys settings for a list of indexes
+///
+/// This function will open each index once and retrieve the foreign keys settings.
 pub fn retrieve_foreign_keys_settings<'a>(
     index_scheduler: &IndexScheduler,
     index_uids: impl IntoIterator<Item = &'a SourceIndexUid>,
