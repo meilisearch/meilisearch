@@ -109,37 +109,57 @@ pub fn filters_into_index_filters<'a>(
     index_scheduler: &IndexScheduler,
     progress: &Progress,
 ) -> Result<Vec<Option<IndexFilter<'a>>>> {
-    // list all the foreign filters
+    // list all the foreign filters and check their validity
     let mut foreign_filters = Vec::new();
     for (index_uid, filter) in filters.iter() {
         let Some(filter) = filter else { continue };
         for foreign_filter in filter.condition.list_foreign_filters() {
-            foreign_filters.push((index_uid.clone(), Some(foreign_filter.clone())));
+            let FilterCondition::Foreign { fid, op } = foreign_filter else { unreachable!() };
+
+            // get the foreign keys settings for the index
+            let foreign_keys = foreign_keys_per_index.get(index_uid).ok_or(Error::Milli {
+                error: milli::Error::UserError(milli::UserError::InvalidFilter(
+                    "Index does not have foreign keys".to_string(),
+                )),
+                index_uid: Some(index_uid.as_ref().to_string()),
+            })?;
+
+            // get the foreign index uid for the foreign key
+            let (foreign_index_uid, _) = foreign_keys
+                .iter()
+                .find(|(_f_index, s_fname)| s_fname.as_ref() == fid.fragment())
+                .ok_or(Error::Milli {
+                    error: milli::Error::UserError(milli::UserError::InvalidFilter(format!(
+                        "Field `{}` is not a foreign key",
+                        fid.fragment()
+                    ))),
+                    index_uid: Some(index_uid.as_ref().to_string()),
+                })?;
+
+            // convert inner foreign filter into an index filter, throw an error if there is a nested foreign filter
+            let index_filter = IndexFilter::from(condition_to_index_condition(*op, &mut |_| {
+                Err(Error::Milli {
+                    error: milli::Error::UserError(milli::UserError::InvalidFilter(
+                        "Nested foreign filters are not supported".to_string(),
+                    )),
+                    index_uid: Some(index_uid.as_ref().to_string()),
+                })
+            })?);
+
+            // index_uid and foreign_index_uid are RCs and can be cloned safely
+            foreign_filters.push((
+                index_uid.clone(),
+                foreign_index_uid.clone(),
+                fid,
+                Some(index_filter),
+                None,
+            ));
         }
     }
 
     // group the foreign filters by foreign index
     let mut filters_per_foreign_index: HashMap<ForeignIndexUid, Vec<usize>> = HashMap::new();
-    for (i, (source_index_uid, filter)) in foreign_filters.iter().enumerate() {
-        let Some(FilterCondition::Foreign { fid, .. }) = filter else { unreachable!() };
-        let foreign_keys = foreign_keys_per_index.get(source_index_uid).ok_or(Error::Milli {
-            error: milli::Error::UserError(milli::UserError::InvalidFilter(
-                "Index does not have foreign keys".to_string(),
-            )),
-            index_uid: Some(source_index_uid.as_ref().to_string()),
-        })?;
-
-        let (foreign_index_uid, _) = foreign_keys
-            .iter()
-            .find(|(_f_index, s_fname)| s_fname.as_ref() == fid.fragment())
-            .ok_or(Error::Milli {
-                error: milli::Error::UserError(milli::UserError::InvalidFilter(format!(
-                    "Field `{}` is not a foreign key",
-                    fid.fragment()
-                ))),
-                index_uid: Some(source_index_uid.as_ref().to_string()),
-            })?;
-
+    for (i, (_, foreign_index_uid, _, _, _)) in foreign_filters.iter().enumerate() {
         filters_per_foreign_index.entry(foreign_index_uid.clone()).or_default().push(i);
     }
 
@@ -154,29 +174,15 @@ pub fn filters_into_index_filters<'a>(
         // Gather the internal docids for each filter
         let mut filters_internal_docids = Vec::new();
         for filter_index in filter_indices.iter() {
-            let (source_index_uid, foreign_filter) = &mut foreign_filters[*filter_index];
-            let Some(FilterCondition::Foreign { fid, op }) = foreign_filter.take() else {
-                continue;
-            };
-
-            // convert inner foreign filter into an index filter, throw an error if there is a nested foreign filter
-            let index_filter = IndexFilter::from(condition_to_index_condition(*op, &mut |_| {
-                Err(Error::Milli {
-                    error: milli::Error::UserError(milli::UserError::InvalidFilter(
-                        "Nested foreign filters are not supported".to_string(),
-                    )),
-                    index_uid: Some(source_index_uid.as_ref().to_string()),
-                })
-            })?);
+            let (_, foreign_index_uid, _, index_filter, _) = &foreign_filters[*filter_index];
 
             // filter the foreign index
-            let docids =
-                filtered_universe(&foreign_index, &foreign_rtxn, &Some(index_filter), progress)
-                    .map_err(|err| {
-                        Error::from_milli(err, Some(foreign_index_uid.as_ref().to_string()))
-                    })?;
+            let docids = filtered_universe(&foreign_index, &foreign_rtxn, index_filter, progress)
+                .map_err(|err| {
+                Error::from_milli(err, Some(foreign_index_uid.as_ref().to_string()))
+            })?;
 
-            filters_internal_docids.push((fid, docids));
+            filters_internal_docids.push(docids);
         }
 
         // Build the In filter for each filter converting the internal docids to external docids
@@ -184,7 +190,7 @@ pub fn filters_into_index_filters<'a>(
         // Fetch all the external docids once
         let docids_to_fetch = filters_internal_docids
             .iter()
-            .fold(roaring::RoaringBitmap::new(), |bitmap, (_, docids)| bitmap | docids);
+            .fold(roaring::RoaringBitmap::new(), |bitmap, docids| bitmap | docids);
         if docids_to_fetch.len() > MAX_FOREIGN_FILTER_DOCIDS {
             return Err(Error::Milli {
                 error: milli::Error::UserError(milli::UserError::InvalidFilter(
@@ -203,8 +209,7 @@ pub fn filters_into_index_filters<'a>(
         }
 
         // Build the In filter for each filter
-        for (filter_index, (fid, docids)) in
-            filter_indices.iter().zip(filters_internal_docids.into_iter())
+        for (filter_index, docids) in filter_indices.iter().zip(filters_internal_docids.into_iter())
         {
             let mut inner = Vec::new();
             for internal in docids.iter() {
@@ -213,8 +218,7 @@ pub fn filters_into_index_filters<'a>(
                 }
             }
 
-            foreign_filters[*filter_index].1 =
-                Some(FilterCondition::In { fid: fid.clone(), els: inner });
+            foreign_filters[*filter_index].4 = Some(inner);
         }
     }
 
@@ -224,9 +228,7 @@ pub fn filters_into_index_filters<'a>(
         .map(|(_index_uid, filter)| {
             let Some(filter) = filter else { return Ok(None) };
             condition_to_index_condition(filter.condition, &mut |_| {
-                let Some((_, Some(FilterCondition::In { fid, els }))) = in_iter.next() else {
-                    unreachable!()
-                };
+                let Some((_, _, fid, _, Some(els))) = in_iter.next() else { unreachable!() };
                 Ok(IndexFilterCondition::In { fid, els })
             })
             .map(|condition| Some(IndexFilter { condition }))
