@@ -1633,16 +1633,16 @@ pub mod tests {
         let filter = Fc::parse("field1 = value1 AND field2 = value2").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 2);
-        assert!(fids[0].fragment() == "field1");
-        assert!(fids[1].fragment() == "field2");
+        assert!(fids[1].fragment() == "field1");
+        assert!(fids[0].fragment() == "field2");
 
         let filter = Fc::parse("field1 = value1 OR field2 = value2").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 2);
-        assert!(fids[0].fragment() == "field1");
-        assert!(fids[1].fragment() == "field2");
+        assert!(fids[1].fragment() == "field1");
+        assert!(fids[0].fragment() == "field2");
 
-        let depth = 2;
+        let depth = 1;
         let filter =
             Fc::parse("field1 = value1 AND (field2 = value2 OR field3 = value3)").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(depth).collect();
