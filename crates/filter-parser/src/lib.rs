@@ -258,21 +258,38 @@ pub enum IndexFilterCondition<'a> {
 }
 
 impl<'a> IndexFilterCondition<'a> {
-    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token<'a>> + '_> {
-        if depth == 0 {
-            return Box::new(std::iter::empty());
-        }
-        match self {
-            Self::Condition { fid, .. } | Self::In { fid, .. } => Box::new(std::iter::once(fid)),
-            Self::Not(filter) => {
-                let depth = depth.saturating_sub(1);
-                filter.fids(depth)
+    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token<'a>> {
+        FidIter { stack: vec![(depth, self)] }
+    }
+}
+
+struct FidIter<'a, 'b> {
+    stack: Vec<(usize, &'a IndexFilterCondition<'b>)>,
+}
+
+impl<'a, 'b> Iterator for FidIter<'a, 'b> {
+    type Item = &'a Token<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                IndexFilterCondition::Condition { fid, .. }
+                | IndexFilterCondition::In { fid, .. } => return Some(fid),
+
+                IndexFilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, &next));
+                }
+
+                IndexFilterCondition::And(others) | IndexFilterCondition::Or(others)
+                    if depth > 0 =>
+                {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                _ => {}
             }
-            Self::And(subfilters) | Self::Or(subfilters) => {
-                let depth = depth.saturating_sub(1);
-                Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
-            }
-            _ => Box::new(std::iter::empty()),
         }
     }
 }
