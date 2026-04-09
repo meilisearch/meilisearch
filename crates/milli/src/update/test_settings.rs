@@ -6,6 +6,7 @@ use meili_snap::snapshot;
 use super::*;
 use crate::error::Error;
 use crate::index::tests::TempIndex;
+use crate::search::facet::IndexFilter;
 use crate::update::ClearDocuments;
 use crate::{db_snap, Criterion, Filter, SearchResult};
 
@@ -665,7 +666,7 @@ fn setting_not_filterable_cant_filter() {
 
     let rtxn = index.read_txn().unwrap();
     let filter = Filter::from_str("toto = 32").unwrap().unwrap();
-    let _ = filter.evaluate(&rtxn, &index).unwrap_err();
+    let _ = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
 }
 
 #[test]

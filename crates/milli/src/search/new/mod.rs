@@ -58,12 +58,13 @@ use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
+use crate::search::facet::IndexFilter;
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, Deadline, DocumentId, FieldId, Filter, Index, Member, PinDoc, Result,
-    TermsMatchingStrategy, UserError, Weight,
+    AscDesc, Deadline, DocumentId, FieldId, Index, Member, PinDoc, Result, TermsMatchingStrategy,
+    UserError, Weight,
 };
 
 /// Cache for synonyms to avoid repeated database access
@@ -662,7 +663,7 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
-    filters: &Option<Filter<'_>>,
+    filters: &Option<IndexFilter<'_>>,
     progress: &Progress,
 ) -> Result<RoaringBitmap> {
     Ok(if let Some(filters) = filters {

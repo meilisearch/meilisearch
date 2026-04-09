@@ -3,7 +3,7 @@ use std::fmt::Display;
 use nom::error::{self, ParseError};
 use nom::Parser;
 
-use crate::{IResult, Span};
+use crate::{CowSpan, IResult, Span};
 
 pub trait NomErrorExt<E> {
     fn is_failure(&self) -> bool;
@@ -51,8 +51,8 @@ impl<'a, T> IResultExt<'a> for IResult<'a, T> {
         self.map_err(move |e: nom::Err<Error<'a>>| {
             let input = match e {
                 nom::Err::Incomplete(_) => return e,
-                nom::Err::Error(e) => *e.context(),
-                nom::Err::Failure(e) => *e.context(),
+                nom::Err::Error(e) => e.context().clone(),
+                nom::Err::Failure(e) => e.context().clone(),
             };
             Error::failure_from_kind(input, kind)
         })
@@ -61,7 +61,7 @@ impl<'a, T> IResultExt<'a> for IResult<'a, T> {
 
 #[derive(Debug)]
 pub struct Error<'a> {
-    context: Span<'a>,
+    context: CowSpan<'a>,
     kind: ErrorKind<'a>,
 }
 
@@ -73,6 +73,7 @@ pub enum ExpectedValueKind {
 
 #[derive(Debug)]
 pub enum ErrorKind<'a> {
+    Foreign,
     ReservedGeo(&'a str),
     GeoRadius,
     GeoRadiusArgumentCount(usize),
@@ -112,19 +113,19 @@ impl<'a> Error<'a> {
         &self.kind
     }
 
-    pub fn context(&self) -> &Span<'a> {
+    pub fn context(&self) -> &CowSpan<'a> {
         &self.context
     }
 
-    pub fn new_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> Self {
+    pub fn new_from_kind(context: CowSpan<'a>, kind: ErrorKind<'a>) -> Self {
         Self { context, kind }
     }
 
-    pub fn failure_from_kind(context: Span<'a>, kind: ErrorKind<'a>) -> nom::Err<Self> {
+    pub fn failure_from_kind(context: CowSpan<'a>, kind: ErrorKind<'a>) -> nom::Err<Self> {
         nom::Err::Failure(Self::new_from_kind(context, kind))
     }
 
-    pub fn new_from_external(context: Span<'a>, error: impl std::error::Error) -> Self {
+    pub fn new_from_external(context: CowSpan<'a>, error: impl std::error::Error) -> Self {
         Self::new_from_kind(context, ErrorKind::External(error.to_string()))
     }
 
@@ -142,7 +143,7 @@ impl<'a> ParseError<Span<'a>> for Error<'a> {
             error::ErrorKind::Eof => ErrorKind::ExpectedEof,
             kind => ErrorKind::InternalError(kind),
         };
-        Self { context: input, kind }
+        Self { context: input.into(), kind }
     }
 
     fn append(_input: Span<'a>, _kind: error::ErrorKind, other: Self) -> Self {
@@ -150,7 +151,7 @@ impl<'a> ParseError<Span<'a>> for Error<'a> {
     }
 
     fn from_char(input: Span<'a>, c: char) -> Self {
-        Self { context: input, kind: ErrorKind::Char(c) }
+        Self { context: input.into(), kind: ErrorKind::Char(c) }
     }
 }
 
@@ -296,10 +297,13 @@ impl Display for Error<'_> {
                 "Encountered an internal `{:?}` error while parsing your filter. Please fill an issue", kind
             )?,
             ErrorKind::External(ref error) => writeln!(f, "{}", error)?,
+            ErrorKind::Foreign => writeln!(f, "Was expecting a field name and an condition inside `_foreign(..)` filter but instead found `{escaped_input}`.")?,
         }
-        let base_column = self.context.get_utf8_column();
-        let size = self.context.fragment().chars().count();
-
-        write!(f, "{}:{} {}", base_column, base_column + size, self.context.extra)
+        if let Some(base_column) = self.context.get_utf8_column() {
+            let size = self.context.fragment().chars().count();
+            write!(f, "{}:{} {}", base_column, base_column + size, self.context.extra())
+        } else {
+            write!(f, "{}", self.context.extra())
+        }
     }
 }

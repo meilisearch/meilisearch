@@ -819,6 +819,7 @@ mod tests {
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::progress::Progress;
+    use crate::search::facet::IndexFilter;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
@@ -1343,23 +1344,29 @@ mod tests {
 
         // testing the filters
         let mut search = index.search(&rtxn);
-        search.filter(crate::Filter::from_str(r#"title = "The first document""#).unwrap().unwrap());
+
+        let filter = crate::Filter::from_str(r#"title = "The first document""#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
 
-        search.filter(crate::Filter::from_str(r#"nested.object = field"#).unwrap().unwrap());
+        let filter = crate::Filter::from_str(r#"nested.object = field"#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1, 2]);
 
-        search.filter(crate::Filter::from_str(r#"nested.machin = bidule"#).unwrap().unwrap());
+        let filter = crate::Filter::from_str(r#"nested.machin = bidule"#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
 
-        search.filter(crate::Filter::from_str(r#"nested = array"#).unwrap().unwrap());
+        let filter = crate::Filter::from_str(r#"nested = array"#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let error = search.execute().map(|_| unreachable!()).unwrap_err(); // nested is not filterable
         assert!(matches!(error, crate::Error::UserError(crate::UserError::InvalidFilter(_))));
 
-        search.filter(crate::Filter::from_str(r#"nested = "I lied""#).unwrap().unwrap());
+        let filter = crate::Filter::from_str(r#"nested = "I lied""#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let error = search.execute().map(|_| unreachable!()).unwrap_err(); // nested is not filterable
         assert!(matches!(error, crate::Error::UserError(crate::UserError::InvalidFilter(_))));
     }
@@ -1520,7 +1527,8 @@ mod tests {
         for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
             let mut search = crate::Search::new(&rtxn, &index, &progress);
             let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
-            search.filter(crate::Filter::from_str(&filter).unwrap().unwrap());
+            let filter = crate::Filter::from_str(&filter).unwrap().unwrap();
+            search.filter(IndexFilter::from(filter));
             let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
             assert_eq!(documents_ids, vec![i]);
         }
@@ -3281,7 +3289,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
-        let results = index.search(&rtxn).filter(filter).execute().unwrap();
+        let results = index.search(&rtxn).filter(IndexFilter::from(filter)).execute().unwrap();
         assert!(results.documents_ids.is_empty());
 
         db_snap!(index, word_docids);
@@ -3453,7 +3461,7 @@ mod tests {
 
         // Placeholder search with geo filter
         let filter = Filter::from_str("_geoRadius(50.6924, 3.1763, 20000)").unwrap().unwrap();
-        let results = index.search(&wtxn).filter(filter).execute().unwrap();
+        let results = index.search(&wtxn).filter(IndexFilter::from(filter)).execute().unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(

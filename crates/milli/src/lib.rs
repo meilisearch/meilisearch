@@ -48,7 +48,7 @@ use std::hash::BuildHasherDefault;
 
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
 pub use documents::GeoSortStrategy;
-pub use filter_parser::{Condition, FilterCondition, Span, Token};
+pub use filter_parser::{Condition, FilterCondition, IndexFilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
 pub use must_stop_processing::MustStopProcessing;
@@ -89,9 +89,9 @@ pub use self::search::facet::{FacetValueHit, SearchForFacetValues, SHARD_FIELD};
 pub use self::search::similar::Similar;
 pub use self::search::steps::{FederatingResultsStep, SearchStep, TotalProcessingTimeStep};
 pub use self::search::{
-    merge_positioned_hits_into_page, FacetDistribution, Filter, FormatOptions, MatchBounds,
-    MatcherBuilder, MatchingWords, OrderBy, PinDoc, Search, SearchResult, SemanticSearch,
-    TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, FacetDistribution,
+    Filter, FormatOptions, IndexFilter, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
+    PinDoc, Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 pub use self::update::{
     ChannelCongestion, FragmentDiff, InnerIndexSettings, InnerIndexSettingsDiff, SettingsDelta,

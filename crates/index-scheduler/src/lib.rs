@@ -25,6 +25,7 @@ mod dump;
 mod dynamic_search_rules;
 pub mod error;
 mod features;
+pub mod filter;
 mod index_mapper;
 #[cfg(test)]
 mod insta_snapshot;
