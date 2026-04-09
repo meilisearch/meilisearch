@@ -170,6 +170,74 @@ async fn setup_indexes_with_foreign_key_and_filterable_profile(
     (authors_index, books_index)
 }
 
+/// Same documents as [`setup_indexes_with_foreign_key`], but **no** `foreignKeys` on the books index.
+async fn setup_indexes_without_foreign_keys(server: &Server) -> (Index<'_>, Index<'_>) {
+    let authors_index = server.unique_index();
+    let books_index = server.unique_index();
+
+    let (task, code) = authors_index.create(Some("id")).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = authors_index.add_documents(authors_documents(), None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = books_index.create(Some("id")).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = books_index.add_documents(books_documents(), None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    (authors_index, books_index)
+}
+
+/// Foreign key from books → authors; authors index only allows filtering on `id` (not `birthday`, etc.).
+async fn setup_indexes_foreign_key_foreign_author_filterable_id_only(
+    server: &Server,
+) -> (Index<'_>, Index<'_>) {
+    let authors_index = server.unique_index();
+    let books_index = server.unique_index();
+
+    let (task, code) = authors_index.create(Some("id")).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) =
+        authors_index.add_documents(authors_documents_with_author_profile(), None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) =
+        authors_index.update_settings(json!({ "filterableAttributes": ["id"] })).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = books_index.create(Some("id")).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = books_index
+        .update_settings(json!({
+            "foreignKeys": [
+                { "foreignIndexUid": authors_index.uid, "fieldName": "author" },
+                { "foreignIndexUid": authors_index.uid, "fieldName": "related_authors" }
+            ],
+            "filterableAttributes": ["id", "genres", "author", "related_authors", "title"]
+        }))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = books_index.add_documents(books_documents_with_genres(), None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    (authors_index, books_index)
+}
+
 #[actix_rt::test]
 async fn search_hydration_with_attributes_to_highlight() {
     let server = Server::new().await;
@@ -708,6 +776,226 @@ async fn multi_search_with_foreign_filter_on_author_profile() {
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn foreign_filter_rejects_field_not_in_foreign_keys() {
+    let server = Server::new().await;
+    server.set_features(json!({ "foreignKeys": true })).await;
+
+    let (_authors_index, books_index) = setup_indexes_with_foreign_key(&server).await;
+
+    let multi_params = json!({
+        "queries": [{
+          "indexUid": books_index.uid,
+          "q": "",
+          "filter": "_foreign(title, id = a1)"
+      }],
+        "federation": {}
+    });
+
+    let mut search_params = multi_params["queries"][0].clone();
+    search_params.as_object_mut().unwrap().remove("indexUid");
+
+    let (response, code) = books_index.search_post(search_params.into()).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Field `title` is not a foreign key",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+
+    let (response, code) = server.multi_search(multi_params).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Field `title` is not a foreign key",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn foreign_filter_rejects_when_index_has_no_foreign_keys_configured() {
+    let server = Server::new().await;
+    server.set_features(json!({ "foreignKeys": true })).await;
+
+    let (_authors_index, books_index) = setup_indexes_without_foreign_keys(&server).await;
+
+    let multi_params = json!({
+        "queries": [{
+          "indexUid": books_index.uid,
+          "q": "",
+          "filter": "_foreign(author, id = a1)"
+      }],
+        "federation": {}
+    });
+
+    let mut search_params = multi_params["queries"][0].clone();
+    search_params.as_object_mut().unwrap().remove("indexUid");
+
+    let (response, code) = books_index.search_post(search_params.into()).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Field `author` is not a foreign key",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+
+    let (response, code) = server.multi_search(multi_params).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Field `author` is not a foreign key",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn foreign_filter_rejects_nested_foreign() {
+    let server = Server::new().await;
+    server.set_features(json!({ "foreignKeys": true })).await;
+
+    let (_authors_index, books_index) = setup_indexes_with_foreign_key(&server).await;
+
+    let multi_params = json!({
+        "queries": [{
+          "indexUid": books_index.uid,
+          "q": "",
+          "filter": "_foreign(author, id = a1 AND _foreign(related_authors, id = a2))"
+      }],
+        "federation": {}
+    });
+
+    let mut search_params = multi_params["queries"][0].clone();
+    search_params.as_object_mut().unwrap().remove("indexUid");
+
+    let (response, code) = books_index.search_post(search_params.into()).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Nested foreign filters are not supported",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+
+    let (response, code) = server.multi_search(multi_params).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Nested foreign filters are not supported",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn foreign_filter_propagates_inner_filter_error_on_foreign_index() {
+    let server = Server::new().await;
+    server.set_features(json!({ "foreignKeys": true })).await;
+
+    let (_authors_index, books_index) =
+        setup_indexes_foreign_key_foreign_author_filterable_id_only(&server).await;
+
+    let multi_params = json!({
+        "queries": [{
+          "indexUid": books_index.uid,
+          "q": "",
+          "filter": "_foreign(author, birthday = \"1958-06-15\")"
+      }],
+        "federation": {}
+    });
+
+    let mut search_params = multi_params["queries"][0].clone();
+    search_params.as_object_mut().unwrap().remove("indexUid");
+
+    let (response, code) = books_index.search_post(search_params.into()).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Attribute `birthday` is not filterable. Available filterable attribute patterns are: `id`.\n18:26 _foreign(author, birthday = \"1958-06-15\")",
+      "code": "invalid_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+
+    let (response, code) = server.multi_search(multi_params).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Attribute `birthday` is not filterable. Available filterable attribute patterns are: `id`.\n18:26 _foreign(author, birthday = \"1958-06-15\")",
+      "code": "invalid_document_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn foreign_filter_on_non_filterable_attribute() {
+    let server = Server::new().await;
+    server.set_features(json!({ "foreignKeys": true })).await;
+
+    let (authors_index, books_index) = setup_indexes_without_foreign_keys(&server).await;
+
+    let (task, code) =
+        authors_index.update_settings(json!({ "filterableAttributes": ["id"] })).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = books_index.update_settings(json!({ "foreignKeys": [{ "foreignIndexUid": authors_index.uid, "fieldName": "author" }] })).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let multi_params = json!({
+        "queries": [{
+          "indexUid": books_index.uid,
+          "q": "",
+          "filter": "_foreign(author, id = a1)"
+      }],
+        "federation": {}
+    });
+
+    let mut search_params = multi_params["queries"][0].clone();
+    search_params.as_object_mut().unwrap().remove("indexUid");
+
+    let (response, code) = books_index.search_post(search_params.into()).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Index `[uuid]`: Attribute `author` is not filterable. This index does not have configured filterable attributes.\n10:16 _foreign(author, id = a1)",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
+    }
+    "###);
+
+    let (response, code) = server.multi_search(multi_params).await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response, { ".**.requestUid" => "[uuid]" }), @r###"
+    {
+      "message": "Inside `.queries[0]`: Index `[uuid]`: Attribute `author` is not filterable. This index does not have configured filterable attributes.\n_foreign(author, id = a1)",
+      "code": "invalid_search_filter",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
     "###);
 }
