@@ -263,37 +263,6 @@ impl<'a> IndexFilterCondition<'a> {
     }
 }
 
-struct FidIter<'a, 'b> {
-    stack: Vec<(usize, &'a IndexFilterCondition<'b>)>,
-}
-
-impl<'a, 'b> Iterator for FidIter<'a, 'b> {
-    type Item = &'a Token<'b>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            let (depth, current) = self.stack.pop()?;
-
-            match current {
-                IndexFilterCondition::Condition { fid, .. }
-                | IndexFilterCondition::In { fid, .. } => return Some(fid),
-
-                IndexFilterCondition::Not(next) if depth > 0 => {
-                    self.stack.push((depth - 1, &next));
-                }
-
-                IndexFilterCondition::And(others) | IndexFilterCondition::Or(others)
-                    if depth > 0 =>
-                {
-                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
-                }
-
-                _ => {}
-            }
-        }
-    }
-}
-
 impl IndexFilterCondition<'_> {
     pub fn into_owned(self) -> IndexFilterCondition<'static> {
         match self {
@@ -428,52 +397,20 @@ impl<'a> FilterCondition<'a> {
     }
 
     pub fn use_foreign_operator(&self) -> Option<&Token<'a>> {
-        match self {
-            FilterCondition::Foreign { fid, .. } => Some(fid),
-            FilterCondition::Not(this) => this.use_foreign_operator(),
-            FilterCondition::Or(seq) | FilterCondition::And(seq) => {
-                seq.iter().find_map(|filter| filter.use_foreign_operator())
+        ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }.next().and_then(|filter| {
+            match filter {
+                FilterCondition::Foreign { fid, .. } => Some(fid),
+                _ => None,
             }
-            FilterCondition::VectorExists { .. }
-            | FilterCondition::GeoLowerThan { .. }
-            | FilterCondition::GeoBoundingBox { .. }
-            | FilterCondition::GeoPolygon { .. }
-            | FilterCondition::Condition { .. }
-            | FilterCondition::In { .. } => None,
-        }
+        })
     }
 
-    pub fn list_foreign_filters(&self) -> Box<dyn Iterator<Item = FilterCondition<'a>> + '_> {
-        match self {
-            FilterCondition::Foreign { .. } => Box::new(std::iter::once(self.clone())),
-            FilterCondition::Not(op) => op.list_foreign_filters(),
-            FilterCondition::Or(subfilters) | FilterCondition::And(subfilters) => {
-                Box::new(subfilters.iter().flat_map(|filter| filter.list_foreign_filters()))
-            }
-            _ => Box::new(std::iter::empty()),
-        }
+    pub fn list_foreign_filters(&self) -> impl Iterator<Item = &FilterCondition<'a>> {
+        ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }
     }
 
-    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token<'a>> + '_> {
-        if depth == 0 {
-            return Box::new(std::iter::empty());
-        }
-        match self {
-            Self::Condition { fid, .. } | Self::In { fid, .. } => Box::new(std::iter::once(fid)),
-            Self::Not(filter) => {
-                let depth = depth.saturating_sub(1);
-                filter.fids(depth)
-            }
-            Self::And(subfilters) | Self::Or(subfilters) => {
-                let depth = depth.saturating_sub(1);
-                Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
-            }
-            FilterCondition::Foreign { fid, op } => {
-                let depth = depth.saturating_sub(1);
-                Box::new(std::iter::once(fid).chain(op.fids(depth)))
-            }
-            _ => Box::new(std::iter::empty()),
-        }
+    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token<'a>> {
+        FidIter { stack: vec![(depth, self)] }
     }
 
     /// Returns the first token found at the specified depth, `None` if no token at this depth.
@@ -509,6 +446,95 @@ impl<'a> FilterCondition<'a> {
         }
         let span = Span::new_extra(input, input);
         parse_filter(span).finish().map(|(_rem, output)| Some(output))
+    }
+}
+
+/// Iterator listing the `Foreign` filters of a filter condition.
+struct ForeignFilterIter<'a, 'b> {
+    stack: Vec<(usize, &'a FilterCondition<'b>)>,
+}
+
+impl<'a, 'b> Iterator for ForeignFilterIter<'a, 'b> {
+    type Item = &'a FilterCondition<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                FilterCondition::Foreign { .. } => return Some(current),
+
+                FilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                FilterCondition::And(others) | FilterCondition::Or(others) if depth > 0 => {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Iterator listing the `fids` of a filter condition or an index filter condition.
+struct FidIter<'a, T> {
+    stack: Vec<(usize, &'a T)>,
+}
+
+impl<'a, 'b> Iterator for FidIter<'a, FilterCondition<'b>> {
+    type Item = &'a Token<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
+                    return Some(fid)
+                }
+
+                FilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                FilterCondition::And(others) | FilterCondition::Or(others) if depth > 0 => {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                FilterCondition::Foreign { fid, .. } => return Some(fid),
+
+                _ => {}
+            }
+        }
+    }
+}
+
+impl<'a, 'b> Iterator for FidIter<'a, IndexFilterCondition<'b>> {
+    type Item = &'a Token<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                IndexFilterCondition::Condition { fid, .. }
+                | IndexFilterCondition::In { fid, .. } => return Some(fid),
+
+                IndexFilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                IndexFilterCondition::And(others) | IndexFilterCondition::Or(others)
+                    if depth > 0 =>
+                {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                _ => {}
+            }
+        }
     }
 }
 

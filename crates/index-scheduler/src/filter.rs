@@ -114,7 +114,9 @@ pub fn filters_into_index_filters<'a>(
     for (index_uid, filter) in filters.iter() {
         let Some(filter) = filter else { continue };
         for foreign_filter in filter.condition.list_foreign_filters() {
-            let FilterCondition::Foreign { fid, op } = foreign_filter else { unreachable!() };
+            let FilterCondition::Foreign { fid, op } = foreign_filter.clone() else {
+                unreachable!()
+            };
 
             // get the foreign keys settings for the index
             let foreign_keys = foreign_keys_per_index.get(index_uid).ok_or(Error::Milli {
