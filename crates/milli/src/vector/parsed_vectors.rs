@@ -374,7 +374,7 @@ pub struct ParsedVectorsDiff {
 
 impl ParsedVectorsDiff {
     pub fn new(
-        regenerate_for_embedders: impl Iterator<Item = String>,
+        dont_regenerate_for_embedders: impl Iterator<Item = String>,
         documents_diff: &KvReader<FieldId>,
         old_vectors_fid: Option<FieldId>,
         new_vectors_fid: Option<FieldId>,
@@ -395,8 +395,8 @@ impl ParsedVectorsDiff {
             }
         }
         .flatten().map_or(BTreeMap::default(), |del| del.into_iter().map(|(name, vec)| (name, VectorState::Inline(vec))).collect());
-        for name in regenerate_for_embedders {
-            old.entry(name).or_insert(VectorState::Generated);
+        for name in dont_regenerate_for_embedders {
+            old.entry(name).or_insert(VectorState::Manual);
         }
 
         let new = 'new: {
