@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use crate::attribute_patterns::PatternMatch;
+use crate::constants::{RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME};
 use crate::fields_ids_map::metadata::Metadata;
 use crate::update::new::document::Document;
 use crate::update::new::extract::geo::extract_geo_coordinates;
@@ -87,8 +88,8 @@ pub fn extract_geo_document<'doc>(
     if let Some(geo_value) = document.geo_field()? {
         if let Some([lat, lng]) = extract_geo_coordinates(external_document_id, geo_value)? {
             let ((lat_fid, lat_meta), (lng_fid, lng_meta)) = field_id_map
-                .id_with_metadata_or_insert("_geo.lat")
-                .zip(field_id_map.id_with_metadata_or_insert("_geo.lng"))
+                .id_with_metadata_or_insert(RESERVED_GEO_LAT_FIELD_NAME)
+                .zip(field_id_map.id_with_metadata_or_insert(RESERVED_GEO_LNG_FIELD_NAME))
                 .ok_or(UserError::AttributeLimitReached)?;
 
             facet_fn(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;

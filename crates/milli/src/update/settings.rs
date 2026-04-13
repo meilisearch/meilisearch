@@ -15,7 +15,10 @@ use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
 use crate::attribute_patterns::{match_field_legacy, PatternMatch};
-use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME,
+    RESERVED_GEO_LNG_FIELD_NAME,
+};
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes};
@@ -2102,8 +2105,8 @@ impl InnerIndexSettings {
             Some(_) if index.is_geo_enabled(rtxn)? => {
                 // if `_geo` is faceted then we get the `lat` and `lng`
                 let field_ids = fields_ids_map
-                    .insert("_geo.lat")
-                    .zip(fields_ids_map.insert("_geo.lng"))
+                    .insert(RESERVED_GEO_LAT_FIELD_NAME)
+                    .zip(fields_ids_map.insert(RESERVED_GEO_LNG_FIELD_NAME))
                     .ok_or(UserError::AttributeLimitReached)?;
                 Some(field_ids)
             }

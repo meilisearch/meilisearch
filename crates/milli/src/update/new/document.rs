@@ -11,7 +11,8 @@ use serde_json::value::RawValue;
 use super::vector_document::VectorDocument;
 use super::{KvReaderFieldId, KvWriterFieldId};
 use crate::constants::{
-    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME,
+    RESERVED_GEO_LNG_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
 };
 use crate::documents::FieldIdMapper;
 use crate::update::del_add::KvReaderDelAdd;
@@ -427,8 +428,12 @@ where
         let fid = fields_ids_map
             .id_or_insert(RESERVED_GEO_FIELD_NAME)
             .ok_or(UserError::AttributeLimitReached)?;
-        fields_ids_map.id_or_insert("_geo.lat").ok_or(UserError::AttributeLimitReached)?;
-        fields_ids_map.id_or_insert("_geo.lng").ok_or(UserError::AttributeLimitReached)?;
+        fields_ids_map
+            .id_or_insert(RESERVED_GEO_LAT_FIELD_NAME)
+            .ok_or(UserError::AttributeLimitReached)?;
+        fields_ids_map
+            .id_or_insert(RESERVED_GEO_LNG_FIELD_NAME)
+            .ok_or(UserError::AttributeLimitReached)?;
         unordered_field_buffer.push((fid, geo_value));
     }
 
