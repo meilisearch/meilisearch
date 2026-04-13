@@ -611,7 +611,6 @@ impl FacetedDocidsExtractor {
         let mut cached_sorter = context.data.borrow_mut_or_yield();
         let mut del_add_facet_value = DelAddFacetValue::new(&context.doc_alloc);
         let new_filterable_attributes_rules = settings_delta.new_filterable_rules();
-        let old_fields_ids_map = settings_delta.old_fields_ids_map();
         let docid = document.docid();
 
         let mut add = |fid: FieldId, meta: Metadata, depth: perm_json_p::Depth, value: &Value| {
@@ -630,15 +629,14 @@ impl FacetedDocidsExtractor {
             )
         };
 
+        let old_fields_ids_map = settings_delta.old_fields_ids_map();
         let current_document = document.current(
             &context.rtxn,
             context.index,
             old_fields_ids_map.as_fields_ids_map(),
         )?;
 
-        let old_fields_ids_map = settings_delta.old_fields_ids_map();
         let old_filterable_rules = settings_delta.old_filterable_rules();
-
         let new_fields_ids_map = settings_delta.new_fields_ids_map();
         let new_filterable_rules = settings_delta.new_filterable_rules();
 

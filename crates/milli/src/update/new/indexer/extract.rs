@@ -13,6 +13,7 @@ use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use super::settings_changes::settings_change_extract;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::{FieldIdMapper, PrimaryKey};
 use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
@@ -628,10 +629,12 @@ where
         let enabled_filterable_geo =
             !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geo())
                 && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geo());
-        let enabled_geo = settings_delta.old_geo_fields_ids().is_none()
-            && settings_delta.new_geo_fields_ids().is_some();
+        let enabled_sortable_geo = settings_delta
+            .new_fields_ids_map()
+            .id_with_metadata(RESERVED_GEO_FIELD_NAME)
+            .is_some_and(|(_id, meta)| meta.is_sortable());
 
-        if !enabled_filterable_geo && !enabled_geo {
+        if !enabled_filterable_geo && !enabled_sortable_geo {
             break 'geo;
         }
 
@@ -660,10 +663,8 @@ where
         let enabled_filterable_geojson =
             !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geojson())
                 && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geojson());
-        let enabled_geojson = settings_delta.old_geojson_field_id().is_none()
-            && settings_delta.new_geojson_field_id().is_some();
 
-        if !enabled_filterable_geojson && !enabled_geojson {
+        if !enabled_filterable_geojson {
             break 'cellulite;
         }
 
