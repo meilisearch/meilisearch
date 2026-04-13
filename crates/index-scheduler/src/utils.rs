@@ -8,7 +8,7 @@ use convert_case::{Case, Casing as _};
 use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
 use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::{CboRoaringBitmapCodec, ChannelCongestion};
+use meilisearch_types::milli::{ChannelCongestion, DeCboRoaringBitmapCodec};
 use meilisearch_types::task_view::DetailsView;
 use meilisearch_types::tasks::{
     BatchStopReason, Details, IndexSwap, Kind, KindWithContent, Status,
@@ -235,7 +235,7 @@ pub fn consecutive_ranges<'a>(
 
 pub(crate) fn insert_task_datetime(
     wtxn: &mut RwTxn,
-    database: Database<BEI128, CboRoaringBitmapCodec>,
+    database: Database<BEI128, DeCboRoaringBitmapCodec>,
     time: OffsetDateTime,
     task_id: TaskId,
 ) -> Result<()> {
@@ -248,7 +248,7 @@ pub(crate) fn insert_task_datetime(
 
 pub(crate) fn remove_task_datetime(
     wtxn: &mut RwTxn,
-    database: Database<BEI128, CboRoaringBitmapCodec>,
+    database: Database<BEI128, DeCboRoaringBitmapCodec>,
     time: OffsetDateTime,
     task_id: TaskId,
 ) -> Result<()> {
@@ -267,7 +267,7 @@ pub(crate) fn remove_task_datetime(
 
 pub(crate) fn remove_n_tasks_datetime_earlier_than(
     wtxn: &mut RwTxn,
-    database: Database<BEI128, CboRoaringBitmapCodec>,
+    database: Database<BEI128, DeCboRoaringBitmapCodec>,
     earlier_than: OffsetDateTime,
     mut count: usize,
     task_id: TaskId,
@@ -295,7 +295,7 @@ pub(crate) fn remove_n_tasks_datetime_earlier_than(
 pub(crate) fn keep_ids_within_datetimes(
     rtxn: &RoTxn,
     ids: &mut RoaringBitmap,
-    database: Database<BEI128, CboRoaringBitmapCodec>,
+    database: Database<BEI128, DeCboRoaringBitmapCodec>,
     after: Option<OffsetDateTime>,
     before: Option<OffsetDateTime>,
 ) -> Result<()> {

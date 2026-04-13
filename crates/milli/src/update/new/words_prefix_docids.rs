@@ -11,20 +11,20 @@ use tempfile::spooled_tempfile;
 
 use crate::heed_codec::StrBEU16Codec;
 use crate::update::GrenadParameters;
-use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
+use crate::{DeCboRoaringBitmapCodec, Index, Prefix, Result};
 
 struct WordPrefixDocids<'i> {
     index: &'i Index,
-    database: Database<Bytes, CboRoaringBitmapCodec>,
-    prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    database: Database<Bytes, DeCboRoaringBitmapCodec>,
+    prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
     max_memory_by_thread: Option<usize>,
 }
 
 impl<'i> WordPrefixDocids<'i> {
     fn new(
         index: &'i Index,
-        database: Database<Bytes, CboRoaringBitmapCodec>,
-        prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<Bytes, DeCboRoaringBitmapCodec>,
+        prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
         grenad_parameters: &GrenadParameters,
     ) -> WordPrefixDocids<'i> {
         WordPrefixDocids {
@@ -67,6 +67,7 @@ impl<'i> WordPrefixDocids<'i> {
                 ));
 
                 let mut buffer = Vec::new();
+                let mut tmp_buffer = Vec::new();
                 for (prefix_index, prefix) in prefix_to_compute.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
@@ -76,12 +77,16 @@ impl<'i> WordPrefixDocids<'i> {
                     let output = self
                         .database
                         .prefix_iter(&rtxn, prefix.as_bytes())?
-                        .remap_types::<Str, CboRoaringBitmapCodec>()
+                        .remap_types::<Str, DeCboRoaringBitmapCodec>()
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
 
                     buffer.clear();
-                    CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
+                    DeCboRoaringBitmapCodec::serialize_into_with_tmp_buffer(
+                        &output,
+                        &mut buffer,
+                        &mut tmp_buffer,
+                    )?;
                     indexes.push(PrefixEntry { prefix, serialized_length: buffer.len() });
                     file.write_all(&buffer)?;
                 }
@@ -120,16 +125,16 @@ struct PrefixEntry<'a> {
 
 struct WordPrefixIntegerDocids<'i> {
     index: &'i Index,
-    database: Database<Bytes, CboRoaringBitmapCodec>,
-    prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+    database: Database<Bytes, DeCboRoaringBitmapCodec>,
+    prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
     max_memory_by_thread: Option<usize>,
 }
 
 impl<'i> WordPrefixIntegerDocids<'i> {
     fn new(
         index: &'i Index,
-        database: Database<Bytes, CboRoaringBitmapCodec>,
-        prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
+        database: Database<Bytes, DeCboRoaringBitmapCodec>,
+        prefix_database: Database<Bytes, DeCboRoaringBitmapCodec>,
         grenad_parameters: &'_ GrenadParameters,
     ) -> WordPrefixIntegerDocids<'i> {
         WordPrefixIntegerDocids {
@@ -219,10 +224,10 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                         } else {
                             let output = bitmaps_bytes
                                 .into_iter()
-                                .map(CboRoaringBitmapCodec::deserialize_from)
+                                .map(DeCboRoaringBitmapCodec::deserialize_from)
                                 .union()?;
                             buffer.clear();
-                            CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
+                            DeCboRoaringBitmapCodec::serialize_into(&output, &mut buffer)?;
                             indexes.push(PrefixIntegerEntry {
                                 prefix,
                                 pos,
@@ -281,7 +286,7 @@ struct PrefixIntegerEntry<'a> {
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
 fn delete_prefixes(
     wtxn: &mut RwTxn,
-    prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
+    prefix_database: &Database<Bytes, DeCboRoaringBitmapCodec>,
     prefixes: &BTreeSet<Prefix>,
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.

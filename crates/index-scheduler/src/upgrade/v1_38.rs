@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
-use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
+use meilisearch_types::milli::{DeCboRoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Kind, Status};
 use roaring::RoaringBitmap;
 use tracing::info;
@@ -17,7 +17,7 @@ impl UpgradeIndexScheduler for RemoveOrphanBatches {
         let batch_queue = BatchQueue::new(env, wtxn)?;
         let all_batch_ids = batch_queue.all_batch_ids(wtxn)?;
 
-        let batch_to_tasks_mapping: Database<BEU32, CboRoaringBitmapCodec> =
+        let batch_to_tasks_mapping: Database<BEU32, DeCboRoaringBitmapCodec> =
             env.create_database(wtxn, Some(BATCH_TO_TASKS_MAPPING))?;
 
         let all_batches = batch_queue.all_batches.lazily_decode_data();
