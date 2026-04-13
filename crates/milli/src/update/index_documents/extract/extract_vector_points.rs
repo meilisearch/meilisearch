@@ -415,12 +415,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
         // lazily get it when needed
         let document_id = || -> Value { from_utf8(external_id_bytes).unwrap().into() };
 
-        let regenerate_for_embedders = embedder_info
+        let dont_regenerate_for_embedders = embedder_info
             .iter()
-            .filter(|&(_, infos)| infos.embedding_status.must_regenerate(docid))
+            .filter(|&(_, infos)| !infos.embedding_status.must_regenerate(docid))
             .map(|(name, _)| name.clone());
         let mut parsed_vectors = ParsedVectorsDiff::new(
-            regenerate_for_embedders,
+            dont_regenerate_for_embedders,
             obkv,
             old_vectors_fid,
             new_vectors_fid,
