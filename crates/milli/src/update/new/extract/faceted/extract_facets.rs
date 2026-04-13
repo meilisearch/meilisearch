@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::ops::DerefMut as _;
+use std::sync::RwLock;
 
 use bumpalo::collections::Vec as BVec;
 use bumpalo::Bump;
@@ -15,8 +16,8 @@ use crate::filterable_attributes_rules::match_faceted_field;
 use crate::heed_codec::facet::OrderedF64Codec;
 use crate::update::del_add::DelAdd;
 use crate::update::new::channel::FieldIdDocidFacetSender;
-use crate::update::new::document::{Document as _, DocumentContext};
-use crate::update::new::extract::{extract_geo_coordinates, perm_json_p};
+use crate::update::new::document::DocumentContext;
+use crate::update::new::extract::perm_json_p;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
 };
@@ -32,7 +33,7 @@ use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::{
     DocumentId, FieldId, FieldIdMapMissingEntry, FilterFeatures, FilterableAttributesFeatures,
-    FilterableAttributesRule, InternalError, PatternMatch, Result, UserError,
+    FilterableAttributesRule, GlobalFieldsIdsMap, InternalError, PatternMatch, Result, UserError,
     MAX_FACET_VALUE_LENGTH,
 };
 
@@ -721,21 +722,13 @@ impl FacetedDocidsExtractor {
             &mut add,
         )?;
 
-        // TODO do not duplicate the content of the extract_geo_document function
-        if let Some((lat_fid, lng_fid)) = settings_delta.new_geo_fields_ids() {
-            if settings_delta.old_geo_fields_ids().is_none() {
-                if let Some(geo_value) = current_document.geo_field()? {
-                    let external_id = document.external_document_id();
-                    if let Some([lat, lng]) = extract_geo_coordinates(external_id, geo_value)? {
-                        let lat_meta = new_fields_ids_map.metadata(lat_fid).unwrap();
-                        let lng_meta = new_fields_ids_map.metadata(lng_fid).unwrap();
-
-                        add(lat_fid, lat_meta, perm_json_p::Depth::OnBaseKey, &lat.into())?;
-                        add(lng_fid, lng_meta, perm_json_p::Depth::OnBaseKey, &lng.into())?;
-                    }
-                }
-            }
-        }
+        let global = RwLock::new(new_fields_ids_map.clone());
+        let mut global_fields_ids_map = GlobalFieldsIdsMap::new(&global);
+        let external_id = document.external_document_id();
+        extract_geo_document(current_document, external_id, &mut global_fields_ids_map, &mut add)?;
+        // Note that we check that no new _geo.lat/lng fields were added to
+        //      the global fields ids map as they should already exists.
+        debug_assert_eq!(global.into_inner().unwrap(), *new_fields_ids_map);
 
         del_add_facet_value.send_data(docid, fid_docid_facet_sender, &context.doc_alloc).unwrap();
         Ok(())
