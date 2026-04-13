@@ -304,7 +304,7 @@ impl Search<'_> {
             Some(vector_query) => vector_query,
             None => {
                 // attempt to embed the vector
-                self.progress.update_progress(SearchStep::Embed);
+                self.progress.update_progress(SearchStep::EmbedQuery);
                 let span = tracing::trace_span!(target: "search::hybrid", "embed_one");
                 let _entered = span.enter();
 
