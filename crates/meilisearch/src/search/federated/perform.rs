@@ -7,6 +7,31 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::vec::{IntoIter, Vec};
 
+use actix_http::StatusCode;
+use actix_web::web::Data;
+use index_scheduler::filter::{
+    filters_into_index_filters, filters_into_index_filters_unchecked,
+    retrieve_foreign_keys_settings, SourceIndexUid,
+};
+use index_scheduler::{IndexScheduler, RoFeatures};
+use itertools::Itertools;
+use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
+use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::milli::order_by_map::OrderByMap;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
+use meilisearch_types::milli::vector::Embedding;
+use meilisearch_types::milli::{
+    self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, Deadline,
+    DocumentId, FederatingResultsStep, IndexFilter, OrderBy, DEFAULT_VALUES_PER_FACET,
+};
+use meilisearch_types::network::{Network, Remote, RemoteAvailability};
+use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
+use meilisearch_types::Document;
+use roaring::RoaringBitmap;
+use tokio::task::JoinHandle;
+use uuid::Uuid;
+
 use super::super::ranking_rules::{self, RankingRules};
 use super::super::{
     compute_facet_distribution_stats, prepare_search, resolve_pins, AttributesFormat,
@@ -26,30 +51,6 @@ use crate::search::federated::types::{
 };
 use crate::search::hydration::{FederatedHydrationFormatter, HydrationContext};
 use crate::search::{parse_filter, NetworkableQuery as _, DEFAULT_SEARCH_LIMIT};
-use actix_http::StatusCode;
-use actix_web::web::Data;
-use index_scheduler::filter::{
-    filters_into_index_filters, filters_into_index_filters_unchecked,
-    retrieve_foreign_keys_settings, SourceIndexUid,
-};
-use index_scheduler::{IndexScheduler, RoFeatures};
-use itertools::Itertools;
-use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
-use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::milli::order_by_map::OrderByMap;
-use meilisearch_types::milli::progress::Progress;
-use meilisearch_types::milli::score_details::{ScoreDetails, WeightedScoreValue};
-use meilisearch_types::milli::vector::Embedding;
-use meilisearch_types::milli::{
-    self, merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, Deadline,
-    DocumentId, FederatingResultsStep, IndexFilter, OrderBy, DEFAULT_VALUES_PER_FACET,
-};
-use meilisearch_types::network::{Network, Remote};
-use meilisearch_types::settings::DEFAULT_PAGINATION_MAX_TOTAL_HITS;
-use meilisearch_types::Document;
-use roaring::RoaringBitmap;
-use tokio::task::JoinHandle;
-use uuid::Uuid;
 
 #[allow(clippy::too_many_arguments)]
 pub async fn perform_federated_search(
@@ -172,6 +173,7 @@ pub async fn perform_federated_search(
             query_index,
             &network,
             features,
+            index_scheduler.remote_availability(),
         )?
     }
     let federation = federation;
@@ -430,6 +432,14 @@ pub async fn perform_federated_search(
     let remote_errors = partitioned_queries.has_remote.then_some(remote_errors);
     let performance_details =
         federation.show_performance_details.then(|| progress.accumulated_durations());
+
+    if !network.shards.is_empty() {
+        for (remote_name, error) in remote_errors.iter().flatten() {
+            if error.code.is_server_error() {
+                index_scheduler.mark_remote_unavailable(remote_name.clone())?;
+            }
+        }
+    }
 
     Ok((
         FederatedSearchResult {
@@ -981,6 +991,7 @@ impl PartitionedQueries {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn partition(
         &mut self,
         federation: &mut Federation,
@@ -989,6 +1000,7 @@ impl PartitionedQueries {
         query_index: usize,
         network: &Network,
         features: RoFeatures,
+        remote_availability: &RemoteAvailability,
     ) -> Result<(), ResponseError> {
         if let Some(pagination_field) = federated_query.has_pagination() {
             return Err(MeilisearchHttpError::PaginationInFederatedQuery(
@@ -1032,7 +1044,8 @@ impl PartitionedQueries {
 
         let (index_uid, query, federation_options);
         let queries = if federated_query.must_use_network(network, &features)? {
-            let partition = partition.get_or_insert_with(|| super::Partition::new(network.clone()));
+            let partition = partition
+                .get_or_insert_with(|| super::Partition::new(network.clone(), remote_availability));
             (index_uid, query, federation_options) = federated_query.into_index_query_federation();
 
             either::Left(partition.to_query_partition(

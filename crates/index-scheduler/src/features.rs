@@ -3,7 +3,8 @@ use std::sync::{Arc, RwLock};
 use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
-use meilisearch_types::network::Network;
+use meilisearch_types::network::route::Status;
+use meilisearch_types::network::{Network, RemoteAvailability};
 
 use crate::error::FeatureNotEnabledError;
 use crate::Result;
@@ -25,6 +26,7 @@ pub(crate) struct FeatureData {
     persisted: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
     runtime: Arc<RwLock<RuntimeTogglableFeatures>>,
     network: Arc<RwLock<Network>>,
+    remote_availability: Arc<RemoteAvailability>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -234,6 +236,7 @@ impl FeatureData {
             persisted: runtime_features_db,
             runtime,
             network: Arc::new(RwLock::new(network)),
+            remote_availability: Arc::new(RemoteAvailability::new()),
         })
     }
 
@@ -278,6 +281,18 @@ impl FeatureData {
     }
 
     pub fn network(&self) -> Network {
-        Network::clone(&*self.network.read().unwrap())
+        let mut network = Network::clone(&*self.network.read().unwrap());
+        for (remote_name, remote) in network.remotes.iter_mut() {
+            remote.status = if self.remote_availability.is_available(remote_name) {
+                Status::Available
+            } else {
+                Status::Unavailable
+            };
+        }
+        network
+    }
+
+    pub fn remote_availability(&self) -> &RemoteAvailability {
+        &self.remote_availability
     }
 }

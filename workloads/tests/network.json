@@ -100,17 +100,9 @@
       "method": "PATCH",
       "body": {
         "inline": {
-          "filterableAttributes": [
-            "genres",
-            "release_date"
-          ],
-          "searchableAttributes": [
-            "title",
-            "overview"
-          ],
-          "sortableAttributes": [
-            "release_date"
-          ]
+          "filterableAttributes": ["genres", "release_date"],
+          "searchableAttributes": ["title", "overview"],
+          "sortableAttributes": ["release_date"]
         }
       },
       "expectedStatus": 202,
@@ -274,17 +266,9 @@
             "batchUid": 0,
             "canceledBy": null,
             "details": {
-              "filterableAttributes": [
-                "genres",
-                "release_date"
-              ],
-              "searchableAttributes": [
-                "title",
-                "overview"
-              ],
-              "sortableAttributes": [
-                "release_date"
-              ]
+              "filterableAttributes": ["genres", "release_date"],
+              "searchableAttributes": ["title", "overview"],
+              "sortableAttributes": ["release_date"]
             },
             "duration": "[duration]",
             "enqueuedAt": "[timestamp]",
@@ -321,26 +305,31 @@
         "remotes": {
           "prod1": {
             "searchApiKey": "foo1",
+            "status": "available",
             "url": "http://localhost:7701",
             "writeApiKey": "bar1"
           },
           "prod2": {
             "searchApiKey": "foo2",
+            "status": "available",
             "url": "http://localhost:7702",
             "writeApiKey": "bar2"
           },
           "prod3": {
             "searchApiKey": "foo3",
+            "status": "available",
             "url": "http://localhost:7703",
             "writeApiKey": "bar3"
           },
           "prod4": {
             "searchApiKey": "foo4",
+            "status": "available",
             "url": "http://localhost:7704",
             "writeApiKey": "bar4"
           },
           "prod5": {
             "searchApiKey": "foo5",
+            "status": "available",
             "url": "http://localhost:7705",
             "writeApiKey": "bar5"
           }
@@ -348,29 +337,19 @@
         "self": "prod1",
         "shards": {
           "prod1": {
-            "remotes": [
-              "prod1"
-            ]
+            "remotes": ["prod1"]
           },
           "prod2": {
-            "remotes": [
-              "prod2"
-            ]
+            "remotes": ["prod2"]
           },
           "prod3": {
-            "remotes": [
-              "prod3"
-            ]
+            "remotes": ["prod3"]
           },
           "prod4": {
-            "remotes": [
-              "prod4"
-            ]
+            "remotes": ["prod4"]
           },
           "prod5": {
-            "remotes": [
-              "prod5"
-            ]
+            "remotes": ["prod5"]
           }
         },
         "version": "00000000-0000-0000-0000-000000000000"
