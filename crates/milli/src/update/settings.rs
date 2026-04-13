@@ -1631,7 +1631,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             displayed_fields: Setting::NotSet,
             filterable_fields: _,
             sortable_fields: _,
-            foreign_keys: Setting::NotSet,
+            foreign_keys: _,
             criteria: _,
             stop_words: Setting::NotSet, // TODO (require force reindexing of searchables)
             non_separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
@@ -1677,6 +1677,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_filterable_attributes()?;
             self.update_sortable_attributes()?;
             self.update_distinct_attribute()?;
+            self.update_foreign_keys()?;
             self.update_criteria()?;
 
             // Note that we don't need to update the searchables here,
