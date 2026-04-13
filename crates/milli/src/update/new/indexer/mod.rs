@@ -724,7 +724,7 @@ where
                     //
                     // The first two bytes corresponds to the field ID
                     // while the third byte corresponds to the level.
-                    if key.get(2 + 1).copied() != Some(0) {
+                    if key.get(2).copied() != Some(0) {
                         // safety: We don't keep any reference to the database.
                         unsafe { iter.del_current()? };
                     }
