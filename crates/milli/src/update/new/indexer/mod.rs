@@ -682,6 +682,7 @@ where
         let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
         progress.update_progress(db_progress_obj);
 
+        // TODO merge with the above code
         for database in databases {
             if must_stop_processing() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));
@@ -709,6 +710,7 @@ where
         let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
         progress.update_progress(db_progress_obj);
 
+        // TODO merge with the above code (or not?)
         for database in databases {
             if must_stop_processing() {
                 return Err(Error::InternalError(InternalError::AbortedIndexation));

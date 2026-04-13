@@ -1651,7 +1651,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             proximity_precision: _,
             embedder_settings: _,
             search_cutoff: Setting::NotSet,
-            localized_attributes_rules: Setting::NotSet, // TODO to start with
+            localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
             prefix_search: Setting::NotSet,              // TODO continue with this
             facet_search: Setting::NotSet,
             disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
