@@ -500,19 +500,12 @@ where
         // we should insert it in `dimension`
         let backend = self.index.get_vector_store(self.wtxn)?.unwrap_or_default();
         for (name, action) in settings_diff.embedding_config_updates.iter() {
-            if action.is_being_quantized && !dimension.contains_key(name.as_str()) {
-                let index = self.index.embedding_configs().embedder_id(self.wtxn, name)?.ok_or(
-                    InternalError::DatabaseMissingEntry {
-                        db_name: "embedder_category_id",
-                        key: None,
-                    },
-                )?;
-                let reader =
-                    VectorStore::new(backend, self.index.vector_store, index, action.was_quantized);
-                let Some(dim) = reader.dimensions(self.wtxn)? else {
+            let must_rebuild = action.is_being_quantized || action.remove_fragments().is_some();
+            if must_rebuild && !dimension.contains_key(name.as_str()) {
+                let Some(runtime_embedder) = settings_diff.new.runtime_embedders.get(name) else {
                     continue;
                 };
-                dimension.insert(name.to_string(), dim);
+                dimension.insert(name.to_string(), runtime_embedder.embedder.dimensions());
             }
         }
 
