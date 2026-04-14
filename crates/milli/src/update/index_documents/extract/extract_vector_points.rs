@@ -1217,18 +1217,29 @@ struct WriteGrenadOnEmbed<'a> {
 }
 
 impl WriteGrenadOnEmbed<'_> {
+    /// Adds a (docid, extractor_id) pair, indicating they have no associated embedding.
+    ///
+    /// # Panics
+    ///
+    /// if the (docid, extractor_id) pair is not greater than all previously sent pairs.
     pub fn push_response(&mut self, docid: DocumentId, extractor_id: u8) {
         self.waiting_responses.push_back((docid, extractor_id));
     }
 
+    /// Write any outstanding `waiting_responses`.
     pub fn finish(mut self) -> Result<grenad::Reader<BufReader<File>>> {
-        for (docid, extractor_id) in self.waiting_responses {
-            self.scratch.clear();
-            self.scratch.write_u32::<BigEndian>(docid).unwrap();
-            self.scratch.write_u8(extractor_id).unwrap();
-            self.vector_writer.insert(&self.scratch, []).unwrap();
+        for (docid, extractor_id) in std::mem::take(&mut self.waiting_responses) {
+            self.write(docid, extractor_id, None);
         }
         writer_into_reader(self.vector_writer)
+    }
+
+    fn write(&mut self, docid: u32, extractor_id: u8, embedding: Option<&[f32]>) {
+        self.scratch.clear();
+        self.scratch.write_u32::<BigEndian>(docid).unwrap();
+        self.scratch.write_u8(extractor_id).unwrap();
+        let embedding = if let Some(embedding) = embedding { embedding } else { &[] };
+        self.vector_writer.insert(&self.scratch, cast_slice(embedding)).unwrap();
     }
 }
 
@@ -1241,22 +1252,15 @@ impl<'doc> OnEmbed<'doc> for WriteGrenadOnEmbed<'_> {
         let (docid, extractor_id) = (response.metadata.docid, response.metadata.extractor_id);
         while let Some(waiting_response) = self.waiting_responses.pop_front() {
             if (docid, extractor_id) > waiting_response {
-                self.scratch.clear();
-                self.scratch.write_u32::<BigEndian>(docid).unwrap();
-                self.scratch.write_u8(extractor_id).unwrap();
-                self.vector_writer.insert(&self.scratch, []).unwrap();
+                let (docid, extractor_id) = waiting_response;
+                self.write(docid, extractor_id, None);
             } else {
                 self.waiting_responses.push_front(waiting_response);
                 break;
             }
         }
 
-        if let Some(embedding) = response.embedding {
-            self.scratch.clear();
-            self.scratch.write_u32::<BigEndian>(docid).unwrap();
-            self.scratch.write_u8(extractor_id).unwrap();
-            self.vector_writer.insert(&self.scratch, cast_slice(embedding.as_slice())).unwrap();
-        }
+        self.write(docid, extractor_id, response.embedding.as_deref());
     }
 
     fn process_embedding_error(
