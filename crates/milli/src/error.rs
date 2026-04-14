@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::documents::{self, DocumentsBatchCursorError};
-use crate::thread_pool_no_abort::PanicCatched;
+use crate::thread_pool_no_abort::CaughtPanic;
 use crate::vector::settings::EmbeddingSettings;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
@@ -63,7 +63,7 @@ pub enum InternalError {
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
     #[error(transparent)]
-    PanicInThreadPool(#[from] PanicCatched),
+    PanicInThreadPool(#[from] CaughtPanic),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
