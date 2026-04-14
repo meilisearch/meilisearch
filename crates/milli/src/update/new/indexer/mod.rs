@@ -268,14 +268,12 @@ where
     )?;
 
     // Clear the cellulite database when the geojson support is removed
-    // TODO what about PatternMatch::Parent and please test that cellulite is cleared correctly
     if settings_delta.new_match_faceted_field(RESERVED_GEOJSON_FIELD_NAME) == PatternMatch::NoMatch
     {
         index.cellulite.clear(wtxn)?;
     }
 
     // Clear the geo rtree entry when the geo support is removed
-    // TODO what about PatternMatch::Parent and please test that the geo rtree entry is cleared correctly
     if settings_delta.new_match_faceted_field(RESERVED_GEO_FIELD_NAME) == PatternMatch::NoMatch {
         index.delete_geo_rtree(wtxn)?;
     }
