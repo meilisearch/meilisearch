@@ -10,7 +10,7 @@ use crate::error::FaultSource;
 use crate::update::new::vector_document::VectorDocument;
 use crate::vector::embedder::composite::MAX_COMPOSITE_DISTANCE;
 use crate::vector::embedder::rest::ConfigurationSource;
-use crate::{FieldDistribution, PanicCatched};
+use crate::{CaughtPanic, FieldDistribution};
 
 #[derive(Debug, thiserror::Error)]
 #[error("Error while generating embeddings: {inner}")]
@@ -101,7 +101,7 @@ pub enum EmbedErrorKind {
     #[error("no embedding was produced")]
     MissingEmbedding,
     #[error(transparent)]
-    PanicInThreadPool(#[from] PanicCatched),
+    PanicInThreadPool(#[from] CaughtPanic),
     #[error("`media` requested but the configuration doesn't have source `rest`")]
     RestMediaNotARest,
     #[error("`media` requested, and the configuration has source `rest`, but the configuration doesn't have `searchFragments`.")]

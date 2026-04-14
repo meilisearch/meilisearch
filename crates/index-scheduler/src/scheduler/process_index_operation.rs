@@ -379,7 +379,7 @@ impl IndexScheduler {
                             let filter = match Filter::from_json(filter_expr) {
                                 Ok(filter) => filter,
                                 Err(err) => {
-                                    // theorically, this should be catched by deserr before reaching the index-scheduler and cannot happens
+                                    // theorically, this should be caught by deserr before reaching the index-scheduler and cannot happens
                                     task.status = Status::Failed;
                                     task.error = Some(
                                         Error::from_milli(err, Some(index_uid.clone())).into(),
