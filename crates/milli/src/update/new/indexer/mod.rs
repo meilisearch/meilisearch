@@ -276,7 +276,6 @@ where
 
     // Clear the geo rtree entry when the geo support is removed
     // TODO what about PatternMatch::Parent and please test that the geo rtree entry is cleared correctly
-    //      Shouldn't we clear the geo values from the facets databases or is it done above?
     if settings_delta.new_match_faceted_field(RESERVED_GEO_FIELD_NAME) == PatternMatch::NoMatch {
         index.delete_geo_rtree(wtxn)?;
     }
