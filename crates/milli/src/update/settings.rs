@@ -14,7 +14,7 @@ use super::chat::ChatSearchParams;
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
-use crate::attribute_patterns::PatternMatch;
+use crate::attribute_patterns::{match_field_legacy, PatternMatch};
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
@@ -1935,10 +1935,13 @@ impl InnerIndexSettingsDiff {
             Some(DelAddOperation::DeletionAndAddition)
         } else if let Some(only_additional_fields) = &self.only_additional_fields {
             let additional_field = self.new.fields_ids_map.name(id).unwrap();
-            if only_additional_fields.contains(additional_field) {
-                Some(DelAddOperation::Addition)
-            } else {
+            if only_additional_fields
+                .iter()
+                .all(|f| match_field_legacy(f, additional_field) == PatternMatch::NoMatch)
+            {
                 None
+            } else {
+                Some(DelAddOperation::Addition)
             }
         } else if self.cache_user_defined_searchables {
             Some(DelAddOperation::DeletionAndAddition)
