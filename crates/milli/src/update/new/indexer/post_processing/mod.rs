@@ -25,7 +25,7 @@ use crate::update::new::words_prefix_docids::{
     compute_word_prefix_position_docids,
 };
 use crate::update::new::FacetFieldIdsDelta;
-use crate::update::{FacetsUpdateBulk, GrenadParameters};
+use crate::update::FacetsUpdateBulk;
 use crate::{GlobalFieldsIdsMap, Index, Prefix, Result};
 
 mod facet_bulk;
@@ -54,14 +54,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
     if let Some(prefix_data) = compute_word_fst(index, wtxn, word_delta, indexing_context.progress)?
     {
-        compute_prefix_database(
-            index,
-            wtxn,
-            word_delta,
-            &prefix_data,
-            indexing_context.grenad_parameters,
-            indexing_context.progress,
-        )?;
+        compute_prefix_database(index, wtxn, word_delta, &prefix_data, indexing_context.progress)?;
     }
 
     Ok(())
@@ -78,7 +71,6 @@ fn compute_prefix_database(
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
     prefix_data: &PrefixData,
-    grenad_parameters: &GrenadParameters,
     progress: &Progress,
 ) -> Result<()> {
     let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
@@ -86,16 +78,16 @@ fn compute_prefix_database(
     let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
 
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
-    compute_word_prefix_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
 
     progress.update_progress(PostProcessingWords::ExactWordPrefixDocids);
-    compute_exact_word_prefix_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_exact_word_prefix_docids(wtxn, index, &modified, &deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixFieldIdDocids);
-    compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixPositionDocids);
-    compute_word_prefix_position_docids(wtxn, index, &modified, &deleted, grenad_parameters)
+    compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)
 }
 
 fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<BTreeSet<Prefix>>
