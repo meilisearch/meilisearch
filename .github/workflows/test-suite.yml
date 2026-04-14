@@ -158,6 +158,33 @@ jobs:
           command: test
           args: --locked -p meilisearch --features test-ollama ollama
 
+  test-legacy-indexer:
+    name: Test legacy settings indexer
+    runs-on: ubuntu-22.04
+    env:
+      MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS: "true"
+    steps:
+      - uses: actions/checkout@v5
+      - name: check free space before
+        run: df -h
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
+      - name: check free space after
+        run: df -h
+      - name: Setup test with Rust stable
+        uses: dtolnay/rust-toolchain@1.91.1
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2.8.0
+      - name: Run cargo test
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --locked --all
+
   test-disabled-tokenization:
     name: Test disabled tokenization
     runs-on: ubuntu-22.04

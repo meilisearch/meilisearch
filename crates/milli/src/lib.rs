@@ -57,7 +57,7 @@ pub use search::new::{
     VisualSearchLogger,
 };
 use serde_json::Value;
-pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
+pub use thread_pool_no_abort::{CaughtPanic, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 pub use {arroy, cellulite, charabia as tokenizer, hannoy, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
