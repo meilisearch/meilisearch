@@ -94,16 +94,36 @@ fn extract_lat_lng(
             };
             let lat = extract_finite_float_from_value(
                 serde_json::from_slice(lat).map_err(InternalError::SerdeJson)?,
-            )
-            .map_err(|lat| GeoError::BadLatitude { document_id: document_id(), value: lat })
-            .map_err(Box::new)?;
-
+            );
             let lng = extract_finite_float_from_value(
                 serde_json::from_slice(lng).map_err(InternalError::SerdeJson)?,
-            )
-            .map_err(|lng| GeoError::BadLongitude { document_id: document_id(), value: lng })
-            .map_err(Box::new)?;
-            Ok(Some([lat, lng]))
+            );
+
+            match (lat, lng) {
+                (Ok(lat), Ok(lng)) => Ok(Some([lat, lng])),
+                (Ok(_), Err(lng)) => {
+                    Err(Box::new(GeoError::BadLongitude {
+                        document_id: document_id(),
+                        value: lng,
+                    })
+                    .into())
+                }
+                (Err(lat), Ok(_)) => {
+                    Err(Box::new(GeoError::BadLatitude {
+                        document_id: document_id(),
+                        value: lat,
+                    })
+                    .into())
+                }
+                (Err(lat), Err(lng)) => {
+                    Err(Box::new(GeoError::BadLatitudeAndLongitude {
+                        document_id: document_id(),
+                        lat,
+                        lng,
+                    })
+                    .into())
+                }
+            }
         }
         None => Ok(None),
     }
