@@ -46,7 +46,7 @@ pub struct TaskCompactionSummary {
     pub error_message: Option<String>,
 }
 
-/// Compact task queue.
+/// Compact task queue
 ///
 /// Trigger a compaction process on the task queue database and return its size before and
 /// after compaction. A successful compaction requires restarting the instance before it can

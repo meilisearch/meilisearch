@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::error::{Code, ResponseError};
-use meilisearch_types::network::Network;
+use meilisearch_types::network::{Network, RemoteAvailability};
 
 use crate::search::SearchQueryWithIndex;
 
@@ -15,6 +15,9 @@ pub fn partition_shards(
     ))
 }
 
-pub(super) fn remote_for_shard(_network: Network) -> BTreeMap<String, String> {
+pub(super) fn remote_for_shard(
+    _network: Network,
+    _remotes_statuses: &RemoteAvailability,
+) -> BTreeMap<String, String> {
     Default::default()
 }

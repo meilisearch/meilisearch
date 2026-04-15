@@ -19,6 +19,10 @@ use crate::proximity::ProximityPrecision;
 use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
+use crate::update::new::indexer::WordDelta;
+use crate::update::new::merger::merge_scan_and_send_docids;
+use crate::update::new::merger::EntryStatus;
+use crate::update::new::merger::Operation;
 use crate::update::new::merger::{merge_and_send_cellulite, merge_and_send_rtree};
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
@@ -40,7 +44,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     document_ids: &mut RoaringBitmap,
     modified_docids: &mut RoaringBitmap,
     embedder_stats: &EmbedderStats,
-) -> Result<(FacetFieldIdsDelta, Vec<IndexEmbeddingConfig>)>
+) -> Result<(FacetFieldIdsDelta, WordDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,
     MSP: Fn() -> bool + Sync,
@@ -85,6 +89,7 @@ where
     }
 
     let facet_field_ids_delta;
+    let word_delta;
 
     {
         let caches = {
@@ -140,11 +145,23 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordDocids);
 
-            merge_and_send_docids(
+            word_delta = merge_scan_and_send_docids(
                 word_docids,
                 index.word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let word = std::str::from_utf8(key)?.to_string();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word),
+                            EntryStatus::Updated => output.insert_modified(word),
+                        },
+                        Operation::Delete => output.insert_deleted(word),
+                        Operation::Ignore => (),
+                    }
+                    Ok(())
+                },
                 &indexing_context.must_stop_processing,
             )?;
         }
@@ -352,7 +369,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
-    Result::Ok((facet_field_ids_delta, index_embeddings))
+    Result::Ok((facet_field_ids_delta, word_delta, index_embeddings))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -366,7 +383,7 @@ pub(super) fn extract_all_settings_changes<MSP, SD>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     embedder_stats: &EmbedderStats,
-) -> Result<Vec<IndexEmbeddingConfig>>
+) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta)>
 where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
@@ -381,6 +398,8 @@ where
     let span =
         tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
     let _entered = span.enter();
+
+    let word_delta;
 
     update_database_documents(
         &documents,
@@ -416,11 +435,23 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordDocids);
 
-            merge_and_send_docids(
+            word_delta = merge_scan_and_send_docids(
                 word_docids,
                 index.word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let word = std::str::from_utf8(key)?.to_string();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word),
+                            EntryStatus::Updated => output.insert_modified(word),
+                        },
+                        Operation::Delete => output.insert_deleted(word),
+                        Operation::Ignore => (),
+                    }
+                    Ok(())
+                },
                 &indexing_context.must_stop_processing,
             )?;
         }
@@ -576,7 +607,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
     finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
-    Result::Ok(index_embeddings)
+    Result::Ok((index_embeddings, word_delta))
 }
 
 fn primary_key_from_db<'indexer>(

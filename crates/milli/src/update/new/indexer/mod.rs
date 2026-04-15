@@ -18,6 +18,7 @@ pub use post_processing::recompute_word_fst_from_word_docids_database;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 pub use settings_changes::settings_change_extract;
 pub use update_by_function::UpdateByFunction;
+pub use word_delta::WordDelta;
 pub use write::ChannelCongestion;
 use write::{build_vectors, update_index, write_to_db};
 
@@ -49,6 +50,7 @@ mod partial_dump;
 mod post_processing;
 pub mod settings_changes;
 mod update_by_function;
+mod word_delta;
 mod write;
 
 static LOG_MEMORY_METRICS_ONCE: Once = Once::new();
@@ -174,7 +176,8 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let (facet_field_ids_delta, index_embeddings) = extractor_handle.join().unwrap()?;
+        let (facet_field_ids_delta, word_delta, index_embeddings) =
+            extractor_handle.join().unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -197,6 +200,7 @@ where
                 indexing_context,
                 wtxn,
                 global_fields_ids_map,
+                &word_delta,
                 facet_field_ids_delta,
             )
         })
@@ -343,7 +347,7 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let index_embeddings = extractor_handle.join().unwrap()?;
+        let (index_embeddings, word_delta) = extractor_handle.join().unwrap()?;
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -368,6 +372,7 @@ where
                 indexing_context,
                 wtxn,
                 global_fields_ids_map,
+                &word_delta,
                 facet_field_ids_delta,
             )
         })

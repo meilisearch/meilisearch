@@ -1,0 +1,13 @@
+---
+source: crates/meilisearch/tests/dynamic_search_rules/mod.rs
+---
+[
+  {
+    "id": "remote",
+    "title": "Batman"
+  },
+  {
+    "id": "local",
+    "title": "Batman Returns"
+  }
+]

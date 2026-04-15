@@ -14,7 +14,7 @@ use super::chat::ChatSearchParams;
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
-use crate::attribute_patterns::PatternMatch;
+use crate::attribute_patterns::{match_field_legacy, PatternMatch};
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
@@ -27,7 +27,7 @@ use crate::index::{
 };
 use crate::order_by_map::OrderByMap;
 use crate::progress::{EmbedderStats, Progress, VariableNameStep};
-use crate::prompt::{default_max_bytes, default_template_text, PromptData};
+use crate::prompt::{default_max_bytes, default_template_text, Prompt, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::reindex;
@@ -1378,6 +1378,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     },
                 };
 
+                // Validate the document template syntax
+                Prompt::new(prompt.template.clone(), prompt.max_bytes)
+                    .map_err(UserError::InvalidChatSettingsDocumentTemplate)?;
+
                 let search_parameters = match new_search_parameters {
                     Setting::Set(sp) => {
                         let ChatSearchParams {
@@ -1931,10 +1935,13 @@ impl InnerIndexSettingsDiff {
             Some(DelAddOperation::DeletionAndAddition)
         } else if let Some(only_additional_fields) = &self.only_additional_fields {
             let additional_field = self.new.fields_ids_map.name(id).unwrap();
-            if only_additional_fields.contains(additional_field) {
-                Some(DelAddOperation::Addition)
-            } else {
+            if only_additional_fields
+                .iter()
+                .all(|f| match_field_legacy(f, additional_field) == PatternMatch::NoMatch)
+            {
                 None
+            } else {
+                Some(DelAddOperation::Addition)
             }
         } else if self.cache_user_defined_searchables {
             Some(DelAddOperation::DeletionAndAddition)

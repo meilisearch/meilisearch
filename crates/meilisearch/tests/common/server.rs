@@ -43,9 +43,9 @@ impl Server<Owned> {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         let options = default_settings(dir.path());
@@ -58,9 +58,9 @@ impl Server<Owned> {
 
     pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         options.master_key = Some("MASTER_KEY".to_string());
@@ -205,6 +205,42 @@ impl Server<Owned> {
         self.service.patch(url, value).await
     }
 
+    pub async fn create_dynamic_search_rule(
+        &self,
+        uid: impl AsRef<str>,
+        value: Value,
+    ) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.patch(url, value).await
+    }
+
+    pub async fn get_dynamic_search_rule(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.get(url).await
+    }
+
+    pub async fn list_dynamic_search_rules(&self) -> (Value, StatusCode) {
+        self.list_dynamic_search_rules_with(json!({})).await
+    }
+
+    pub async fn list_dynamic_search_rules_with(&self, value: Value) -> (Value, StatusCode) {
+        self.service.post("/dynamic-search-rules", value).await
+    }
+
+    pub async fn patch_dynamic_search_rule(
+        &self,
+        uid: impl AsRef<str>,
+        value: Value,
+    ) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.patch(url, value).await
+    }
+
+    pub async fn delete_dynamic_search_rule(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.delete(url).await
+    }
+
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
         self.service.get("/metrics").await
     }
@@ -215,9 +251,9 @@ impl Server<Shared> {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         let options = default_settings(dir.path());
@@ -510,7 +546,11 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             skip_index_budget: true,
             // Having 2 threads makes the tests way faster
             max_indexing_threads: MaxThreads::from_str("2").unwrap(),
-            experimental_no_edition_2024_for_settings: false,
+            experimental_no_edition_2024_for_settings: std::env::var_os(
+                "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS",
+            )
+            .map(|x| FromStr::from_str(&x.into_string().unwrap()).unwrap())
+            .unwrap_or(false),
             experimental_no_edition_2024_for_dumps: false,
         },
         experimental_enable_metrics: false,

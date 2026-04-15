@@ -26,10 +26,10 @@ use crate::routes::indexes::search_analytics::{SearchAggregator, SearchGET, Sear
 use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
-    MatchingStrategy, Partition, Personalize, RankingScoreThreshold, RetrieveVectors, SearchKind,
-    SearchParams, SearchQuery, SearchResult, SemanticRatio, DEFAULT_CROP_LENGTH,
-    DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG,
-    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    MatchingStrategy, NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold,
+    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -43,6 +43,10 @@ use crate::search_queue::SearchQueue;
 
 - A POST route: this is the preferred route when using API authentication, as it allows [preflight request](https://developer.mozilla.org/en-US/docs/Glossary/Preflight_request) caching and better performance.
 - A GET route: the usage of this route is discouraged, unless you have good reason to do otherwise (specific caching abilities for example)",
+            external_docs(
+                url = "https://www.meilisearch.com/docs/reference/api/search",
+                description = "Search API reference",
+            ),
         ),
     ),
 )]
@@ -542,7 +546,7 @@ pub async fn search_with_url_query(
     let request_uid = Uuid::now_v7();
     debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
     let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -601,22 +605,15 @@ pub(crate) async fn search(
     let personalize_query = personalize.is_some().then(|| query.q.clone()).flatten();
 
     let features = index_scheduler.features();
-    if query.use_network.is_some() {
-        features.check_network("passing `useNetwork` in a search query")?
-    }
+    let network = index_scheduler.network();
+    let remote_availability = index_scheduler.remote_availability();
 
-    let (mut search_result, deadline) = if query
-        .use_network
-        // avoid accidental recursion
-        .take()
-        // false by default for now
-        .unwrap_or_default()
-    {
-        let network = index_scheduler.network();
+    let (mut search_result, deadline) = if query.must_use_network(&network, &features)? {
         let mut federation = Federation::default();
-        let queries = Partition::new(network)
+        let queries = Partition::new(network, remote_availability)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
             .collect();
+
         let search_result = perform_federated_search(
             index_scheduler,
             queries,
@@ -753,7 +750,7 @@ pub async fn search_with_post(
     let request_uid = Uuid::now_v7();
 
     let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
 

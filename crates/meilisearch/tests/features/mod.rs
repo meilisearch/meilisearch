@@ -22,6 +22,7 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
       "taskQueueCompactionRoute": false,
@@ -41,6 +42,7 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
       "taskQueueCompactionRoute": false,
@@ -60,6 +62,7 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
       "taskQueueCompactionRoute": false,
@@ -80,6 +83,7 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
       "taskQueueCompactionRoute": false,
@@ -100,6 +104,7 @@ async fn experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
       "taskQueueCompactionRoute": false,
@@ -127,6 +132,7 @@ async fn experimental_feature_metrics() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
       "taskQueueCompactionRoute": false,
@@ -178,14 +184,14 @@ async fn errors() {
     let (response, code) = server.set_features(json!({"NotAFeature": true})).await;
 
     meili_snap::snapshot!(code, @"400 Bad Request");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r#"
     {
-      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`",
+      "message": "Unknown field `NotAFeature`: expected one of `metrics`, `logsRoute`, `editDocumentsByFunction`, `containsFilter`, `dynamicSearchRules`, `network`, `getTaskDocumentsRoute`, `taskQueueCompactionRoute`, `compositeEmbedders`, `chatCompletions`, `multimodal`, `foreignKeys`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
     }
-    "###);
+    "#);
 
     // The type must be a bool, not a number
     let (response, code) = server.set_features(json!({FEATURE_NAME: 42})).await;

@@ -22,8 +22,10 @@ content of the scheduler or enqueue new tasks.
 */
 
 mod dump;
+mod dynamic_search_rules;
 pub mod error;
 mod features;
+pub mod filter;
 mod index_mapper;
 #[cfg(test)]
 mod insta_snapshot;
@@ -55,12 +57,13 @@ pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
+use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules, RuleUid};
 use meilisearch_types::features::{
     ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::json_template::JsonTemplate;
@@ -68,7 +71,8 @@ use meilisearch_types::milli::vector::{
     Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
 use meilisearch_types::milli::{self, Index};
-use meilisearch_types::network::Network;
+use meilisearch_types::network::route::Status;
+use meilisearch_types::network::{Network, RemoteAvailability};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
@@ -183,6 +187,8 @@ pub struct IndexScheduler {
     pub(crate) index_mapper: IndexMapper,
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
+    /// In charge of storing and retrieving search dynamic rules.
+    dynamic_search_rules: dynamic_search_rules::DynamicSearchRulesStore,
 
     /// Stores the custom chat prompts and other settings of the indexes.
     pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
@@ -260,6 +266,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
+            dynamic_search_rules: self.dynamic_search_rules.clone(),
             chat_settings: self.chat_settings,
             runtime: self.runtime.clone(),
             web_client: self.web_client.clone(),
@@ -271,6 +278,7 @@ impl IndexScheduler {
             + Queue::nb_db()
             + IndexMapper::nb_db()
             + features::FeatureData::nb_db()
+            + dynamic_search_rules::DynamicSearchRulesStore::nb_db()
             + 1 // chat-prompts
             + 1 // persisted
     }
@@ -335,6 +343,8 @@ impl IndexScheduler {
         let mut wtxn = env.write_txn()?;
 
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
+        let dynamic_search_rules =
+            dynamic_search_rules::DynamicSearchRulesStore::new(&env, &mut wtxn)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
@@ -376,6 +386,7 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
+            dynamic_search_rules,
             chat_settings,
             runtime,
             web_client
@@ -781,7 +792,25 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
-        self.register_with_custom_metadata(kind, task_id, None, dry_run, None)
+        self.register_with_custom_metadata_and_network(kind, task_id, None, dry_run, None, None)
+    }
+
+    pub fn register_with_custom_metadata(
+        &self,
+        kind: KindWithContent,
+        task_id: Option<TaskId>,
+        custom_metadata: Option<String>,
+        dry_run: bool,
+        task_network: Option<TaskNetwork>,
+    ) -> Result<Task> {
+        self.register_with_custom_metadata_and_network(
+            kind,
+            task_id,
+            custom_metadata,
+            dry_run,
+            task_network,
+            None,
+        )
     }
 
     /// Register a new task in the scheduler, with metadata.
@@ -798,13 +827,14 @@ impl IndexScheduler {
     /// 2. The task to register matches the network version of the network topology change task
     ///
     /// Always accept the task if it is not an import task.
-    pub fn register_with_custom_metadata(
+    pub fn register_with_custom_metadata_and_network(
         &self,
         kind: KindWithContent,
         task_id: Option<TaskId>,
         custom_metadata: Option<String>,
         dry_run: bool,
         task_network: Option<TaskNetwork>,
+        new_network: Option<Network>,
     ) -> Result<Task> {
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
@@ -846,9 +876,14 @@ impl IndexScheduler {
             }
         }
 
-        if let Err(e) = wtxn.commit() {
+        let result = match new_network {
+            Some(new_network) => self.put_network(wtxn, new_network),
+            None => wtxn.commit().map_err(Into::into),
+        };
+
+        if let Err(e) = result {
             self.queue.delete_persisted_task_data(&task)?;
-            return Err(e.into());
+            return Err(e);
         }
 
         // notify the scheduler loop to execute a new tick
@@ -893,6 +928,17 @@ impl IndexScheduler {
             self.scheduler.wake_up.signal();
         }
         Ok(())
+    }
+
+    pub fn network_status_change_for_remote(
+        &self,
+        remote_name: String,
+        status: Status,
+    ) -> Result<(), Error> {
+        match status {
+            Status::Available => self.mark_remote_available(&remote_name),
+            Status::Unavailable => self.mark_remote_unavailable_indefinitely(remote_name),
+        }
     }
 
     fn update_network_task<F, O>(
@@ -1098,20 +1144,46 @@ impl IndexScheduler {
         self.features.features()
     }
 
+    pub fn remote_availability(&self) -> &RemoteAvailability {
+        self.features.remote_availability()
+    }
+
     pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.features.put_runtime_features(wtxn, features)?;
         Ok(())
     }
 
-    pub fn put_network(&self, network: Network) -> Result<()> {
-        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.features.put_network(wtxn, network)?;
-        Ok(())
+    pub fn put_network(&self, wtxn: RwTxn, network: Network) -> Result<()> {
+        self.features.put_network(wtxn, network)
     }
 
     pub fn network(&self) -> Network {
         self.features.network()
+    }
+
+    pub fn put_dynamic_search_rules(&self, rules: DynamicSearchRules) -> Result<()> {
+        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+        self.dynamic_search_rules.put(wtxn, rules)?;
+        Ok(())
+    }
+
+    pub fn dynamic_search_rules(&self) -> Arc<DynamicSearchRules> {
+        self.dynamic_search_rules.get()
+    }
+
+    pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.dynamic_search_rules.put_one(&mut wtxn, rule)?;
+        wtxn.commit()?;
+        Ok(())
+    }
+
+    pub fn delete_dynamic_search_rule(&self, uid: &RuleUid) -> Result<bool> {
+        let mut wtxn = self.env.write_txn()?;
+        let deleted = self.dynamic_search_rules.delete_one(&mut wtxn, uid)?;
+        wtxn.commit()?;
+        Ok(deleted)
     }
 
     pub fn update_runtime_webhooks(&self, runtime: RuntimeWebhooks) -> Result<()> {

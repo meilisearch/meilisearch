@@ -217,7 +217,7 @@ impl<'indexer> FacetSearchBuilder<'indexer> {
     }
 }
 
-fn callback(_bytes: &[u8], _deladd: DelAdd, _is_modified: bool) -> Result<()> {
+fn callback(_bytes: &[u8], _deladd: DelAdd) -> Result<()> {
     Ok(())
 }
 

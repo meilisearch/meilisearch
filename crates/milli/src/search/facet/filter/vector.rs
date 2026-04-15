@@ -8,25 +8,25 @@ use crate::Index;
 
 #[derive(Debug, thiserror::Error)]
 pub enum VectorFilterError<'a> {
-    #[error("The embedder `{}` does not exist. {}", embedder.value(), {
+    #[error("The embedder `{}` does not exist. {}", embedder.fragment(), {
         if available.is_empty() {
             String::from("This index does not have any configured embedders.")
         } else {
             let mut available = available.clone();
             available.sort_unstable();
-            let did_you_mean = DidYouMean::new(embedder.value(), &available);
+            let did_you_mean = DidYouMean::new(embedder.fragment(), &available);
             format!("Available embedders are: {}.{did_you_mean}", available.iter().map(|e| format!("`{e}`")).collect::<Vec<_>>().join(", "))
         }
     })]
     EmbedderDoesNotExist { embedder: &'a Token<'a>, available: Vec<String> },
 
-    #[error("The fragment `{}` does not exist on embedder `{}`. {}", fragment.value(), embedder.value(), {
+    #[error("The fragment `{}` does not exist on embedder `{}`. {}", fragment.fragment(), embedder.fragment(), {
         if available.is_empty() {
             String::from("This embedder does not have any configured fragments.")
         } else {
             let mut available = available.clone();
             available.sort_unstable();
-            let did_you_mean = DidYouMean::new(fragment.value(), &available);
+            let did_you_mean = DidYouMean::new(fragment.fragment(), &available);
             format!("Available fragments on this embedder are: {}.{did_you_mean}", available.iter().map(|f| format!("`{f}`")).collect::<Vec<_>>().join(", "))
         }
     })]
@@ -43,7 +43,9 @@ impl<'a> From<VectorFilterError<'a>> for Error {
     fn from(err: VectorFilterError<'a>) -> Self {
         match &err {
             EmbedderDoesNotExist { embedder: token, .. }
-            | FragmentDoesNotExist { fragment: token, .. } => token.as_external_error(err).into(),
+            | FragmentDoesNotExist { fragment: token, .. } => {
+                (*token).to_external_error(err).into()
+            }
         }
     }
 }
@@ -83,7 +85,7 @@ fn evaluate_inner(
     filter: &VectorFilter<'_>,
 ) -> crate::Result<RoaringBitmap> {
     let backend = index.get_vector_store(rtxn)?.unwrap_or_default();
-    let embedder_name = embedder.value();
+    let embedder_name = embedder.fragment();
     let available_embedders =
         || embedding_configs.iter().map(|c| c.name.clone()).collect::<Vec<_>>();
 
@@ -106,7 +108,7 @@ fn evaluate_inner(
 
     let docids = match filter {
         VectorFilter::Fragment(fragment) => {
-            let fragment_name = fragment.value();
+            let fragment_name = fragment.fragment();
             let fragment_config = embedding_config
                 .fragments
                 .as_slice()

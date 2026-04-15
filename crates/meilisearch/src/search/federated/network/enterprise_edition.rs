@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::milli::SHARD_FIELD;
+use meilisearch_types::network::RemoteAvailability;
 use meilisearch_types::{error::ResponseError, network::Network};
 use rand::seq::IteratorRandom as _;
 
@@ -30,20 +31,39 @@ pub fn partition_shards(
     }))
 }
 
-pub(super) fn remote_for_shard(network: Network) -> BTreeMap<String, String> {
+pub(super) fn remote_for_shard(
+    network: Network,
+    remote_availability: &RemoteAvailability,
+) -> BTreeMap<String, String> {
     let mut rng = rand::thread_rng();
+    let local = network.local;
 
     let remote_for_shard = {
         network
             .shards
             .into_iter()
             .filter_map(move |(shard_name, shard)| {
-                let Some(remote_for_shard) = shard.remotes.into_iter().choose(&mut rng) else {
-                    tracing::warn!("No remote for shard {shard_name}");
-                    return None;
+                let shard_name = shard_name.escape_default().collect();
+
+                let remote_for_shard = match &local {
+                    // pick the local instance if it owns the shard
+                    Some(local) if shard.remotes.contains(local) => local.clone(),
+                    // otherwise pick a random other remote
+                    _ => {
+                        let Some(remote_for_shard) = shard
+                            .remotes
+                            .into_iter()
+                            .filter(|remote| remote_availability.is_available(remote))
+                            .choose(&mut rng)
+                        else {
+                            tracing::warn!("No remote for shard {shard_name}");
+                            return None;
+                        };
+                        remote_for_shard
+                    }
                 };
 
-                Some((shard_name.escape_default().collect(), remote_for_shard))
+                Some((shard_name, remote_for_shard))
             })
             .collect()
     };

@@ -20,8 +20,8 @@ use crate::analytics::Analytics;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::similar_analytics::{SimilarAggregator, SimilarGET, SimilarPOST};
 use crate::search::{
-    add_search_rules, perform_similar, RankingScoreThresholdSimilar, RetrieveVectors, Route,
-    SearchKind, SimilarQuery, SimilarResult, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, perform_similar, RankingScoreThresholdSimilar, SimilarQuery, SimilarResult,
+    DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 
 #[routes::routes(
@@ -206,38 +206,17 @@ async fn similar(
     index_uid: IndexUid,
     mut query: SimilarQuery,
 ) -> Result<SimilarResult, ResponseError> {
-    let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
     let progress = Progress::default();
     // Tenant token search_rules.
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
         add_search_rules(&mut query.filter, search_rules);
     }
 
-    let index = index_scheduler.index(&index_uid)?;
-
-    let (embedder_name, embedder, quantized) = SearchKind::embedder(
-        &index_scheduler,
-        index_uid.to_string(),
-        &index,
-        &query.embedder,
-        None,
-        Route::Similar,
-    )?;
-
     let progress_clone = progress.clone();
     let result = tokio::task::spawn_blocking(move || {
         let _step = progress_clone.update_progress_scoped(TotalProcessingTimeStep::Search);
 
-        perform_similar(
-            &index,
-            query,
-            embedder_name,
-            embedder,
-            quantized,
-            retrieve_vectors,
-            index_scheduler.features(),
-            &progress_clone,
-        )
+        perform_similar(&index_scheduler, index_uid, query, &progress_clone)
     })
     .await;
 
