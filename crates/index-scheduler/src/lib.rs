@@ -344,7 +344,7 @@ impl IndexScheduler {
 
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let dynamic_search_rules =
-            dynamic_search_rules::DynamicSearchRulesStore::new(&env, &mut wtxn)?;
+            dynamic_search_rules::DynamicSearchRulesStore::new(&options, from_db_version)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
