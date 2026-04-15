@@ -83,6 +83,8 @@ impl<'a> IndexFilter<'a> {
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
+        let left_normalized_value;
+        let right_normalized_value;
 
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
@@ -124,25 +126,29 @@ impl<'a> IndexFilter<'a> {
             Condition::GreaterThan(val) => {
                 let number = val.parse_finite_float().ok();
                 let number_bounds = number.map(|number| (Excluded(number), Included(f64::MAX)));
-                let str_bounds = (Excluded(val.fragment()), Unbounded);
+                left_normalized_value = crate::normalize_facet(val.fragment());
+                let str_bounds = (Excluded(left_normalized_value.as_str()), Unbounded);
                 (number_bounds, str_bounds)
             }
             Condition::GreaterThanOrEqual(val) => {
                 let number = val.parse_finite_float().ok();
                 let number_bounds = number.map(|number| (Included(number), Included(f64::MAX)));
-                let str_bounds = (Included(val.fragment()), Unbounded);
+                left_normalized_value = crate::normalize_facet(val.fragment());
+                let str_bounds = (Included(left_normalized_value.as_str()), Unbounded);
                 (number_bounds, str_bounds)
             }
             Condition::LowerThan(val) => {
                 let number = val.parse_finite_float().ok();
                 let number_bounds = number.map(|number| (Included(f64::MIN), Excluded(number)));
-                let str_bounds = (Unbounded, Excluded(val.fragment()));
+                left_normalized_value = crate::normalize_facet(val.fragment());
+                let str_bounds = (Unbounded, Excluded(left_normalized_value.as_str()));
                 (number_bounds, str_bounds)
             }
             Condition::LowerThanOrEqual(val) => {
                 let number = val.parse_finite_float().ok();
                 let number_bounds = number.map(|number| (Included(f64::MIN), Included(number)));
-                let str_bounds = (Unbounded, Included(val.fragment()));
+                left_normalized_value = crate::normalize_facet(val.fragment());
+                let str_bounds = (Unbounded, Included(left_normalized_value.as_str()));
                 (number_bounds, str_bounds)
             }
             Condition::Between { from, to } => {
@@ -151,7 +157,12 @@ impl<'a> IndexFilter<'a> {
 
                 let number_bounds =
                     from_number.zip(to_number).map(|(from, to)| (Included(from), Included(to)));
-                let str_bounds = (Included(from.fragment()), Included(to.fragment()));
+                left_normalized_value = crate::normalize_facet(from.fragment());
+                right_normalized_value = crate::normalize_facet(to.fragment());
+                let str_bounds = (
+                    Included(left_normalized_value.as_str()),
+                    Included(right_normalized_value.as_str()),
+                );
                 (number_bounds, str_bounds)
             }
             Condition::Null => {
