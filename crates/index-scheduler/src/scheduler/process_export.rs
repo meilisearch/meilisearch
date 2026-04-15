@@ -26,6 +26,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::MustStopProcessing;
+use crate::filter::filter_into_index_filter;
 use crate::processing::AtomicDocumentStep;
 use crate::utils::UreqRequestWrapper;
 use crate::{Error, IndexScheduler, Result};
@@ -84,6 +85,13 @@ impl IndexScheduler {
             let index = self.index(uid)?;
             let index_rtxn = index.read_txn()?;
             let filter = filter.as_ref().map(Filter::from_json).transpose().map_err(err)?.flatten();
+            let filter = filter
+                .map(|f| {
+                    // evaluate foreign key filter
+                    filter_into_index_filter(f, &index, &index_rtxn, self, &progress, uid)
+                })
+                .transpose()?;
+
             let filter_universe =
                 filter.map(|f| f.evaluate(&index_rtxn, &index)).transpose().map_err(err)?;
             let whole_universe =

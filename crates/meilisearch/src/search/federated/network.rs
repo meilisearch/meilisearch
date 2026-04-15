@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
-use meilisearch_types::network::{Network, Remote};
+use meilisearch_types::network::{Network, Remote, RemoteAvailability};
 
 use crate::search::{Federation, FederationOptions, SearchQuery, SearchQueryWithIndex};
 
@@ -22,9 +22,11 @@ pub enum Partition {
 }
 
 impl Partition {
-    pub fn new(network: Network) -> Self {
+    pub fn new(network: Network, remote_availability: &RemoteAvailability) -> Self {
         if network.leader.is_some() {
-            Partition::ByShard { remote_for_shard: current_edition::remote_for_shard(network) }
+            Partition::ByShard {
+                remote_for_shard: current_edition::remote_for_shard(network, remote_availability),
+            }
         } else {
             Partition::ByRemote { remotes: network.remotes }
         }

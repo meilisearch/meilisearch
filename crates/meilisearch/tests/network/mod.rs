@@ -193,7 +193,8 @@ async fn errors_on_param() {
         "kefir": {
           "url": "http://localhost:7700",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -440,12 +441,14 @@ async fn get_and_set_network() {
         "myself": {
           "url": "http://localhost:7700",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "foo",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -471,12 +474,14 @@ async fn get_and_set_network() {
         "myself": {
           "url": "http://localhost:7700",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "bar",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -503,17 +508,20 @@ async fn get_and_set_network() {
         "myself": {
           "url": "http://localhost:7700",
           "searchApiKey": null,
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "them": {
           "url": "http://localhost:7702",
           "searchApiKey": "baz",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "bar",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -537,12 +545,14 @@ async fn get_and_set_network() {
         "them": {
           "url": "http://localhost:7702",
           "searchApiKey": "baz",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "bar",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -562,12 +572,14 @@ async fn get_and_set_network() {
         "them": {
           "url": "http://localhost:7702",
           "searchApiKey": "baz",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "bar",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -587,12 +599,14 @@ async fn get_and_set_network() {
         "them": {
           "url": "http://localhost:7702",
           "searchApiKey": "baz",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "bar",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -612,12 +626,14 @@ async fn get_and_set_network() {
         "them": {
           "url": "http://localhost:7702",
           "searchApiKey": "baz",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "bar",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -637,12 +653,14 @@ async fn get_and_set_network() {
         "them": {
           "url": "http://localhost:7702",
           "searchApiKey": "baz",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "bar",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},
@@ -662,12 +680,14 @@ async fn get_and_set_network() {
         "them": {
           "url": "http://localhost:7702",
           "searchApiKey": "baz",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
           "searchApiKey": "bar",
-          "writeApiKey": null
+          "writeApiKey": null,
+          "status": "available"
         }
       },
       "shards": {},

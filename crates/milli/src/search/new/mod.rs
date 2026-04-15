@@ -58,12 +58,13 @@ use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
 use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
+use crate::search::facet::IndexFilter;
 use crate::search::new::distinct::apply_distinct_rule;
 use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, Deadline, DocumentId, FieldId, Filter, Index, Member, PinDoc, Result,
-    TermsMatchingStrategy, UserError, Weight,
+    AscDesc, Deadline, DocumentId, FieldId, Index, Member, PinDoc, Result, TermsMatchingStrategy,
+    UserError, Weight,
 };
 
 /// Cache for synonyms to avoid repeated database access
@@ -305,7 +306,7 @@ fn resolve_universe(
     logger: &mut dyn SearchLogger<QueryGraph>,
     progress: &Progress,
 ) -> Result<RoaringBitmap> {
-    let _step = progress.update_progress_scoped(SearchStep::ResolveUniverse);
+    let _step = progress.update_progress_scoped(SearchStep::EvaluateQuery);
     resolve_maximally_reduced_query_graph(
         ctx,
         initial_universe,
@@ -662,11 +663,11 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
-    filters: &Option<Filter<'_>>,
+    filters: &Option<IndexFilter<'_>>,
     progress: &Progress,
 ) -> Result<RoaringBitmap> {
     Ok(if let Some(filters) = filters {
-        let _step = progress.update_progress_scoped(SearchStep::Filter);
+        let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
         filters.evaluate(txn, index)?
     } else {
         index.documents_ids(txn)?
@@ -713,7 +714,7 @@ pub fn execute_vector_search(
     let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =
         &mut placeholder_search_logger;
 
-    let _step = progress.update_progress_scoped(SearchStep::SemanticSearch);
+    let _step = progress.update_progress_scoped(SearchStep::SemanticRanking);
     let BucketSortOutput { docids, scores, all_candidates, degraded } = bucket_sort(
         ctx,
         ranking_rules,
@@ -770,7 +771,7 @@ pub fn execute_search(
     let mut used_negative_operator = false;
     let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
-        let _step = progress.update_progress_scoped(SearchStep::Tokenize);
+        let _step = progress.update_progress_scoped(SearchStep::TokenizeQuery);
         let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
         let entered = span.enter();
 
@@ -883,7 +884,7 @@ pub fn execute_search(
             progress,
         )?;
 
-        let _step = progress.update_progress_scoped(SearchStep::KeywordSearch);
+        let _step = progress.update_progress_scoped(SearchStep::KeywordRanking);
         bucket_sort(
             ctx,
             ranking_rules,
@@ -903,7 +904,7 @@ pub fn execute_search(
     } else {
         let ranking_rules =
             get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;
-        let _step = progress.update_progress_scoped(SearchStep::PlaceholderSearch);
+        let _step = progress.update_progress_scoped(SearchStep::PlaceholderRanking);
         bucket_sort(
             ctx,
             ranking_rules,

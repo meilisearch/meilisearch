@@ -3,12 +3,14 @@ use std::collections::{BinaryHeap, HashSet};
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
+use index_scheduler::filter::filter_into_index_filter;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::deserr_codes::*;
 use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{deserr_codes::*, Code};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
+use meilisearch_types::milli::progress::Progress;
 use serde_json::Value;
 use tracing::debug;
 use utoipa::ToSchema;
@@ -18,10 +20,10 @@ use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
 use crate::search::{
-    add_search_rules, perform_facet_search, FacetSearchResult, HybridQuery, MatchingStrategy,
-    RankingScoreThreshold, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
-    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
-    DEFAULT_SEARCH_OFFSET,
+    add_search_rules, parse_filter, perform_facet_search, prepare_search, FacetSearchResult,
+    HybridQuery, MatchingStrategy, RankingScoreThreshold, SearchQuery, SearchResult,
+    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
 
@@ -266,6 +268,8 @@ pub async fn search(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
+    let progress = Progress::default();
+    let permit = search_queue.try_get_search_permit().await?;
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
     let query = params.into_inner();
@@ -282,20 +286,45 @@ pub async fn search(
     if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
         add_search_rules(&mut search_query.filter, search_rules);
     }
-
-    let index = index_scheduler.index(&index_uid)?;
-    let search_kind = search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
-    let permit = search_queue.try_get_search_permit().await?;
+    let features = index_scheduler.features();
+    let progress_clone = progress.clone();
     let search_result = tokio::task::spawn_blocking(move || {
-        perform_facet_search(
+        let index = index_scheduler.index(&index_uid)?;
+        let rtxn = index.read_txn()?;
+        let deadline = index.search_deadline(&rtxn)?;
+        let search_kind =
+            search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
+        let filter = match &search_query.filter {
+            Some(filter) => {
+                let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
+                filter
+                    .map(|f| {
+                        filter_into_index_filter(
+                            f,
+                            &index,
+                            &rtxn,
+                            &index_scheduler,
+                            &progress_clone,
+                            &index_uid,
+                        )
+                    })
+                    .transpose()?
+            }
+            None => None,
+        };
+
+        let (search, _, _, _) = prepare_search(
             &index,
-            search_query,
-            facet_query,
-            facet_name,
-            search_kind,
-            index_scheduler.features(),
-            locales,
-        )
+            &rtxn,
+            &search_query,
+            filter,
+            &search_kind,
+            deadline,
+            features,
+            &progress_clone,
+        )?;
+
+        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
     })
     .await;
     permit.drop().await;

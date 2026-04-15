@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::documents::{self, DocumentsBatchCursorError};
-use crate::thread_pool_no_abort::PanicCatched;
+use crate::thread_pool_no_abort::CaughtPanic;
 use crate::vector::settings::EmbeddingSettings;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
@@ -63,7 +63,7 @@ pub enum InternalError {
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
     #[error(transparent)]
-    PanicInThreadPool(#[from] PanicCatched),
+    PanicInThreadPool(#[from] CaughtPanic),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
@@ -108,6 +108,8 @@ pub enum SerializationError {
     Encoding { db_name: Option<&'static str> },
     #[error("number is not a valid finite number")]
     InvalidNumberSerialization,
+    #[error("failed to serialize index filter to filter string")]
+    FailedToSerializeFilter,
 }
 
 impl From<cellulite::Error> for Error {
@@ -432,6 +434,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     DocumentEditionRuntimeError(Box<EvalAltResult>),
     #[error("Document edition runtime error encountered while compiling the function: {0}")]
     DocumentEditionCompilationError(rhai::ParseError),
+    #[error("`.chat.documentTemplate`: Invalid document template: {0}.")]
+    InvalidChatSettingsDocumentTemplate(crate::prompt::error::NewPromptError),
     #[error("`.chat.documentTemplateMaxBytes`: `documentTemplateMaxBytes` cannot be zero")]
     InvalidChatSettingsDocumentTemplateMaxBytes,
     #[error("{0}")]

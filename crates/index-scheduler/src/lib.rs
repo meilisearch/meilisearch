@@ -25,6 +25,7 @@ mod dump;
 mod dynamic_search_rules;
 pub mod error;
 mod features;
+pub mod filter;
 mod index_mapper;
 #[cfg(test)]
 mod insta_snapshot;
@@ -62,7 +63,7 @@ use meilisearch_types::features::{
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::json_template::JsonTemplate;
@@ -70,7 +71,8 @@ use meilisearch_types::milli::vector::{
     Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
 use meilisearch_types::milli::{self, Index};
-use meilisearch_types::network::Network;
+use meilisearch_types::network::route::Status;
+use meilisearch_types::network::{Network, RemoteAvailability};
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
@@ -790,7 +792,25 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
-        self.register_with_custom_metadata(kind, task_id, None, dry_run, None)
+        self.register_with_custom_metadata_and_network(kind, task_id, None, dry_run, None, None)
+    }
+
+    pub fn register_with_custom_metadata(
+        &self,
+        kind: KindWithContent,
+        task_id: Option<TaskId>,
+        custom_metadata: Option<String>,
+        dry_run: bool,
+        task_network: Option<TaskNetwork>,
+    ) -> Result<Task> {
+        self.register_with_custom_metadata_and_network(
+            kind,
+            task_id,
+            custom_metadata,
+            dry_run,
+            task_network,
+            None,
+        )
     }
 
     /// Register a new task in the scheduler, with metadata.
@@ -807,13 +827,14 @@ impl IndexScheduler {
     /// 2. The task to register matches the network version of the network topology change task
     ///
     /// Always accept the task if it is not an import task.
-    pub fn register_with_custom_metadata(
+    pub fn register_with_custom_metadata_and_network(
         &self,
         kind: KindWithContent,
         task_id: Option<TaskId>,
         custom_metadata: Option<String>,
         dry_run: bool,
         task_network: Option<TaskNetwork>,
+        new_network: Option<Network>,
     ) -> Result<Task> {
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
@@ -855,9 +876,14 @@ impl IndexScheduler {
             }
         }
 
-        if let Err(e) = wtxn.commit() {
+        let result = match new_network {
+            Some(new_network) => self.put_network(wtxn, new_network),
+            None => wtxn.commit().map_err(Into::into),
+        };
+
+        if let Err(e) = result {
             self.queue.delete_persisted_task_data(&task)?;
-            return Err(e.into());
+            return Err(e);
         }
 
         // notify the scheduler loop to execute a new tick
@@ -902,6 +928,17 @@ impl IndexScheduler {
             self.scheduler.wake_up.signal();
         }
         Ok(())
+    }
+
+    pub fn network_status_change_for_remote(
+        &self,
+        remote_name: String,
+        status: Status,
+    ) -> Result<(), Error> {
+        match status {
+            Status::Available => self.mark_remote_available(&remote_name),
+            Status::Unavailable => self.mark_remote_unavailable_indefinitely(remote_name),
+        }
     }
 
     fn update_network_task<F, O>(
@@ -1107,16 +1144,18 @@ impl IndexScheduler {
         self.features.features()
     }
 
+    pub fn remote_availability(&self) -> &RemoteAvailability {
+        self.features.remote_availability()
+    }
+
     pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
         let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         self.features.put_runtime_features(wtxn, features)?;
         Ok(())
     }
 
-    pub fn put_network(&self, network: Network) -> Result<()> {
-        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.features.put_network(wtxn, network)?;
-        Ok(())
+    pub fn put_network(&self, wtxn: RwTxn, network: Network) -> Result<()> {
+        self.features.put_network(wtxn, network)
     }
 
     pub fn network(&self) -> Network {

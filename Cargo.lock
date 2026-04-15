@@ -444,9 +444,9 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "arroy"
-version = "0.6.4-nested-rtxns"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb8b6b34d9d83e3b837cb7f72a439dbd2293b102393c084af5e5b097212e1532"
+checksum = "699ea33fc45fb11de023c86d7d4dfe7dda934cfa81838d6bc637e2587f0e5d6d"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -498,6 +498,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "utoipa",
 ]
 
 [[package]]
@@ -629,7 +630,7 @@ source = "git+https://github.com/meilisearch/bbqueue#e8af4a4bccc8eb36b2b0442c4a9
 
 [[package]]
 name = "benchmarks"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "anyhow",
  "bumpalo",
@@ -846,7 +847,7 @@ dependencies = [
 
 [[package]]
 name = "build-info"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "anyhow",
  "time",
@@ -1115,9 +1116,9 @@ dependencies = [
 
 [[package]]
 name = "cellulite"
-version = "0.3.1-nested-rtxns-2"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f22d721963ead1a144f10cb8b53dc9469e760723b069123c7c7bc675c7354270"
+checksum = "ea10acbe37fc6de810cb2d03171f25161437582aa6184f0755cd5a8a448dec0e"
 dependencies = [
  "crossbeam",
  "geo",
@@ -1991,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "dump"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "anyhow",
  "big_s",
@@ -2325,7 +2326,7 @@ dependencies = [
 
 [[package]]
 name = "file-store"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "tempfile",
  "thiserror 2.0.17",
@@ -2347,7 +2348,7 @@ dependencies = [
 
 [[package]]
 name = "filter-parser"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "insta",
  "levenshtein_automata",
@@ -2375,7 +2376,7 @@ dependencies = [
 
 [[package]]
 name = "flatten-serde-json"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "criterion",
  "serde_json",
@@ -2549,7 +2550,7 @@ dependencies = [
 
 [[package]]
 name = "fuzzers"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "arbitrary",
  "bumpalo",
@@ -3042,9 +3043,9 @@ dependencies = [
 
 [[package]]
 name = "hannoy"
-version = "0.1.7-nested-rtxns"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "887aa70bc3aecc9b5c4652752820e3b37a1fb95d62520efbd18acd377cc26e95"
+checksum = "202cc875f1cff075e50f71e3b2415b549f31709be4f9a1de29dfb3920038cdb2"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -3135,9 +3136,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "heed"
-version = "0.22.1-nested-rtxns-7"
+version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4679efe3143dcb1b7d82023d532c42445f840bd5156efb4d5fb1a2258f06cbc"
+checksum = "ad82d6598ccf1dac15c8b758a1bd282b755b6776be600429176757190a1b0202"
 dependencies = [
  "bitflags 2.10.0",
  "byteorder",
@@ -3273,7 +3274,7 @@ dependencies = [
 
 [[package]]
 name = "http-client"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "cidr",
  "hyper-util",
@@ -3592,7 +3593,7 @@ dependencies = [
 
 [[package]]
 name = "index-scheduler"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "anyhow",
  "backoff",
@@ -3862,7 +3863,7 @@ dependencies = [
 
 [[package]]
 name = "json-depth-checker"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "criterion",
  "serde_json",
@@ -4236,9 +4237,9 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "lmdb-master-sys"
-version = "0.2.6-nested-rtxns-6"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e113d9bf240f974fbe7fd516cbfd8c422e925c0655495501c7237548425493d0"
+checksum = "aaeb9bd22e73bd1babffff614994b341e9b2008de7bb73bf1f7e9154f1978f8b"
 dependencies = [
  "cc",
  "doxygen-rs",
@@ -4393,7 +4394,7 @@ checksum = "ae960838283323069879657ca3de837e9f7bbb4c7bf6ea7f1b290d5e9476d2e0"
 
 [[package]]
 name = "meili-snap"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "insta",
  "md5 0.8.0",
@@ -4404,7 +4405,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "actix-cors",
  "actix-http",
@@ -4505,7 +4506,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-auth"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "base64 0.22.1",
  "enum-iterator",
@@ -4525,7 +4526,7 @@ dependencies = [
 
 [[package]]
 name = "meilisearch-types"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -4546,6 +4547,7 @@ dependencies = [
  "meili-snap",
  "memmap2",
  "milli",
+ "papaya",
  "roaring 0.10.12",
  "rustc-hash 2.1.1",
  "serde",
@@ -4563,7 +4565,7 @@ dependencies = [
 
 [[package]]
 name = "meilitool"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -4597,7 +4599,7 @@ dependencies = [
 
 [[package]]
 name = "milli"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "arroy",
  "bbqueue",
@@ -5150,9 +5152,9 @@ dependencies = [
 
 [[package]]
 name = "papaya"
-version = "0.2.3"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f92dd0b07c53a0a0c764db2ace8c541dc47320dad97c2200c2a637ab9dd2328f"
+checksum = "997ee03cd38c01469a7046643714f0ad28880bcb9e6679ff0666e24817ca19b7"
 dependencies = [
  "equivalent",
  "seize",
@@ -5268,7 +5270,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "permissive-json-pointer"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "big_s",
  "serde_json",
@@ -6271,7 +6273,7 @@ dependencies = [
 
 [[package]]
 name = "routes"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "actix-web",
  "routes-macros",
@@ -6280,7 +6282,7 @@ dependencies = [
 
 [[package]]
 name = "routes-macros"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "proc-macro2",
  "proc-macro2-diagnostics",
@@ -8718,7 +8720,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "1.41.0"
+version = "1.42.1"
 dependencies = [
  "anyhow",
  "build-info",

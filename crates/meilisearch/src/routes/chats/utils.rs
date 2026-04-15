@@ -219,7 +219,10 @@ pub fn format_documents<'doc>(
 ) -> Result<Vec<&'doc str>, ResponseError> {
     let ChatConfig { prompt: PromptData { template, max_bytes }, .. } = index.chat_config(rtxn)?;
 
-    let prompt = Prompt::new(template, max_bytes).unwrap();
+    let prompt = Prompt::new(template, max_bytes).map_err(|e| {
+        ResponseError::from_msg(e.to_string(), Code::InvalidChatSettingDocumentTemplate)
+    })?;
+
     let fid_map = index.fields_ids_map(rtxn)?;
     let metadata_builder = MetadataBuilder::from_index(index, rtxn)?;
     let fid_map_with_meta = FieldIdMapWithMetadata::new(fid_map.clone(), metadata_builder);

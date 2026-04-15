@@ -60,7 +60,7 @@ use nom::character::complete::{char, multispace0};
 use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
-use nom::sequence::{delimited, preceded, terminated, tuple};
+use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
 use nom::Finish;
 use nom_locate::LocatedSpan;
 pub(crate) use value::parse_value;
@@ -70,73 +70,156 @@ use crate::condition::parse_vectors_exists;
 use crate::error::IResultExt;
 
 pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
+pub type OwnedSpan = LocatedSpan<String, String>;
 
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
 
-const MAX_FILTER_DEPTH: usize = 200;
+const MAX_FILTER_DEPTH: usize = 150;
 
-#[derive(Debug, Clone, Eq)]
-pub struct Token<'a> {
-    /// The token in the original input, it should be used when possible.
-    span: Span<'a>,
-    /// If you need to modify the original input you can use the `value` field
-    /// to store your modified input.
-    value: Option<String>,
+/// Copy the Cow<str> behaviour because span doesn't support `LocatedSpan<Cow<str>, Cow<str>>`.
+#[derive(Debug, Clone)]
+pub enum CowSpan<'a> {
+    Borrowed(Span<'a>),
+    Owned(OwnedSpan),
 }
 
-impl PartialEq for Token<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.span.fragment() == other.span.fragment()
-    }
-}
-
-impl<'a> Token<'a> {
-    pub fn new(span: Span<'a>, value: Option<String>) -> Self {
-        Self { span, value }
+impl<'a> CowSpan<'a> {
+    pub fn fragment(&self) -> &str {
+        match self {
+            CowSpan::Borrowed(span) => span.fragment(),
+            CowSpan::Owned(span) => span.fragment(),
+        }
     }
 
-    /// Returns the string contained in the span of the `Token`.
-    /// This is only useful in the tests. You should always use
-    /// the value.
-    #[cfg(test)]
-    pub fn lexeme(&self) -> &str {
-        &self.span
+    pub fn extra(&self) -> &str {
+        match self {
+            CowSpan::Borrowed(span) => span.extra,
+            CowSpan::Owned(span) => &span.extra,
+        }
     }
 
-    /// Return the string contained in the token.
-    pub fn value(&self) -> &str {
-        self.value.as_ref().map_or(&self.span, |value| value)
+    pub fn into_owned(self) -> CowSpan<'static> {
+        match self {
+            CowSpan::Borrowed(span) => {
+                let fragment = span.fragment().to_string();
+                let extra = span.extra.to_string();
+
+                CowSpan::Owned(OwnedSpan::new_extra(fragment, extra))
+            }
+            CowSpan::Owned(span) => CowSpan::Owned(span),
+        }
     }
 
-    pub fn as_external_error(&self, error: impl std::error::Error) -> Error<'a> {
-        Error::new_from_external(self.span, error)
-    }
-
-    /// Returns a copy of the span this token was created with.
-    pub fn original_span(&self) -> Span<'a> {
-        self.span
-    }
-
-    pub fn parse_finite_float(&self) -> Result<f64, Error<'a>> {
-        let value: f64 = self.value().parse().map_err(|e| self.as_external_error(e))?;
-        if value.is_finite() {
-            Ok(value)
-        } else {
-            Err(Error::new_from_kind(self.span, ErrorKind::NonFiniteFloat))
+    pub fn get_utf8_column(&self) -> Option<usize> {
+        match self {
+            CowSpan::Borrowed(span) => Some(span.get_utf8_column()),
+            // When owning a span, we don't know the original column because we lost the reference to the original input.
+            CowSpan::Owned(_) => None,
         }
     }
 }
 
-impl<'a> From<Span<'a>> for Token<'a> {
+impl<'a> From<Span<'a>> for CowSpan<'a> {
     fn from(span: Span<'a>) -> Self {
-        Self { span, value: None }
+        CowSpan::Borrowed(span)
     }
 }
 
-/// Allow [Token] to be constructed from &[str]
-impl<'a> From<&'a str> for Token<'a> {
+impl From<OwnedSpan> for CowSpan<'_> {
+    fn from(span: OwnedSpan) -> Self {
+        CowSpan::Owned(span)
+    }
+}
+
+/// Allow [CowSpan] to be constructed from &[str]
+impl<'a> From<&'a str> for CowSpan<'a> {
     fn from(s: &'a str) -> Self {
-        Token::from(Span::new_extra(s, s))
+        CowSpan::from(Span::new_extra(s, s))
+    }
+}
+
+/// Allow [CowSpan] to be constructed from String
+impl From<String> for CowSpan<'_> {
+    fn from(s: String) -> Self {
+        CowSpan::from(OwnedSpan::new_extra(s.clone(), s))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Token<'a> {
+    /// The token in the original input, it should be used when possible.
+    span: CowSpan<'a>,
+    /// If you need to modify the original input you can use the `modified_fragment` field
+    /// to store your modified input.
+    modified_fragment: Option<String>,
+}
+
+impl PartialEq for Token<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.original_fragment() == other.original_fragment()
+    }
+}
+
+impl Eq for Token<'_> {}
+
+impl<'a> Token<'a> {
+    /// Returns the original fragment of the token.
+    pub fn original_fragment(&self) -> &str {
+        self.span.fragment()
+    }
+
+    /// Return the fragment of the token.
+    /// If the token has been modified, the modified value is returned.
+    pub fn fragment(&self) -> &str {
+        self.modified_fragment.as_ref().map_or(self.span.fragment(), |v| v)
+    }
+
+    /// Returns the extra fragment of the token.
+    pub fn extra(&self) -> &str {
+        self.span.extra()
+    }
+
+    /// Returns the modified value of the token.
+    /// This is only useful in the tests. You should always use
+    /// the fragment.
+    #[cfg(test)]
+    pub fn modified_fragment(&self) -> Option<&str> {
+        self.modified_fragment.as_deref()
+    }
+
+    pub fn modify_fragment(&mut self, new: String) {
+        self.modified_fragment = Some(new);
+    }
+
+    pub fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
+        Self { span: self.span, modified_fragment }
+    }
+
+    pub fn to_external_error(&self, error: impl std::error::Error) -> Error<'a> {
+        Error::new_from_external(self.span.clone(), error)
+    }
+
+    pub fn parse_finite_float(&self) -> Result<f64, Error<'a>> {
+        let value: f64 = self.fragment().parse().map_err(|e| self.to_external_error(e))?;
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(Error::new_from_kind(self.span.clone(), ErrorKind::NonFiniteFloat))
+        }
+    }
+
+    pub fn get_utf8_column(&self) -> Option<usize> {
+        self.span.get_utf8_column()
+    }
+
+    pub fn into_owned(self) -> Token<'static> {
+        Token { span: self.span.into_owned(), modified_fragment: self.modified_fragment }
+    }
+}
+
+impl<'a, T: Into<CowSpan<'a>>> From<T> for Token<'a> {
+    fn from(span: T) -> Self {
+        Token { span: span.into(), modified_fragment: None }
     }
 }
 
@@ -147,6 +230,86 @@ pub enum VectorFilter<'a> {
     UserProvided,
     Regenerate,
     None,
+}
+
+impl<'a> VectorFilter<'a> {
+    pub fn into_owned(self) -> VectorFilter<'static> {
+        match self {
+            Self::Fragment(token) => VectorFilter::Fragment(token.into_owned()),
+            Self::DocumentTemplate => VectorFilter::DocumentTemplate,
+            Self::UserProvided => VectorFilter::UserProvided,
+            Self::Regenerate => VectorFilter::Regenerate,
+            Self::None => VectorFilter::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexFilterCondition<'a> {
+    Not(Box<Self>),
+    Condition { fid: Token<'a>, op: Condition<'a> },
+    In { fid: Token<'a>, els: Vec<Token<'a>> },
+    Or(Vec<Self>),
+    And(Vec<Self>),
+    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
+    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
+    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
+    GeoPolygon { points: Vec<[Token<'a>; 2]> },
+}
+
+impl<'a> IndexFilterCondition<'a> {
+    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token<'a>> {
+        FidIter { stack: vec![(depth, self)] }
+    }
+}
+
+impl IndexFilterCondition<'_> {
+    pub fn into_owned(self) -> IndexFilterCondition<'static> {
+        match self {
+            Self::Not(condition) => IndexFilterCondition::Not(Box::new((*condition).into_owned())),
+            Self::Condition { fid, op } => {
+                IndexFilterCondition::Condition { fid: fid.into_owned(), op: op.into_owned() }
+            }
+            Self::In { fid, els } => IndexFilterCondition::In {
+                fid: fid.into_owned(),
+                els: els.into_iter().map(|el| el.into_owned()).collect(),
+            },
+            Self::Or(subfilters) => IndexFilterCondition::Or(
+                subfilters.into_iter().map(|filter| filter.into_owned()).collect(),
+            ),
+            Self::And(subfilters) => IndexFilterCondition::And(
+                subfilters.into_iter().map(|filter| filter.into_owned()).collect(),
+            ),
+            Self::VectorExists { fid, embedder, filter } => IndexFilterCondition::VectorExists {
+                fid: fid.into_owned(),
+                embedder: embedder.map(|embedder| embedder.into_owned()),
+                filter: filter.into_owned(),
+            },
+            Self::GeoLowerThan { point: [point0, point1], radius, resolution } => {
+                IndexFilterCondition::GeoLowerThan {
+                    point: [point0.into_owned(), point1.into_owned()],
+                    radius: radius.into_owned(),
+                    resolution: resolution.map(|resolution| resolution.into_owned()),
+                }
+            }
+            Self::GeoBoundingBox {
+                top_right_point: [top_right_point0, top_right_point1],
+                bottom_left_point: [bottom_left_point0, bottom_left_point1],
+            } => IndexFilterCondition::GeoBoundingBox {
+                top_right_point: [top_right_point0.into_owned(), top_right_point1.into_owned()],
+                bottom_left_point: [
+                    bottom_left_point0.into_owned(),
+                    bottom_left_point1.into_owned(),
+                ],
+            },
+            Self::GeoPolygon { points } => IndexFilterCondition::GeoPolygon {
+                points: points
+                    .into_iter()
+                    .map(|[point0, point1]| [point0.into_owned(), point1.into_owned()])
+                    .collect(),
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,6 +323,7 @@ pub enum FilterCondition<'a> {
     GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
     GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
     GeoPolygon { points: Vec<[Token<'a>; 2]> },
+    Foreign { fid: Token<'a>, op: Box<Self> },
 }
 
 pub enum TraversedElement<'a> {
@@ -193,6 +357,7 @@ impl<'a> FilterCondition<'a> {
             | FilterCondition::GeoBoundingBox { .. }
             | FilterCondition::GeoPolygon { .. }
             | FilterCondition::In { .. } => None,
+            FilterCondition::Foreign { fid: _, op } => op.use_contains_operator(),
         }
     }
 
@@ -208,13 +373,14 @@ impl<'a> FilterCondition<'a> {
             | FilterCondition::GeoPolygon { .. }
             | FilterCondition::In { .. } => None,
             FilterCondition::VectorExists { fid, .. } => Some(fid),
+            FilterCondition::Foreign { fid: _, op } => op.use_vector_filter(),
         }
     }
 
     pub fn use_field(&self, field: &str) -> Option<&Token<'a>> {
         match self {
             FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
-                (fid.value() == field).then_some(fid)
+                (fid.fragment() == field).then_some(fid)
             }
             FilterCondition::Not(this) => this.use_field(field),
             FilterCondition::Or(seq) | FilterCondition::And(seq) => {
@@ -224,27 +390,27 @@ impl<'a> FilterCondition<'a> {
             | FilterCondition::GeoBoundingBox { .. }
             | FilterCondition::GeoPolygon { .. }
             | FilterCondition::VectorExists { .. } => None,
+            FilterCondition::Foreign { fid, op } => {
+                (fid.fragment() == field).then_some(fid).or_else(|| op.use_field(field))
+            }
         }
     }
 
-    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token<'a>> + '_> {
-        if depth == 0 {
-            return Box::new(std::iter::empty());
-        }
-        match self {
-            FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
-                Box::new(std::iter::once(fid))
+    pub fn use_foreign_operator(&self) -> Option<&Token<'a>> {
+        ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }.next().and_then(|filter| {
+            match filter {
+                FilterCondition::Foreign { fid, .. } => Some(fid),
+                _ => None,
             }
-            FilterCondition::Not(filter) => {
-                let depth = depth.saturating_sub(1);
-                filter.fids(depth)
-            }
-            FilterCondition::And(subfilters) | FilterCondition::Or(subfilters) => {
-                let depth = depth.saturating_sub(1);
-                Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
-            }
-            _ => Box::new(std::iter::empty()),
-        }
+        })
+    }
+
+    pub fn list_foreign_filters(&self) -> impl Iterator<Item = &FilterCondition<'a>> {
+        ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }
+    }
+
+    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token<'a>> {
+        FidIter { stack: vec![(depth, self)] }
     }
 
     /// Returns the first token found at the specified depth, `None` if no token at this depth.
@@ -283,6 +449,95 @@ impl<'a> FilterCondition<'a> {
     }
 }
 
+/// Iterator listing the `Foreign` filters of a filter condition.
+struct ForeignFilterIter<'a, 'b> {
+    stack: Vec<(usize, &'a FilterCondition<'b>)>,
+}
+
+impl<'a, 'b> Iterator for ForeignFilterIter<'a, 'b> {
+    type Item = &'a FilterCondition<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                FilterCondition::Foreign { .. } => return Some(current),
+
+                FilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                FilterCondition::And(others) | FilterCondition::Or(others) if depth > 0 => {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Iterator listing the `fids` of a filter condition or an index filter condition.
+struct FidIter<'a, T> {
+    stack: Vec<(usize, &'a T)>,
+}
+
+impl<'a, 'b> Iterator for FidIter<'a, FilterCondition<'b>> {
+    type Item = &'a Token<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
+                    return Some(fid)
+                }
+
+                FilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                FilterCondition::And(others) | FilterCondition::Or(others) if depth > 0 => {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                FilterCondition::Foreign { fid, .. } => return Some(fid),
+
+                _ => {}
+            }
+        }
+    }
+}
+
+impl<'a, 'b> Iterator for FidIter<'a, IndexFilterCondition<'b>> {
+    type Item = &'a Token<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                IndexFilterCondition::Condition { fid, .. }
+                | IndexFilterCondition::In { fid, .. } => return Some(fid),
+
+                IndexFilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                IndexFilterCondition::And(others) | IndexFilterCondition::Or(others)
+                    if depth > 0 =>
+                {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                _ => {}
+            }
+        }
+    }
+}
+
 /// remove OPTIONAL whitespaces before AND after the provided parser.
 fn ws<'a, O>(
     inner: impl FnMut(Span<'a>) -> IResult<'a, O>,
@@ -318,7 +573,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
     // everything after `IN` can be a failure
     let (input, _) = cut_with_err(ws(tag("]")), |_| {
         if eof::<_, ()>(input).is_ok() {
-            Error::new_from_kind(input, ErrorKind::InClosingBracket)
+            Error::new_from_kind(input.into(), ErrorKind::InClosingBracket)
         } else {
             let expected_value_kind = match parse_value(input) {
                 Err(nom::Err::Error(e)) => match e.kind() {
@@ -327,7 +582,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
                 },
                 _ => ExpectedValueKind::Other,
             };
-            Error::new_from_kind(input, ErrorKind::InExpectedValue(expected_value_kind))
+            Error::new_from_kind(input.into(), ErrorKind::InExpectedValue(expected_value_kind))
         }
     })(input)?;
 
@@ -356,7 +611,10 @@ fn parse_not_in(input: Span) -> IResult<FilterCondition> {
 /// or             = and ("OR" and)
 fn parse_or(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
-        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::DepthLimitReached,
+        )));
     }
     let (input, first_filter) = parse_and(input, depth + 1)?;
     // if we found a `OR` then we MUST find something next
@@ -376,7 +634,10 @@ fn parse_or(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// and            = not ("AND" not)*
 fn parse_and(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
-        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::DepthLimitReached,
+        )));
     }
     let (input, first_filter) = parse_not(input, depth + 1)?;
     // if we found a `AND` then we MUST find something next
@@ -398,7 +659,10 @@ fn parse_and(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// If we parse a `NOT` we MUST parse something behind.
 fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
-        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::DepthLimitReached,
+        )));
     }
     alt((
         map(
@@ -410,6 +674,23 @@ fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
         ),
         |input| parse_primary(input, depth + 1),
     ))(input)
+}
+
+/// foreign      = WS* "_foreign(string WS* "," WS* value WS*)
+/// If we parse `_foreign` we MUST parse the rest of the expression.
+fn parse_foreign(input: Span, depth: usize) -> IResult<FilterCondition> {
+    let (mut params_span, _) = tuple((multispace0, word_exact("_foreign")))(input)?;
+    params_span.extra = input.fragment();
+
+    // if we were able to parse `_foreign` and can't parse the rest of the input we return a failure
+    delimited(char('('), ws(|input| parse_foreign_operator(input, depth)), char(')'))(params_span)
+        .map_cut(ErrorKind::Foreign)
+}
+
+fn parse_foreign_operator(input: Span, depth: usize) -> IResult<FilterCondition> {
+    let (input, (fid, op)) =
+        separated_pair(parse_value, ws(tag(",")), |input| parse_or(input, depth))(input)?;
+    Ok((input, FilterCondition::Foreign { fid, op: op.into() }))
 }
 
 /// geoRadius      = WS* "_geoRadius(float WS* "," WS* float WS* "," WS* float)
@@ -428,7 +709,10 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     let (input, args) = parsed?;
 
     if !(3..=4).contains(&args.len()) {
-        return Err(Error::failure_from_kind(input, ErrorKind::GeoRadiusArgumentCount(args.len())));
+        return Err(Error::failure_from_kind(
+            input.into(),
+            ErrorKind::GeoRadiusArgumentCount(args.len()),
+        ));
     }
 
     let res = FilterCondition::GeoLowerThan {
@@ -460,13 +744,13 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     .map_cut(ErrorKind::GeoBoundingBox)?;
 
     if args.len() != 2 {
-        return Err(Error::failure_from_kind(input, ErrorKind::GeoBoundingBox));
+        return Err(Error::failure_from_kind(input.into(), ErrorKind::GeoBoundingBox));
     }
 
     if let Some(offending) = args.iter().find(|a| a.len() != 2) {
         let context = offending.first().unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            *context,
+            (*context).into(),
             ErrorKind::GeoCoordinatesNotPair(offending.len()),
         ));
     }
@@ -500,7 +784,7 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     if args.len() < 3 {
         let context = args.last().and_then(|a| a.last()).unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            *context,
+            (*context).into(),
             ErrorKind::GeoPolygonNotEnoughPoints(args.len()),
         ));
     }
@@ -508,7 +792,7 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     if let Some(offending) = args.iter().find(|a| a.len() != 2) {
         let context = offending.first().unwrap_or(&input);
         return Err(Error::failure_from_kind(
-            *context,
+            (*context).into(),
             ErrorKind::GeoCoordinatesNotPair(offending.len()),
         ));
     }
@@ -528,9 +812,11 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geoPoint` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     ))(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
+    .map_err(|e| {
+        e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geoPoint")))
+    })?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
-    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geoPoint")))
+    Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geoPoint")))
 }
 
 /// geoPoint      = WS* "_geoDistance(float WS* "," WS* float WS* "," WS* float)
@@ -542,9 +828,11 @@ fn parse_geo_distance(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geoDistance` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     ))(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))?;
+    .map_err(|e| {
+        e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geoDistance")))
+    })?;
     // if we succeeded we still return a `Failure` because `geoDistance` filters are not allowed
-    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geoDistance")))
+    Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geoDistance")))
 }
 
 /// geo      = WS* "_geo(float WS* "," WS* float WS* "," WS* float)
@@ -556,9 +844,9 @@ fn parse_geo(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geo` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     ))(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))?;
+    .map_err(|e| e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geo"))))?;
     // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
-    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geo")))
+    Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geo")))
 }
 
 fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
@@ -577,7 +865,10 @@ fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
 /// primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
 fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
-        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::DepthLimitReached,
+        )));
     }
     alt((
         // if we find a first parenthesis, then we must parse an expression and find the closing parenthesis
@@ -585,7 +876,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
             ws(char('(')),
             cut(|input| parse_expression(input, depth + 1)),
             cut_with_err(ws(char(')')), |c| {
-                Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(c.char()))
+                Error::new_from_kind(input.into(), ErrorKind::MissingClosingDelimiter(c.char()))
             }),
         ),
         // Made a random block of functions because we reached the maximum number of elements per alt
@@ -603,6 +894,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_not_contains,
         parse_starts_with,
         parse_not_starts_with,
+        |input| parse_foreign(input, depth),
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
         parse_geo,
         parse_geo_distance,
@@ -610,7 +902,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_error_reserved_keyword,
     ))(input)
     // if the inner parsers did not match enough information to return an accurate error
-    .map_err(|e| e.map_err(|_| Error::new_from_kind(input, ErrorKind::InvalidPrimary)))
+    .map_err(|e| e.map_err(|_| Error::new_from_kind(input.into(), ErrorKind::InvalidPrimary)))
 }
 
 /// expression     = or
@@ -621,6 +913,82 @@ pub fn parse_expression(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// filter     = expression EOF
 pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
     terminated(|input| parse_expression(input, 0), eof)(input)
+}
+
+impl std::fmt::Display for IndexFilterCondition<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IndexFilterCondition::Not(filter) => {
+                write!(f, "NOT ({filter})")
+            }
+            IndexFilterCondition::Condition { fid, op } => {
+                write!(f, "{fid} {op}")
+            }
+            IndexFilterCondition::In { fid, els } => {
+                write!(f, "{fid} IN[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            IndexFilterCondition::Or(els) => {
+                write!(f, "OR[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            IndexFilterCondition::And(els) => {
+                write!(f, "AND[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            IndexFilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
+                write!(f, "_vectors")?;
+                if let Some(embedder) = embedder {
+                    write!(f, ".{:?}", embedder.fragment())?;
+                }
+                match inner {
+                    VectorFilter::Fragment(fragment) => {
+                        write!(f, ".fragments.{:?}", fragment.fragment())?
+                    }
+                    VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
+                    VectorFilter::UserProvided => write!(f, ".userProvided")?,
+                    VectorFilter::Regenerate => write!(f, ".regenerate")?,
+                    VectorFilter::None => (),
+                }
+                write!(f, " EXISTS")
+            }
+            IndexFilterCondition::GeoLowerThan { point, radius, resolution: None } => {
+                write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
+            }
+            IndexFilterCondition::GeoLowerThan { point, radius, resolution: Some(resolution) } => {
+                write!(f, "_geoRadius({}, {}, {}, {})", point[0], point[1], radius, resolution)
+            }
+            IndexFilterCondition::GeoBoundingBox {
+                top_right_point: top_left_point,
+                bottom_left_point: bottom_right_point,
+            } => {
+                write!(
+                    f,
+                    "_geoBoundingBox([{}, {}], [{}, {}])",
+                    top_left_point[0],
+                    top_left_point[1],
+                    bottom_right_point[0],
+                    bottom_right_point[1]
+                )
+            }
+            IndexFilterCondition::GeoPolygon { points } => {
+                write!(f, "_geoPolygon([")?;
+                for point in points {
+                    write!(f, "[{}, {}], ", point[0], point[1])?;
+                }
+                write!(f, "])")
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for FilterCondition<'_> {
@@ -656,11 +1024,11 @@ impl std::fmt::Display for FilterCondition<'_> {
             FilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
                 write!(f, "_vectors")?;
                 if let Some(embedder) = embedder {
-                    write!(f, ".{:?}", embedder.value())?;
+                    write!(f, ".{:?}", embedder.fragment())?;
                 }
                 match inner {
                     VectorFilter::Fragment(fragment) => {
-                        write!(f, ".fragments.{:?}", fragment.value())?
+                        write!(f, ".fragments.{:?}", fragment.fragment())?
                     }
                     VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
                     VectorFilter::UserProvided => write!(f, ".userProvided")?,
@@ -695,6 +1063,9 @@ impl std::fmt::Display for FilterCondition<'_> {
                 }
                 write!(f, "])")
             }
+            FilterCondition::Foreign { fid, op } => {
+                write!(f, "_foreign({fid}, {op})")
+            }
         }
     }
 }
@@ -720,7 +1091,7 @@ impl std::fmt::Display for Condition<'_> {
 
 impl std::fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{{}}}", self.value())
+        write!(f, "{{{}}}", self.fragment())
     }
 }
 
@@ -736,7 +1107,7 @@ pub mod tests {
         let lines = if before.is_empty() { 1 } else { before.lines().count() };
         let offset = before.chars().count();
         // the extra field is not checked in the tests so we can set it to nothing
-        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "") }.into()
+        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "").into() }
     }
 
     #[track_caller]
@@ -885,16 +1256,21 @@ pub mod tests {
         // Test recursion
         // This is the most that is allowed
         insta::assert_snapshot!(
-            p("(((((((((((((((((((((((((((((((((((((((((((((((((x = 1)))))))))))))))))))))))))))))))))))))))))))))))))"),
+            p("((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))"),
             @"{x} = {1}"
         );
         insta::assert_snapshot!(
-            p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
+            p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
             @"NOT ({x} = {1})"
         );
 
         // Confusing keywords
         insta::assert_snapshot!(p(r#"NOT "OR" EXISTS AND "EXISTS" NOT EXISTS"#), @"AND[NOT ({OR} EXISTS), NOT ({EXISTS} EXISTS), ]");
+
+        // Test foreign
+        insta::assert_snapshot!(p("_foreign(channel, subscribers = 1000)"), @"_foreign({channel}, {subscribers} = {1000})");
+        insta::assert_snapshot!(p("_foreign(channel, channel = ponce AND subscribers > 1000)"), @"_foreign({channel}, AND[{channel} = {ponce}, {subscribers} > {1000}, ])");
+        insta::assert_snapshot!(p("_foreign(channel, channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 ))"), @"_foreign({channel}, AND[{channel} = {ponce}, OR[{dog race} != {bernese mountain}, {subscribers} > {1000}, ], ])");
     }
 
     #[test]
@@ -1107,14 +1483,14 @@ pub mod tests {
 
         insta::assert_snapshot!(p("((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))"), @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
-        51:106 ((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))
+        38:106 ((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))
         "###);
 
         insta::assert_snapshot!(
             p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
             @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
-        797:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
+        597:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
         "###
         );
 
@@ -1242,42 +1618,42 @@ pub mod tests {
         let filter = Fc::parse("field = value").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 1);
-        assert_eq!(fids[0].value(), "field");
+        assert_eq!(fids[0].fragment(), "field");
 
         let filter = Fc::parse("field IN [1, 2, 3]").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 1);
-        assert_eq!(fids[0].value(), "field");
+        assert_eq!(fids[0].fragment(), "field");
 
         let filter = Fc::parse("field != value").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 1);
-        assert_eq!(fids[0].value(), "field");
+        assert_eq!(fids[0].fragment(), "field");
 
         let filter = Fc::parse("field1 = value1 AND field2 = value2").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 2);
-        assert!(fids[0].value() == "field1");
-        assert!(fids[1].value() == "field2");
+        assert!(fids[1].fragment() == "field1");
+        assert!(fids[0].fragment() == "field2");
 
         let filter = Fc::parse("field1 = value1 OR field2 = value2").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 2);
-        assert!(fids[0].value() == "field1");
-        assert!(fids[1].value() == "field2");
+        assert!(fids[1].fragment() == "field1");
+        assert!(fids[0].fragment() == "field2");
 
-        let depth = 2;
+        let depth = 1;
         let filter =
             Fc::parse("field1 = value1 AND (field2 = value2 OR field3 = value3)").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(depth).collect();
         assert_eq!(fids.len(), 1);
-        assert_eq!(fids[0].value(), "field1");
+        assert_eq!(fids[0].fragment(), "field1");
     }
 
     #[test]
     fn token_from_str() {
         let s = "test string that should not be parsed";
         let token: Token = s.into();
-        assert_eq!(token.value(), s);
+        assert_eq!(token.fragment(), s);
     }
 }

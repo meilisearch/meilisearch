@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use meilisearch_types::milli::SHARD_FIELD;
+use meilisearch_types::network::RemoteAvailability;
 use meilisearch_types::{error::ResponseError, network::Network};
 use rand::seq::IteratorRandom as _;
 
@@ -30,7 +31,10 @@ pub fn partition_shards(
     }))
 }
 
-pub(super) fn remote_for_shard(network: Network) -> BTreeMap<String, String> {
+pub(super) fn remote_for_shard(
+    network: Network,
+    remote_availability: &RemoteAvailability,
+) -> BTreeMap<String, String> {
     let mut rng = rand::thread_rng();
     let local = network.local;
 
@@ -46,7 +50,11 @@ pub(super) fn remote_for_shard(network: Network) -> BTreeMap<String, String> {
                     Some(local) if shard.remotes.contains(local) => local.clone(),
                     // otherwise pick a random other remote
                     _ => {
-                        let Some(remote_for_shard) = shard.remotes.into_iter().choose(&mut rng)
+                        let Some(remote_for_shard) = shard
+                            .remotes
+                            .into_iter()
+                            .filter(|remote| remote_availability.is_available(remote))
+                            .choose(&mut rng)
                         else {
                             tracing::warn!("No remote for shard {shard_name}");
                             return None;

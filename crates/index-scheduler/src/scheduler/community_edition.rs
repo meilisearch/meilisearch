@@ -39,6 +39,24 @@ impl IndexScheduler {
         Err(Error::RequiresEnterpriseEdition { action: "processing a network task" })
     }
 
+    pub fn is_remote_available(&self, _remote_name: &str) -> Result<bool> {
+        Err(Error::RequiresEnterpriseEdition { action: "checking the availability of a remote" })
+    }
+
+    pub fn mark_remote_unavailable(&self, _remote_name: String) -> Result<()> {
+        Err(Error::RequiresEnterpriseEdition { action: "marking a remote as unavailable" })
+    }
+
+    pub fn mark_remote_unavailable_indefinitely(&self, _remote_name: String) -> Result<()> {
+        Err(Error::RequiresEnterpriseEdition {
+            action: "marking a remote as unavailable indefinitely",
+        })
+    }
+
+    pub fn mark_remote_available(&self, _remote_name: &str) -> Result<()> {
+        Err(Error::RequiresEnterpriseEdition { action: "marking a remote as available" })
+    }
+
     #[cfg(unix)]
     pub(super) async fn process_snapshot_to_s3(
         &self,

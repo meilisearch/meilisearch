@@ -619,7 +619,7 @@ pub(crate) mod test {
     fn create_test_network() -> Network {
         Network {
             local: Some("myself".to_string()),
-            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()) }},
+            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()), status: Default::default() }},
             leader: None,
             version: Default::default(),
             shards: maplit::btreemap! {"shard".to_string() => Shard { remotes: maplit::btreeset!["other".to_string()]} },

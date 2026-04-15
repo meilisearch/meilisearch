@@ -546,7 +546,7 @@ pub async fn search_with_url_query(
     let request_uid = Uuid::now_v7();
     debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
     let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
@@ -606,10 +606,11 @@ pub(crate) async fn search(
 
     let features = index_scheduler.features();
     let network = index_scheduler.network();
+    let remote_availability = index_scheduler.remote_availability();
 
     let (mut search_result, deadline) = if query.must_use_network(&network, &features)? {
         let mut federation = Federation::default();
-        let queries = Partition::new(network)
+        let queries = Partition::new(network, remote_availability)
             .into_query_partition(&mut federation, &query, None, &index_uid)?
             .collect();
 
@@ -749,7 +750,7 @@ pub async fn search_with_post(
     let request_uid = Uuid::now_v7();
 
     let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
 
