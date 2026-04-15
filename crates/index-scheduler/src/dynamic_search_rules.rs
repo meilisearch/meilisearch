@@ -6,9 +6,11 @@ use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
 use meilisearch_types::index_uid::IndexUid;
 
-use crate::Result;
+use crate::{IndexSchedulerOptions, Result};
 
 const NUMBER_OF_DATABASES: u32 = 1;
+const DSR_DIR_NAME: &str = "search_rules";
+const DSR_DB_SIZE: usize = 1 * 1_024 * 1_024 * 1_024; // 1 GB
 
 mod db_name {
     pub const DYNAMIC_SEARCH_RULES: &str = "dynamic-search-rules";
@@ -16,8 +18,7 @@ mod db_name {
 
 #[derive(Clone)]
 pub(crate) struct DynamicSearchRulesStore {
-    pub(crate) persisted: Database<Str, SerdeJson<DynamicSearchRule>>,
-    runtime: Arc<RwLock<Arc<DynamicSearchRules>>>,
+    pub(crate) db: Database<Str, SerdeJson<DynamicSearchRule>>,
 }
 
 impl DynamicSearchRulesStore {
@@ -25,24 +26,23 @@ impl DynamicSearchRulesStore {
         NUMBER_OF_DATABASES
     }
 
-    pub fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self> {
-        let persisted = env.create_database(wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))?;
-        let rules: DynamicSearchRules = persisted
-            .iter(wtxn)?
-            .filter_map(|entry: Result<(&str, DynamicSearchRule), heed::Error>| {
-                entry
-                    .map(|(key, rule)| match key.parse::<IndexUid>() {
-                        Ok(key) => Some((key, rule)),
-                        Err(err) => {
-                            tracing::error!("Error when deserializing from DB: {err}");
-                            None
-                        }
-                    })
-                    .transpose()
-            })
-            .collect::<Result<DynamicSearchRules, heed::Error>>()?;
+    pub fn new(options: &IndexSchedulerOptions, _from_db_version: (u32, u32, u32)) -> Result<Self> {
+        let dsr_db_path = options.indexes_path.join(DSR_DIR_NAME);
+        std::fs::create_dir_all(&dsr_db_path)?;
 
-        Ok(Self { persisted, runtime: Arc::new(RwLock::new(Arc::new(rules))) })
+        let env = unsafe {
+            let env_options = heed::EnvOpenOptions::new();
+            let mut env_options = env_options.read_txn_without_tls();
+
+            env_options.max_dbs(Self::nb_db()).map_size(DSR_DB_SIZE).open(dsr_db_path)
+        }?;
+
+        let db = {
+            let mut wtxn = env.write_txn()?;
+            env.create_database(&mut wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))
+        }?;
+
+        Ok(Self { db })
     }
 
     pub fn put(&self, mut wtxn: RwTxn, value: DynamicSearchRules) -> Result<()> {
