@@ -45,7 +45,7 @@ pub fn generate_facet_levels(
     while {
         let mut level_size = 0;
         let level = base_level.checked_add(1).unwrap();
-        for reader in compute_level(index, wtxn, db, field_id, base_level)? {
+        for reader in compute_level(wtxn, db, field_id, base_level)? {
             let mut cursor = reader.into_cursor()?;
             while let Some((left_bound, facet_group_value)) = cursor.move_on_next()? {
                 level_size += 1;
@@ -70,14 +70,13 @@ pub fn generate_facet_levels(
 /// Compute the groups of facets from the provided base level
 /// and write the content into different grenad files.
 fn compute_level(
-    index: &Index,
     wtxn: &heed::RwTxn,
     db: Database<FacetGroupKeyCodec<BytesRefCodec>, LazyDecode<FacetGroupValueCodec>>,
     field_id: FieldId,
     base_level: u8,
 ) -> Result<Vec<grenad::Reader<BufReader<File>>>, crate::Error> {
     let thread_count = rayon::current_num_threads();
-    let rtxns = iter::repeat_with(|| index.env.nested_read_txn(wtxn))
+    let rtxns = iter::repeat_with(|| wtxn.nested_read_txn())
         .take(thread_count)
         .collect::<heed::Result<Vec<_>>>()?;
 

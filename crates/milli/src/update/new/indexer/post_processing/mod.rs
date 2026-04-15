@@ -143,13 +143,11 @@ fn compute_word_fst(
     word_delta: &WordDelta,
     progress: &Progress,
 ) -> Result<Option<PrefixData>> {
-    let rtxn = index.read_txn()?;
     progress.update_progress(PostProcessingWords::WordFst);
 
-    let words_fst = index.words_fst(&rtxn)?;
+    let words_fst = index.words_fst(wtxn)?;
     let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
-    // TODO Are you sure you want to use a rtxn, here?
-    let prefix_settings = index.prefix_settings(&rtxn)?;
+    let prefix_settings = index.prefix_settings(wtxn)?;
     word_fst_builder.with_prefix_settings(prefix_settings);
 
     // we ignore modifications when rebuilding the FST

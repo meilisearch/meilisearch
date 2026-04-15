@@ -13,22 +13,19 @@ use crate::heed_codec::StrBEU16Codec;
 use crate::update::GrenadParameters;
 use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
 
-struct WordPrefixDocids<'i> {
-    index: &'i Index,
+struct WordPrefixDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
     max_memory_by_thread: Option<usize>,
 }
 
-impl<'i> WordPrefixDocids<'i> {
+impl WordPrefixDocids {
     fn new(
-        index: &'i Index,
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
         grenad_parameters: &GrenadParameters,
-    ) -> WordPrefixDocids<'i> {
+    ) -> WordPrefixDocids {
         WordPrefixDocids {
-            index,
             database,
             prefix_database,
             max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
@@ -52,7 +49,7 @@ impl<'i> WordPrefixDocids<'i> {
         prefix_to_compute: &BTreeSet<Prefix>,
     ) -> Result<()> {
         let thread_count = rayon::current_num_threads();
-        let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
+        let rtxns = iter::repeat_with(|| wtxn.nested_read_txn())
             .take(thread_count)
             .collect::<heed::Result<Vec<_>>>()?;
 
@@ -118,22 +115,19 @@ struct PrefixEntry<'a> {
     serialized_length: usize,
 }
 
-struct WordPrefixIntegerDocids<'i> {
-    index: &'i Index,
+struct WordPrefixIntegerDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
     max_memory_by_thread: Option<usize>,
 }
 
-impl<'i> WordPrefixIntegerDocids<'i> {
+impl WordPrefixIntegerDocids {
     fn new(
-        index: &'i Index,
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
         grenad_parameters: &'_ GrenadParameters,
-    ) -> WordPrefixIntegerDocids<'i> {
+    ) -> WordPrefixIntegerDocids {
         WordPrefixIntegerDocids {
-            index,
             database,
             prefix_database,
             max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
@@ -162,7 +156,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         prefixes: &BTreeSet<Prefix>,
     ) -> Result<()> {
         let thread_count = rayon::current_num_threads();
-        let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
+        let rtxns = iter::repeat_with(|| wtxn.nested_read_txn())
             .take(thread_count)
             .collect::<heed::Result<Vec<_>>>()?;
 
@@ -305,7 +299,6 @@ pub fn compute_word_prefix_docids(
     grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
-        index,
         index.word_docids.remap_key_type(),
         index.word_prefix_docids.remap_key_type(),
         grenad_parameters,
@@ -322,7 +315,6 @@ pub fn compute_exact_word_prefix_docids(
     grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
-        index,
         index.exact_word_docids.remap_key_type(),
         index.exact_word_prefix_docids.remap_key_type(),
         grenad_parameters,
@@ -339,7 +331,6 @@ pub fn compute_word_prefix_fid_docids(
     grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
-        index,
         index.word_fid_docids.remap_key_type(),
         index.word_prefix_fid_docids.remap_key_type(),
         grenad_parameters,
@@ -356,7 +347,6 @@ pub fn compute_word_prefix_position_docids(
     grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
-        index,
         index.word_position_docids.remap_key_type(),
         index.word_prefix_position_docids.remap_key_type(),
         grenad_parameters,
