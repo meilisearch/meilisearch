@@ -48,13 +48,13 @@ pub struct PrefixIntegersReader<D> {
 }
 
 impl<D> PrefixIntegersReader<D> {
-    pub fn next_entry(
+    pub fn next_entry<'b>(
         &mut self,
-        first_tmp_buffer: &mut Vec<u8>,
-        second_tmp_buffer: &mut Vec<u8>,
-    ) -> io::Result<Option<D>>
+        first_tmp_buffer: &'b mut Vec<u8>,
+        second_tmp_buffer: &'b mut Vec<u8>,
+    ) -> io::Result<Option<D::Decoded>>
     where
-        D: Decode,
+        D: Decode<'b>,
     {
         first_tmp_buffer.clear();
         second_tmp_buffer.clear();
@@ -66,14 +66,14 @@ pub trait Encode {
     fn encode<W: io::Write>(self, tmp_buffer: &mut Vec<u8>, writer: &mut W) -> io::Result<()>;
 }
 
-pub trait Decode: Sized {
-    fn decode<'a, R: io::Read>(
-        first_tmp_buffer: &'a mut Vec<u8>,
-        second_tmp_buffer: &'a mut Vec<u8>,
+pub trait Decode<'b>: Sized {
+    type Decoded: 'b;
+
+    fn decode<R: io::Read>(
+        first_tmp_buffer: &'b mut Vec<u8>,
+        second_tmp_buffer: &'b mut Vec<u8>,
         reader: &mut R,
-    ) -> io::Result<Option<Self>>
-    where
-        Self: 'a;
+    ) -> io::Result<Option<Self::Decoded>>;
 }
 
 /// Represents a prefix, its position in the field and the length the bitmap takes on disk.
@@ -100,7 +100,7 @@ impl Encode for InPrefixIntegerEntry<'_> {
         let serialized_bytes = match bitmap {
             Some(bitmap) => {
                 tmp_buffer.clear();
-                CboRoaringBitmapCodec::serialize_into_vec(&bitmap, tmp_buffer);
+                DeCboRoaringBitmapCodec::serialize_into(&bitmap, tmp_buffer)?;
                 &tmp_buffer[..]
             }
             None => &[][..],
@@ -123,15 +123,16 @@ pub struct OutPrefixIntegerEntry<'b> {
     pub bitmap: Option<&'b [u8]>,
 }
 
-impl<'b> Decode for OutPrefixIntegerEntry<'b> {
-    fn decode<'a, R: io::Read>(
-        first_tmp_buffer: &'a mut Vec<u8>,
-        second_tmp_buffer: &'a mut Vec<u8>,
+pub struct OutPrefixIntegerEntryCodec;
+
+impl<'b> Decode<'b> for OutPrefixIntegerEntryCodec {
+    type Decoded = OutPrefixIntegerEntry<'b>;
+
+    fn decode<R: io::Read>(
+        first_tmp_buffer: &'b mut Vec<u8>,
+        second_tmp_buffer: &'b mut Vec<u8>,
         reader: &mut R,
-    ) -> io::Result<Option<Self>>
-    where
-        Self: 'a,
-    {
+    ) -> io::Result<Option<Self::Decoded>> {
         // prefix length and prefix
         let mut prefix_length: u16 = 0;
         match reader.read_exact(bytemuck::bytes_of_mut(&mut prefix_length)) {
@@ -159,6 +160,6 @@ impl<'b> Decode for OutPrefixIntegerEntry<'b> {
             Some(second_tmp_buffer.as_slice())
         };
 
-        Ok(Some(Self { prefix, pos, bitmap }))
+        Ok(Some(Self::Decoded { prefix, pos, bitmap }))
     }
 }
