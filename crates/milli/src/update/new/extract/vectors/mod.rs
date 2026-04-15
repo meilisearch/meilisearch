@@ -113,7 +113,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
             match change {
                 DocumentChange::Deletion(deletion) => {
                     // vector deletion is handled by document sender,
-                    // we still need to accomodate deletion from embedding_status
+                    // we still need to accommodate deletion from embedding_status
                     for chunks in &mut all_chunks {
                         let (is_user_provided, must_regenerate) =
                             chunks.is_user_provided_must_regenerate(deletion.docid());
