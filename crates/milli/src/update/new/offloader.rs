@@ -1,7 +1,5 @@
-use std::{
-    fs::File,
-    io::{self, BufReader, BufWriter, ErrorKind, Read as _, Seek as _, Write as _},
-};
+use std::fs::File;
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read as _, Seek as _, Write as _};
 
 use roaring::RoaringBitmap;
 
@@ -36,6 +34,8 @@ impl<E, D> PrefixIntegersOffloader<E, D> {
             file.rewind()?;
             Ok(PrefixIntegersReader {
                 file: BufReader::new(file),
+                first_tmp_buffer: Default::default(),
+                second_tmp_buffer: Default::default(),
                 _marker: std::marker::PhantomData,
             })
         })
@@ -44,21 +44,19 @@ impl<E, D> PrefixIntegersOffloader<E, D> {
 
 pub struct PrefixIntegersReader<D> {
     file: BufReader<File>,
+    first_tmp_buffer: Vec<u8>,
+    second_tmp_buffer: Vec<u8>,
     _marker: std::marker::PhantomData<D>,
 }
 
 impl<D> PrefixIntegersReader<D> {
-    pub fn next_entry<'b>(
-        &mut self,
-        first_tmp_buffer: &'b mut Vec<u8>,
-        second_tmp_buffer: &'b mut Vec<u8>,
-    ) -> io::Result<Option<D::Decoded>>
+    pub fn next_entry<'a>(&'a mut self) -> io::Result<Option<D::Decoded>>
     where
-        D: Decode<'b>,
+        D: Decode<'a>,
     {
-        first_tmp_buffer.clear();
-        second_tmp_buffer.clear();
-        D::decode(first_tmp_buffer, second_tmp_buffer, &mut self.file)
+        self.first_tmp_buffer.clear();
+        self.second_tmp_buffer.clear();
+        D::decode(&mut self.first_tmp_buffer, &mut self.second_tmp_buffer, &mut self.file)
     }
 }
 

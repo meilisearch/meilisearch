@@ -214,12 +214,8 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         // We iterate over all the collected and serialized bitmaps through
         // the files and entries to eventually put them in the final database.
         let mut key_buffer = Vec::new();
-        let mut first_tmp_buffer = Vec::new();
-        let mut second_tmp_buffer = Vec::new();
         for mut entries in outputs {
-            while let Some(entry) =
-                entries.next_entry(&mut first_tmp_buffer, &mut second_tmp_buffer)?
-            {
+            while let Some(entry) = entries.next_entry()? {
                 // TODO do the key_buffering in the OutTruc
                 key_buffer.clear();
                 key_buffer.extend_from_slice(entry.prefix.as_bytes());
