@@ -154,7 +154,7 @@ jobs:
           echo "date=$commit_date" >> $GITHUB_OUTPUT
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@d7543c93d881b35a8faa02e8e3605f69b7a1ce62 # tag=v3.10.0
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # tag=v4.1.1
 
       - name: Download digests
         uses: actions/download-artifact@v4
