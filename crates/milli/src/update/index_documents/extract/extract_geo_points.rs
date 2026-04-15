@@ -102,27 +102,19 @@ fn extract_lat_lng(
             match (lat, lng) {
                 (Ok(lat), Ok(lng)) => Ok(Some([lat, lng])),
                 (Ok(_), Err(lng)) => {
-                    Err(Box::new(GeoError::BadLongitude {
-                        document_id: document_id(),
-                        value: lng,
-                    })
-                    .into())
+                    Err(Box::new(GeoError::BadLongitude { document_id: document_id(), value: lng })
+                        .into())
                 }
                 (Err(lat), Ok(_)) => {
-                    Err(Box::new(GeoError::BadLatitude {
-                        document_id: document_id(),
-                        value: lat,
-                    })
-                    .into())
+                    Err(Box::new(GeoError::BadLatitude { document_id: document_id(), value: lat })
+                        .into())
                 }
-                (Err(lat), Err(lng)) => {
-                    Err(Box::new(GeoError::BadLatitudeAndLongitude {
-                        document_id: document_id(),
-                        lat,
-                        lng,
-                    })
-                    .into())
-                }
+                (Err(lat), Err(lng)) => Err(Box::new(GeoError::BadLatitudeAndLongitude {
+                    document_id: document_id(),
+                    lat,
+                    lng,
+                })
+                .into()),
             }
         }
         None => Ok(None),
