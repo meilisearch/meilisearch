@@ -1,14 +1,16 @@
 use std::collections::BTreeSet;
-use std::io::{BufReader, BufWriter, Read, Seek, Write};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, Write};
 use std::iter;
 
 use hashbrown::HashMap;
 use heed::types::{Bytes, DecodeIgnore, Str};
 use heed::{Database, RwTxn};
 use rayon::iter::{IndexedParallelIterator as _, IntoParallelIterator, ParallelIterator as _};
-use roaring::MultiOps;
+use roaring::{MultiOps, RoaringBitmap};
 
+use super::offloader::{InPrefixIntegerEntry, OutPrefixIntegerEntry, PrefixIntegersOffloader};
 use crate::heed_codec::StrBEU16Codec;
+use crate::update::new::offloader::OutPrefixIntegerEntryCodec;
 use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
 
 struct WordPrefixDocids {
@@ -148,11 +150,8 @@ impl WordPrefixIntegerDocids {
             .into_par_iter()
             .enumerate()
             .map(|(thread_id, rtxn)| {
-                // `indexes` represent offsets at which prefixes computations were stored in the `file`.
-                let mut indexes = Vec::new();
-                let mut file = tempfile::tempfile().map(BufWriter::new)?;
-
-                let mut buffer = Vec::new();
+                let mut entries = tempfile::tempfile()
+                    .map(PrefixIntegersOffloader::<_, OutPrefixIntegerEntryCodec>::new)?;
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
@@ -186,72 +185,52 @@ impl WordPrefixIntegerDocids {
                     }
 
                     for (pos, bitmaps_bytes) in bitmap_bytes_at_positions {
-                        if bitmaps_bytes.is_empty() {
-                            indexes.push(PrefixIntegerEntry {
-                                prefix,
-                                pos,
-                                serialized_length: None,
-                            });
+                        let bitmap = if bitmaps_bytes.is_empty() {
+                            None
                         } else {
                             let output = bitmaps_bytes
                                 .into_iter()
                                 .map(CboRoaringBitmapCodec::deserialize_from)
                                 .union()?;
-                            buffer.clear();
-                            CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
-                            indexes.push(PrefixIntegerEntry {
-                                prefix,
-                                pos,
-                                serialized_length: Some(buffer.len()),
-                            });
-                            file.write_all(&buffer)?;
-                        }
+                            Some(output)
+                        };
+                        entries.push(InPrefixIntegerEntry { prefix, pos, bitmap })?;
                     }
                 }
 
-                Ok((indexes, file))
+                entries.finish().map_err(Into::into)
             })
             .collect::<Result<Vec<_>>>()?;
 
         // We iterate over all the collected and serialized bitmaps through
         // the files and entries to eventually put them in the final database.
         let mut key_buffer = Vec::new();
-        let mut buffer = Vec::new();
-        for (index, file) in outputs {
-            let mut file = file.into_inner().map_err(|e| e.into_error())?;
-            file.rewind()?;
-            let mut file = BufReader::new(file);
-            for PrefixIntegerEntry { prefix, pos, serialized_length } in index {
+        for mut entries in outputs {
+            while let Some(entry) = entries.next_entry()? {
+                // TODO do the key_buffering in the OutTruc
                 key_buffer.clear();
-                key_buffer.extend_from_slice(prefix.as_bytes());
+                key_buffer.extend_from_slice(entry.prefix.as_bytes());
                 key_buffer.push(0);
-                key_buffer.extend_from_slice(&pos.to_be_bytes());
-                match serialized_length {
-                    Some(serialized_length) => {
-                        buffer.resize(serialized_length, 0);
-                        file.read_exact(&mut buffer)?;
+                key_buffer.extend_from_slice(&entry.pos.to_be_bytes());
+
+                match entry.bitmap {
+                    Some(bitmap_bytes) => {
                         self.prefix_database.remap_data_type::<Bytes>().put(
                             wtxn,
                             &key_buffer,
-                            &buffer,
+                            &bitmap_bytes,
                         )?;
                     }
                     None => {
                         self.prefix_database.delete(wtxn, &key_buffer)?;
                     }
                 }
+                drop(entry);
             }
         }
 
         Ok(())
     }
-}
-
-/// Represents a prefix and the length the bitmap takes on disk.
-struct PrefixIntegerEntry<'a> {
-    prefix: &'a str,
-    pos: u16,
-    serialized_length: Option<usize>,
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
