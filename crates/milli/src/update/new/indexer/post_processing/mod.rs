@@ -284,6 +284,9 @@ fn compute_facet_level_database(
         let Some(metadata) = global_fields_ids_map.metadata(fid) else {
             continue;
         };
+
+        // Note in case of a settings change we will recompute the facet level database if the
+        // user only enabled the facet search and the field is marked as comparable or sortable.
         if !metadata.require_facet_level_database(&filterable_attributes_rules) {
             continue;
         }
