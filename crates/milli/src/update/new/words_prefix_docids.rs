@@ -136,7 +136,7 @@ impl<'b> Decoder<'b> for OutPrefixEntryCodec {
         reader: &mut R,
     ) -> io::Result<Option<Self::Decoded>> {
         // prefix length and prefix
-        let mut prefix_length: u16 = 0;
+        let mut prefix_length: u8 = 0;
         match reader.read_exact(bytemuck::bytes_of_mut(&mut prefix_length)) {
             Ok(()) => (),
             Err(e) if e.kind() == ErrorKind::UnexpectedEof => return Ok(None),
@@ -146,7 +146,7 @@ impl<'b> Decoder<'b> for OutPrefixEntryCodec {
         reader.read_exact(first_tmp_buffer)?;
 
         // bitmap length and bitmap (bytes)
-        let mut bitmap_length: u16 = 0;
+        let mut bitmap_length: u32 = 0;
         reader.read_exact(bytemuck::bytes_of_mut(&mut bitmap_length))?;
         second_tmp_buffer.resize(bitmap_length as usize, 0);
         reader.read_exact(second_tmp_buffer)?;
@@ -335,7 +335,7 @@ impl<'b> Decoder<'b> for OutPrefixIntegerEntryCodec {
         reader: &mut R,
     ) -> io::Result<Option<Self::Decoded>> {
         // prefix length and prefix
-        let mut prefix_length: u16 = 0;
+        let mut prefix_length: u8 = 0;
         match reader.read_exact(bytemuck::bytes_of_mut(&mut prefix_length)) {
             Ok(()) => (),
             Err(e) if e.kind() == ErrorKind::UnexpectedEof => return Ok(None),
@@ -351,7 +351,7 @@ impl<'b> Decoder<'b> for OutPrefixIntegerEntryCodec {
         first_tmp_buffer.extend_from_slice(&pos.to_be_bytes());
 
         // bitmap length and bitmap (bytes)
-        let mut bitmap_length: u16 = 0;
+        let mut bitmap_length: u32 = 0;
         reader.read_exact(bytemuck::bytes_of_mut(&mut bitmap_length))?;
         let bitmap = if bitmap_length == 0 {
             None
