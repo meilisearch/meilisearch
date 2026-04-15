@@ -10,6 +10,7 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use super::offloader::{InPrefixIntegerEntry, OutPrefixIntegerEntry, PrefixIntegersOffloader};
 use crate::heed_codec::StrBEU16Codec;
+use crate::update::new::offloader::OutPrefixIntegerEntryCodec;
 use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
 
 struct WordPrefixDocids<'i> {
@@ -154,7 +155,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
             .enumerate()
             .map(|(thread_id, rtxn)| {
                 let mut entries = tempfile::tempfile()
-                    .map(PrefixIntegersOffloader::<_, OutPrefixIntegerEntry>::new)?;
+                    .map(PrefixIntegersOffloader::<_, OutPrefixIntegerEntryCodec>::new)?;
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
