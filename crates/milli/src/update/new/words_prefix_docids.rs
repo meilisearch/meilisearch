@@ -263,12 +263,12 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                     Some(bitmap_bytes) => {
                         self.prefix_database.remap_data_type::<Bytes>().put(
                             wtxn,
-                            &key,
-                            &bitmap_bytes,
+                            key,
+                            bitmap_bytes,
                         )?;
                     }
                     None => {
-                        self.prefix_database.delete(wtxn, &key)?;
+                        self.prefix_database.delete(wtxn, key)?;
                     }
                 }
             }
