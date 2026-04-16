@@ -84,9 +84,37 @@ impl From<DbDynamicSearchRule> for DynamicSearchRule {
 
 impl From<DynamicSearchRule> for DbDynamicSearchRule {
     fn from(value: DynamicSearchRule) -> Self {
-        let query_is_empty_rule = DbActivationQueryIsEmpty::default();
-        let query_contains_rule = DbActivationQueryContains::default();
-        let time_window_rule = DbActivationTimeWindow::default();
+        let mut query_is_empty_rule = DbActivationQueryIsEmpty::default();
+        let mut query_contains_rule = DbActivationQueryContains::default();
+        let mut time_window_rule = DbActivationTimeWindow::default();
+
+        for condition in value.conditions {
+            match condition {
+                Condition::Query { is_empty, contains } => {
+                    query_is_empty_rule.query_is_empty_enabled = is_empty.is_some_and(|b| b);
+
+                    if let Some(string) = contains {
+                        query_contains_rule.query_contains_enabled = true;
+                        query_contains_rule.query_contains = string;
+                    }
+                }
+
+                Condition::Time { start, end } => {
+                    time_window_rule.time_window_enabled = true;
+
+                    if let Some(start) = start {
+                        time_window_rule.time_window_has_start = true;
+                        time_window_rule.time_window_start = start;
+                    }
+
+                    if let Some(end) = end {
+                        time_window_rule.time_window_has_end = true;
+                        time_window_rule.time_window_end = end;
+                    }
+                }
+            }
+        }
+
         Self {
             uid: value.uid,
             description: value.description,
