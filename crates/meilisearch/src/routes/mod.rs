@@ -419,9 +419,9 @@ pub async fn running() -> HttpResponse {
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
     /// Total disk space used by the database in bytes
-    pub database_size: u64,
+    pub database_size: Size,
     /// Actual size of the data in the database in bytes
-    pub used_database_size: u64,
+    pub used_database_size: Size,
     /// Date of the last update in RFC 3339 format. Null if no update has been
     /// processed
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
@@ -471,10 +471,13 @@ pub struct Stats {
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<AuthController>>,
+    params: AwebQueryParameter<GetIndexStatsParams, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let filters = index_scheduler.filters();
+    let params = params.into_inner();
 
-    let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
+    let stats =
+        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters, params)?;
 
     debug!(returns = ?stats, "Get stats");
     Ok(HttpResponse::Ok().json(stats))
