@@ -353,6 +353,8 @@ InvalidSettingsSynonyms                        , InvalidRequest       , BAD_REQU
 InvalidSettingsTypoTolerance                   , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsLocalizedAttributes             , InvalidRequest       , BAD_REQUEST ;
 InvalidState                                   , Internal             , INTERNAL_SERVER_ERROR ;
+InvalidStatsShowInternalDatabaseSizes          , InvalidRequest       , BAD_REQUEST ;
+InvalidStatsSizeFormat                         , InvalidRequest       , BAD_REQUEST ;
 InvalidStoreFile                               , Internal             , INTERNAL_SERVER_ERROR ;
 InvalidSwapDuplicateIndexFound                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSwapIndexes                             , InvalidRequest       , BAD_REQUEST ;
