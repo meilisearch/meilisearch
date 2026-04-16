@@ -49,6 +49,7 @@ memmap2 = "0.9.9"
 obkv = "0.3.0"
 once_cell = "1.21.3"
 ordered-float = "5.1.0"
+permissive-json-pointer = { path = "../permissive-json-pointer" }
 rayon = "1.11.0"
 roaring = { version = "0.10.12", features = ["serde"] }
 rstar = { version = "0.12.2", features = ["serde"] }
@@ -100,7 +101,7 @@ tracing = "0.1.41"
 url = "2.5.7"
 hashbrown = "0.15.5"
 bumpalo = "3.19.0"
-bumparaw-collections = "0.1.4"
+bumparaw-collections = "0.1.7"
 steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.9"
 rustc-hash = "2.1.1"

@@ -418,17 +418,9 @@ fn send_and_extract_flattened_documents_data(
                 let fid_docid_facet_numbers_chunk =
                     unsafe { as_cloneable_grenad(&fid_docid_facet_numbers_chunk)? };
 
-                let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetNumbers(
-                    fid_docid_facet_numbers_chunk.clone(),
-                )));
-
                 // send fid_docid_facet_strings_chunk to DB writer
                 let fid_docid_facet_strings_chunk =
                     unsafe { as_cloneable_grenad(&fid_docid_facet_strings_chunk)? };
-
-                let _ = lmdb_writer_sx.send(Ok(TypedChunk::FieldIdDocidFacetStrings(
-                    fid_docid_facet_strings_chunk.clone(),
-                )));
 
                 let _ = lmdb_writer_sx
                     .send(Ok(TypedChunk::FieldIdFacetIsNullDocids(fid_facet_is_null_docids_chunk)));

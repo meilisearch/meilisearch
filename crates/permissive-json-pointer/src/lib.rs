@@ -88,7 +88,7 @@ where
     }
 }
 
-fn root_dot_suffixes(path: &str) -> impl Iterator<Item = (&str, &str)> {
+pub fn root_dot_suffixes(path: &str) -> impl Iterator<Item = (&str, &str)> {
     path.rmatch_indices('.').map(|(index, _)| (&path[0..index], &path[index + 1..]))
 }
 

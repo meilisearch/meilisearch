@@ -2080,7 +2080,7 @@ impl InnerIndexSettings {
         let allowed_separators = index.allowed_separators(rtxn)?;
         let dictionary = index.dictionary(rtxn)?;
         let mut fields_ids_map = index.fields_ids_map(rtxn)?;
-        let exact_attributes = index.exact_attributes_ids(rtxn)?;
+        let exact_attributes = index.exact_attributes_ids(&fields_ids_map, rtxn)?;
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
         let runtime_embedders = match runtime_embedders {
             Some(embedding_configs) => embedding_configs,

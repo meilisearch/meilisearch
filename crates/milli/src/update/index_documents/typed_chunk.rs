@@ -68,8 +68,6 @@ impl ChunkAccumulator {
 }
 
 pub(crate) enum TypedChunk {
-    FieldIdDocidFacetStrings(grenad::Reader<CursorClonableMmap>),
-    FieldIdDocidFacetNumbers(grenad::Reader<CursorClonableMmap>),
     Documents(grenad::Reader<CursorClonableMmap>),
     FieldIdWordCountDocids(grenad::Reader<BufReader<File>>),
     WordDocids {
@@ -103,9 +101,7 @@ impl TypedChunk {
     fn mergeable_with(&self, other: &Self) -> bool {
         use TypedChunk::*;
         match (self, other) {
-            (FieldIdDocidFacetStrings(_), FieldIdDocidFacetStrings(_))
-            | (FieldIdDocidFacetNumbers(_), FieldIdDocidFacetNumbers(_))
-            | (Documents(_), Documents(_))
+            (Documents(_), Documents(_))
             | (FieldIdWordCountDocids(_), FieldIdWordCountDocids(_))
             | (WordDocids { .. }, WordDocids { .. })
             | (WordPositionDocids(_), WordPositionDocids(_))
@@ -509,74 +505,6 @@ pub(crate) fn write_typed_chunk_into_index(
             }
 
             is_merged_database = true;
-        }
-        TypedChunk::FieldIdDocidFacetNumbers(_) => {
-            let span =
-                tracing::trace_span!(target: "indexing::write_db", "field_id_docid_facet_numbers");
-            let _entered = span.enter();
-
-            let mut builder = MergerBuilder::new(KeepFirst);
-            for typed_chunk in typed_chunks {
-                let TypedChunk::FieldIdDocidFacetNumbers(chunk) = typed_chunk else {
-                    unreachable!();
-                };
-
-                builder.push(chunk.into_cursor()?);
-            }
-            let merger = builder.build();
-
-            let index_fid_docid_facet_numbers =
-                index.field_id_docid_facet_f64s.remap_types::<Bytes, Bytes>();
-            let mut iter = merger.into_stream_merger_iter()?;
-            while let Some((key, value)) = iter.next()? {
-                let reader = KvReaderDelAdd::from_slice(value);
-                if valid_lmdb_key(key) {
-                    match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
-                        (None, None) => {}
-                        (None, Some(new)) => index_fid_docid_facet_numbers.put(wtxn, key, new)?,
-                        (Some(_), None) => {
-                            index_fid_docid_facet_numbers.delete(wtxn, key)?;
-                        }
-                        (Some(_), Some(new)) => {
-                            index_fid_docid_facet_numbers.put(wtxn, key, new)?
-                        }
-                    }
-                }
-            }
-        }
-        TypedChunk::FieldIdDocidFacetStrings(_) => {
-            let span =
-                tracing::trace_span!(target: "indexing::write_db", "field_id_docid_facet_strings");
-            let _entered = span.enter();
-
-            let mut builder = MergerBuilder::new(KeepFirst);
-            for typed_chunk in typed_chunks {
-                let TypedChunk::FieldIdDocidFacetStrings(chunk) = typed_chunk else {
-                    unreachable!();
-                };
-
-                builder.push(chunk.into_cursor()?);
-            }
-            let merger = builder.build();
-
-            let index_fid_docid_facet_strings =
-                index.field_id_docid_facet_strings.remap_types::<Bytes, Bytes>();
-            let mut iter = merger.into_stream_merger_iter()?;
-            while let Some((key, value)) = iter.next()? {
-                let reader = KvReaderDelAdd::from_slice(value);
-                if valid_lmdb_key(key) {
-                    match (reader.get(DelAdd::Deletion), reader.get(DelAdd::Addition)) {
-                        (None, None) => {}
-                        (None, Some(new)) => index_fid_docid_facet_strings.put(wtxn, key, new)?,
-                        (Some(_), None) => {
-                            index_fid_docid_facet_strings.delete(wtxn, key)?;
-                        }
-                        (Some(_), Some(new)) => {
-                            index_fid_docid_facet_strings.put(wtxn, key, new)?
-                        }
-                    }
-                }
-            }
         }
         TypedChunk::GeoPoints(_) => {
             let span = tracing::trace_span!(target: "indexing::write_db", "geo_points");

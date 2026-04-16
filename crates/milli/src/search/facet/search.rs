@@ -2,6 +2,7 @@ use std::cmp::{Ordering, Reverse};
 use std::collections::BinaryHeap;
 use std::ops::ControlFlow;
 
+use bumpalo::Bump;
 use charabia::normalizer::NormalizerOption;
 use charabia::{Language, Normalize, StrDetection, Token};
 use fst::automaton::{Automaton, Str};
@@ -13,7 +14,7 @@ use crate::error::UserError;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::build_dfa;
-use crate::{DocumentId, FieldId, OrderBy, Result, Search};
+use crate::{DocumentFromDb, DocumentId, FieldId, FieldsIdsMap, OrderBy, Result, Search};
 
 /// The maximum number of values per facet returned by the facet search route.
 const DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET: usize = 100;
@@ -60,14 +61,27 @@ impl<'a> SearchForFacetValues<'a> {
 
     fn one_original_value_of(
         &self,
-        field_id: FieldId,
-        facet_str: &str,
+        field_name: &str,
+        normalized_facet: &str,
+        fields_ids_map: &FieldsIdsMap,
         any_docid: DocumentId,
     ) -> Result<Option<String>> {
         let index = self.search_query.index;
         let rtxn = self.search_query.rtxn;
-        let key: (FieldId, _, &str) = (field_id, any_docid, facet_str);
-        Ok(index.field_id_docid_facet_strings.get(rtxn, &key)?.map(|v| v.to_owned()))
+
+        let Some(doc) = DocumentFromDb::new(any_docid, rtxn, index, fields_ids_map)? else {
+            return Ok(None);
+        };
+
+        let bump = Bump::new();
+        Ok(crate::Document::original_facet_value_of(
+            &doc,
+            normalized_facet,
+            field_name,
+            &bump,
+            |err| crate::InternalError::SerdeJson(err).into(),
+        )?
+        .map(|s| s.to_string()))
     }
 
     pub fn execute(&self) -> Result<Vec<FacetValueHit>> {
@@ -130,8 +144,11 @@ impl<'a> SearchForFacetValues<'a> {
                 let query = query.as_ref();
 
                 let authorize_typos = self.search_query.index.authorize_typos(rtxn)?;
-                let field_authorizes_typos =
-                    !self.search_query.index.exact_attributes_ids(rtxn)?.contains(&fid);
+                let field_authorizes_typos = !self
+                    .search_query
+                    .index
+                    .exact_attributes_ids(&fields_ids_map, rtxn)?
+                    .contains(&fid);
 
                 if authorize_typos && field_authorizes_typos {
                     let exact_words_fst = self.search_query.index.exact_words(rtxn)?;
@@ -139,6 +156,7 @@ impl<'a> SearchForFacetValues<'a> {
                         if fst.contains(query) {
                             let _ = self.fetch_original_facets_using_normalized(
                                 fid,
+                                &fields_ids_map,
                                 query,
                                 query,
                                 &search_candidates,
@@ -164,6 +182,7 @@ impl<'a> SearchForFacetValues<'a> {
                             if self
                                 .fetch_original_facets_using_normalized(
                                     fid,
+                                    &fields_ids_map,
                                     value,
                                     query,
                                     &search_candidates,
@@ -183,6 +202,7 @@ impl<'a> SearchForFacetValues<'a> {
                         if self
                             .fetch_original_facets_using_normalized(
                                 fid,
+                                &fields_ids_map,
                                 value,
                                 query,
                                 &search_candidates,
@@ -202,9 +222,18 @@ impl<'a> SearchForFacetValues<'a> {
                         result?;
                     let count = search_candidates.intersection_len(&bitmap);
                     if count != 0 {
-                        let value = self
-                            .one_original_value_of(fid, left_bound, bitmap.min().unwrap())?
-                            .unwrap_or_else(|| left_bound.to_string());
+                        let value = 'value: {
+                            let Some(field_name) = fields_ids_map.name(fid) else {
+                                break 'value None;
+                            };
+                            self.one_original_value_of(
+                                field_name,
+                                left_bound,
+                                &fields_ids_map,
+                                bitmap.min().unwrap(),
+                            )?
+                        };
+                        let value = value.unwrap_or_else(|| left_bound.to_string());
                         if results.insert(FacetValueHit { value, count }).is_break() {
                             break;
                         }
@@ -219,6 +248,7 @@ impl<'a> SearchForFacetValues<'a> {
     fn fetch_original_facets_using_normalized(
         &self,
         fid: FieldId,
+        fields_ids_map: &FieldsIdsMap,
         value: &str,
         query: &str,
         search_candidates: &RoaringBitmap,
@@ -247,9 +277,18 @@ impl<'a> SearchForFacetValues<'a> {
             };
             let count = search_candidates.intersection_len(&docids);
             if count != 0 {
-                let value = self
-                    .one_original_value_of(fid, &original, docids.min().unwrap())?
-                    .unwrap_or_else(|| query.to_string());
+                let value = 'value: {
+                    let Some(field_name) = fields_ids_map.name(fid) else {
+                        break 'value None;
+                    };
+                    self.one_original_value_of(
+                        field_name,
+                        &original,
+                        fields_ids_map,
+                        docids.min().unwrap(),
+                    )?
+                };
+                let value = value.unwrap_or_else(|| query.to_string());
                 if results.insert(FacetValueHit { value, count }).is_break() {
                     break;
                 }

@@ -1508,12 +1508,6 @@ mod tests {
         3   0  third        1  [3, ]
         3   0  zeroth       1  [0, ]
         "###);
-        db_snap!(index, field_id_docid_facet_strings, @r###"
-        3   0    zeroth       zeroth
-        3   1    first        first
-        3   2    second       second
-        3   3    third        third
-        "###);
 
         let rtxn = index.read_txn().unwrap();
 
@@ -1533,7 +1527,6 @@ mod tests {
             .unwrap();
 
         db_snap!(index, facet_id_string_docids, @"");
-        db_snap!(index, field_id_docid_facet_strings, @"");
 
         // update the settings to test the sortable
         index
@@ -1547,12 +1540,6 @@ mod tests {
         3   0  second       1  [2, ]
         3   0  third        1  [3, ]
         3   0  zeroth       1  [0, ]
-        "###);
-        db_snap!(index, field_id_docid_facet_strings, @r###"
-        3   0    zeroth       zeroth
-        3   1    first        first
-        3   2    second       second
-        3   3    third        third
         "###);
 
         let rtxn = index.read_txn().unwrap();

@@ -1,25 +1,26 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fmt;
 use std::fmt::Display;
 use std::ops::ControlFlow;
-use std::{fmt, mem};
 
-use heed::types::Bytes;
+use bumpalo::Bump;
 use heed::BytesDecode;
 use indexmap::IndexMap;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 
 use crate::attribute_patterns::match_field_legacy;
-use crate::facet::FacetType;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
-use crate::heed_codec::facet::{
-    FacetGroupKeyCodec, FieldDocIdFacetF64Codec, FieldDocIdFacetStringCodec, OrderedF64Codec,
-};
+use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::search::facet::facet_distribution_iter::{
     count_iterate_over_facet_distribution, lexicographically_iterate_over_facet_distribution,
 };
-use crate::{Error, FieldId, FilterableAttributesRule, Index, PatternMatch, Result, UserError};
+use crate::update::new::document::RawFacetValue;
+use crate::{
+    Document, DocumentFromDb, Error, FieldId, FieldsIdsMap, FilterableAttributesRule, Index,
+    PatternMatch, Result, UserError,
+};
 
 /// The default number of values by facets that will
 /// be fetched from the key-value store.
@@ -101,69 +102,57 @@ impl<'a> FacetDistribution<'a> {
     /// decide to iterate over the facet values of each one of them, one by one.
     fn facet_distribution_from_documents(
         &self,
-        field_id: FieldId,
-        facet_type: FacetType,
+        field_name: &str,
+        fields_ids_map: &FieldsIdsMap,
         candidates: &RoaringBitmap,
         distribution: &mut IndexMap<String, u64>,
-    ) -> heed::Result<()> {
-        match facet_type {
-            FacetType::Number => {
-                let mut lexicographic_distribution = BTreeMap::new();
-                let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
+    ) -> crate::Result<()> {
+        let mut bump = Bump::new();
+        let mut lexicographic_distribution = BTreeMap::new();
+        let mut normalized_distribution = BTreeMap::new();
 
-                let db = self.index.field_id_docid_facet_f64s;
-                for docid in candidates {
-                    key_buffer.truncate(mem::size_of::<FieldId>());
-                    key_buffer.extend_from_slice(&docid.to_be_bytes());
-                    let iter = db
-                        .remap_key_type::<Bytes>()
-                        .prefix_iter(self.rtxn, &key_buffer)?
-                        .remap_key_type::<FieldDocIdFacetF64Codec>();
+        for docid in candidates {
+            bump.reset();
+            let Some(document_from_db) =
+                DocumentFromDb::new(docid, self.rtxn, self.index, fields_ids_map)?
+            else {
+                continue;
+            };
 
-                    for result in iter {
-                        let ((_, _, value), ()) = result?;
-                        *lexicographic_distribution.entry(value.to_string()).or_insert(0) += 1;
-                    }
-                }
-
-                distribution.extend(
-                    lexicographic_distribution
-                        .into_iter()
-                        .take(self.max_values_per_facet.saturating_sub(distribution.len())),
-                );
-            }
-            FacetType::String => {
-                let mut normalized_distribution = BTreeMap::new();
-                let mut key_buffer: Vec<_> = field_id.to_be_bytes().to_vec();
-
-                let db = self.index.field_id_docid_facet_strings;
-                for docid in candidates {
-                    key_buffer.truncate(mem::size_of::<FieldId>());
-                    key_buffer.extend_from_slice(&docid.to_be_bytes());
-                    let iter = db
-                        .remap_key_type::<Bytes>()
-                        .prefix_iter(self.rtxn, &key_buffer)?
-                        .remap_key_type::<FieldDocIdFacetStringCodec>();
-
-                    for result in iter {
-                        let ((_, _, normalized_value), original_value) = result?;
-                        let (_, count) = normalized_distribution
-                            .entry(normalized_value)
-                            .or_insert_with(|| (original_value, 0));
-                        *count += 1;
-
-                        // we'd like to break here if we have enough facet values, but we are collecting them by increasing docid,
-                        // so higher ranked facets could be in later docids
-                    }
-                }
-
-                let iter = normalized_distribution
-                    .into_iter()
-                    .take(self.max_values_per_facet.saturating_sub(distribution.len()))
-                    .map(|(_normalized, (original, count))| (original.to_string(), count));
-                distribution.extend(iter);
-            }
+            document_from_db.facet_values(
+                field_name,
+                &bump,
+                |value| {
+                    let key = match value {
+                        RawFacetValue::Bool(b) => b.to_string(),
+                        RawFacetValue::Number(number) => number.to_string(),
+                        RawFacetValue::OriginalString(s) => {
+                            let normalized = crate::normalize_facet(s);
+                            let (_, count) = normalized_distribution
+                                .entry(normalized)
+                                .or_insert_with(|| (s.to_string(), 0));
+                            *count += 1;
+                            return Ok(());
+                        }
+                    };
+                    *lexicographic_distribution.entry(key).or_insert(0) += 1;
+                    Ok(())
+                },
+                |err| crate::InternalError::SerdeJson(err).into(),
+            )?;
         }
+
+        let iter = normalized_distribution
+            .into_iter()
+            .take(self.max_values_per_facet.saturating_sub(distribution.len()))
+            .map(|(_normalized, (original, count))| (original.to_string(), count));
+
+        distribution.extend(iter);
+        distribution.extend(
+            lexicographic_distribution
+                .into_iter()
+                .take(self.max_values_per_facet.saturating_sub(distribution.len())),
+        );
 
         Ok(())
     }
@@ -176,7 +165,7 @@ impl<'a> FacetDistribution<'a> {
         candidates: &RoaringBitmap,
         order_by: OrderBy,
         distribution: &mut IndexMap<String, u64>,
-    ) -> heed::Result<()> {
+    ) -> crate::Result<()> {
         let search_function = match order_by {
             OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
             OrderBy::Count => count_iterate_over_facet_distribution,
@@ -202,14 +191,18 @@ impl<'a> FacetDistribution<'a> {
     fn facet_strings_distribution_from_facet_levels(
         &self,
         field_id: FieldId,
+        field_name: &str,
+        fields_ids_map: &FieldsIdsMap,
         candidates: &RoaringBitmap,
         order_by: OrderBy,
         distribution: &mut IndexMap<String, u64>,
-    ) -> heed::Result<()> {
+    ) -> crate::Result<()> {
         let search_function = match order_by {
             OrderBy::Lexicographic => lexicographically_iterate_over_facet_distribution,
             OrderBy::Count => count_iterate_over_facet_distribution,
         };
+
+        let mut bump = Bump::new();
 
         search_function(
             self.rtxn,
@@ -217,14 +210,25 @@ impl<'a> FacetDistribution<'a> {
             field_id,
             candidates,
             |facet_key, nbr_docids, any_docid| {
+                bump.reset();
                 let facet_key = StrRefCodec::bytes_decode(facet_key).unwrap();
 
-                let key: (FieldId, _, &str) = (field_id, any_docid, facet_key);
-                let optional_original_string =
-                    self.index.field_id_docid_facet_strings.get(self.rtxn, &key)?;
+                let Some(doc) =
+                    DocumentFromDb::new(any_docid, self.rtxn, self.index, fields_ids_map)?
+                else {
+                    return Ok(ControlFlow::Continue(()));
+                };
 
-                let original_string = match optional_original_string {
-                    Some(original_string) => original_string.to_owned(),
+                let optional_original_value = crate::Document::original_facet_value_of(
+                    &doc,
+                    facet_key,
+                    field_name,
+                    &bump,
+                    |err| crate::InternalError::SerdeJson(err).into(),
+                )?;
+
+                let original_value = match optional_original_value {
+                    Some(original_value) => original_value.to_owned(),
                     None => {
                         tracing::error!(
                             "Missing original facet string. Using the normalized facet {} instead",
@@ -234,7 +238,7 @@ impl<'a> FacetDistribution<'a> {
                     }
                 };
 
-                distribution.insert(original_string, nbr_docids);
+                distribution.insert(original_value, nbr_docids);
                 if distribution.len() == self.max_values_per_facet {
                     Ok(ControlFlow::Break(()))
                 } else {
@@ -247,17 +251,21 @@ impl<'a> FacetDistribution<'a> {
     fn facet_values(
         &self,
         field_id: FieldId,
+        field_name: &str,
+        fields_ids_map: &FieldsIdsMap,
         order_by: OrderBy,
-    ) -> heed::Result<IndexMap<String, u64>> {
-        use FacetType::{Number, String};
-
+    ) -> crate::Result<IndexMap<String, u64>> {
         let mut distribution = IndexMap::new();
         match (order_by, &self.candidates) {
             (OrderBy::Lexicographic, Some(cnd)) if cnd.len() <= CANDIDATES_THRESHOLD => {
                 // Classic search, candidates were specified, we must return facet values only related
                 // to those candidates. We also enter here for facet strings for performance reasons.
-                self.facet_distribution_from_documents(field_id, Number, cnd, &mut distribution)?;
-                self.facet_distribution_from_documents(field_id, String, cnd, &mut distribution)?;
+                self.facet_distribution_from_documents(
+                    field_name,
+                    fields_ids_map,
+                    cnd,
+                    &mut distribution,
+                )?;
             }
             _ => {
                 let universe;
@@ -277,6 +285,8 @@ impl<'a> FacetDistribution<'a> {
                 )?;
                 self.facet_strings_distribution_from_facet_levels(
                     field_id,
+                    field_name,
+                    fields_ids_map,
                     candidates,
                     order_by,
                     &mut distribution,
@@ -342,7 +352,7 @@ impl<'a> FacetDistribution<'a> {
                     .as_ref()
                     .and_then(|facets| facets.get(name).copied())
                     .unwrap_or(self.default_order_by);
-                let values = self.facet_values(fid, order_by)?;
+                let values = self.facet_values(fid, name, &fields_ids_map, order_by)?;
                 distribution.insert(name.to_string(), values);
             }
         }

@@ -9,12 +9,12 @@ use crate::documents::GeoSortParameter;
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
 use crate::heed_codec::BytesRefCodec;
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
-use crate::{is_faceted, AscDesc, DocumentId, Member, UserError};
+use crate::{is_faceted, AscDesc, DocumentId, FieldsIdsMap, Member, UserError};
 
 #[derive(Debug, Clone, Copy)]
 enum AscDescId {
     Facet { field_id: u16, ascending: bool },
-    Geo { field_ids: [u16; 2], target_point: [f64; 2], ascending: bool },
+    Geo { target_point: [f64; 2], ascending: bool },
 }
 
 /// A [`SortedDocumentsIterator`] allows efficient access to a continuous range of sorted documents.
@@ -183,6 +183,7 @@ pub struct SortedDocumentsIteratorBuilder<'ctx> {
     fields: &'ctx [AscDescId],
     candidates: RoaringBitmap,
     geo_candidates: &'ctx RoaringBitmap,
+    fields_ids_map: &'ctx FieldsIdsMap,
 }
 
 impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
@@ -199,6 +200,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                 SortedDocumentsIteratorBuilder::build_facet(
                     self.index,
                     self.rtxn,
+                    self.fields_ids_map,
                     self.number_db,
                     self.string_db,
                     next_fields,
@@ -208,16 +210,16 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                     *ascending,
                 )
             }
-            [AscDescId::Geo { field_ids, target_point, ascending }, next_fields @ ..] => {
+            [AscDescId::Geo { target_point, ascending }, next_fields @ ..] => {
                 SortedDocumentsIteratorBuilder::build_geo(
                     self.index,
                     self.rtxn,
+                    self.fields_ids_map,
                     self.number_db,
                     self.string_db,
                     next_fields,
                     self.candidates,
                     self.geo_candidates,
-                    *field_ids,
                     *target_point,
                     *ascending,
                 )
@@ -230,6 +232,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     fn build_facet(
         index: &'ctx crate::Index,
         rtxn: &'ctx heed::RoTxn<'ctx>,
+        fields_ids_map: &'ctx FieldsIdsMap,
         number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         next_fields: &'ctx [AscDescId],
@@ -273,6 +276,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                 Ok(SortedDocumentsIteratorBuilder {
                     index,
                     rtxn,
+                    fields_ids_map,
                     number_db,
                     string_db,
                     fields: next_fields,
@@ -287,6 +291,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                         return Some(Ok(SortedDocumentsIteratorBuilder {
                             index,
                             rtxn,
+                            fields_ids_map,
                             number_db,
                             string_db,
                             fields: next_fields,
@@ -310,12 +315,12 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     fn build_geo(
         index: &'ctx crate::Index,
         rtxn: &'ctx heed::RoTxn<'ctx>,
+        fields_ids_map: &'ctx FieldsIdsMap,
         number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
         next_fields: &'ctx [AscDescId],
         candidates: RoaringBitmap,
         geo_candidates: &'ctx RoaringBitmap,
-        field_ids: [u16; 2],
         target_point: [f64; 2],
         ascending: bool,
     ) -> crate::Result<SortedDocumentsIterator<'ctx>> {
@@ -333,10 +338,10 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                 if let Ok(Some((docids, _point))) = next_bucket(
                     index,
                     rtxn,
+                    fields_ids_map,
                     &candidates,
                     ascending,
                     target_point,
-                    &Some(field_ids),
                     &mut rtree,
                     &mut cache,
                     geo_candidates,
@@ -351,6 +356,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                         fields: next_fields,
                         candidates: docids,
                         geo_candidates,
+                        fields_ids_map,
                     }));
                 }
             }
@@ -366,6 +372,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
                         fields: next_fields,
                         candidates: not_geo_candidates,
                         geo_candidates,
+                        fields_ids_map,
                     }));
                 }
             }
@@ -385,6 +392,7 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
 pub struct SortedDocuments<'ctx> {
     index: &'ctx crate::Index,
     rtxn: &'ctx heed::RoTxn<'ctx>,
+    fields_ids_map: &'ctx FieldsIdsMap,
     fields: Vec<AscDescId>,
     number_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
     string_db: Database<FacetGroupKeyCodec<BytesRefCodec>, FacetGroupValueCodec>,
@@ -402,6 +410,7 @@ impl<'ctx> SortedDocuments<'ctx> {
             fields: &self.fields,
             candidates: self.candidates.clone(),
             geo_candidates: &self.geo_candidates,
+            fields_ids_map: self.fields_ids_map,
         };
         builder.build()
     }
@@ -410,11 +419,11 @@ impl<'ctx> SortedDocuments<'ctx> {
 pub fn recursive_sort<'ctx>(
     index: &'ctx crate::Index,
     rtxn: &'ctx heed::RoTxn<'ctx>,
+    fields_ids_map: &'ctx FieldsIdsMap,
     sort: Vec<AscDesc>,
     candidates: &'ctx RoaringBitmap,
 ) -> crate::Result<SortedDocuments<'ctx>> {
     let sortable_fields: BTreeSet<_> = index.sortable_fields(rtxn)?.into_iter().collect();
-    let fields_ids_map = index.fields_ids_map(rtxn)?;
 
     // Retrieve the field ids that are used for sorting
     let mut fields = Vec::new();
@@ -445,13 +454,9 @@ pub fn recursive_sort<'ctx>(
         }
         if let Some((target_point, ascending)) = geofield {
             if sortable_fields.contains(RESERVED_GEO_FIELD_NAME) {
-                if let (Some(lat), Some(lng)) =
-                    (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
-                {
-                    need_geo_candidates = true;
-                    fields.push(AscDescId::Geo { field_ids: [lat, lng], target_point, ascending });
-                    continue;
-                }
+                need_geo_candidates = true;
+                fields.push(AscDescId::Geo { target_point, ascending });
+                continue;
             }
             return Err(UserError::InvalidDocumentSortableAttribute {
                 field: RESERVED_GEO_FIELD_NAME.to_string(),
@@ -471,5 +476,14 @@ pub fn recursive_sort<'ctx>(
     let string_db =
         index.facet_id_string_docids.remap_key_type::<FacetGroupKeyCodec<BytesRefCodec>>();
 
-    Ok(SortedDocuments { index, rtxn, fields, number_db, string_db, candidates, geo_candidates })
+    Ok(SortedDocuments {
+        index,
+        rtxn,
+        fields,
+        number_db,
+        string_db,
+        candidates,
+        geo_candidates,
+        fields_ids_map,
+    })
 }

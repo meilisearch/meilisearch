@@ -16,7 +16,6 @@ pub struct GeoSort<Q: RankingRuleQueryTrait> {
     strategy: GeoSortStrategy,
     ascending: bool,
     point: [f64; 2],
-    field_ids: Option<[u16; 2]>,
     rtree: Option<RTree<GeoPoint>>,
 
     cached_sorted_docids: VecDeque<(u32, [f64; 2])>,
@@ -42,7 +41,6 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
             ascending,
             point,
             geo_candidates: geo_faceted_docids,
-            field_ids: None,
             rtree: None,
             cached_sorted_docids: VecDeque::new(),
             max_bucket_size,
@@ -60,10 +58,10 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
         fill_cache(
             ctx.index,
             ctx.txn,
+            &ctx.fields_ids_map,
             self.strategy,
             self.ascending,
             self.point,
-            &self.field_ids,
             &mut self.rtree,
             geo_candidates,
             &mut self.cached_sorted_docids,
@@ -97,10 +95,6 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
             return Ok(());
         }
 
-        let fid_map = ctx.index.fields_ids_map(ctx.txn)?;
-        let lat = fid_map.id("_geo.lat").expect("geo candidates but no fid for lat");
-        let lng = fid_map.id("_geo.lng").expect("geo candidates but no fid for lng");
-        self.field_ids = Some([lat, lng]);
         self.fill_buffer(ctx, &geo_candidates)?;
         Ok(())
     }
@@ -119,10 +113,10 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         next_bucket(
             ctx.index,
             ctx.txn,
+            &ctx.fields_ids_map,
             universe,
             self.ascending,
             self.point,
-            &self.field_ids,
             &mut self.rtree,
             &mut self.cached_sorted_docids,
             &self.geo_candidates,
