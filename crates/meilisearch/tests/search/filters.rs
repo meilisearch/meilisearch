@@ -1170,3 +1170,53 @@ async fn vector_filter_regenerate() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn issue_6335() {
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["cattos"],
+        "features": {
+                  "facetSearch": false,
+                  "filter": {"equality": true, "comparison": true}
+        }}]}),
+        &json!({
+            "filter": "cattos < pestiféré"
+        }),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r#"
+            [
+              {
+                "id": 750,
+                "father": "romain",
+                "mother": "michelle",
+                "cattos": [
+                  "enigma"
+                ]
+              },
+              {
+                "id": 951,
+                "father": "jean-baptiste",
+                "mother": "sophie",
+                "doggos": [
+                  {
+                    "name": "turbo",
+                    "age": 5
+                  },
+                  {
+                    "name": "fast",
+                    "age": 6
+                  }
+                ],
+                "cattos": [
+                  "moumoute",
+                  "gomez"
+                ]
+              }
+            ]
+            "#);
+        },
+    )
+    .await;
+}
