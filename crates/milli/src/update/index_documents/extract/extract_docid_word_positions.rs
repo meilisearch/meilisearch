@@ -12,7 +12,7 @@ use super::helpers::{create_sorter, sorter_into_reader, GrenadParameters, KeepLa
 use crate::error::{InternalError, SerializationError};
 use crate::update::del_add::{del_add_from_two_obkvs, DelAdd, KvReaderDelAdd};
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
-use crate::{FieldId, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH};
+use crate::{FieldId, PatternMatch, Result, MAX_POSITION_PER_ATTRIBUTE, MAX_WORD_LENGTH};
 
 /// Extracts the word and positions where this word appear and
 /// prefixes it by the document id.
@@ -162,7 +162,7 @@ fn searchable_fields_changed(
             // "_vectors": { "manual": [1, 2, 3]} -> "_vectors.manual" is not registered.
             continue;
         };
-        if metadata.is_searchable() {
+        if metadata.is_searchable() == PatternMatch::Match {
             let del_add = KvReaderDelAdd::from_slice(field_bytes);
             match (del_add.get(DelAdd::Deletion), del_add.get(DelAdd::Addition)) {
                 // if both fields are None, check the next field.
@@ -217,7 +217,7 @@ fn tokens_from_document<'a>(
             continue;
         };
         // if field is searchable.
-        if metadata.is_searchable() {
+        if metadata.is_searchable() == PatternMatch::Match {
             // extract deletion or addition only.
             if let Some(field_bytes) = KvReaderDelAdd::from_slice(field_bytes).get(del_add) {
                 // parse json.
