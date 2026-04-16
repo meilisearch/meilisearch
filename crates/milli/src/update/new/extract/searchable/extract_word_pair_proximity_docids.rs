@@ -353,13 +353,14 @@ impl WordPairProximityDocidsExtractor {
                     action = match (old_field_metadata, new_field_metadata) {
                         // At least one field is removed or added from the searchable fields
                         (
-                            Metadata { searchable: Some(_), .. },
-                            Metadata { searchable: None, .. },
-                        )
-                        | (
-                            Metadata { searchable: None, .. },
-                            Metadata { searchable: Some(_), .. },
-                        ) => ActionToOperate::ReindexAllFields,
+                            Metadata { searchable: (was_matching, _), .. },
+                            Metadata { searchable: (is_matching, _), .. },
+                        ) if was_matching != is_matching
+                            && (was_matching == PatternMatch::Match
+                                || is_matching == PatternMatch::Match) =>
+                        {
+                            ActionToOperate::ReindexAllFields
+                        }
                         _ => action,
                     };
 
@@ -494,7 +495,7 @@ fn process_document_tokens<'doc>(
     let mut should_tokenize = |field_name: &str| {
         let (field_id, meta) = field_id_and_metadata(field_name)?;
 
-        let pattern_match = if meta.is_searchable() {
+        let pattern_match = if meta.is_searchable() == PatternMatch::Match {
             PatternMatch::Match
         } else {
             // TODO: should be a match on the field_name using `match_field_legacy` function,

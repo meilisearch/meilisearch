@@ -58,7 +58,9 @@ impl<'a> Field<'a> {
         Field {
             name,
             displayed: FieldDisplayConfig { enabled: metadata.displayed },
-            searchable: FieldSearchConfig { enabled: metadata.searchable.is_some() },
+            searchable: FieldSearchConfig {
+                enabled: metadata.is_searchable() == PatternMatch::Match,
+            },
             sortable: FieldSortableConfig { enabled: metadata.sortable },
             distinct: FieldDistinctConfig { enabled: metadata.distinct },
             ranking_rule: FieldRankingRuleConfig {
