@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::io::{self, ErrorKind};
 use std::iter;
 
@@ -9,7 +10,7 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use super::offloader::{Decoder, Encoder, Offloader};
 use crate::heed_codec::StrBEU16Codec;
-use crate::update::new::indexer::ShortWords;
+use crate::update::new::indexer::MiniString;
 use crate::{CboRoaringBitmapCodec, Index, Result};
 
 struct WordPrefixDocids<'i> {
@@ -30,8 +31,8 @@ impl<'i> WordPrefixDocids<'i> {
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &ShortWords,
-        prefix_to_delete: &ShortWords,
+        prefix_to_compute: &BTreeSet<MiniString>,
+        prefix_to_delete: &BTreeSet<MiniString>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
@@ -41,7 +42,7 @@ impl<'i> WordPrefixDocids<'i> {
     fn recompute_modified_prefixes_no_frozen(
         &self,
         wtxn: &mut RwTxn,
-        prefix_to_compute: &ShortWords,
+        prefix_to_compute: &BTreeSet<MiniString>,
     ) -> Result<()> {
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
@@ -66,7 +67,7 @@ impl<'i> WordPrefixDocids<'i> {
                         .prefix_iter(&rtxn, prefix.as_bytes())?
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
-                    entries.push(InPrefixEntry { prefix, bitmap: output })?;
+                    entries.push(InPrefixEntry { prefix: prefix.as_ref(), bitmap: output })?;
                 }
 
                 entries.finish().map_err(Into::into)
@@ -176,8 +177,8 @@ impl<'i> WordPrefixIntegerDocids<'i> {
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &ShortWords,
-        prefix_to_delete: &ShortWords,
+        prefix_to_compute: &BTreeSet<MiniString>,
+        prefix_to_delete: &BTreeSet<MiniString>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
@@ -192,7 +193,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
     fn recompute_modified_prefixes_no_frozen(
         &self,
         wtxn: &mut RwTxn,
-        prefixes: &ShortWords,
+        prefixes: &BTreeSet<MiniString>,
     ) -> Result<()> {
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
@@ -248,7 +249,11 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                                 .union()?;
                             Some(output)
                         };
-                        entries.push(InPrefixIntegerEntry { prefix, pos, bitmap })?;
+                        entries.push(InPrefixIntegerEntry {
+                            prefix: prefix.as_str(),
+                            pos,
+                            bitmap,
+                        })?;
                     }
                 }
 
@@ -371,7 +376,7 @@ impl<'b> Decoder<'b> for OutPrefixIntegerEntryCodec {
 fn delete_prefixes(
     wtxn: &mut RwTxn,
     prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
-    prefixes: &ShortWords,
+    prefixes: &BTreeSet<MiniString>,
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
     for prefix in prefixes.iter() {
@@ -391,8 +396,8 @@ fn delete_prefixes(
 pub fn compute_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &ShortWords,
-    prefix_to_delete: &ShortWords,
+    prefix_to_compute: &BTreeSet<MiniString>,
+    prefix_to_delete: &BTreeSet<MiniString>,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index,
@@ -406,8 +411,8 @@ pub fn compute_word_prefix_docids(
 pub fn compute_exact_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &ShortWords,
-    prefix_to_delete: &ShortWords,
+    prefix_to_compute: &BTreeSet<MiniString>,
+    prefix_to_delete: &BTreeSet<MiniString>,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index,
@@ -421,8 +426,8 @@ pub fn compute_exact_word_prefix_docids(
 pub fn compute_word_prefix_fid_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &ShortWords,
-    prefix_to_delete: &ShortWords,
+    prefix_to_compute: &BTreeSet<MiniString>,
+    prefix_to_delete: &BTreeSet<MiniString>,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index,
@@ -436,8 +441,8 @@ pub fn compute_word_prefix_fid_docids(
 pub fn compute_word_prefix_position_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &ShortWords,
-    prefix_to_delete: &ShortWords,
+    prefix_to_compute: &BTreeSet<MiniString>,
+    prefix_to_delete: &BTreeSet<MiniString>,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index,

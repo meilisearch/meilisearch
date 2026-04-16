@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 use either::Either;
@@ -16,7 +17,7 @@ use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
 use crate::update::facet::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::update::new::facet_search_builder::FacetSearchBuilder;
-use crate::update::new::indexer::{ShortWords, WordDelta};
+use crate::update::new::indexer::{MiniString, WordDelta};
 use crate::update::new::merger::FacetFieldIdDelta;
 use crate::update::new::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
 use crate::update::new::word_fst_builder::{PrefixData, WordFstBuilder};
@@ -94,7 +95,7 @@ fn compute_prefix_database(
 }
 
 /// The words must be sorted.
-fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<ShortWords>
+fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<BTreeSet<MiniString>>
 where
     I: IntoIterator<Item = &'a str>,
 {
@@ -102,21 +103,21 @@ where
     let mut prefix_stream = prefix_fst.stream();
     let mut current_prefix = match prefix_stream.next() {
         Some(current) => current,
-        None => return Ok(ShortWords::new()),
+        None => return Ok(BTreeSet::new()),
     };
     let mut current_word = match iter.next() {
         Some(current) => current,
-        None => return Ok(ShortWords::new()),
+        None => return Ok(BTreeSet::new()),
     };
 
-    let mut output = ShortWords::new();
+    let mut output = BTreeSet::new();
     loop {
         // Current prefixes are only inserted once and each prefix is only inserted once.
         if current_word.as_bytes().starts_with(current_prefix) {
             let current_prefix = std::str::from_utf8(current_prefix)?;
-            if let Err(e) = output.push(current_prefix) {
-                tracing::warn!("prefix `{current_prefix}` is too long, skipping it: {e}");
-            }
+            // safety: Prefixes are 3 bytes or less
+            let current_prefix = MiniString::new(current_prefix).unwrap();
+            output.insert(current_prefix);
         }
 
         if current_word.as_bytes() < current_prefix {
