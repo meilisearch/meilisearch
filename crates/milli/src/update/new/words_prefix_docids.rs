@@ -196,6 +196,8 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         wtxn: &mut RwTxn,
         prefixes: &BTreeSet<MiniString>,
     ) -> Result<()> {
+        std::thread::sleep(Duration::from_mins(10));
+
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
             .take(thread_count)
