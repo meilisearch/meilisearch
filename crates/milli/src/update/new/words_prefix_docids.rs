@@ -2,7 +2,7 @@ use std::io::{self, ErrorKind};
 use std::iter;
 
 use hashbrown::HashMap;
-use heed::types::{Bytes, DecodeIgnore, Str};
+use heed::types::{Bytes, DecodeIgnore};
 use heed::{Database, RwTxn};
 use rayon::iter::{IndexedParallelIterator as _, IntoParallelIterator, ParallelIterator as _};
 use roaring::{MultiOps, RoaringBitmap};
@@ -64,7 +64,6 @@ impl<'i> WordPrefixDocids<'i> {
                     let output = self
                         .database
                         .prefix_iter(&rtxn, prefix.as_bytes())?
-                        .remap_types::<Str, CboRoaringBitmapCodec>()
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
                     entries.push(InPrefixEntry { prefix, bitmap: output })?;
@@ -205,6 +204,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
             .map(|(thread_id, rtxn)| {
                 let mut entries =
                     tempfile::tempfile().map(Offloader::<_, OutPrefixIntegerEntryCodec>::new)?;
+
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
@@ -373,7 +373,9 @@ fn delete_prefixes(
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
     for prefix in prefixes.iter() {
-        let mut iter = prefix_database.prefix_iter_mut(wtxn, prefix.as_bytes())?;
+        let mut iter = prefix_database
+            .remap_data_type::<DecodeIgnore>()
+            .prefix_iter_mut(wtxn, prefix.as_bytes())?;
         while iter.next().transpose()?.is_some() {
             // safety: we do not keep a reference on database entries.
             unsafe { iter.del_current()? };
