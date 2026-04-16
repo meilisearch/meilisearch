@@ -2,6 +2,7 @@ use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
 use index_scheduler::{IndexScheduler, Query};
 use meilisearch_auth::AuthController;
+use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::progress::ProgressStepView;
@@ -12,6 +13,7 @@ use time::OffsetDateTime;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::routes::create_all_stats;
+use crate::routes::indexes::{GetIndexStatsParams, SizeFormat};
 use crate::search_queue::SearchQueue;
 
 #[routes::routes(
@@ -131,10 +133,28 @@ pub async fn get_metrics(
         return Err(error);
     }
 
-    let response = create_all_stats((*index_scheduler).clone(), auth_controller, auth_filters)?;
+    let response = create_all_stats(
+        (*index_scheduler).clone(),
+        auth_controller,
+        auth_filters,
+        GetIndexStatsParams {
+            show_internal_database_sizes: Param(false),
+            size_format: Some(SizeFormat::Raw),
+        },
+    )?;
 
-    crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(response.database_size as i64);
-    crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(response.used_database_size as i64);
+    let database_size = match response.database_size {
+        crate::routes::indexes::Size::Raw(bytes) => bytes as i64,
+        crate::routes::indexes::Size::Human(_) => 0,
+    };
+
+    let used_database_size = match response.used_database_size {
+        crate::routes::indexes::Size::Raw(bytes) => bytes as i64,
+        crate::routes::indexes::Size::Human(_) => 0,
+    };
+
+    crate::metrics::MEILISEARCH_DB_SIZE_BYTES.set(database_size as i64);
+    crate::metrics::MEILISEARCH_USED_DB_SIZE_BYTES.set(used_database_size as i64);
     crate::metrics::MEILISEARCH_INDEX_COUNT.set(response.indexes.len() as i64);
 
     crate::metrics::MEILISEARCH_SEARCH_QUEUE_SIZE.set(search_queue.capacity() as i64);
