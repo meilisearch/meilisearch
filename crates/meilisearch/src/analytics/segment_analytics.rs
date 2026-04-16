@@ -10,6 +10,7 @@ use actix_web::HttpRequest;
 use byte_unit::Byte;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::{AuthController, AuthFilter};
+use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::features::RuntimeTogglableFeatures;
 use meilisearch_types::InstanceUid;
 use once_cell::sync::Lazy;
@@ -27,6 +28,7 @@ use super::{config_user_id_path, Aggregate, MEILISEARCH_CONFIG_PATH};
 use crate::option::{
     default_http_addr, IndexerOpts, LogMode, MaxMemory, MaxThreads, ScheduleSnapshot,
 };
+use crate::routes::indexes::GetIndexStatsParams;
 use crate::routes::{create_all_stats, Stats};
 use crate::Opt;
 
@@ -488,6 +490,7 @@ impl Segment {
             index_scheduler.clone().into(),
             auth_controller.into(),
             &AuthFilter::default(),
+            GetIndexStatsParams { show_internal_database_sizes: Param(false), size_format: None },
         ) {
             // Replace the version number with the prototype name if any.
             let version = build_info::DescribeResult::from_build()

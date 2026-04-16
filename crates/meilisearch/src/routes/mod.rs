@@ -2,11 +2,14 @@ use std::collections::BTreeMap;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
+use deserr::actix_web::AwebQueryParameter;
 use export::Export;
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::batch_view::BatchView;
 use meilisearch_types::batches::BatchStats;
+use meilisearch_types::deserr::query_params::Param;
+use meilisearch_types::deserr::DeserrQueryParamError;
 use meilisearch_types::error::{Code, ErrorType, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::CreateApiKey;
@@ -37,7 +40,9 @@ use crate::milli::progress::{ProgressStepView, ProgressView};
 use crate::routes::batches::AllBatches;
 use crate::routes::features::RuntimeTogglableFeatures;
 use crate::routes::indexes::documents::{DocumentDeletionByFilter, DocumentEditionByFunction};
-use crate::routes::indexes::{IndexView, ListFields, ListFieldsFilter};
+use crate::routes::indexes::{
+    GetIndexStatsParams, IndexView, ListFields, ListFieldsFilter, Size, SizeFormat,
+};
 use crate::routes::multi_search::SearchResults;
 use crate::routes::network::{Network, Remote, Shard};
 use crate::routes::swap_indexes::SwapIndexesPayload;
@@ -414,9 +419,9 @@ pub async fn running() -> HttpResponse {
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
     /// Total disk space used by the database in bytes
-    pub database_size: u64,
+    pub database_size: Size,
     /// Actual size of the data in the database in bytes
-    pub used_database_size: u64,
+    pub used_database_size: Size,
     /// Date of the last update in RFC 3339 format. Null if no update has been
     /// processed
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
@@ -466,10 +471,13 @@ pub struct Stats {
 async fn get_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
     auth_controller: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<AuthController>>,
+    params: AwebQueryParameter<GetIndexStatsParams, DeserrQueryParamError>,
 ) -> Result<HttpResponse, ResponseError> {
     let filters = index_scheduler.filters();
+    let params = params.into_inner();
 
-    let stats = create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters)?;
+    let stats =
+        create_all_stats((*index_scheduler).clone(), (*auth_controller).clone(), filters, params)?;
 
     debug!(returns = ?stats, "Get stats");
     Ok(HttpResponse::Ok().json(stats))
@@ -479,11 +487,15 @@ pub fn create_all_stats(
     index_scheduler: Data<IndexScheduler>,
     auth_controller: Data<AuthController>,
     filters: &meilisearch_auth::AuthFilter,
+    params: GetIndexStatsParams,
 ) -> Result<Stats, ResponseError> {
     let mut last_task: Option<OffsetDateTime> = None;
     let mut indexes = BTreeMap::new();
     let mut database_size = 0;
     let mut used_database_size = 0;
+
+    let size_format = params.size_format.unwrap_or(SizeFormat::Raw); // default to `raw` for backcompat.
+    let Param(show_internal_database_sizes) = params.show_internal_database_sizes;
 
     for index_uid in index_scheduler.index_names()? {
         // Accumulate the size of all indexes, even unauthorized ones, so
@@ -500,13 +512,19 @@ pub fn create_all_stats(
         last_task = last_task.map_or(Some(stats.inner_stats.updated_at), |last| {
             Some(last.max(stats.inner_stats.updated_at))
         });
-        indexes.insert(index_uid.to_string(), stats.into());
+        indexes.insert(
+            index_uid.to_string(),
+            IndexStats::from_db_index_stats(stats, size_format, show_internal_database_sizes),
+        );
     }
 
     database_size += index_scheduler.size()?;
     used_database_size += index_scheduler.used_size()?;
     database_size += auth_controller.size()?;
     used_database_size += auth_controller.used_size()?;
+
+    let database_size = Size::new(database_size, size_format);
+    let used_database_size = Size::new(used_database_size, size_format);
 
     let stats = Stats { database_size, used_database_size, last_update: last_task, indexes };
     Ok(stats)

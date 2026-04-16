@@ -1024,7 +1024,7 @@ fn create_and_list_index() {
 
     index_scheduler.index("kefir").unwrap();
     let list = index_scheduler.paginated_indexes_stats(&AuthFilter::default(), 0, 20).unwrap();
-    snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]", "[1][0][1].used_database_size" => "[bytes]", "[1][0][1].database_size" => "[bytes]" }), @r###"
+    snapshot!(json_string!(list, { "[1][0][1].created_at" => "[date]", "[1][0][1].updated_at" => "[date]", "[1][0][1].used_database_size" => "[bytes]", "[1][0][1].database_size" => "[bytes]", "[1][0][1].internal_database_sizes" => "[bytes]" }), @r###"
     [
       1,
       [
@@ -1037,6 +1037,7 @@ fn create_and_list_index() {
               "totalValueSize": 0
             },
             "database_size": "[bytes]",
+            "internal_database_sizes": "[bytes]",
             "number_of_embeddings": 0,
             "number_of_embedded_documents": 0,
             "used_database_size": "[bytes]",

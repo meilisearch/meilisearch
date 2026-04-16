@@ -551,6 +551,40 @@ pub async fn delete_index(
     Ok(HttpResponse::Accepted().json(task))
 }
 
+#[derive(Serialize, Debug, ToSchema)]
+#[serde(untagged, rename_all = "camelCase")]
+#[schema(rename_all = "camelCase")]
+pub enum Size {
+    /// Size as an integer, in bytes
+    Raw(u64),
+    /// Size as a human-readable string with an appropriate unit.
+    Human(String),
+}
+
+impl From<Size> for serde_json::Value {
+    fn from(value: Size) -> Self {
+        match value {
+            Size::Raw(bytes) => serde_json::Value::Number(serde_json::Number::from(bytes)),
+            Size::Human(human) => serde_json::Value::String(human),
+        }
+    }
+}
+
+impl Size {
+    pub fn new(bytes: u64, format: SizeFormat) -> Self {
+        use byte_unit::Byte;
+        use byte_unit::UnitType::Binary;
+
+        match format {
+            SizeFormat::Human => {
+                let size = Byte::from_u64(bytes).get_appropriate_unit(Binary);
+                Self::Human(format!("{size:#.2}"))
+            }
+            SizeFormat::Raw => Self::Raw(bytes),
+        }
+    }
+}
+
 /// Stats of an `Index`, as known to the `stats` route.
 #[derive(Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -559,11 +593,17 @@ pub struct IndexStats {
     /// Number of documents in the index
     pub number_of_documents: u64,
     /// Size of the documents database, in bytes.
-    pub raw_document_db_size: u64,
+    pub raw_document_db_size: Size,
     /// Average size of a document in the documents database.
-    pub avg_document_size: u64,
+    pub avg_document_size: Size,
     /// Whether or not the index is currently ingesting document
     pub is_indexing: bool,
+    /// Size of all the internal databases for the index.
+    ///
+    /// Database names can change from version to version.
+    #[serde(skip_serializing_if = "serde_json::Map::is_empty")]
+    // serde_json::Map<String, Size> is not Serialize, so we convert the Size to a serde_json::Value
+    pub internal_database_sizes: serde_json::Map<String, serde_json::Value>,
     /// Number of embeddings in the index
     #[serde(skip_serializing_if = "Option::is_none")]
     pub number_of_embeddings: Option<u64>,
@@ -576,19 +616,58 @@ pub struct IndexStats {
     pub field_distribution: FieldDistribution,
 }
 
-impl From<index_scheduler::IndexStats> for IndexStats {
-    fn from(stats: index_scheduler::IndexStats) -> Self {
-        IndexStats {
-            number_of_documents: stats
-                .inner_stats
-                .number_of_documents
-                .unwrap_or(stats.inner_stats.documents_database_stats.number_of_entries()),
-            raw_document_db_size: stats.inner_stats.documents_database_stats.total_size(),
-            avg_document_size: stats.inner_stats.documents_database_stats.average_value_size(),
-            is_indexing: stats.is_indexing,
-            number_of_embeddings: stats.inner_stats.number_of_embeddings,
-            number_of_embedded_documents: stats.inner_stats.number_of_embedded_documents,
-            field_distribution: stats.inner_stats.field_distribution,
+#[derive(Copy, Clone, Debug, Serialize, Deserr, ToSchema)]
+#[serde(rename_all = "camelCase")]
+#[deserr(rename_all = camelCase)]
+#[schema(rename_all = "camelCase")]
+pub enum SizeFormat {
+    /// Format sizes as a human-readable string with an appropriate unit.
+    Human,
+    /// Format sizes as a number of bytes.
+    Raw,
+}
+
+impl IndexStats {
+    pub fn from_db_index_stats(
+        db_index_stats: index_scheduler::IndexStats,
+        format: SizeFormat,
+        with_internal_database_sizes: bool,
+    ) -> Self {
+        let index_scheduler::IndexStats {
+            is_indexing,
+            inner_stats:
+                index_scheduler::InnerIndexStats {
+                    documents_database_stats,
+                    number_of_documents,
+                    database_size: _,
+                    internal_database_sizes,
+                    number_of_embeddings,
+                    number_of_embedded_documents,
+                    used_database_size: _,
+                    primary_key: _,
+                    field_distribution,
+                    created_at: _,
+                    updated_at: _,
+                },
+        } = db_index_stats;
+
+        Self {
+            number_of_documents: number_of_documents
+                .unwrap_or(documents_database_stats.number_of_entries()),
+            raw_document_db_size: Size::new(documents_database_stats.total_size(), format),
+            avg_document_size: Size::new(documents_database_stats.average_value_size(), format),
+            internal_database_sizes: if with_internal_database_sizes {
+                internal_database_sizes
+                    .into_iter()
+                    .map(|(dbname, size)| (dbname, Size::new(size, format).into()))
+                    .collect()
+            } else {
+                Default::default()
+            },
+            is_indexing,
+            number_of_embeddings,
+            number_of_embedded_documents,
+            field_distribution,
         }
     }
 }
@@ -634,11 +713,40 @@ impl From<index_scheduler::IndexStats> for IndexStats {
 )]
 pub async fn get_index_stats(
     index_scheduler: GuardedData<ActionPolicy<{ actions::STATS_GET }>, Data<IndexScheduler>>,
+    params: AwebQueryParameter<GetIndexStatsParams, DeserrQueryParamError>,
     index_uid: web::Path<String>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
-    let stats = IndexStats::from(index_scheduler.index_stats(&index_uid)?);
+
+    let GetIndexStatsParams {
+        show_internal_database_sizes: Param(show_internal_database_sizes),
+        size_format,
+    } = params.into_inner();
+
+    let stats = IndexStats::from_db_index_stats(
+        index_scheduler.index_stats(&index_uid)?,
+        size_format.unwrap_or(SizeFormat::Raw), // default to `raw` for backcompat.
+        show_internal_database_sizes,
+    );
 
     debug!(returns = ?stats, "Get index stats");
     Ok(HttpResponse::Ok().json(stats))
+}
+
+#[derive(Debug, Deserr, IntoParams)]
+#[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
+#[into_params(rename_all = "camelCase", parameter_in = Query)]
+pub struct GetIndexStatsParams {
+    /// If `true`, adds `internalDatabaseSizes` to the response.
+    #[deserr(default, error = DeserrQueryParamError<InvalidStatsShowInternalDatabaseSizes>)]
+    #[param(required = false, value_type = bool, example = false)]
+    pub show_internal_database_sizes: Param<bool>,
+
+    /// Specify how to format the sizes:
+    ///
+    /// - `"raw"`: format sizes as a number of bytes
+    /// - `"human"`: format sizes as a human-readable string with an appropriate unit.
+    #[deserr(default, error = DeserrQueryParamError<InvalidStatsSizeFormat>)]
+    #[param(required = false, example = "human")]
+    pub size_format: Option<SizeFormat>,
 }
