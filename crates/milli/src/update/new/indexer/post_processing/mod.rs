@@ -80,8 +80,7 @@ fn compute_prefix_database(
     let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
 
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
-    std::thread::sleep(Duration::from_mins(1));
-    // compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
+    compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
 
     progress.update_progress(PostProcessingWords::ExactWordPrefixDocids);
     compute_exact_word_prefix_docids(wtxn, index, &modified, &deleted)?;
