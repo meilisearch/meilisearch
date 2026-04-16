@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::io::{self, ErrorKind};
 use std::iter;
+use std::time::Duration;
 
 use hashbrown::HashMap;
 use heed::types::{Bytes, DecodeIgnore};
@@ -199,6 +200,8 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
             .take(thread_count)
             .collect::<heed::Result<Vec<_>>>()?;
+
+        std::thread::sleep(Duration::from_mins(10));
 
         let outputs = rtxns
             .into_par_iter()
