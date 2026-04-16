@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
+use std::time::Duration;
 
 use either::Either;
 use facet_bulk::generate_facet_levels;
@@ -16,7 +16,7 @@ use crate::update::del_add::DelAdd;
 use crate::update::facet::new_incremental::FacetsUpdateIncremental;
 use crate::update::facet::{FACET_GROUP_SIZE, FACET_MAX_GROUP_SIZE, FACET_MIN_LEVEL_SIZE};
 use crate::update::new::facet_search_builder::FacetSearchBuilder;
-use crate::update::new::indexer::WordDelta;
+use crate::update::new::indexer::{ShortWords, WordDelta};
 use crate::update::new::merger::FacetFieldIdDelta;
 use crate::update::new::steps::{IndexingStep, PostProcessingFacets, PostProcessingWords};
 use crate::update::new::word_fst_builder::{PrefixData, WordFstBuilder};
@@ -25,8 +25,8 @@ use crate::update::new::words_prefix_docids::{
     compute_word_prefix_position_docids,
 };
 use crate::update::new::FacetFieldIdsDelta;
-use crate::update::{FacetsUpdateBulk, GrenadParameters};
-use crate::{GlobalFieldsIdsMap, Index, Prefix, Result};
+use crate::update::FacetsUpdateBulk;
+use crate::{GlobalFieldsIdsMap, Index, Result};
 
 mod facet_bulk;
 
@@ -54,14 +54,7 @@ where
     indexing_context.progress.update_progress(IndexingStep::PostProcessingWords);
     if let Some(prefix_data) = compute_word_fst(index, wtxn, word_delta, indexing_context.progress)?
     {
-        compute_prefix_database(
-            index,
-            wtxn,
-            word_delta,
-            &prefix_data,
-            indexing_context.grenad_parameters,
-            indexing_context.progress,
-        )?;
+        compute_prefix_database(index, wtxn, word_delta, &prefix_data, indexing_context.progress)?;
     }
 
     Ok(())
@@ -78,27 +71,30 @@ fn compute_prefix_database(
     wtxn: &mut RwTxn,
     word_delta: &WordDelta,
     prefix_data: &PrefixData,
-    grenad_parameters: &GrenadParameters,
     progress: &Progress,
 ) -> Result<()> {
+    progress.update_progress(PostProcessingWords::ComputePrefixes);
     let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
     let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
     let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
 
+    std::thread::sleep(Duration::from_secs(10));
+
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
-    compute_word_prefix_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
 
     progress.update_progress(PostProcessingWords::ExactWordPrefixDocids);
-    compute_exact_word_prefix_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_exact_word_prefix_docids(wtxn, index, &modified, &deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixFieldIdDocids);
-    compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted, grenad_parameters)?;
+    compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixPositionDocids);
-    compute_word_prefix_position_docids(wtxn, index, &modified, &deleted, grenad_parameters)
+    compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)
 }
 
-fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<BTreeSet<Prefix>>
+/// The words must be sorted.
+fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<ShortWords>
 where
     I: IntoIterator<Item = &'a str>,
 {
@@ -106,18 +102,21 @@ where
     let mut prefix_stream = prefix_fst.stream();
     let mut current_prefix = match prefix_stream.next() {
         Some(current) => current,
-        None => return Ok(BTreeSet::new()),
+        None => return Ok(ShortWords::new()),
     };
     let mut current_word = match iter.next() {
         Some(current) => current,
-        None => return Ok(BTreeSet::new()),
+        None => return Ok(ShortWords::new()),
     };
 
-    let mut output = BTreeSet::new();
+    let mut output = ShortWords::new();
     loop {
+        // Current prefixes are only inserted once and each prefix is only inserted once.
         if current_word.as_bytes().starts_with(current_prefix) {
             let current_prefix = std::str::from_utf8(current_prefix)?;
-            output.insert(current_prefix.into());
+            if let Err(e) = output.push(current_prefix) {
+                tracing::warn!("prefix `{current_prefix}` is too long, skipping it: {e}");
+            }
         }
 
         if current_word.as_bytes() < current_prefix {

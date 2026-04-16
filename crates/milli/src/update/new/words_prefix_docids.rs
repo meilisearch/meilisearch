@@ -1,23 +1,21 @@
-use std::collections::BTreeSet;
-use std::io::{BufReader, BufWriter, Read, Seek, Write};
+use std::io::{self, ErrorKind};
 use std::iter;
 
 use hashbrown::HashMap;
-use heed::types::{Bytes, DecodeIgnore, Str};
+use heed::types::{Bytes, DecodeIgnore};
 use heed::{Database, RwTxn};
 use rayon::iter::{IndexedParallelIterator as _, IntoParallelIterator, ParallelIterator as _};
-use roaring::MultiOps;
-use tempfile::spooled_tempfile;
+use roaring::{MultiOps, RoaringBitmap};
 
+use super::offloader::{Decoder, Encoder, Offloader};
 use crate::heed_codec::StrBEU16Codec;
-use crate::update::GrenadParameters;
-use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
+use crate::update::new::indexer::ShortWords;
+use crate::{CboRoaringBitmapCodec, Index, Result};
 
 struct WordPrefixDocids<'i> {
     index: &'i Index,
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-    max_memory_by_thread: Option<usize>,
 }
 
 impl<'i> WordPrefixDocids<'i> {
@@ -25,21 +23,15 @@ impl<'i> WordPrefixDocids<'i> {
         index: &'i Index,
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-        grenad_parameters: &GrenadParameters,
     ) -> WordPrefixDocids<'i> {
-        WordPrefixDocids {
-            index,
-            database,
-            prefix_database,
-            max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
-        }
+        WordPrefixDocids { index, database, prefix_database }
     }
 
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &BTreeSet<Prefix>,
-        prefix_to_delete: &BTreeSet<Prefix>,
+        prefix_to_compute: &ShortWords,
+        prefix_to_delete: &ShortWords,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
@@ -49,7 +41,7 @@ impl<'i> WordPrefixDocids<'i> {
     fn recompute_modified_prefixes_no_frozen(
         &self,
         wtxn: &mut RwTxn,
-        prefix_to_compute: &BTreeSet<Prefix>,
+        prefix_to_compute: &ShortWords,
     ) -> Result<()> {
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
@@ -60,13 +52,9 @@ impl<'i> WordPrefixDocids<'i> {
             .into_par_iter()
             .enumerate()
             .map(|(thread_id, rtxn)| {
-                // `indexes` represent offsets at which prefixes computations were stored in the `file`.
-                let mut indexes = Vec::new();
-                let mut file = BufWriter::new(spooled_tempfile(
-                    self.max_memory_by_thread.unwrap_or(usize::MAX),
-                ));
+                let mut entries =
+                    tempfile::tempfile().map(Offloader::<_, OutPrefixEntryCodec>::new)?;
 
-                let mut buffer = Vec::new();
                 for (prefix_index, prefix) in prefix_to_compute.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
@@ -76,35 +64,20 @@ impl<'i> WordPrefixDocids<'i> {
                     let output = self
                         .database
                         .prefix_iter(&rtxn, prefix.as_bytes())?
-                        .remap_types::<Str, CboRoaringBitmapCodec>()
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
-
-                    buffer.clear();
-                    CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
-                    indexes.push(PrefixEntry { prefix, serialized_length: buffer.len() });
-                    file.write_all(&buffer)?;
+                    entries.push(InPrefixEntry { prefix, bitmap: output })?;
                 }
 
-                Ok((indexes, file))
+                entries.finish().map_err(Into::into)
             })
             .collect::<Result<Vec<_>>>()?;
 
         // We iterate over all the collected and serialized bitmaps through
         // the files and entries to eventually put them in the final database.
-        let mut buffer = Vec::new();
-        for (index, file) in outputs {
-            let mut file = file.into_inner().map_err(|e| e.into_error())?;
-            file.rewind()?;
-            let mut file = BufReader::new(file);
-            for PrefixEntry { prefix, serialized_length } in index {
-                buffer.resize(serialized_length, 0);
-                file.read_exact(&mut buffer)?;
-                self.prefix_database.remap_data_type::<Bytes>().put(
-                    wtxn,
-                    prefix.as_bytes(),
-                    &buffer,
-                )?;
+        for mut entries in outputs {
+            while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
+                self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
             }
         }
 
@@ -112,17 +85,82 @@ impl<'i> WordPrefixDocids<'i> {
     }
 }
 
-/// Represents a prefix and the lenght the bitmap takes on disk.
-struct PrefixEntry<'a> {
-    prefix: &'a str,
-    serialized_length: usize,
+/// Represents a prefix, its position in the field and the length the bitmap takes on disk.
+pub struct InPrefixEntry<'a> {
+    pub prefix: &'a str,
+    pub bitmap: RoaringBitmap,
+}
+
+impl Encoder for InPrefixEntry<'_> {
+    fn encode<W: io::Write>(self, tmp_buffer: &mut Vec<u8>, writer: &mut W) -> io::Result<()> {
+        let InPrefixEntry { prefix, bitmap } = self;
+
+        // prefix length and prefix
+        let prefix_length: u8 =
+            prefix.len().try_into().map_err(|_| io::Error::other("prefix length too long"))?;
+        writer.write_all(bytemuck::bytes_of(&prefix_length))?;
+        writer.write_all(prefix.as_bytes())?;
+
+        // bitmap length and bitmap
+        let serialized_bytes = {
+            tmp_buffer.clear();
+            CboRoaringBitmapCodec::serialize_into_vec(&bitmap, tmp_buffer);
+            &tmp_buffer[..]
+        };
+        let serialized_bitmap_length: u32 = serialized_bytes
+            .len()
+            .try_into()
+            .map_err(|_| io::Error::other("serialized bitmap length too long"))?;
+        writer.write_all(bytemuck::bytes_of(&serialized_bitmap_length))?;
+        writer.write_all(serialized_bytes)?;
+
+        Ok(())
+    }
+}
+
+pub struct OutPrefixEntryCodec;
+
+/// Represents the key and value of a prefix integer entry.
+pub struct OutPrefixEntry<'b> {
+    pub key: &'b [u8],
+    pub value: &'b [u8],
+}
+
+impl<'b> Decoder<'b> for OutPrefixEntryCodec {
+    type Decoded = OutPrefixEntry<'b>;
+
+    fn decode<R: io::Read>(
+        first_tmp_buffer: &'b mut Vec<u8>,
+        second_tmp_buffer: &'b mut Vec<u8>,
+        reader: &mut R,
+    ) -> io::Result<Option<Self::Decoded>> {
+        // prefix length and prefix
+        let mut prefix_length: u8 = 0;
+        match reader.read_exact(bytemuck::bytes_of_mut(&mut prefix_length)) {
+            Ok(()) => (),
+            Err(e) if e.kind() == ErrorKind::UnexpectedEof => return Ok(None),
+            Err(e) => return Err(e),
+        }
+        first_tmp_buffer.resize(prefix_length as usize, 0);
+        reader.read_exact(first_tmp_buffer)?;
+
+        // bitmap length and bitmap (bytes)
+        let mut bitmap_length: u32 = 0;
+        reader.read_exact(bytemuck::bytes_of_mut(&mut bitmap_length))?;
+        second_tmp_buffer.resize(bitmap_length as usize, 0);
+        reader.read_exact(second_tmp_buffer)?;
+
+        Ok(Some(Self::Decoded {
+            key: first_tmp_buffer.as_slice(),
+            value: second_tmp_buffer.as_slice(),
+        }))
+    }
 }
 
 struct WordPrefixIntegerDocids<'i> {
     index: &'i Index,
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-    max_memory_by_thread: Option<usize>,
 }
 
 impl<'i> WordPrefixIntegerDocids<'i> {
@@ -130,21 +168,15 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         index: &'i Index,
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-        grenad_parameters: &'_ GrenadParameters,
     ) -> WordPrefixIntegerDocids<'i> {
-        WordPrefixIntegerDocids {
-            index,
-            database,
-            prefix_database,
-            max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
-        }
+        WordPrefixIntegerDocids { index, database, prefix_database }
     }
 
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &BTreeSet<Prefix>,
-        prefix_to_delete: &BTreeSet<Prefix>,
+        prefix_to_compute: &ShortWords,
+        prefix_to_delete: &ShortWords,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
@@ -159,7 +191,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
     fn recompute_modified_prefixes_no_frozen(
         &self,
         wtxn: &mut RwTxn,
-        prefixes: &BTreeSet<Prefix>,
+        prefixes: &ShortWords,
     ) -> Result<()> {
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
@@ -170,13 +202,9 @@ impl<'i> WordPrefixIntegerDocids<'i> {
             .into_par_iter()
             .enumerate()
             .map(|(thread_id, rtxn)| {
-                // `indexes` represent offsets at which prefixes computations were stored in the `file`.
-                let mut indexes = Vec::new();
-                let mut file = BufWriter::new(spooled_tempfile(
-                    self.max_memory_by_thread.unwrap_or(usize::MAX),
-                ));
+                let mut entries =
+                    tempfile::tempfile().map(Offloader::<_, OutPrefixIntegerEntryCodec>::new)?;
 
-                let mut buffer = Vec::new();
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
@@ -210,58 +238,37 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                     }
 
                     for (pos, bitmaps_bytes) in bitmap_bytes_at_positions {
-                        if bitmaps_bytes.is_empty() {
-                            indexes.push(PrefixIntegerEntry {
-                                prefix,
-                                pos,
-                                serialized_length: None,
-                            });
+                        let bitmap = if bitmaps_bytes.is_empty() {
+                            None
                         } else {
                             let output = bitmaps_bytes
                                 .into_iter()
                                 .map(CboRoaringBitmapCodec::deserialize_from)
                                 .union()?;
-                            buffer.clear();
-                            CboRoaringBitmapCodec::serialize_into_vec(&output, &mut buffer);
-                            indexes.push(PrefixIntegerEntry {
-                                prefix,
-                                pos,
-                                serialized_length: Some(buffer.len()),
-                            });
-                            file.write_all(&buffer)?;
-                        }
+                            Some(output)
+                        };
+                        entries.push(InPrefixIntegerEntry { prefix, pos, bitmap })?;
                     }
                 }
 
-                Ok((indexes, file))
+                entries.finish().map_err(Into::into)
             })
             .collect::<Result<Vec<_>>>()?;
 
         // We iterate over all the collected and serialized bitmaps through
         // the files and entries to eventually put them in the final database.
-        let mut key_buffer = Vec::new();
-        let mut buffer = Vec::new();
-        for (index, file) in outputs {
-            let mut file = file.into_inner().map_err(|e| e.into_error())?;
-            file.rewind()?;
-            let mut file = BufReader::new(file);
-            for PrefixIntegerEntry { prefix, pos, serialized_length } in index {
-                key_buffer.clear();
-                key_buffer.extend_from_slice(prefix.as_bytes());
-                key_buffer.push(0);
-                key_buffer.extend_from_slice(&pos.to_be_bytes());
-                match serialized_length {
-                    Some(serialized_length) => {
-                        buffer.resize(serialized_length, 0);
-                        file.read_exact(&mut buffer)?;
+        for mut entries in outputs {
+            while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
+                match value {
+                    Some(bitmap_bytes) => {
                         self.prefix_database.remap_data_type::<Bytes>().put(
                             wtxn,
-                            &key_buffer,
-                            &buffer,
+                            key,
+                            bitmap_bytes,
                         )?;
                     }
                     None => {
-                        self.prefix_database.delete(wtxn, &key_buffer)?;
+                        self.prefix_database.delete(wtxn, key)?;
                     }
                 }
             }
@@ -271,22 +278,104 @@ impl<'i> WordPrefixIntegerDocids<'i> {
     }
 }
 
-/// Represents a prefix and the length the bitmap takes on disk.
-struct PrefixIntegerEntry<'a> {
-    prefix: &'a str,
-    pos: u16,
-    serialized_length: Option<usize>,
+/// Represents a prefix, its position in the field and the length the bitmap takes on disk.
+pub struct InPrefixIntegerEntry<'a> {
+    pub prefix: &'a str,
+    pub pos: u16,
+    pub bitmap: Option<RoaringBitmap>,
+}
+
+impl Encoder for InPrefixIntegerEntry<'_> {
+    fn encode<W: io::Write>(self, tmp_buffer: &mut Vec<u8>, writer: &mut W) -> io::Result<()> {
+        let InPrefixIntegerEntry { prefix, pos, bitmap } = self;
+
+        // prefix length and prefix
+        let prefix_length: u8 =
+            prefix.len().try_into().map_err(|_| io::Error::other("prefix length too long"))?;
+        writer.write_all(bytemuck::bytes_of(&prefix_length))?;
+        writer.write_all(prefix.as_bytes())?;
+
+        // pos
+        writer.write_all(bytemuck::bytes_of(&pos))?;
+
+        // bitmap length and bitmap
+        let serialized_bytes = match bitmap {
+            Some(bitmap) => {
+                tmp_buffer.clear();
+                CboRoaringBitmapCodec::serialize_into_vec(&bitmap, tmp_buffer);
+                &tmp_buffer[..]
+            }
+            None => &[][..],
+        };
+        let serialized_bitmap_length: u32 = serialized_bytes
+            .len()
+            .try_into()
+            .map_err(|_| io::Error::other("serialized bitmap length too long"))?;
+        writer.write_all(bytemuck::bytes_of(&serialized_bitmap_length))?;
+        writer.write_all(serialized_bytes)?;
+
+        Ok(())
+    }
+}
+
+pub struct OutPrefixIntegerEntryCodec;
+
+/// Represents the key and value of a prefix integer entry.
+pub struct OutPrefixIntegerEntry<'b> {
+    pub key: &'b [u8],
+    pub value: Option<&'b [u8]>,
+}
+
+impl<'b> Decoder<'b> for OutPrefixIntegerEntryCodec {
+    type Decoded = OutPrefixIntegerEntry<'b>;
+
+    fn decode<R: io::Read>(
+        first_tmp_buffer: &'b mut Vec<u8>,
+        second_tmp_buffer: &'b mut Vec<u8>,
+        reader: &mut R,
+    ) -> io::Result<Option<Self::Decoded>> {
+        // prefix length and prefix
+        let mut prefix_length: u8 = 0;
+        match reader.read_exact(bytemuck::bytes_of_mut(&mut prefix_length)) {
+            Ok(()) => (),
+            Err(e) if e.kind() == ErrorKind::UnexpectedEof => return Ok(None),
+            Err(e) => return Err(e),
+        }
+        first_tmp_buffer.resize(prefix_length as usize, 0);
+        reader.read_exact(first_tmp_buffer)?;
+        first_tmp_buffer.push(0);
+
+        // pos
+        let mut pos: u16 = 0;
+        reader.read_exact(bytemuck::bytes_of_mut(&mut pos))?;
+        first_tmp_buffer.extend_from_slice(&pos.to_be_bytes());
+
+        // bitmap length and bitmap (bytes)
+        let mut bitmap_length: u32 = 0;
+        reader.read_exact(bytemuck::bytes_of_mut(&mut bitmap_length))?;
+        let bitmap = if bitmap_length == 0 {
+            None
+        } else {
+            second_tmp_buffer.resize(bitmap_length as usize, 0);
+            reader.read_exact(second_tmp_buffer)?;
+            Some(second_tmp_buffer.as_slice())
+        };
+
+        Ok(Some(Self::Decoded { key: first_tmp_buffer.as_slice(), value: bitmap }))
+    }
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::post_processing::prefix")]
 fn delete_prefixes(
     wtxn: &mut RwTxn,
     prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
-    prefixes: &BTreeSet<Prefix>,
+    prefixes: &ShortWords,
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
-    for prefix in prefixes {
-        let mut iter = prefix_database.prefix_iter_mut(wtxn, prefix.as_bytes())?;
+    for prefix in prefixes.iter() {
+        let mut iter = prefix_database
+            .remap_data_type::<DecodeIgnore>()
+            .prefix_iter_mut(wtxn, prefix.as_bytes())?;
         while iter.next().transpose()?.is_some() {
             // safety: we do not keep a reference on database entries.
             unsafe { iter.del_current()? };
@@ -300,15 +389,13 @@ fn delete_prefixes(
 pub fn compute_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &BTreeSet<Prefix>,
-    prefix_to_delete: &BTreeSet<Prefix>,
-    grenad_parameters: &GrenadParameters,
+    prefix_to_compute: &ShortWords,
+    prefix_to_delete: &ShortWords,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index,
         index.word_docids.remap_key_type(),
         index.word_prefix_docids.remap_key_type(),
-        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -317,15 +404,13 @@ pub fn compute_word_prefix_docids(
 pub fn compute_exact_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &BTreeSet<Prefix>,
-    prefix_to_delete: &BTreeSet<Prefix>,
-    grenad_parameters: &GrenadParameters,
+    prefix_to_compute: &ShortWords,
+    prefix_to_delete: &ShortWords,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index,
         index.exact_word_docids.remap_key_type(),
         index.exact_word_prefix_docids.remap_key_type(),
-        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -334,15 +419,13 @@ pub fn compute_exact_word_prefix_docids(
 pub fn compute_word_prefix_fid_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &BTreeSet<Prefix>,
-    prefix_to_delete: &BTreeSet<Prefix>,
-    grenad_parameters: &GrenadParameters,
+    prefix_to_compute: &ShortWords,
+    prefix_to_delete: &ShortWords,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index,
         index.word_fid_docids.remap_key_type(),
         index.word_prefix_fid_docids.remap_key_type(),
-        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -351,15 +434,13 @@ pub fn compute_word_prefix_fid_docids(
 pub fn compute_word_prefix_position_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &BTreeSet<Prefix>,
-    prefix_to_delete: &BTreeSet<Prefix>,
-    grenad_parameters: &GrenadParameters,
+    prefix_to_compute: &ShortWords,
+    prefix_to_delete: &ShortWords,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index,
         index.word_position_docids.remap_key_type(),
         index.word_prefix_position_docids.remap_key_type(),
-        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
