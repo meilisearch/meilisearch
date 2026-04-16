@@ -1,26 +1,24 @@
-use std::sync::{Arc, RwLock};
+use std::collections::HashSet;
+use std::env::VarError;
+use std::sync::Arc;
 use std::u64;
 
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRules, RuleAction, RuleUid,
 };
-use meilisearch_types::heed;
-use meilisearch_types::heed::types::{SerdeJson, Str};
-use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
+use meilisearch_types::heed::RwTxn;
+use meilisearch_types::heed::{self, EnvFlags};
+use meilisearch_types::milli::{self, CreateOrOpen, FilterableAttributesRule};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-use crate::{IndexSchedulerOptions, Result};
+use crate::utils::clamp_to_page_size;
+use crate::{IndexBudget, IndexSchedulerOptions, Result};
 
-const NUMBER_OF_DATABASES: u32 = 1;
 const DSR_DIR_NAME: &str = "search_rules";
-const DSR_DB_SIZE: usize = 1 * 1_024 * 1_024 * 1_024; // 1 GB
-
-mod db_name {
-    pub const DYNAMIC_SEARCH_RULES: &str = "dynamic-search-rules";
-}
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DbDynamicSearchRule {
     uid: RuleUid,
 
@@ -103,17 +101,20 @@ impl From<DynamicSearchRule> for DbDynamicSearchRule {
 }
 
 #[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct DbActivationQueryIsEmpty {
     query_is_empty_enabled: bool,
 }
 
 #[derive(Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct DbActivationQueryContains {
     query_contains_enabled: bool,
     query_contains: String,
 }
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DbActivationTimeWindow {
     time_window_enabled: bool,
     time_window_has_start: bool,
@@ -140,31 +141,77 @@ impl Default for DbActivationTimeWindow {
 
 #[derive(Clone)]
 pub(crate) struct DynamicSearchRulesStore {
-    pub(crate) db: Database<Str, SerdeJson<DynamicSearchRule>>,
+    pub(crate) index: milli::Index,
 }
 
 impl DynamicSearchRulesStore {
-    pub(crate) const fn nb_db() -> u32 {
-        NUMBER_OF_DATABASES
-    }
-
-    pub fn new(options: &IndexSchedulerOptions, _from_db_version: (u32, u32, u32)) -> Result<Self> {
+    pub fn new(options: &IndexSchedulerOptions, budget: &IndexBudget) -> Result<Self> {
         let dsr_db_path = options.indexes_path.join(DSR_DIR_NAME);
+
         std::fs::create_dir_all(&dsr_db_path)?;
 
-        let env = unsafe {
-            let env_options = heed::EnvOpenOptions::new();
-            let mut env_options = env_options.read_txn_without_tls();
+        let mut newly_created = false;
+        let create_or_open = if dsr_db_path.join("data.mdb").exists() {
+            newly_created = true;
+            CreateOrOpen::Open
+        } else {
+            CreateOrOpen::create_without_shards()
+        };
 
-            env_options.max_dbs(Self::nb_db()).map_size(DSR_DB_SIZE).open(dsr_db_path)
-        }?;
+        let mut env_options = heed::EnvOpenOptions::new().read_txn_without_tls();
+        env_options.map_size(clamp_to_page_size(budget.map_size));
 
-        let db = {
-            let mut wtxn = env.write_txn()?;
-            env.create_database(&mut wtxn, Some(db_name::DYNAMIC_SEARCH_RULES))
-        }?;
+        // You can find more details about this experimental
+        // environment variable on the following GitHub discussion:
+        // <https://github.com/orgs/meilisearch/discussions/806>
+        let max_readers = match std::env::var("MEILI_EXPERIMENTAL_INDEX_MAX_READERS") {
+            Ok(value) => value.parse::<u32>().unwrap(),
+            Err(VarError::NotPresent) => 1024,
+            Err(VarError::NotUnicode(value)) => panic!(
+                "Invalid unicode for the `MEILI_EXPERIMENTAL_INDEX_MAX_READERS` env var: {value:?}"
+            ),
+        };
 
-        Ok(Self { db })
+        env_options.max_readers(max_readers);
+
+        if options.enable_mdb_writemap {
+            unsafe {
+                env_options.flags(EnvFlags::WRITE_MAP);
+            }
+        }
+
+        let index = milli::Index::new(env_options, dsr_db_path, create_or_open)
+            .map_err(|e| crate::error::Error::from_milli(e, Some("$search_rules".to_string())))?;
+
+        if newly_created {
+            let mut wtxn = index.write_txn()?;
+            let mut settings =
+                milli::update::Settings::new(&mut wtxn, &index, &options.indexer_config);
+
+            settings.set_primary_key("uid".to_string());
+            settings.set_searchable_fields(vec!["description".to_string()]);
+
+            settings.set_filterable_fields(vec![
+                FilterableAttributesRule::Field("active".to_string()),
+                FilterableAttributesRule::Field("queryIsEmptyEnabled".to_string()),
+                FilterableAttributesRule::Field("queryContainsEnabled".to_string()),
+                FilterableAttributesRule::Field("timeWindowEnabled".to_string()),
+                FilterableAttributesRule::Field("timeWindowHasStart".to_string()),
+                FilterableAttributesRule::Field("timeWindowHasEnd".to_string()),
+                FilterableAttributesRule::Field("timeWindowStart".to_string()),
+                FilterableAttributesRule::Field("timeWindowEnd".to_string()),
+            ]);
+
+            settings.set_sortable_fields(HashSet::from_iter(["precedence".to_string()]));
+
+            settings.set_authorize_typos(true);
+            settings.set_facet_search(true);
+
+            wtxn.commit()?;
+        }
+
+        // TODO - should I check the index version? I presume yes
+        Ok(Self { index })
     }
 
     pub fn put(&self, mut wtxn: RwTxn, value: DynamicSearchRules) -> Result<()> {
