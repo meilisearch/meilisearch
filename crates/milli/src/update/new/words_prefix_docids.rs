@@ -77,6 +77,7 @@ impl<'i> WordPrefixDocids<'i> {
         // the files and entries to eventually put them in the final database.
         for mut entries in outputs {
             while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
+                // TODO why doesn't it deletes?
                 self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
             }
         }
@@ -259,6 +260,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         // the files and entries to eventually put them in the final database.
         for mut entries in outputs {
             while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
+                continue;
                 match value {
                     Some(bitmap_bytes) => {
                         self.prefix_database.remap_data_type::<Bytes>().put(
