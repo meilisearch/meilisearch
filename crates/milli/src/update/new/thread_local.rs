@@ -47,6 +47,8 @@ unsafe impl<T> MostlySend for RefCell<T> where T: MostlySend {}
 
 unsafe impl<T> MostlySend for Option<T> where T: MostlySend {}
 
+unsafe impl MostlySend for () {}
+
 impl<T> FullySend<T> {
     pub fn into(self) -> T {
         self.0

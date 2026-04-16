@@ -11,7 +11,8 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use super::facet_range_search;
 use crate::constants::{
-    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME,
+    RESERVED_GEO_LNG_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
 };
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
@@ -647,7 +648,7 @@ impl<'a> IndexFilter<'a> {
 
                     let geo_lat_token = top_right_point[0]
                         .clone()
-                        .with_modified_fragment(Some("_geo.lat".to_string()));
+                        .with_modified_fragment(Some(RESERVED_GEO_LAT_FIELD_NAME.to_string()));
 
                     let condition_lat = IndexFilterCondition::Condition {
                         fid: geo_lat_token,
@@ -667,7 +668,7 @@ impl<'a> IndexFilter<'a> {
 
                     let geo_lng_token = top_right_point[1]
                         .clone()
-                        .with_modified_fragment(Some("_geo.lng".to_string()));
+                        .with_modified_fragment(Some(RESERVED_GEO_LNG_FIELD_NAME.to_string()));
 
                     let selected_lng = if top_right[1] < bottom_left[1] {
                         // In this case the bounding box is wrapping around the earth (going from 180 to -180).

@@ -4,6 +4,7 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
+use crate::constants::{RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME};
 use crate::documents::geo_sort::{fill_cache, next_bucket};
 use crate::documents::{GeoSortParameter, GeoSortStrategy};
 use crate::score_details::{self, ScoreDetails};
@@ -98,8 +99,10 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         }
 
         let fid_map = ctx.index.fields_ids_map(ctx.txn)?;
-        let lat = fid_map.id("_geo.lat").expect("geo candidates but no fid for lat");
-        let lng = fid_map.id("_geo.lng").expect("geo candidates but no fid for lng");
+        let lat =
+            fid_map.id(RESERVED_GEO_LAT_FIELD_NAME).expect("geo candidates but no fid for lat");
+        let lng =
+            fid_map.id(RESERVED_GEO_LNG_FIELD_NAME).expect("geo candidates but no fid for lng");
         self.field_ids = Some([lat, lng]);
         self.fill_buffer(ctx, &geo_candidates)?;
         Ok(())
