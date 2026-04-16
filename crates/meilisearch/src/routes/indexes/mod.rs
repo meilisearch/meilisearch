@@ -577,7 +577,7 @@ impl Size {
 
         match format {
             SizeFormat::Human => {
-                let size = Byte::from_u64(bytes as u64).get_appropriate_unit(Binary);
+                let size = Byte::from_u64(bytes).get_appropriate_unit(Binary);
                 Self::Human(format!("{size:#.2}"))
             }
             SizeFormat::Raw => Self::Raw(bytes),
@@ -657,11 +657,10 @@ impl IndexStats {
             raw_document_db_size: Size::new(documents_database_stats.total_size(), format),
             avg_document_size: Size::new(documents_database_stats.average_value_size(), format),
             internal_database_sizes: if with_internal_database_sizes {
-                let internal_database_sizes = internal_database_sizes
+                internal_database_sizes
                     .into_iter()
                     .map(|(dbname, size)| (dbname, Size::new(size, format).into()))
-                    .collect();
-                internal_database_sizes
+                    .collect()
             } else {
                 Default::default()
             },
