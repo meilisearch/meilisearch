@@ -91,6 +91,22 @@ test_criterion!(
     vec![Words, Typo, Proximity, Attribute, Exactness],
     vec![]
 );
+test_criterion!(attribute_rank, ALLOW_OPTIONAL_WORDS, vec![AttributeRank], vec![]);
+test_criterion!(word_position, ALLOW_OPTIONAL_WORDS, vec![WordPosition], vec![]);
+
+test_criterion!(
+    attribute_rank_before_words,
+    ALLOW_OPTIONAL_WORDS,
+    vec![AttributeRank, Words, Typo, Proximity, Exactness],
+    vec![]
+);
+
+test_criterion!(
+    word_position_before_words,
+    ALLOW_OPTIONAL_WORDS,
+    vec![WordPosition, Words, Typo, Proximity, Exactness],
+    vec![]
+);
 
 #[test]
 fn criteria_mixup() {

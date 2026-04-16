@@ -15,6 +15,7 @@ pub mod stop_words;
 pub mod typo;
 pub mod typo_proximity;
 pub mod word_position;
+pub mod words_ranking_rules_order;
 pub mod words_tms;
 
 fn collect_field_values(
