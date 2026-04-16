@@ -52,6 +52,7 @@ make_enum_progress! {
 make_enum_progress! {
     pub enum PostProcessingWords {
         WordFst,
+        ComputePrefixes,
         WordPrefixDocids,
         ExactWordPrefixDocids,
         WordPrefixFieldIdDocids,
