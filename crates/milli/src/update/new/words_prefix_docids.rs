@@ -180,7 +180,7 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         prefix_to_compute: &BTreeSet<MiniString>,
         prefix_to_delete: &BTreeSet<MiniString>,
     ) -> Result<()> {
-        delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
+        // delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
     }
 
@@ -265,7 +265,6 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         // the files and entries to eventually put them in the final database.
         for mut entries in outputs {
             while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
-                continue;
                 match value {
                     Some(bitmap_bytes) => {
                         self.prefix_database.remap_data_type::<Bytes>().put(
