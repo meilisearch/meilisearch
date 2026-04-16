@@ -756,10 +756,10 @@ where
         old_fields_ids_map
             .iter_id_metadata()
             .filter_map(|(id, metadata)| {
-                if metadata.is_searchable()
+                if metadata.is_searchable() == PatternMatch::Match
                     && new_fields_ids_map
                         .metadata(id)
-                        .is_none_or(|metadata| !metadata.is_searchable())
+                        .is_none_or(|metadata| metadata.is_searchable() != PatternMatch::Match)
                 {
                     Some(id)
                 } else {

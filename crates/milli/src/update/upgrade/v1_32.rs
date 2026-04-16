@@ -14,7 +14,9 @@ use crate::heed_codec::StrBEU16Codec;
 use crate::progress::Progress;
 use crate::update::new::steps::SettingsIndexerStep;
 use crate::vector::VectorStore;
-use crate::{make_enum_progress, Error, Index, InternalError, MustStopProcessing, Result};
+use crate::{
+    make_enum_progress, Error, Index, InternalError, MustStopProcessing, PatternMatch, Result,
+};
 
 pub(super) struct CleanupFidBasedDatabases();
 
@@ -43,7 +45,13 @@ impl UpgradeIndex for CleanupFidBasedDatabases {
         let fid_map = index.fields_ids_map_with_metadata(wtxn)?;
         let fids_to_delete: BTreeSet<_> = fid_map
             .iter()
-            .filter_map(|(id, _, metadata)| if !metadata.is_searchable() { Some(id) } else { None })
+            .filter_map(|(id, _, metadata)| {
+                if metadata.is_searchable() != PatternMatch::Match {
+                    Some(id)
+                } else {
+                    None
+                }
+            })
             .collect();
 
         if !fids_to_delete.is_empty() {

@@ -18,7 +18,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Metadata {
     /// The weight as defined in the FieldidsWeightsMap of the searchable attribute if it is searchable.
-    pub searchable: Option<Weight>,
+    pub searchable: (PatternMatch, Option<Weight>),
     /// The field is part of the exact attributes.
     pub exact: bool,
     /// The field is part of the sortable attributes.
@@ -187,12 +187,16 @@ impl Metadata {
         self.sortable
     }
 
-    pub fn is_searchable(&self) -> bool {
-        self.searchable.is_some()
+    pub fn is_searchable(&self) -> PatternMatch {
+        let (pattern_match, _) = self.searchable;
+
+        pattern_match
     }
 
     pub fn searchable_weight(&self) -> Option<Weight> {
-        self.searchable
+        let (_, weight) = self.searchable;
+
+        weight
     }
 
     pub fn is_distinct(&self) -> bool {
@@ -323,7 +327,7 @@ impl MetadataBuilder {
         if is_faceted_by(field, RESERVED_VECTORS_FIELD_NAME) {
             // Vectors fields are not searchable, filterable, distinct or asc_desc
             return Metadata {
-                searchable: None,
+                searchable: (PatternMatch::NoMatch, None),
                 exact: false,
                 sortable: false,
                 distinct: false,
@@ -353,7 +357,7 @@ impl MetadataBuilder {
         if match_field_legacy(RESERVED_GEO_FIELD_NAME, field) == PatternMatch::Match {
             // Geo fields are not searchable, distinct or asc_desc
             return Metadata {
-                searchable: None,
+                searchable: (PatternMatch::NoMatch, None),
                 exact: false,
                 sortable,
                 distinct: false,
@@ -369,7 +373,7 @@ impl MetadataBuilder {
         if match_field_legacy(RESERVED_GEOJSON_FIELD_NAME, field) == PatternMatch::Match {
             debug_assert!(!sortable, "geojson fields should not be sortable");
             return Metadata {
-                searchable: None,
+                searchable: (PatternMatch::NoMatch, None),
                 exact: false,
                 sortable,
                 distinct: false,
@@ -388,9 +392,12 @@ impl MetadataBuilder {
             Some(attributes) => attributes
                 .iter()
                 .enumerate()
-                .find(|(_i, pattern)| is_faceted_by(field, pattern))
-                .map(|(i, _)| i as u16),
-            None => Some(0),
+                .find_map(|(i, pattern)| match match_field_legacy(pattern, field) {
+                    PatternMatch::Match => Some((PatternMatch::Match, Some(i as u16))),
+                    pattern_match => Some((pattern_match, None)),
+                })
+                .unwrap_or((PatternMatch::NoMatch, None)),
+            None => (PatternMatch::Match, Some(0)),
         };
 
         let exact = self.exact_searchable_attributes.iter().any(|attr| is_faceted_by(field, attr));
