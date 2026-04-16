@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::time::Duration;
 
 use either::Either;
 use facet_bulk::generate_facet_levels;
@@ -72,9 +73,12 @@ fn compute_prefix_database(
     prefix_data: &PrefixData,
     progress: &Progress,
 ) -> Result<()> {
+    progress.update_progress(PostProcessingWords::ComputePrefixes);
     let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
     let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
     let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
+
+    std::thread::sleep(Duration::from_secs(10));
 
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
     compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
@@ -89,6 +93,7 @@ fn compute_prefix_database(
     compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)
 }
 
+/// The words must be sorted.
 fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<ShortWords>
 where
     I: IntoIterator<Item = &'a str>,
@@ -106,6 +111,7 @@ where
 
     let mut output = ShortWords::new();
     loop {
+        // Current prefixes are only inserted once and each prefix is only inserted once.
         if current_word.as_bytes().starts_with(current_prefix) {
             let current_prefix = std::str::from_utf8(current_prefix)?;
             if let Err(e) = output.push(current_prefix) {

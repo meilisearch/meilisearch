@@ -1,9 +1,10 @@
 use std::num::TryFromIntError;
 
-// TODO move this in it's own module
 #[derive(Default)]
 pub struct ShortWords {
+    // TODO use a linked list of increasing boxes
     data: String,
+    // TODO use a linked of increasing boxes
     indices: Vec<ShortWordIndex>,
 }
 
@@ -12,12 +13,12 @@ impl ShortWords {
         Self::default()
     }
 
-    pub fn push(&mut self, prefix: &str) -> Result<(), TryFromIntError> {
+    pub fn push(&mut self, s: &str) -> Result<(), TryFromIntError> {
         let index = self.data.len();
-        let length = prefix.len();
-        let iprefix = ShortWordIndex::new(index, length)?;
-        self.data.push_str(prefix);
-        self.indices.push(iprefix);
+        let length = s.len();
+        let swindex = ShortWordIndex::new(index, length)?;
+        self.data.push_str(s);
+        self.indices.push(swindex);
         Ok(())
     }
 
@@ -33,7 +34,7 @@ impl ShortWords {
 struct ShortWordIndex(u32);
 
 impl ShortWordIndex {
-    const NUM_BITS_INDEX: u32 = 27; // max :134 217 728
+    const NUM_BITS_INDEX: u32 = 27; // max: 134 217 728
     const NUM_BITS_LENGTH: u32 = 5; // max: 32
 
     pub fn new(index: usize, length: usize) -> Result<Self, TryFromIntError> {
@@ -63,3 +64,5 @@ impl ShortWordIndex {
         (self.0 >> Self::NUM_BITS_INDEX) as usize
     }
 }
+
+// TODO add tests
