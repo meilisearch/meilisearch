@@ -13,7 +13,7 @@ impl MiniString {
             None
         } else {
             let mut data: [u8; _] = Default::default();
-            data.copy_from_slice(s.as_bytes());
+            data[..s.len()].copy_from_slice(s.as_bytes());
             Some(MiniString { length: s.len() as u8, data })
         }
     }
