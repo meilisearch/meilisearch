@@ -45,21 +45,17 @@ impl<'i> WordPrefixDocids<'i> {
         wtxn: &mut RwTxn,
         prefix_to_compute: &BTreeSet<MiniString>,
     ) -> Result<()> {
-        std::thread::sleep(Duration::from_mins(10));
-
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
             .take(thread_count)
             .collect::<heed::Result<Vec<_>>>()?;
 
-        return Ok(());
-
         let outputs = rtxns
             .into_par_iter()
             .enumerate()
             .map(|(thread_id, rtxn)| {
-                let mut entries =
-                    tempfile::tempfile().map(Offloader::<_, OutPrefixEntryCodec>::new)?;
+                // let mut entries =
+                //     tempfile::tempfile().map(Offloader::<_, OutPrefixEntryCodec>::new)?;
 
                 for (prefix_index, prefix) in prefix_to_compute.iter().enumerate() {
                     // Is prefix for another thread?
@@ -72,21 +68,23 @@ impl<'i> WordPrefixDocids<'i> {
                         .prefix_iter(&rtxn, prefix.as_bytes())?
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
-                    entries.push(InPrefixEntry { prefix: prefix.as_ref(), bitmap: output })?;
+                    // entries.push(InPrefixEntry { prefix: prefix.as_ref(), bitmap: output })?;
+                    assert!(output.len() >= 0);
                 }
 
-                entries.finish().map_err(Into::into)
+                // entries.finish().map_err(Into::into)
+                Ok(())
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // We iterate over all the collected and serialized bitmaps through
-        // the files and entries to eventually put them in the final database.
-        for mut entries in outputs {
-            while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
-                // TODO why doesn't it deletes?
-                self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
-            }
-        }
+        // // We iterate over all the collected and serialized bitmaps through
+        // // the files and entries to eventually put them in the final database.
+        // for mut entries in outputs {
+        //     while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
+        //         // TODO why doesn't it deletes?
+        //         self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
+        //     }
+        // }
 
         Ok(())
     }
@@ -200,23 +198,17 @@ impl<'i> WordPrefixIntegerDocids<'i> {
         wtxn: &mut RwTxn,
         prefixes: &BTreeSet<MiniString>,
     ) -> Result<()> {
-        std::thread::sleep(Duration::from_mins(10));
-
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
             .take(thread_count)
             .collect::<heed::Result<Vec<_>>>()?;
 
-        return Ok(());
-
-        std::thread::sleep(Duration::from_mins(10));
-
         let outputs = rtxns
             .into_par_iter()
             .enumerate()
             .map(|(thread_id, rtxn)| {
-                let mut entries =
-                    tempfile::tempfile().map(Offloader::<_, OutPrefixIntegerEntryCodec>::new)?;
+                // let mut entries =
+                //     tempfile::tempfile().map(Offloader::<_, OutPrefixIntegerEntryCodec>::new)?;
 
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
                     // Is prefix for another thread?
@@ -260,36 +252,38 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                                 .union()?;
                             Some(output)
                         };
-                        entries.push(InPrefixIntegerEntry {
-                            prefix: prefix.as_str(),
-                            pos,
-                            bitmap,
-                        })?;
+                        assert!(bitmap.map_or(true, |b| b.len() >= 0));
+                        // entries.push(InPrefixIntegerEntry {
+                        //     prefix: prefix.as_str(),
+                        //     pos,
+                        //     bitmap,
+                        // })?;
                     }
                 }
 
-                entries.finish().map_err(Into::into)
+                // entries.finish().map_err(Into::into)
+                Ok(())
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // We iterate over all the collected and serialized bitmaps through
-        // the files and entries to eventually put them in the final database.
-        for mut entries in outputs {
-            while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
-                match value {
-                    Some(bitmap_bytes) => {
-                        self.prefix_database.remap_data_type::<Bytes>().put(
-                            wtxn,
-                            key,
-                            bitmap_bytes,
-                        )?;
-                    }
-                    None => {
-                        self.prefix_database.delete(wtxn, key)?;
-                    }
-                }
-            }
-        }
+        // // We iterate over all the collected and serialized bitmaps through
+        // // the files and entries to eventually put them in the final database.
+        // for mut entries in outputs {
+        //     while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
+        //         match value {
+        //             Some(bitmap_bytes) => {
+        //                 self.prefix_database.remap_data_type::<Bytes>().put(
+        //                     wtxn,
+        //                     key,
+        //                     bitmap_bytes,
+        //                 )?;
+        //             }
+        //             None => {
+        //                 self.prefix_database.delete(wtxn, key)?;
+        //             }
+        //         }
+        //     }
+        // }
 
         Ok(())
     }
