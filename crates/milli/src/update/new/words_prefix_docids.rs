@@ -54,8 +54,8 @@ impl<'i> WordPrefixDocids<'i> {
             .into_par_iter()
             .enumerate()
             .map(|(thread_id, rtxn)| {
-                // let mut entries =
-                //     tempfile::tempfile().map(Offloader::<_, OutPrefixEntryCodec>::new)?;
+                let mut entries =
+                    tempfile::tempfile().map(Offloader::<_, OutPrefixEntryCodec>::new)?;
 
                 for (prefix_index, prefix) in prefix_to_compute.iter().enumerate() {
                     // Is prefix for another thread?
@@ -68,8 +68,7 @@ impl<'i> WordPrefixDocids<'i> {
                         .prefix_iter(&rtxn, prefix.as_bytes())?
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
-                    // entries.push(InPrefixEntry { prefix: prefix.as_ref(), bitmap: output })?;
-                    assert!(output.len() >= 0);
+                    entries.push(InPrefixEntry { prefix: prefix.as_ref(), bitmap: output })?;
                 }
 
                 // entries.finish().map_err(Into::into)
@@ -77,14 +76,15 @@ impl<'i> WordPrefixDocids<'i> {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // // We iterate over all the collected and serialized bitmaps through
-        // // the files and entries to eventually put them in the final database.
-        // for mut entries in outputs {
-        //     while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
-        //         // TODO why doesn't it deletes?
-        //         self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
-        //     }
-        // }
+        // We iterate over all the collected and serialized bitmaps through
+        // the files and entries to eventually put them in the final database.
+        for mut entries in outputs {
+            drop(entries);
+            //     while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
+            //         // TODO why doesn't it deletes?
+            //         self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
+            //     }
+        }
 
         Ok(())
     }
@@ -207,8 +207,8 @@ impl<'i> WordPrefixIntegerDocids<'i> {
             .into_par_iter()
             .enumerate()
             .map(|(thread_id, rtxn)| {
-                // let mut entries =
-                //     tempfile::tempfile().map(Offloader::<_, OutPrefixIntegerEntryCodec>::new)?;
+                let mut entries =
+                    tempfile::tempfile().map(Offloader::<_, OutPrefixIntegerEntryCodec>::new)?;
 
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
                     // Is prefix for another thread?
@@ -252,12 +252,11 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                                 .union()?;
                             Some(output)
                         };
-                        assert!(bitmap.map_or(true, |b| b.len() >= 0));
-                        // entries.push(InPrefixIntegerEntry {
-                        //     prefix: prefix.as_str(),
-                        //     pos,
-                        //     bitmap,
-                        // })?;
+                        entries.push(InPrefixIntegerEntry {
+                            prefix: prefix.as_str(),
+                            pos,
+                            bitmap,
+                        })?;
                     }
                 }
 
@@ -266,24 +265,25 @@ impl<'i> WordPrefixIntegerDocids<'i> {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        // // We iterate over all the collected and serialized bitmaps through
-        // // the files and entries to eventually put them in the final database.
-        // for mut entries in outputs {
-        //     while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
-        //         match value {
-        //             Some(bitmap_bytes) => {
-        //                 self.prefix_database.remap_data_type::<Bytes>().put(
-        //                     wtxn,
-        //                     key,
-        //                     bitmap_bytes,
-        //                 )?;
-        //             }
-        //             None => {
-        //                 self.prefix_database.delete(wtxn, key)?;
-        //             }
-        //         }
-        //     }
-        // }
+        // We iterate over all the collected and serialized bitmaps through
+        // the files and entries to eventually put them in the final database.
+        for mut entries in outputs {
+            drop(entries);
+            //     while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
+            //         match value {
+            //             Some(bitmap_bytes) => {
+            //                 self.prefix_database.remap_data_type::<Bytes>().put(
+            //                     wtxn,
+            //                     key,
+            //                     bitmap_bytes,
+            //                 )?;
+            //             }
+            //             None => {
+            //                 self.prefix_database.delete(wtxn, key)?;
+            //             }
+            //         }
+            //     }
+        }
 
         Ok(())
     }
