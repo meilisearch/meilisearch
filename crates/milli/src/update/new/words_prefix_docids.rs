@@ -47,12 +47,12 @@ impl<'i> WordPrefixDocids<'i> {
     ) -> Result<()> {
         std::thread::sleep(Duration::from_mins(10));
 
-        return Ok(());
-
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
             .take(thread_count)
             .collect::<heed::Result<Vec<_>>>()?;
+
+        return Ok(());
 
         let outputs = rtxns
             .into_par_iter()
@@ -202,12 +202,12 @@ impl<'i> WordPrefixIntegerDocids<'i> {
     ) -> Result<()> {
         std::thread::sleep(Duration::from_mins(10));
 
-        return Ok(());
-
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
             .take(thread_count)
             .collect::<heed::Result<Vec<_>>>()?;
+
+        return Ok(());
 
         std::thread::sleep(Duration::from_mins(10));
 
