@@ -80,8 +80,7 @@ impl<'i> WordPrefixDocids<'i> {
         for mut entries in outputs {
             while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
                 // TODO why doesn't it deletes?
-                // self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
-                assert!(value.len() >= 0);
+                self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
             }
         }
 
@@ -269,15 +268,14 @@ impl<'i> WordPrefixIntegerDocids<'i> {
             while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
                 match value {
                     Some(bitmap_bytes) => {
-                        // self.prefix_database.remap_data_type::<Bytes>().put(
-                        //     wtxn,
-                        //     key,
-                        //     bitmap_bytes,
-                        // )?;
-                        assert!(bitmap_bytes.len() >= 0);
+                        self.prefix_database.remap_data_type::<Bytes>().put(
+                            wtxn,
+                            key,
+                            bitmap_bytes,
+                        )?;
                     }
                     None => {
-                        // self.prefix_database.delete(wtxn, key)?;
+                        self.prefix_database.delete(wtxn, key)?;
                     }
                 }
             }
