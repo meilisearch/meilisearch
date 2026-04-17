@@ -8,6 +8,7 @@ use meilisearch_types::dynamic_search_rules::{
 };
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::heed::{self, EnvFlags};
+use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::{self, CreateOrOpen, FilterableAttributesRule};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -28,48 +29,29 @@ struct DbDynamicSearchRule {
     precedence: u64,
     active: bool,
 
-    #[serde(flatten)]
-    query_is_empty_rule: DbActivationQueryIsEmpty,
+    conditions: Vec<DbActivationCondition>,
 
-    #[serde(flatten)]
-    query_contains_rule: DbActivationQueryContains,
-
-    #[serde(flatten)]
-    time_window_rule: DbActivationTimeWindow,
-
-    pub actions: Vec<RuleAction>,
+    actions: Vec<RuleAction>,
 }
 
 impl From<DbDynamicSearchRule> for DynamicSearchRule {
     fn from(value: DbDynamicSearchRule) -> Self {
-        let mut conditions = Vec::new();
-
-        if value.query_is_empty_rule.query_is_empty_enabled {
-            conditions.push(Condition::Query { is_empty: Some(true), contains: None })
-        }
-
-        if value.query_contains_rule.query_contains_enabled {
-            conditions.push(Condition::Query {
-                is_empty: None,
-                contains: Some(value.query_contains_rule.query_contains),
-            });
-        }
-
-        if value.time_window_rule.time_window_enabled {
-            let start = if value.time_window_rule.time_window_has_start {
-                Some(value.time_window_rule.time_window_start)
-            } else {
-                None
-            };
-
-            let end = if value.time_window_rule.time_window_has_end {
-                Some(value.time_window_rule.time_window_end)
-            } else {
-                None
-            };
-
-            conditions.push(Condition::Time { start, end });
-        }
+        let conditions = value
+            .conditions
+            .into_iter()
+            .map(|cond| match cond {
+                DbActivationCondition::QueryIsEmpty => {
+                    Condition::Query { is_empty: Some(true), contains: None }
+                }
+                DbActivationCondition::QueryIsNotEmpty => {
+                    Condition::Query { is_empty: Some(false), contains: None }
+                }
+                DbActivationCondition::QueryContains { contains } => {
+                    Condition::Query { is_empty: None, contains: Some(contains) }
+                }
+                DbActivationCondition::TimeWindow { start, end } => Condition::Time { start, end },
+            })
+            .collect();
 
         Self {
             uid: value.uid,
@@ -84,87 +66,66 @@ impl From<DbDynamicSearchRule> for DynamicSearchRule {
 
 impl From<DynamicSearchRule> for DbDynamicSearchRule {
     fn from(value: DynamicSearchRule) -> Self {
-        let mut query_is_empty_rule = DbActivationQueryIsEmpty::default();
-        let mut query_contains_rule = DbActivationQueryContains::default();
-        let mut time_window_rule = DbActivationTimeWindow::default();
-
-        for condition in value.conditions {
-            match condition {
-                Condition::Query { is_empty, contains } => {
-                    query_is_empty_rule.query_is_empty_enabled = is_empty.is_some_and(|b| b);
-
-                    if let Some(string) = contains {
-                        query_contains_rule.query_contains_enabled = true;
-                        query_contains_rule.query_contains = string;
-                    }
+        let conditions = value
+            .conditions
+            .into_iter()
+            .filter_map(|cond| match cond {
+                Condition::Query { is_empty: Some(is_empty), contains: None } => {
+                    Some(if is_empty {
+                        DbActivationCondition::QueryIsEmpty
+                    } else {
+                        DbActivationCondition::QueryIsNotEmpty
+                    })
                 }
 
+                Condition::Query { is_empty: None, contains: Some(contains) } => {
+                    Some(DbActivationCondition::QueryContains { contains })
+                }
                 Condition::Time { start, end } => {
-                    time_window_rule.time_window_enabled = true;
-
-                    if let Some(start) = start {
-                        time_window_rule.time_window_has_start = true;
-                        time_window_rule.time_window_start = start;
-                    }
-
-                    if let Some(end) = end {
-                        time_window_rule.time_window_has_end = true;
-                        time_window_rule.time_window_end = end;
-                    }
+                    Some(DbActivationCondition::TimeWindow { start, end })
                 }
-            }
-        }
+
+                _ => None,
+            })
+            .collect();
 
         Self {
             uid: value.uid,
             description: value.description,
             precedence: value.priority.unwrap_or(u64::MAX),
             active: value.active,
-            query_is_empty_rule,
-            query_contains_rule,
-            time_window_rule,
             actions: value.actions,
+            conditions,
         }
     }
-}
-
-#[derive(Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct DbActivationQueryIsEmpty {
-    query_is_empty_enabled: bool,
-}
-
-#[derive(Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct DbActivationQueryContains {
-    query_contains_enabled: bool,
-    query_contains: String,
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct DbActivationTimeWindow {
-    time_window_enabled: bool,
-    time_window_has_start: bool,
-    time_window_has_end: bool,
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DbActivationCondition {
+    QueryIsEmpty,
+    QueryIsNotEmpty,
 
-    #[serde(with = "time::serde::rfc3339")]
-    time_window_start: OffsetDateTime,
+    #[serde(rename_all = "camelCase")]
+    QueryContains {
+        contains: String,
+    },
 
-    #[serde(with = "time::serde::rfc3339")]
-    time_window_end: OffsetDateTime,
-}
-
-impl Default for DbActivationTimeWindow {
-    fn default() -> Self {
-        Self {
-            time_window_enabled: false,
-            time_window_has_start: false,
-            time_window_has_end: false,
-            time_window_start: OffsetDateTime::UNIX_EPOCH,
-            time_window_end: OffsetDateTime::UNIX_EPOCH,
-        }
-    }
+    #[serde(rename_all = "camelCase")]
+    TimeWindow {
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "time::serde::rfc3339::option"
+        )]
+        start: Option<OffsetDateTime>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "time::serde::rfc3339::option"
+        )]
+        end: Option<OffsetDateTime>,
+    },
 }
 
 #[derive(Clone)]
@@ -217,23 +178,31 @@ impl DynamicSearchRulesStore {
                 milli::update::Settings::new(&mut wtxn, &index, &options.indexer_config);
 
             settings.set_primary_key("uid".to_string());
-            settings.set_searchable_fields(vec!["description".to_string()]);
+            settings.set_searchable_fields(vec![
+                "description".to_string(),
+                "conditions.contains".to_string(),
+                "actions.selector.indexUid".to_string(),
+            ]);
 
             settings.set_filterable_fields(vec![
                 FilterableAttributesRule::Field("active".to_string()),
-                FilterableAttributesRule::Field("queryIsEmptyEnabled".to_string()),
-                FilterableAttributesRule::Field("queryContainsEnabled".to_string()),
-                FilterableAttributesRule::Field("timeWindowEnabled".to_string()),
-                FilterableAttributesRule::Field("timeWindowHasStart".to_string()),
-                FilterableAttributesRule::Field("timeWindowHasEnd".to_string()),
-                FilterableAttributesRule::Field("timeWindowStart".to_string()),
-                FilterableAttributesRule::Field("timeWindowEnd".to_string()),
+                FilterableAttributesRule::Field("conditions.kind".to_string()),
+                FilterableAttributesRule::Field("conditions.start".to_string()),
+                FilterableAttributesRule::Field("conditions.end".to_string()),
+                FilterableAttributesRule::Field("actions.selector.indexUid".to_string()),
             ]);
 
             settings.set_sortable_fields(HashSet::from_iter(["precedence".to_string()]));
 
             settings.set_authorize_typos(true);
             settings.set_facet_search(true);
+
+            settings.execute(
+                &|| false,
+                &Progress::default(),
+                &options.ip_policy,
+                Arc::default(),
+            ).map_err(|e| crate::error::Error::from_milli(e, Some("$search_rules".to_string())))?;
 
             wtxn.commit()?;
         }
