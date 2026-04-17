@@ -35,7 +35,7 @@ impl<'i> WordPrefixDocids<'i> {
         prefix_to_compute: &BTreeSet<MiniString>,
         prefix_to_delete: &BTreeSet<MiniString>,
     ) -> Result<()> {
-        delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
+        // delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
     }
 
@@ -45,6 +45,10 @@ impl<'i> WordPrefixDocids<'i> {
         wtxn: &mut RwTxn,
         prefix_to_compute: &BTreeSet<MiniString>,
     ) -> Result<()> {
+        std::thread::sleep(Duration::from_mins(10));
+
+        return Ok(());
+
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| self.index.env.nested_read_txn(wtxn))
             .take(thread_count)
