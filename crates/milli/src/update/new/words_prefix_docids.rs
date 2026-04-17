@@ -71,19 +71,18 @@ impl<'i> WordPrefixDocids<'i> {
                     entries.push(InPrefixEntry { prefix: prefix.as_ref(), bitmap: output })?;
                 }
 
-                // entries.finish().map_err(Into::into)
-                Ok(())
+                entries.finish().map_err(Into::into)
             })
             .collect::<Result<Vec<_>>>()?;
 
         // We iterate over all the collected and serialized bitmaps through
         // the files and entries to eventually put them in the final database.
         for mut entries in outputs {
-            drop(entries);
-            //     while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
-            //         // TODO why doesn't it deletes?
-            //         self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
-            //     }
+            while let Some(OutPrefixEntry { key, value }) = entries.next_entry()? {
+                // TODO why doesn't it deletes?
+                // self.prefix_database.remap_data_type::<Bytes>().put(wtxn, key, value)?;
+                assert!(value.len() >= 0);
+            }
         }
 
         Ok(())
@@ -260,29 +259,28 @@ impl<'i> WordPrefixIntegerDocids<'i> {
                     }
                 }
 
-                // entries.finish().map_err(Into::into)
-                Ok(())
+                entries.finish().map_err(Into::into)
             })
             .collect::<Result<Vec<_>>>()?;
 
         // We iterate over all the collected and serialized bitmaps through
         // the files and entries to eventually put them in the final database.
         for mut entries in outputs {
-            drop(entries);
-            //     while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
-            //         match value {
-            //             Some(bitmap_bytes) => {
-            //                 self.prefix_database.remap_data_type::<Bytes>().put(
-            //                     wtxn,
-            //                     key,
-            //                     bitmap_bytes,
-            //                 )?;
-            //             }
-            //             None => {
-            //                 self.prefix_database.delete(wtxn, key)?;
-            //             }
-            //         }
-            //     }
+            while let Some(OutPrefixIntegerEntry { key, value }) = entries.next_entry()? {
+                match value {
+                    Some(bitmap_bytes) => {
+                        // self.prefix_database.remap_data_type::<Bytes>().put(
+                        //     wtxn,
+                        //     key,
+                        //     bitmap_bytes,
+                        // )?;
+                        assert!(bitmap_bytes.len() >= 0);
+                    }
+                    None => {
+                        // self.prefix_database.delete(wtxn, key)?;
+                    }
+                }
+            }
         }
 
         Ok(())
