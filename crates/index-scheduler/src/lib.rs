@@ -278,7 +278,6 @@ impl IndexScheduler {
             + Queue::nb_db()
             + IndexMapper::nb_db()
             + features::FeatureData::nb_db()
-            + dynamic_search_rules::DynamicSearchRulesStore::nb_db()
             + 1 // chat-prompts
             + 1 // persisted
     }
@@ -344,7 +343,7 @@ impl IndexScheduler {
 
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let dynamic_search_rules =
-            dynamic_search_rules::DynamicSearchRulesStore::new(&env, &mut wtxn)?;
+            dynamic_search_rules::DynamicSearchRulesStore::new(&options, &budget)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
