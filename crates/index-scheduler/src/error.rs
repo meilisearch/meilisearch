@@ -398,3 +398,9 @@ impl From<ReceiveImportFinishedError> for Error {
         }
     }
 }
+
+impl From<meilisearch_types::milli::Error> for Error {
+    fn from(err: meilisearch_types::milli::Error) -> Self {
+        Error::Milli { error: err, index_uid: None }
+    }
+}
