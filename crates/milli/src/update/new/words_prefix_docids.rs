@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 use std::io::{self, ErrorKind, Write};
 use std::iter;
 
+use byteorder::{NativeEndian, ReadBytesExt, WriteBytesExt};
 use hashbrown::HashMap;
 use heed::types::{Bytes, DecodeIgnore};
 use heed::{Database, RwTxn};
@@ -103,7 +104,7 @@ impl Encoder for InPrefixEntry<'_> {
         // prefix length and prefix
         let prefix_length: u8 =
             prefix.len().try_into().map_err(|_| io::Error::other("prefix length too long"))?;
-        writer.write_all(bytemuck::bytes_of(&prefix_length))?;
+        writer.write_u8(prefix_length)?;
         writer.write_all(prefix.as_bytes())?;
 
         // bitmap length and bitmap
@@ -116,7 +117,7 @@ impl Encoder for InPrefixEntry<'_> {
             .len()
             .try_into()
             .map_err(|_| io::Error::other("serialized bitmap length too long"))?;
-        writer.write_all(bytemuck::bytes_of(&serialized_bitmap_length))?;
+        writer.write_u32::<NativeEndian>(serialized_bitmap_length)?;
         writer.write_all(serialized_bytes)?;
 
         Ok(())
@@ -140,18 +141,16 @@ impl<'b> Decoder<'b> for OutPrefixEntryCodec {
         reader: &mut R,
     ) -> io::Result<Option<Self::Decoded>> {
         // prefix length and prefix
-        let mut prefix_length: u8 = 0;
-        match reader.read_exact(bytemuck::bytes_of_mut(&mut prefix_length)) {
-            Ok(()) => (),
+        let prefix_length = match reader.read_u8() {
+            Ok(prefix_length) => prefix_length,
             Err(e) if e.kind() == ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => return Err(e),
-        }
+        };
         first_tmp_buffer.resize(prefix_length as usize, 0);
         reader.read_exact(first_tmp_buffer)?;
 
         // bitmap length and bitmap (bytes)
-        let mut bitmap_length: u32 = 0;
-        reader.read_exact(bytemuck::bytes_of_mut(&mut bitmap_length))?;
+        let bitmap_length = reader.read_u32::<NativeEndian>()?;
         second_tmp_buffer.resize(bitmap_length as usize, 0);
         reader.read_exact(second_tmp_buffer)?;
 
@@ -298,13 +297,13 @@ impl Encoder for InPrefixIntegerEntry<'_> {
         let InPrefixIntegerEntry { prefix, pos, bitmap } = self;
 
         // prefix length and prefix
-        let prefix_length: u8 =
+        let prefix_length =
             prefix.len().try_into().map_err(|_| io::Error::other("prefix length too long"))?;
-        writer.write_all(bytemuck::bytes_of(&prefix_length))?;
+        writer.write_u8(prefix_length)?;
         writer.write_all(prefix.as_bytes())?;
 
         // pos
-        writer.write_all(bytemuck::bytes_of(&pos))?;
+        writer.write_u16::<NativeEndian>(pos)?;
 
         // bitmap length and bitmap
         let serialized_bytes = match bitmap {
@@ -315,11 +314,11 @@ impl Encoder for InPrefixIntegerEntry<'_> {
             }
             None => &[][..],
         };
-        let serialized_bitmap_length: u32 = serialized_bytes
+        let serialized_bitmap_length = serialized_bytes
             .len()
             .try_into()
             .map_err(|_| io::Error::other("serialized bitmap length too long"))?;
-        writer.write_all(bytemuck::bytes_of(&serialized_bitmap_length))?;
+        writer.write_u32::<NativeEndian>(serialized_bitmap_length)?;
         writer.write_all(serialized_bytes)?;
 
         Ok(())
@@ -343,24 +342,21 @@ impl<'b> Decoder<'b> for OutPrefixIntegerEntryCodec {
         reader: &mut R,
     ) -> io::Result<Option<Self::Decoded>> {
         // prefix length and prefix
-        let mut prefix_length: u8 = 0;
-        match reader.read_exact(bytemuck::bytes_of_mut(&mut prefix_length)) {
-            Ok(()) => (),
+        let prefix_length = match reader.read_u8() {
+            Ok(prefix_length) => prefix_length,
             Err(e) if e.kind() == ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => return Err(e),
-        }
+        };
         first_tmp_buffer.resize(prefix_length as usize, 0);
         reader.read_exact(first_tmp_buffer)?;
         first_tmp_buffer.push(0);
 
         // pos
-        let mut pos: u16 = 0;
-        reader.read_exact(bytemuck::bytes_of_mut(&mut pos))?;
+        let pos = reader.read_u16::<NativeEndian>()?;
         first_tmp_buffer.extend_from_slice(&pos.to_be_bytes());
 
         // bitmap length and bitmap (bytes)
-        let mut bitmap_length: u32 = 0;
-        reader.read_exact(bytemuck::bytes_of_mut(&mut bitmap_length))?;
+        let bitmap_length = reader.read_u32::<NativeEndian>()?;
         let bitmap = if bitmap_length == 0 {
             None
         } else {
