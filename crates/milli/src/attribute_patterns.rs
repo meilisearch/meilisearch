@@ -114,6 +114,31 @@ pub fn match_field_legacy(pattern: &str, field: &str) -> PatternMatch {
     }
 }
 
+/// Match a field against a set of patterns using the legacy behavior.
+///
+/// A field matches a set of patterns if it is a parent of one of the patterns or if it matches one of the patterns.
+///
+/// # Arguments
+///
+/// * `patterns` - The set of patterns to match against.
+/// * `field` - The field to match against the patterns.
+pub fn field_match_any_patterns_legacy<'a, I, P>(patterns: I, field: &str) -> PatternMatch
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<str>,
+{
+    let mut selection = PatternMatch::NoMatch;
+    for pattern in patterns {
+        match match_field_legacy(pattern.as_ref(), field) {
+            PatternMatch::Match => return PatternMatch::Match,
+            PatternMatch::Parent => selection = PatternMatch::Parent,
+            PatternMatch::NoMatch => (),
+        }
+    }
+
+    selection
+}
+
 /// Match a field against a distinct field.
 pub fn match_distinct_field(distinct_field: Option<&str>, field: &str) -> PatternMatch {
     if let Some(distinct_field) = distinct_field {
