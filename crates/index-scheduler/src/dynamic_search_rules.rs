@@ -1,14 +1,18 @@
 use std::collections::HashSet;
 use std::env::VarError;
+use std::error::Error;
 use std::sync::Arc;
 use std::u64;
 
+use http_client::policy::IpPolicy;
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRules, RuleAction, RuleUid,
 };
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::heed::{self, EnvFlags};
+use meilisearch_types::milli::documents::documents_batch_reader_from_objects;
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexerConfig};
 use meilisearch_types::milli::{self, CreateOrOpen, FilterableAttributesRule};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -131,6 +135,12 @@ pub enum DbActivationCondition {
 #[derive(Clone)]
 pub(crate) struct DynamicSearchRulesStore {
     pub(crate) index: milli::Index,
+    indexer_config: Arc<IndexerConfig>,
+    ip_policy: IpPolicy,
+}
+
+fn dsr_milli_error(e: impl Into<milli::Error>) -> crate::error::Error {
+    crate::error::Error::from_milli(e.into(), Some("$search_rules".to_string()))
 }
 
 impl DynamicSearchRulesStore {
@@ -141,9 +151,9 @@ impl DynamicSearchRulesStore {
 
         let mut newly_created = false;
         let create_or_open = if dsr_db_path.join("data.mdb").exists() {
-            newly_created = true;
             CreateOrOpen::Open
         } else {
+            newly_created = true;
             CreateOrOpen::create_without_shards()
         };
 
@@ -169,8 +179,8 @@ impl DynamicSearchRulesStore {
             }
         }
 
-        let index = milli::Index::new(env_options, dsr_db_path, create_or_open)
-            .map_err(|e| crate::error::Error::from_milli(e, Some("$search_rules".to_string())))?;
+        let index =
+            milli::Index::new(env_options, dsr_db_path, create_or_open).map_err(dsr_milli_error)?;
 
         if newly_created {
             let mut wtxn = index.write_txn()?;
@@ -197,30 +207,23 @@ impl DynamicSearchRulesStore {
             settings.set_authorize_typos(true);
             settings.set_facet_search(true);
 
-            settings.execute(
-                &|| false,
-                &Progress::default(),
-                &options.ip_policy,
-                Arc::default(),
-            ).map_err(|e| crate::error::Error::from_milli(e, Some("$search_rules".to_string())))?;
+            settings
+                .execute(&|| false, &Progress::default(), &options.ip_policy, Arc::default())
+                .map_err(dsr_milli_error)?;
 
             wtxn.commit()?;
         }
 
         // TODO - should I check the index version? I presume yes
-        Ok(Self { index })
+        Ok(Self {
+            index,
+            indexer_config: options.indexer_config.clone(),
+            ip_policy: options.ip_policy.clone(),
+        })
     }
 
-    pub fn put(&self, mut wtxn: RwTxn, value: DynamicSearchRules) -> Result<()> {
-        // self.persisted.clear(&mut wtxn)?;
-        // for (uid, rule) in &value {
-        //     self.persisted.put(&mut wtxn, uid, rule)?;
-        // }
-        // wtxn.commit()?;
-
-        // let mut runtime = self.runtime.write().unwrap();
-        // *runtime = Arc::new(value);
-        Ok(())
+    pub fn put(&self, value: DynamicSearchRules) -> Result<()> {
+        self.ingest_rules(value.into_values())
     }
 
     pub fn get(&self) -> Arc<DynamicSearchRules> {
@@ -228,12 +231,8 @@ impl DynamicSearchRulesStore {
         // self.runtime.read().unwrap().clone()
     }
 
-    pub fn put_one(&self, wtxn: &mut RwTxn, rule: &DynamicSearchRule) -> Result<()> {
-        // self.persisted.put(wtxn, &rule.uid, rule)?;
-
-        // let mut lock = self.runtime.write().unwrap();
-        // Arc::make_mut(&mut lock).insert(rule.uid.clone(), rule.clone());
-        Ok(())
+    pub fn put_one(&self, rule: &DynamicSearchRule) -> Result<()> {
+        self.ingest_rules([rule.clone()])
     }
 
     pub fn delete_one(&self, wtxn: &mut RwTxn, uid: &RuleUid) -> Result<bool> {
@@ -248,6 +247,61 @@ impl DynamicSearchRulesStore {
     }
 
     pub fn list(&self) -> Result<Vec<DynamicSearchRule>> {
-        todo!()
+        let rtxn = self.index.read_txn()?;
+        let fields = self.index.fields_ids_map(&rtxn)?;
+        let mut rules = Vec::new();
+
+        let mut docs = self.index.all_documents(&rtxn).map_err(dsr_milli_error)?;
+
+        for doc in &mut docs {
+            let (_id, obkv) = doc.map_err(dsr_milli_error)?;
+            let obj = milli::all_obkv_to_json(obkv, &fields).map_err(dsr_milli_error)?;
+            let db_rule: DbDynamicSearchRule = serde_json::from_value(obj.into()).map_err(|e| {
+                dsr_milli_error(milli::Error::UserError(milli::UserError::SerdeJson(e)))
+            })?;
+
+            rules.push(db_rule.into());
+        }
+
+        Ok(rules)
+    }
+
+    fn ingest_rules(&self, rules: impl IntoIterator<Item = DynamicSearchRule>) -> Result<()> {
+        let mut wtxn = self.index.write_txn()?;
+
+        let objects = rules
+            .into_iter()
+            .map(DbDynamicSearchRule::from)
+            .map(|rule| serde_json::to_value(&rule).expect("serialization to always succeed"))
+            .map(|rule| {
+                if let serde_json::Value::Object(obj) = rule {
+                    obj
+                } else {
+                    unreachable!("a dynamic search rule is always an object")
+                }
+            });
+
+        let embedder_stats = Arc::default();
+        let builder = milli::update::IndexDocuments::new(
+            &mut wtxn,
+            &self.index,
+            &self.indexer_config,
+            IndexDocumentsConfig::default(),
+            &|_step| {},
+            &|| false,
+            &embedder_stats,
+            &self.ip_policy,
+        )
+        .map_err(dsr_milli_error)?;
+
+        let reader = documents_batch_reader_from_objects(objects);
+
+        let (builder, user_result) = builder.add_documents(reader).map_err(dsr_milli_error)?;
+        user_result.map_err(dsr_milli_error)?;
+        builder.execute().map_err(dsr_milli_error)?;
+
+        wtxn.commit()?;
+
+        Ok(())
     }
 }
