@@ -1162,9 +1162,7 @@ impl IndexScheduler {
     }
 
     pub fn put_dynamic_search_rules(&self, rules: DynamicSearchRules) -> Result<()> {
-        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.dynamic_search_rules.put(wtxn, rules)?;
-        Ok(())
+        self.dynamic_search_rules.put(rules)
     }
 
     pub fn dynamic_search_rules(&self) -> Arc<DynamicSearchRules> {
@@ -1172,10 +1170,7 @@ impl IndexScheduler {
     }
 
     pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {
-        let mut wtxn = self.env.write_txn()?;
-        self.dynamic_search_rules.put_one(&mut wtxn, rule)?;
-        wtxn.commit()?;
-        Ok(())
+        self.dynamic_search_rules.put_one(rule)
     }
 
     pub fn delete_dynamic_search_rule(&self, uid: &RuleUid) -> Result<bool> {
