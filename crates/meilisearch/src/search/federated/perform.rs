@@ -91,7 +91,8 @@ pub async fn perform_federated_search(
     let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
 
     let network = index_scheduler.network();
-    let dynamic_search_rules = index_scheduler.dynamic_search_rules();
+    // TODO - we surely no longer need that Arc anymore
+    let dynamic_search_rules = Arc::new(index_scheduler.dynamic_search_rules()?);
 
     // Preconstruct metadata keeping the original queries order for later metadata building
     let precomputed_query_metadata: Option<Vec<_>> = include_metadata.then(|| {

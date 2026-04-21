@@ -1165,7 +1165,7 @@ impl IndexScheduler {
         self.dynamic_search_rules.put(rules)
     }
 
-    pub fn dynamic_search_rules(&self) -> Arc<DynamicSearchRules> {
+    pub fn dynamic_search_rules(&self) -> Result<DynamicSearchRules> {
         self.dynamic_search_rules.get()
     }
 
@@ -1174,10 +1174,7 @@ impl IndexScheduler {
     }
 
     pub fn delete_dynamic_search_rule(&self, uid: &RuleUid) -> Result<bool> {
-        let mut wtxn = self.env.write_txn()?;
-        let deleted = self.dynamic_search_rules.delete_one(&mut wtxn, uid)?;
-        wtxn.commit()?;
-        Ok(deleted)
+        self.dynamic_search_rules.delete_one(uid)
     }
 
     pub fn update_runtime_webhooks(&self, runtime: RuntimeWebhooks) -> Result<()> {

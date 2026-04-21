@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 use std::env::VarError;
-use std::error::Error;
 use std::sync::Arc;
 use std::u64;
 
@@ -8,7 +7,6 @@ use http_client::policy::IpPolicy;
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRules, RuleAction, RuleUid,
 };
-use meilisearch_types::heed::RwTxn;
 use meilisearch_types::heed::{self, EnvFlags};
 use meilisearch_types::milli::documents::documents_batch_reader_from_objects;
 use meilisearch_types::milli::progress::Progress;
@@ -226,30 +224,66 @@ impl DynamicSearchRulesStore {
         self.ingest_rules(value.into_values())
     }
 
-    pub fn get(&self) -> Arc<DynamicSearchRules> {
-        todo!()
-        // self.runtime.read().unwrap().clone()
-    }
-
     pub fn put_one(&self, rule: &DynamicSearchRule) -> Result<()> {
         self.ingest_rules([rule.clone()])
     }
 
-    pub fn delete_one(&self, wtxn: &mut RwTxn, uid: &RuleUid) -> Result<bool> {
-        // let deleted = self.persisted.delete(wtxn, uid)?;
+    pub fn delete_one(&self, uid: &RuleUid) -> Result<bool> {
+        let mut wtxn = self.index.write_txn()?;
+        let rtxn = self.index.read_txn()?;
+        let external_document_ids = self.index.external_documents_ids();
 
-        // if deleted {
-        //     let mut lock = self.runtime.write().unwrap();
-        //     Arc::make_mut(&mut lock).remove(uid);
-        // }
-        // Ok(deleted)
-        todo!()
+        let Some(ext_id) =
+            external_document_ids.get(&wtxn, uid.as_str()).map_err(dsr_milli_error)?
+        else {
+            return Ok(false);
+        };
+
+        let db_fields_ids_map = self.index.fields_ids_map(&wtxn)?;
+        let mut new_fields_ids_map = db_fields_ids_map.clone();
+        let primary_key =
+            self.index.primary_key(&rtxn)?.expect("a rule to always have a defined primary key");
+        let primary_key =
+            milli::documents::PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
+                .map_err(dsr_milli_error)?;
+
+        let mut to_delete = roaring::RoaringBitmap::new();
+        to_delete.insert(ext_id);
+
+        let mut indexer = milli::update::new::indexer::DocumentDeletion::new();
+        indexer.delete_documents_by_docids(to_delete);
+        let indexer_alloc = bumpalo::Bump::new();
+        let document_changes = indexer.into_changes(&indexer_alloc, primary_key);
+
+        let progress = Progress::default();
+        let embedder_stats = milli::progress::EmbedderStats::default();
+
+        milli::update::new::indexer::index(
+            &mut wtxn,
+            &self.index,
+            &self.indexer_config.thread_pool,
+            self.indexer_config.grenad_parameters(),
+            &db_fields_ids_map,
+            new_fields_ids_map,
+            None, // document deletion never changes the primary key
+            &document_changes,
+            Default::default(),
+            &|| false,
+            &progress,
+            &self.ip_policy,
+            &embedder_stats,
+        )
+        .map_err(dsr_milli_error)?;
+
+        wtxn.commit()?;
+
+        Ok(true)
     }
 
-    pub fn list(&self) -> Result<Vec<DynamicSearchRule>> {
+    pub fn get(&self) -> Result<DynamicSearchRules> {
         let rtxn = self.index.read_txn()?;
         let fields = self.index.fields_ids_map(&rtxn)?;
-        let mut rules = Vec::new();
+        let mut rules = DynamicSearchRules::new();
 
         let mut docs = self.index.all_documents(&rtxn).map_err(dsr_milli_error)?;
 
@@ -260,7 +294,7 @@ impl DynamicSearchRulesStore {
                 dsr_milli_error(milli::Error::UserError(milli::UserError::SerdeJson(e)))
             })?;
 
-            rules.push(db_rule.into());
+            rules.insert(db_rule.uid.clone(), db_rule.into());
         }
 
         Ok(rules)
