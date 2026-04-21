@@ -131,7 +131,15 @@ pub async fn patch_settings(
     index_scheduler.features().check_chat_completions("using the /chats/settings route")?;
     let ChatsParam { workspace_uid } = chats_param.into_inner();
 
-    let old_settings = index_scheduler.chat_settings(&workspace_uid)?.unwrap_or_default();
+    let old_settings = match index_scheduler.chat_settings(&workspace_uid)? {
+        Some(settings) => settings,
+        None => {
+            return Err(ResponseError::from_msg(
+                format!("Chat `{workspace_uid}` not found"),
+                Code::ChatNotFound,
+            ))
+        }
+    };
 
     let prompts = match new.prompts {
         Setting::Set(new_prompts) => DbChatCompletionPrompts {
