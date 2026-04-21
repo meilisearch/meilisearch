@@ -1822,7 +1822,7 @@ pub fn perform_search(
     )?;
 
     let pins = if features.runtime_features().dynamic_search_rules {
-        let rules = index_scheduler.dynamic_search_rules();
+        let rules = index_scheduler.dynamic_search_rules()?;
         resolve_pins(&rules, &query, &index_uid, index, &rtxn)?
     } else {
         Vec::new()
