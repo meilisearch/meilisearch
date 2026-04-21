@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::env::VarError;
 use std::sync::Arc;
-use std::u64;
 
 use http_client::policy::IpPolicy;
 use meilisearch_types::dynamic_search_rules::{
