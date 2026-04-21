@@ -83,12 +83,6 @@ impl IndexScheduler {
                 t.finished_at = Some(finished_at);
             }
 
-            // Patch the task to remove the batch uid, because as of v1.12.5 batches are not persisted.
-            // This prevent from referencing *future* batches not actually associated with the task.
-            //
-            // See <https://github.com/meilisearch/meilisearch/issues/5247> for details.
-            t.batch_uid = None;
-
             let mut dump_content_file = dump_tasks.push_task(&t.into())?;
 
             // 3.1. Dump the `content_file` associated with the task if there is one and the task is not finished yet.
@@ -274,6 +268,14 @@ impl IndexScheduler {
         progress.update_progress(DumpCreationProgress::DumpTheWebhooks);
         let webhooks = self.webhooks_dump_view();
         dump.create_webhooks(webhooks)?;
+
+        // 8. Dump the dynamic search rules
+        progress.update_progress(DumpCreationProgress::DumpDynamicSearchRules);
+        let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules()?;
+        for result in self.dynamic_search_rules.persisted.iter(&rtxn)? {
+            let (_, rule) = result?;
+            dump_dynamic_search_rules.push_rule(&rule)?;
+        }
 
         let dump_uid = started_at.format(format_description!(
                     "[year repr:full][month repr:numerical][day padding:zero]-[hour padding:zero][minute padding:zero][second padding:zero][subsecond digits:3]"

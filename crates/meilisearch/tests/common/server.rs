@@ -43,14 +43,14 @@ impl Server<Owned> {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         let options = default_settings(dir.path());
-
-        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let handle = tokio::runtime::Handle::current();
+        let (index_scheduler, auth) = setup_meilisearch(&options, handle).unwrap();
         let service = Service { index_scheduler, auth, options, api_key: None };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
@@ -58,14 +58,16 @@ impl Server<Owned> {
 
     pub async fn new_auth_with_options(mut options: Opt, dir: TempDir) -> Self {
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         options.master_key = Some("MASTER_KEY".to_string());
 
-        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let handle = tokio::runtime::Handle::current();
+
+        let (index_scheduler, auth) = setup_meilisearch(&options, handle).unwrap();
         let service = Service { index_scheduler, auth, options, api_key: None };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
@@ -78,7 +80,9 @@ impl Server<Owned> {
     }
 
     pub async fn new_with_options(options: Opt) -> Result<Self, anyhow::Error> {
-        let (index_scheduler, auth) = setup_meilisearch(&options)?;
+        let handle = tokio::runtime::Handle::current();
+
+        let (index_scheduler, auth) = setup_meilisearch(&options, handle)?;
         let service = Service { index_scheduler, auth, options, api_key: None };
 
         Ok(Server { service, _dir: None, _marker: PhantomData })
@@ -201,6 +205,42 @@ impl Server<Owned> {
         self.service.patch(url, value).await
     }
 
+    pub async fn create_dynamic_search_rule(
+        &self,
+        uid: impl AsRef<str>,
+        value: Value,
+    ) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.patch(url, value).await
+    }
+
+    pub async fn get_dynamic_search_rule(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.get(url).await
+    }
+
+    pub async fn list_dynamic_search_rules(&self) -> (Value, StatusCode) {
+        self.list_dynamic_search_rules_with(json!({})).await
+    }
+
+    pub async fn list_dynamic_search_rules_with(&self, value: Value) -> (Value, StatusCode) {
+        self.service.post("/dynamic-search-rules", value).await
+    }
+
+    pub async fn patch_dynamic_search_rule(
+        &self,
+        uid: impl AsRef<str>,
+        value: Value,
+    ) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.patch(url, value).await
+    }
+
+    pub async fn delete_dynamic_search_rule(&self, uid: impl AsRef<str>) -> (Value, StatusCode) {
+        let url = format!("/dynamic-search-rules/{}", uid.as_ref());
+        self.service.delete(url).await
+    }
+
     pub async fn get_metrics(&self) -> (Value, StatusCode) {
         self.service.get("/metrics").await
     }
@@ -211,14 +251,15 @@ impl Server<Shared> {
         let dir = TempDir::new().unwrap();
 
         if cfg!(windows) {
-            std::env::set_var("TMP", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMP", TEST_TEMP_DIR.path()) };
         } else {
-            std::env::set_var("TMPDIR", TEST_TEMP_DIR.path());
+            unsafe { std::env::set_var("TMPDIR", TEST_TEMP_DIR.path()) };
         }
 
         let options = default_settings(dir.path());
+        let handle = tokio::runtime::Handle::current();
 
-        let (index_scheduler, auth) = setup_meilisearch(&options).unwrap();
+        let (index_scheduler, auth) = setup_meilisearch(&options, handle).unwrap();
         let service = Service { index_scheduler, auth, api_key: None, options };
 
         Server { service, _dir: Some(dir), _marker: PhantomData }
@@ -390,6 +431,17 @@ impl<State> Server<State> {
         self.service.post("/multi-search", queries).await
     }
 
+    pub async fn multi_search_with_headers(
+        &self,
+        queries: Value,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let body = serde_json::to_string(&queries).unwrap();
+        let mut all_headers = vec![("content-type", "application/json")];
+        all_headers.extend(headers);
+        self.service.post_str("/multi-search", body, all_headers).await
+    }
+
     pub async fn list_indexes_raw(&self, parameters: &str) -> (Value, StatusCode) {
         self.service.get(format!("/indexes{parameters}")).await
     }
@@ -426,7 +478,13 @@ impl<State> Server<State> {
         self.service.delete(format!("/tasks?{}", value)).await
     }
 
-    pub async fn wait_task(&self, update_id: u64) -> Value {
+    pub async fn compact_task_queue(&self) -> (Value, StatusCode) {
+        self.service.post("/tasks/compact", json!(null)).await
+    }
+
+    pub async fn wait_task(&self, update_id: impl super::IntoTaskUid) -> Value {
+        let update_id = update_id.uid();
+
         // try several times to get status, or panic to not wait forever
         let url = format!("/tasks/{update_id}");
         let max_attempts = 400; // 200 seconds in total, 0.5secs per attempt
@@ -488,10 +546,15 @@ pub fn default_settings(dir: impl AsRef<Path>) -> Opt {
             skip_index_budget: true,
             // Having 2 threads makes the tests way faster
             max_indexing_threads: MaxThreads::from_str("2").unwrap(),
-            experimental_no_edition_2024_for_settings: false,
+            experimental_no_edition_2024_for_settings: std::env::var_os(
+                "MEILI_EXPERIMENTAL_NO_EDITION_2024_FOR_SETTINGS",
+            )
+            .map(|x| FromStr::from_str(&x.into_string().unwrap()).unwrap())
+            .unwrap_or(false),
             experimental_no_edition_2024_for_dumps: false,
         },
         experimental_enable_metrics: false,
+        experimental_allowed_ip_networks: vec![cidr::AnyIpCidr::Any],
         ..Parser::parse_from(None as Option<&str>)
     }
 }

@@ -5,6 +5,7 @@ use std::pin::Pin;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use actix_http::header::{HeaderName, HeaderValue};
 use actix_web::web::{Bytes, Data};
 use actix_web::{web, HttpResponse};
 use deserr::actix_web::AwebJson;
@@ -18,53 +19,48 @@ use serde::Serialize;
 use tokio::sync::mpsc;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::Layer;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::{LogRouteHandle, LogStderrHandle};
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_logs, cancel_logs, update_stderr_target),
+#[routes::routes(
+    routes(
+        "/stream" => [post(get_logs), delete(cancel_logs)],
+        "/stderr" => post(update_stderr_target),
+    ),
+    tag = "Logs",
     tags((
         name = "Logs",
         description = "Everything about retrieving or customizing logs.
 Currently [experimental](https://www.meilisearch.com/docs/learn/experimental/overview).",
-        external_docs(url = "https://www.meilisearch.com/docs/learn/experimental/log_customization"),
     )),
 )]
 pub struct LogsApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("stream")
-            .route(web::post().to(SeqHandler(get_logs)))
-            .route(web::delete().to(SeqHandler(cancel_logs))),
-    )
-    .service(web::resource("stderr").route(web::post().to(SeqHandler(update_stderr_target))));
-}
-
+/// Format for log output
 #[derive(Debug, Default, Clone, Copy, Deserr, Serialize, PartialEq, Eq, ToSchema)]
 #[deserr(rename_all = camelCase)]
 #[schema(rename_all = "camelCase")]
 pub enum LogMode {
-    /// Output the logs in a human readable form.
+    /// Output the logs in a human readable form
     #[default]
     Human,
-    /// Output the logs in json.
+    /// Output the logs in JSON format
     Json,
-    /// Output the logs in the firefox profiler format. They can then be loaded and visualized at https://profiler.firefox.com/
+    /// Output the logs in Firefox profiler format for visualization
     Profile,
 }
 
-/// Simple wrapper around the `Targets` from `tracing_subscriber` to implement `MergeWithError` on it.
+/// Simple wrapper around the `Targets` from `tracing_subscriber` to
+/// implement `MergeWithError` on it.
 #[derive(Clone, Debug)]
 struct MyTargets(Targets);
 
-/// Simple wrapper around the `ParseError` from `tracing_subscriber` to implement `MergeWithError` on it.
+/// Simple wrapper around the `ParseError` from `tracing_subscriber` to
+/// implement `MergeWithError` on it.
 #[derive(Debug, thiserror::Error)]
 enum MyParseError {
     #[error(transparent)]
@@ -101,26 +97,28 @@ impl MergeWithError<MyParseError> for DeserrJsonError<BadRequest> {
     }
 }
 
+/// Request body for streaming logs
 #[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields, validate = validate_get_logs -> DeserrJsonError<InvalidSettingsTypoTolerance>)]
 #[schema(rename_all = "camelCase")]
 pub struct GetLogs {
-    /// Lets you specify which parts of the code you want to inspect and is formatted like that: code_part=log_level,code_part=log_level
-    /// - If the `code_part` is missing, then the `log_level` will be applied to everything.
-    /// - If the `log_level` is missing, then the `code_part` will be selected in `info` log level.
+    /// Log targets to filter. Format: code_part=log_level (e.g.,
+    /// milli=trace,actix_web=off)
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
-    #[schema(value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
+    #[schema(required = false, value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
     target: MyTargets,
 
-    /// Lets you customize the format of the logs.
+    /// Output format for log entries. `human` provides readable text output,
+    /// `json` provides structured JSON for parsing, and `profile` outputs
+    /// Firefox profiler format for performance visualization.
     #[deserr(default, error = DeserrJsonError<BadRequest>)]
-    #[schema(default = LogMode::default)]
+    #[schema(required = false, default = LogMode::default)]
     mode: LogMode,
 
-    /// A boolean to indicate if you want to profile the memory as well. This is only useful while using the `profile` mode.
-    /// Be cautious, though; it slows down the engine a lot.
+    /// Enable memory profiling (only useful with profile mode, significantly
+    /// slows down the engine)
     #[deserr(default = false, error = DeserrJsonError<BadRequest>)]
-    #[schema(default = false)]
+    #[schema(required = false, default = false)]
     profile_memory: bool,
 }
 
@@ -157,7 +155,8 @@ impl Write for LogWriter {
 }
 
 struct HandleGuard {
-    /// We need to keep an handle on the logs to make it available again when the streamer is dropped
+    /// We need to keep an handle on the logs to make it available again when
+    /// the streamer is dropped
     logs: Arc<LogRouteHandle>,
 }
 
@@ -278,19 +277,14 @@ fn entry_stream(
 
 /// Retrieve logs
 ///
-/// Stream logs over HTTP. The format of the logs depends on the configuration specified in the payload.
-/// The logs are sent as multi-part, and the stream never stops, so make sure your clients correctly handle that.
-/// To make the server stop sending you logs, you can call the `DELETE /logs/stream` route.
+/// Stream logs over HTTP. The format of the logs depends on the configuration specified in the payload. The logs are sent as multi-part, and the stream never stops, so ensure your client can handle a long-lived connection. To stop receiving logs, call the `DELETE /logs/stream` route.
 ///
-/// There can only be one listener at a timeand an error will be returned if you call this route while it's being used by another client.
-#[utoipa::path(
-    post,
-    path = "/stream",
-    tag = "Logs",
+/// Only one client can listen at a time. An error is returned if you call this route while it is already in use by another client.
+#[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     request_body = GetLogs,
     responses(
-        (status = OK, description = "Logs are being returned", body = String, content_type = "application/json", example = json!(
+        (status = OK, description = "Logs are being returned.", body = String, content_type = "application/json", example = json!(
             r#"
 2024-10-08T13:35:02.643750Z  WARN HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=400 error=Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625}: tracing_actix_web::middleware: Error encountered while processing the incoming HTTP request: ResponseError { code: 400, message: "Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625", error_code: "feature_not_enabled", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#feature_not_enabled" }
 2024-10-08T13:35:02.644191Z  INFO HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=400 error=Getting metrics requires enabling the `metrics` experimental feature. See https://github.com/meilisearch/product/discussions/625}: meilisearch: close time.busy=1.66ms time.idle=658µs
@@ -298,7 +292,7 @@ fn entry_stream(
 2024-10-08T13:35:23.094987Z  INFO HTTP request{method=GET host="localhost:7700" route=/metrics query_parameters= user_agent=HTTPie/3.2.3 status_code=200}: meilisearch: close time.busy=2.12ms time.idle=595µs
 "#
         )),
-        (status = 400, description = "The route is already being used", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 400, description = "The route is already being used.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The `/logs/stream` route is currently in use by someone else.",
                 "code": "bad_request",
@@ -306,7 +300,7 @@ fn entry_stream(
                 "link": "https://docs.meilisearch.com/errors#bad_request"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -342,7 +336,12 @@ pub async fn get_logs(
     .unwrap();
 
     if let Some(stream) = stream {
-        Ok(HttpResponse::Ok().streaming(stream))
+        let mut resp = HttpResponse::Ok().streaming(stream);
+
+        resp.headers_mut()
+            .insert(HeaderName::from_static("x-accel-buffering"), HeaderValue::from_static("no"));
+
+        Ok(resp)
     } else {
         Err(MeilisearchHttpError::AlreadyUsedLogRoute.into())
     }
@@ -350,15 +349,12 @@ pub async fn get_logs(
 
 /// Stop retrieving logs
 ///
-/// Call this route to make the engine stops sending logs through the `POST /logs/stream` route.
-#[utoipa::path(
-    delete,
-    path = "/stream",
-    tag = "Logs",
+/// Call this route to make the engine stop sending logs to the client that opened the `POST /logs/stream` connection.
+#[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
-        (status = NO_CONTENT, description = "Logs are being returned"),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = NO_CONTENT, description = "Logs are being returned."),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -381,29 +377,26 @@ pub async fn cancel_logs(
     Ok(HttpResponse::NoContent().finish())
 }
 
+/// Request body for updating stderr log configuration
 #[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct UpdateStderrLogs {
-    /// Lets you specify which parts of the code you want to inspect and is formatted like that: code_part=log_level,code_part=log_level
-    /// - If the `code_part` is missing, then the `log_level` will be applied to everything.
-    /// - If the `log_level` is missing, then the `code_part` will be selected in `info` log level.
+    /// Log targets to filter. Format: code_part=log_level (e.g.,
+    /// milli=trace,actix_web=off)
     #[deserr(default = "info".parse().unwrap(), try_from(&String) = MyTargets::from_str -> DeserrJsonError<BadRequest>)]
-    #[schema(value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
+    #[schema(required = false, value_type = String, default = "info", example = json!("milli=trace,index_scheduler,actix_web=off"))]
     target: MyTargets,
 }
 
 /// Update target of the console logs
 ///
-/// This route lets you specify at runtime the level of the console logs outputted on stderr.
-#[utoipa::path(
-    post,
-    path = "/stderr",
-    tag = "Logs",
+/// Configure at runtime the level of the console logs written to stderr (e.g. debug, info, warn, error).
+#[routes::path(
     request_body = UpdateStderrLogs,
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
-        (status = NO_CONTENT, description = "The console logs have been updated"),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = NO_CONTENT, description = "The console logs have been updated."),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",

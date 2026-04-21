@@ -5,10 +5,11 @@ use std::time::Duration;
 use big_s::S;
 use crossbeam_channel::RecvTimeoutError;
 use file_store::File;
+use http_client::policy::IpPolicy;
 use meilisearch_auth::open_auth_store_env;
 use meilisearch_types::document_formats::DocumentFormatError;
 use meilisearch_types::milli::update::IndexDocumentsMethod::ReplaceDocuments;
-use meilisearch_types::milli::update::IndexerConfig;
+use meilisearch_types::milli::update::{IndexerConfig, MissingDocumentPolicy};
 use meilisearch_types::tasks::KindWithContent;
 use meilisearch_types::{versioning, VERSION_FILE_NAME};
 use tempfile::{NamedTempFile, TempDir};
@@ -112,8 +113,11 @@ impl IndexScheduler {
             max_number_of_batched_tasks: usize::MAX,
             batched_tasks_size_limit: u64::MAX,
             instance_features: Default::default(),
+            export_default_payload_size_bytes: byte_unit::Byte::parse_str("20MiB", false).unwrap(),
             auto_upgrade: true, // Don't cost much and will ensure the happy path works
             embedding_cache_cap: 10,
+            // NO DANGER: test code
+            ip_policy: IpPolicy::danger_always_allow(),
             experimental_no_snapshot_compaction: false,
         };
         let version = configuration(&mut options).unwrap_or({
@@ -126,7 +130,7 @@ impl IndexScheduler {
         std::fs::create_dir_all(&options.auth_path).unwrap();
         let auth_env = open_auth_store_env(&options.auth_path).unwrap();
         let index_scheduler =
-            Self::new(options, auth_env, version, sender, planned_failures).unwrap();
+            Self::new_test(options, auth_env, version, None, sender, planned_failures).unwrap();
 
         // To be 100% consistent between all test we're going to start the scheduler right now
         // and ensure it's in the expected starting state.
@@ -190,6 +194,22 @@ pub(crate) fn replace_document_import_task(
     content_file_uuid: u128,
     documents_count: u64,
 ) -> KindWithContent {
+    replace_document_import_task_with_opts(
+        index,
+        primary_key,
+        content_file_uuid,
+        documents_count,
+        MissingDocumentPolicy::default(),
+    )
+}
+
+pub(crate) fn replace_document_import_task_with_opts(
+    index: &'static str,
+    primary_key: Option<&'static str>,
+    content_file_uuid: u128,
+    documents_count: u64,
+    on_missing_document: MissingDocumentPolicy,
+) -> KindWithContent {
     KindWithContent::DocumentAdditionOrUpdate {
         index_uid: S(index),
         primary_key: primary_key.map(ToOwned::to_owned),
@@ -197,6 +217,7 @@ pub(crate) fn replace_document_import_task(
         content_file: Uuid::from_u128(content_file_uuid),
         documents_count,
         allow_index_creation: true,
+        on_missing_document,
     }
 }
 

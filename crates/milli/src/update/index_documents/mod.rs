@@ -39,7 +39,7 @@ use crate::update::{
     IndexerConfig, UpdateIndexingStep, WordPrefixDocids, WordPrefixIntegerDocids, WordsPrefixesFst,
 };
 use crate::vector::db::EmbedderInfo;
-use crate::vector::{ArroyWrapper, RuntimeEmbedders};
+use crate::vector::{RuntimeEmbedders, VectorStore};
 use crate::{CboRoaringBitmapCodec, Index, Result, UserError};
 
 static MERGED_DATABASE_COUNT: usize = 7;
@@ -54,11 +54,12 @@ pub struct DocumentAdditionResult {
     pub number_of_documents: u64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum IndexDocumentsMethod {
     /// Replace the previous document with the new one,
     /// removing all the already known attributes.
+    #[default]
     ReplaceDocuments,
 
     /// Merge the previous version of the document with the new version,
@@ -66,10 +67,19 @@ pub enum IndexDocumentsMethod {
     UpdateDocuments,
 }
 
-impl Default for IndexDocumentsMethod {
-    fn default() -> Self {
-        Self::ReplaceDocuments
-    }
+/// Controls whether new documents should be created when they don't already exist.
+///
+/// This policy is checked when processing a document whose ID is not found in the index.
+/// It applies to both update and replace operations.
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MissingDocumentPolicy {
+    /// Create the document if it doesn't exist. This is the default behavior.
+    #[default]
+    Create,
+
+    /// Skip the document silently if it doesn't exist. No error is returned, the document is simply
+    /// not indexed.
+    Skip,
 }
 
 pub struct IndexDocuments<'t, 'i, 'a, FP, FA> {
@@ -99,6 +109,7 @@ where
     FP: Fn(UpdateIndexingStep) + Sync + Send,
     FA: Fn() -> bool + Sync + Send,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         wtxn: &'t mut heed::RwTxn<'i>,
         index: &'i Index,
@@ -107,12 +118,14 @@ where
         progress: FP,
         should_abort: FA,
         embedder_stats: &'t Arc<EmbedderStats>,
+        embedder_ip_policy: &'a http_client::policy::IpPolicy,
     ) -> Result<IndexDocuments<'t, 'i, 'a, FP, FA>> {
         let transform = Some(Transform::new(
             wtxn,
             index,
             indexer_config,
             config.update_method,
+            embedder_ip_policy,
             config.autogenerate_docids,
         )?);
 
@@ -208,7 +221,7 @@ where
         target = "indexing::details",
         name = "index_documents_raw"
     )]
-    pub fn execute_raw(self, output: TransformOutput) -> Result<u64>
+    pub fn execute_raw(mut self, output: TransformOutput) -> Result<u64>
     where
         FP: Fn(UpdateIndexingStep) + Sync,
         FA: Fn() -> bool + Sync,
@@ -485,26 +498,20 @@ where
 
         // If an embedder wasn't used in the typedchunk but must be binary quantized
         // we should insert it in `dimension`
+        let backend = self.index.get_vector_store(self.wtxn)?.unwrap_or_default();
         for (name, action) in settings_diff.embedding_config_updates.iter() {
-            if action.is_being_quantized && !dimension.contains_key(name.as_str()) {
-                let index = self.index.embedding_configs().embedder_id(self.wtxn, name)?.ok_or(
-                    InternalError::DatabaseMissingEntry {
-                        db_name: "embedder_category_id",
-                        key: None,
-                    },
-                )?;
-                let reader =
-                    ArroyWrapper::new(self.index.vector_arroy, index, action.was_quantized);
-                let Some(dim) = reader.dimensions(self.wtxn)? else {
+            let must_rebuild = action.is_being_quantized || action.remove_fragments().is_some();
+            if must_rebuild && !dimension.contains_key(name.as_str()) {
+                let Some(runtime_embedder) = settings_diff.new.runtime_embedders.get(name) else {
                     continue;
                 };
-                dimension.insert(name.to_string(), dim);
+                dimension.insert(name.to_string(), runtime_embedder.embedder.dimensions());
             }
         }
 
         for (embedder_name, dimension) in dimension {
             let wtxn = &mut *self.wtxn;
-            let vector_arroy = self.index.vector_arroy;
+            let vector_store = self.index.vector_store;
             let cancel = &self.should_abort;
 
             let embedder_index =
@@ -522,12 +529,13 @@ where
                 .is_some_and(|conf| conf.is_quantized);
             let is_quantizing = embedder_config.is_some_and(|action| action.is_being_quantized);
 
-            pool.install(|| {
-                let mut writer = ArroyWrapper::new(vector_arroy, embedder_index, was_quantized);
+            pool.install(|| -> Result<_> {
+                let mut writer =
+                    VectorStore::new(backend, vector_store, embedder_index, was_quantized);
                 writer.build_and_quantize(
                     wtxn,
                     // In the settings we don't have any progress to share
-                    &Progress::default(),
+                    Progress::default(),
                     &mut rng,
                     dimension,
                     is_quantizing,
@@ -539,11 +547,24 @@ where
             .map_err(InternalError::from)??;
         }
 
+        self.index.cellulite.build(self.wtxn, &self.should_abort, &Progress::default())?;
+
         self.execute_prefix_databases(
             word_docids.map(MergerBuilder::build),
             exact_word_docids.map(MergerBuilder::build),
             word_position_docids.map(MergerBuilder::build),
             word_fid_docids.map(MergerBuilder::build),
+        )?;
+
+        // Delete the old fid-based databases.
+        // this may not be the most efficient way to do it in this indexer,
+        // but we are in the legacy indexer, so it is the easiest way to do it until the new indexer is ready.
+        crate::update::new::indexer::delete_old_fid_based_databases(
+            self.wtxn,
+            self.index,
+            &*settings_diff,
+            &self.should_abort,
+            &Progress::default(),
         )?;
 
         Ok(number_of_documents)
@@ -552,11 +573,11 @@ where
     #[tracing::instrument(
         level = "trace",
         skip_all,
-        target = "indexing::prefix",
+        target = "indexing::post_processing::prefix",
         name = "index_documents_prefix_databases"
     )]
     pub fn execute_prefix_databases(
-        self,
+        &mut self,
         word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
         exact_word_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
         word_position_docids: Option<Merger<CursorClonableMmap, MergeDeladdCboRoaringBitmaps>>,
@@ -753,7 +774,7 @@ where
 #[tracing::instrument(
     level = "trace",
     skip_all,
-    target = "indexing::prefix",
+    target = "indexing::post_processing::prefix",
     name = "index_documents_word_prefix_docids"
 )]
 fn execute_word_prefix_docids(
@@ -783,6 +804,7 @@ mod tests {
     use bumpalo::Bump;
     use fst::IntoStreamer;
     use heed::RwTxn;
+    use http_client::policy::IpPolicy;
     use maplit::hashset;
 
     use super::*;
@@ -790,11 +812,16 @@ mod tests {
     use crate::documents::mmap_from_objects;
     use crate::index::tests::TempIndex;
     use crate::progress::Progress;
+    use crate::search::facet::IndexFilter;
     use crate::search::TermsMatchingStrategy;
     use crate::update::new::indexer;
     use crate::update::Setting;
     use crate::vector::db::IndexEmbeddingConfig;
     use crate::{all_obkv_to_json, db_snap, Filter, FilterableAttributesRule, Search, UserError};
+
+    fn no_cancel() -> bool {
+        false
+    }
 
     #[test]
     fn simple_document_replacement() {
@@ -1268,7 +1295,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // testing the simple query search
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = index.search(&rtxn);
         search.query("document");
         search.terms_matching_strategy(TermsMatchingStrategy::default());
         // all documents should be returned
@@ -1309,24 +1336,30 @@ mod tests {
         assert!(documents_ids.is_empty()); // nested is not searchable
 
         // testing the filters
-        let mut search = crate::Search::new(&rtxn, &index);
-        search.filter(crate::Filter::from_str(r#"title = "The first document""#).unwrap().unwrap());
+        let mut search = index.search(&rtxn);
+
+        let filter = crate::Filter::from_str(r#"title = "The first document""#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
 
-        search.filter(crate::Filter::from_str(r#"nested.object = field"#).unwrap().unwrap());
+        let filter = crate::Filter::from_str(r#"nested.object = field"#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1, 2]);
 
-        search.filter(crate::Filter::from_str(r#"nested.machin = bidule"#).unwrap().unwrap());
+        let filter = crate::Filter::from_str(r#"nested.machin = bidule"#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
         assert_eq!(documents_ids, vec![1]);
 
-        search.filter(crate::Filter::from_str(r#"nested = array"#).unwrap().unwrap());
+        let filter = crate::Filter::from_str(r#"nested = array"#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let error = search.execute().map(|_| unreachable!()).unwrap_err(); // nested is not filterable
         assert!(matches!(error, crate::Error::UserError(crate::UserError::InvalidFilter(_))));
 
-        search.filter(crate::Filter::from_str(r#"nested = "I lied""#).unwrap().unwrap());
+        let filter = crate::Filter::from_str(r#"nested = "I lied""#).unwrap().unwrap();
+        search.filter(IndexFilter::from(filter));
         let error = search.execute().map(|_| unreachable!()).unwrap_err(); // nested is not filterable
         assert!(matches!(error, crate::Error::UserError(crate::UserError::InvalidFilter(_))));
     }
@@ -1334,6 +1367,7 @@ mod tests {
     #[test]
     fn index_documents_with_nested_primary_key() {
         let index = TempIndex::new();
+        let progress = Progress::default();
 
         index
             .update_settings(|settings| {
@@ -1373,7 +1407,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         // testing the simple query search
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = crate::Search::new(&rtxn, &index, &progress);
         search.query("document");
         search.terms_matching_strategy(TermsMatchingStrategy::default());
         // all documents should be returned
@@ -1429,6 +1463,7 @@ mod tests {
     #[test]
     fn test_facets_generation() {
         let index = TempIndex::new();
+        let progress = Progress::default();
 
         index
             .add_documents(documents!([
@@ -1483,9 +1518,10 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
 
         for (s, i) in [("zeroth", 0), ("first", 1), ("second", 2), ("third", 3)] {
-            let mut search = crate::Search::new(&rtxn, &index);
+            let mut search = crate::Search::new(&rtxn, &index, &progress);
             let filter = format!(r#""dog.race.bernese mountain" = {s}"#);
-            search.filter(crate::Filter::from_str(&filter).unwrap().unwrap());
+            let filter = crate::Filter::from_str(&filter).unwrap().unwrap();
+            search.filter(IndexFilter::from(filter));
             let crate::SearchResult { documents_ids, .. } = search.execute().unwrap();
             assert_eq!(documents_ids, vec![i]);
         }
@@ -1521,7 +1557,7 @@ mod tests {
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = crate::Search::new(&rtxn, &index, &progress);
         search.sort_criteria(vec![crate::AscDesc::Asc(crate::Member::Field(S(
             "dog.race.bernese mountain",
         )))]);
@@ -1573,6 +1609,7 @@ mod tests {
     #[test]
     fn test_meilisearch_1714() {
         let index = TempIndex::new();
+        let progress = Progress::default();
 
         index
             .add_documents(documents!([
@@ -1591,7 +1628,7 @@ mod tests {
         let count = index.word_docids.get(&rtxn, "bāo").unwrap().unwrap().len();
         assert_eq!(count, 2);
 
-        let mut search = crate::Search::new(&rtxn, &index);
+        let mut search = crate::Search::new(&rtxn, &index, &progress);
         search.query("化妆包");
         search.terms_matching_strategy(TermsMatchingStrategy::default());
 
@@ -1961,11 +1998,11 @@ mod tests {
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = indexer::DocumentOperation::new();
-        indexer.replace_documents(&doc1).unwrap();
-        indexer.replace_documents(&doc2).unwrap();
-        indexer.replace_documents(&doc3).unwrap();
-        indexer.replace_documents(&doc4).unwrap();
+        let mut indexer = indexer::IndexOperations::new();
+        indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
+        indexer.replace_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
+        indexer.replace_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
+        indexer.replace_documents(&doc4, MissingDocumentPolicy::default()).unwrap();
 
         let indexer_alloc = Bump::new();
         let (_document_changes, operation_stats, _primary_key) = indexer
@@ -1975,8 +2012,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2013,11 +2051,11 @@ mod tests {
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = indexer::DocumentOperation::new();
-        indexer.replace_documents(&doc1).unwrap();
-        indexer.update_documents(&doc2).unwrap();
-        indexer.update_documents(&doc3).unwrap();
-        indexer.update_documents(&doc4).unwrap();
+        let mut indexer = indexer::IndexOperations::new();
+        indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc4, MissingDocumentPolicy::default()).unwrap();
 
         let indexer_alloc = Bump::new();
         let (document_changes, operation_stats, primary_key) = indexer
@@ -2027,8 +2065,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2045,8 +2084,10 @@ mod tests {
             primary_key,
             &document_changes,
             RuntimeEmbedders::default(),
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2100,12 +2141,12 @@ mod tests {
         let db_fields_ids_map = index.inner.fields_ids_map(&rtxn).unwrap();
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let mut indexer = indexer::DocumentOperation::new();
-        indexer.replace_documents(&doc1).unwrap();
-        indexer.update_documents(&doc2).unwrap();
-        indexer.update_documents(&doc3).unwrap();
-        indexer.replace_documents(&doc4).unwrap();
-        indexer.update_documents(&doc5).unwrap();
+        let mut indexer = indexer::IndexOperations::new();
+        indexer.replace_documents(&doc1, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc2, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc3, MissingDocumentPolicy::default()).unwrap();
+        indexer.replace_documents(&doc4, MissingDocumentPolicy::default()).unwrap();
+        indexer.update_documents(&doc5, MissingDocumentPolicy::default()).unwrap();
 
         let indexer_alloc = Bump::new();
         let (document_changes, operation_stats, primary_key) = indexer
@@ -2115,8 +2156,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2133,8 +2175,10 @@ mod tests {
             primary_key,
             &document_changes,
             RuntimeEmbedders::default(),
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2294,8 +2338,8 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
-        indexer.replace_documents(&documents).unwrap();
+        let mut indexer = indexer::IndexOperations::new();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
         indexer.delete_documents(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2304,8 +2348,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2319,8 +2364,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2348,14 +2395,14 @@ mod tests {
             { "id": 2, "doggo": { "name": "bob", "age": 20 } },
             { "id": 3, "name": "jean", "age": 25 },
         ]);
-        let mut indexer = indexer::DocumentOperation::new();
-        indexer.update_documents(&documents).unwrap();
+        let mut indexer = indexer::IndexOperations::new();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let documents = documents!([
             { "id": 2, "catto": "jorts" },
             { "id": 3, "legs": 4 },
         ]);
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let indexer_alloc = Bump::new();
@@ -2367,8 +2414,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2382,8 +2430,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2411,8 +2461,8 @@ mod tests {
         ]);
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
-        indexer.update_documents(&documents).unwrap();
+        let mut indexer = indexer::IndexOperations::new();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2421,8 +2471,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2436,8 +2487,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2463,8 +2516,8 @@ mod tests {
         ]);
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
-        indexer.update_documents(&documents).unwrap();
+        let mut indexer = indexer::IndexOperations::new();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
         indexer.delete_documents(&["1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2474,8 +2527,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2489,8 +2543,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2513,14 +2569,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         indexer.delete_documents(&["1", "2"]);
 
         let documents = documents!([
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2529,8 +2585,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2544,8 +2601,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2569,7 +2628,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2578,7 +2637,7 @@ mod tests {
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
             { "id": 3, "name": "bob", "age": 25 },
         ]);
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         indexer.delete_documents(&["1", "2", "1", "2"]);
 
@@ -2589,8 +2648,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2604,8 +2664,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2628,12 +2690,12 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
         ]);
-        indexer.update_documents(&documents).unwrap();
+        indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2642,8 +2704,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2657,8 +2720,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2678,7 +2743,7 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         indexer.delete_documents(&["1"]);
 
@@ -2686,7 +2751,7 @@ mod tests {
             { "id": 1, "catto": "jorts" },
         ]);
 
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2695,8 +2760,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2710,8 +2776,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2835,7 +2903,13 @@ mod tests {
         "###);
 
         let embedder = std::sync::Arc::new(
-            crate::vector::Embedder::new(embedder.embedder_options, 0).unwrap(),
+            crate::vector::Embedder::new(
+                embedder.embedder_options,
+                0,
+                // NO DANGER: test code
+                IpPolicy::danger_always_allow(),
+            )
+            .unwrap(),
         );
         let res = index
             .search(&rtxn)
@@ -2889,14 +2963,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         // OP
 
         let documents = documents!([
             { "id": 1, "doggo": "bernese" },
         ]);
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         // FINISHING
         let (document_changes, _operation_stats, primary_key) = indexer
@@ -2906,8 +2980,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2921,8 +2996,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -2950,14 +3027,14 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         indexer.delete_documents(&["1"]);
 
         let documents = documents!([
             { "id": 0, "catto": "jorts" },
         ]);
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2966,8 +3043,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -2981,8 +3059,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -3009,12 +3089,12 @@ mod tests {
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
         ]);
-        indexer.replace_documents(&documents).unwrap();
+        indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -3023,8 +3103,9 @@ mod tests {
                 &rtxn,
                 None,
                 &mut new_fields_ids_map,
-                &|| false,
+                &no_cancel,
                 Progress::default(),
+                None,
             )
             .unwrap();
 
@@ -3038,8 +3119,10 @@ mod tests {
             primary_key,
             &document_changes,
             embedders,
-            &|| false,
+            &no_cancel,
             &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
             &Default::default(),
         )
         .unwrap();
@@ -3199,7 +3282,7 @@ mod tests {
         let rtxn = index.read_txn().unwrap();
         // Placeholder search with filter
         let filter = Filter::from_str("label = sign").unwrap().unwrap();
-        let results = index.search(&rtxn).filter(filter).execute().unwrap();
+        let results = index.search(&rtxn).filter(IndexFilter::from(filter)).execute().unwrap();
         assert!(results.documents_ids.is_empty());
 
         db_snap!(index, word_docids);
@@ -3371,7 +3454,7 @@ mod tests {
 
         // Placeholder search with geo filter
         let filter = Filter::from_str("_geoRadius(50.6924, 3.1763, 20000)").unwrap().unwrap();
-        let results = index.search(&wtxn).filter(filter).execute().unwrap();
+        let results = index.search(&wtxn).filter(IndexFilter::from(filter)).execute().unwrap();
         assert!(!results.documents_ids.is_empty());
         for id in results.documents_ids.iter() {
             assert!(
@@ -3563,6 +3646,7 @@ mod tests {
     #[test]
     fn delete_words_exact_attributes() {
         let index = TempIndex::new();
+        let progress = Progress::default();
 
         index
             .update_settings(|settings| {
@@ -3601,7 +3685,7 @@ mod tests {
         let words = index.words_fst(&txn).unwrap().into_stream().into_strs().unwrap();
         insta::assert_snapshot!(format!("{words:?}"), @r###"["hello"]"###);
 
-        let mut s = Search::new(&txn, &index);
+        let mut s = Search::new(&txn, &index, &progress);
         s.query("hello");
         let crate::SearchResult { documents_ids, .. } = s.execute().unwrap();
         insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0]");

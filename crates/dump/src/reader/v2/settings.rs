@@ -107,17 +107,12 @@ impl Settings<Unchecked> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq)]
 pub enum Setting<T> {
     Set(T),
     Reset,
+    #[default]
     NotSet,
-}
-
-impl<T> Default for Setting<T> {
-    fn default() -> Self {
-        Self::NotSet
-    }
 }
 
 impl<T> Setting<T> {

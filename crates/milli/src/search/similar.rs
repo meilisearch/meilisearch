@@ -2,14 +2,16 @@ use std::sync::Arc;
 
 use roaring::RoaringBitmap;
 
+use crate::progress::Progress;
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::{ArroyWrapper, Embedder};
-use crate::{filtered_universe, DocumentId, Filter, Index, Result, SearchResult};
+use crate::search::facet::IndexFilter;
+use crate::vector::{Embedder, VectorStore};
+use crate::{filtered_universe, DocumentId, Index, Result, SearchResult};
 
 pub struct Similar<'a> {
     id: DocumentId,
     // this should be linked to the String in the query
-    filter: Option<Filter<'a>>,
+    filter: Option<IndexFilter<'a>>,
     offset: usize,
     limit: usize,
     rtxn: &'a heed::RoTxn<'a>,
@@ -18,6 +20,7 @@ pub struct Similar<'a> {
     embedder: Arc<Embedder>,
     ranking_score_threshold: Option<f64>,
     quantized: bool,
+    progress: &'a Progress,
 }
 
 impl<'a> Similar<'a> {
@@ -31,6 +34,7 @@ impl<'a> Similar<'a> {
         embedder_name: String,
         embedder: Arc<Embedder>,
         quantized: bool,
+        progress: &'a Progress,
     ) -> Self {
         Self {
             id,
@@ -43,10 +47,11 @@ impl<'a> Similar<'a> {
             embedder,
             ranking_score_threshold: None,
             quantized,
+            progress,
         }
     }
 
-    pub fn filter(&mut self, filter: Filter<'a>) -> &mut Self {
+    pub fn filter(&mut self, filter: IndexFilter<'a>) -> &mut Self {
         self.filter = Some(filter);
         self
     }
@@ -57,7 +62,7 @@ impl<'a> Similar<'a> {
     }
 
     pub fn execute(&self) -> Result<SearchResult> {
-        let mut universe = filtered_universe(self.index, self.rtxn, &self.filter)?;
+        let mut universe = filtered_universe(self.index, self.rtxn, &self.filter, self.progress)?;
 
         // we never want to receive the docid
         universe.remove(self.id);
@@ -72,7 +77,10 @@ impl<'a> Similar<'a> {
                 crate::UserError::InvalidSimilarEmbedder(self.embedder_name.to_owned())
             })?;
 
-        let reader = ArroyWrapper::new(self.index.vector_arroy, embedder_index, self.quantized);
+        let backend = self.index.get_vector_store(self.rtxn)?.unwrap_or_default();
+
+        let reader =
+            VectorStore::new(backend, self.index.vector_store, embedder_index, self.quantized);
         let results = reader.nns_by_item(
             self.rtxn,
             self.id,

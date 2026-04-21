@@ -1,0 +1,5 @@
+---
+source: crates/meilisearch/tests/index/fields.rs
+expression: code
+---
+202 Accepted

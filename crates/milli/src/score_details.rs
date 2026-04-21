@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::distance_between_two_points;
+use crate::{criterion::AttributeState, distance_between_two_points};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreDetails {
@@ -20,6 +20,15 @@ pub enum ScoreDetails {
 
     /// Returned when we don't have the time to finish applying all the subsequent ranking-rules
     Skipped,
+
+    /// A document that has been explicitly pinned to a specific position in the results.
+    /// Pinned documents are placed at their target position regardless of their ranking score.
+    /// This variant acts as a marker: it does not participate in score-based comparisons but
+    /// carries the target position so downstream consumers like federated merge can detect and
+    /// handle pinned documents appropriately.
+    Pin {
+        position: u32,
+    },
 }
 
 #[derive(Clone, Copy)]
@@ -63,25 +72,46 @@ impl ScoreDetails {
             ScoreDetails::GeoSort(_) => None,
             ScoreDetails::Vector(_) => None,
             ScoreDetails::Skipped => Some(Rank { rank: 0, max_rank: 1 }),
+            ScoreDetails::Pin { .. } => None,
         }
     }
 
+    /// Calculate the global score of the details.
+    ///
+    /// It is computed from the ranks of the ranking rules, excluding the sort/geo sort rules.
+    /// If the details contain a semantic score (ScoreDetails::Vector), it is used instead of the ranking score.
+    ///
+    /// note: this function expects a maximum of one semantic score, otherwise only the last one will be used.
     pub fn global_score<'a>(details: impl Iterator<Item = &'a Self> + 'a) -> f64 {
-        Self::score_values(details)
-            .find_map(|x| {
-                let ScoreValue::Score(score) = x else {
-                    return None;
-                };
-                Some(score)
-            })
-            .unwrap_or(1.0f64)
+        // Filter out only the ranking scores (Rank values) and exclude sort/geo sort.
+        // Pin is a placement directive, not a score — it is filtered out upfront.
+        let mut semantic_score = None;
+        let ranking_ranks =
+            details.filter_map(ScoreDetails::rank_or_value).filter_map(|rank_or_value| {
+                match rank_or_value {
+                    RankOrValue::Rank(rank) => Some(rank),
+                    RankOrValue::Score(score) => {
+                        semantic_score = Some(score);
+                        None
+                    }
+                    RankOrValue::Sort(_) => None,
+                    RankOrValue::GeoSort(_) => None,
+                }
+            });
+
+        let ranking_score = Rank::global_score(ranking_ranks);
+
+        // If we have semantic score, use it, otherwise use ranking score
+        semantic_score.unwrap_or(ranking_score)
     }
 
     pub fn score_values<'a>(
         details: impl Iterator<Item = &'a Self> + 'a,
     ) -> impl Iterator<Item = ScoreValue<'a>> + 'a {
+        // Pin is a placement directive, not a score — filter it out before entering
+        // the rank_or_value pipeline.
         details
-            .map(ScoreDetails::rank_or_value)
+            .filter_map(ScoreDetails::rank_or_value)
             .coalesce(|left, right| match (left, right) {
                 (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
                     Ok(RankOrValue::Rank(Rank::merge(left, right)))
@@ -101,7 +131,7 @@ impl ScoreDetails {
         weight: f64,
     ) -> impl Iterator<Item = WeightedScoreValue> + 'a {
         details
-            .map(ScoreDetails::rank_or_value)
+            .filter_map(ScoreDetails::rank_or_value)
             .coalesce(|left, right| match (left, right) {
                 (RankOrValue::Rank(left), RankOrValue::Rank(right)) => {
                     Ok(RankOrValue::Rank(Rank::merge(left, right)))
@@ -120,21 +150,24 @@ impl ScoreDetails {
             })
     }
 
-    fn rank_or_value(&self) -> RankOrValue<'_> {
+    fn rank_or_value(&self) -> Option<RankOrValue<'_>> {
         match self {
-            ScoreDetails::Words(w) => RankOrValue::Rank(w.rank()),
-            ScoreDetails::Typo(t) => RankOrValue::Rank(t.rank()),
-            ScoreDetails::Proximity(p) => RankOrValue::Rank(*p),
-            ScoreDetails::Fid(f) => RankOrValue::Rank(*f),
-            ScoreDetails::Position(p) => RankOrValue::Rank(*p),
-            ScoreDetails::ExactAttribute(e) => RankOrValue::Rank(e.rank()),
-            ScoreDetails::ExactWords(e) => RankOrValue::Rank(e.rank()),
-            ScoreDetails::Sort(sort) => RankOrValue::Sort(sort),
-            ScoreDetails::GeoSort(geosort) => RankOrValue::GeoSort(geosort),
-            ScoreDetails::Vector(vector) => {
-                RankOrValue::Score(vector.similarity.as_ref().map(|s| *s as f64).unwrap_or(0.0f64))
-            }
-            ScoreDetails::Skipped => RankOrValue::Rank(Rank { rank: 0, max_rank: 1 }),
+            ScoreDetails::Words(w) => Some(RankOrValue::Rank(w.rank())),
+            ScoreDetails::Typo(t) => Some(RankOrValue::Rank(t.rank())),
+            ScoreDetails::Proximity(p) => Some(RankOrValue::Rank(*p)),
+            ScoreDetails::Fid(f) => Some(RankOrValue::Rank(*f)),
+            ScoreDetails::Position(p) => Some(RankOrValue::Rank(*p)),
+            ScoreDetails::ExactAttribute(e) => Some(RankOrValue::Rank(e.rank())),
+            ScoreDetails::ExactWords(e) => Some(RankOrValue::Rank(e.rank())),
+            ScoreDetails::Sort(sort) => Some(RankOrValue::Sort(sort)),
+            ScoreDetails::GeoSort(geosort) => Some(RankOrValue::GeoSort(geosort)),
+            ScoreDetails::Vector(vector) => Some(RankOrValue::Score(
+                vector.similarity.as_ref().map(|s| *s as f64).unwrap_or(0.0f64),
+            )),
+            ScoreDetails::Skipped => Some(RankOrValue::Rank(Rank { rank: 0, max_rank: 1 })),
+            // Pin is filtered out before reaching rank_or_value() — see global_score(),
+            // score_values(), and weighted_score_values().
+            ScoreDetails::Pin { .. } => None,
         }
     }
 
@@ -143,6 +176,7 @@ impl ScoreDetails {
     /// - If Position is not preceded by Fid
     /// - If Exactness is not preceded by ExactAttribute
     pub fn to_json_map<'a>(
+        attribute_state: AttributeState,
         details: impl Iterator<Item = &'a Self>,
     ) -> serde_json::Map<String, serde_json::Value> {
         let mut order = 0;
@@ -179,34 +213,61 @@ impl ScoreDetails {
                     order += 1;
                 }
                 ScoreDetails::Fid(fid) => {
-                    // copy the rank for future use in Position.
-                    fid_details = Some(*fid);
-                    // For now, fid is a virtual rule always followed by the "position" rule
-                    let fid_details = serde_json::json!({
-                        "order": order,
-                        "attributeRankingOrderScore": fid.local_score(),
-                    });
-                    details_map.insert("attribute".into(), fid_details);
+                    match attribute_state {
+                        AttributeState::Unified => {
+                            // copy the rank for future use in Position.
+                            fid_details = Some(*fid);
+                            // In this case, fid is a virtual rule always followed by the "position" rule
+                            let fid_details = serde_json::json!({
+                                "order": order,
+                                "attributeRankingOrderScore": fid.local_score(),
+                            });
+                            details_map.insert("attribute".into(), fid_details);
+                        }
+                        AttributeState::Separated => {
+                            let fid_details = serde_json::json!({
+                                "order": order,
+                                "score": fid.local_score(),
+                            });
+                            details_map.insert("attributeRank".into(), fid_details);
+                        }
+                    }
+
                     order += 1;
                 }
                 ScoreDetails::Position(position) => {
-                    // For now, position is a virtual rule always preceded by the "fid" rule
-                    let attribute_details = details_map
-                        .get_mut("attribute")
-                        .expect("position not preceded by attribute");
-                    let attribute_details = attribute_details
-                        .as_object_mut()
-                        .expect("attribute details was not an object");
-                    let Some(fid_details) = fid_details else {
-                        unimplemented!("position not preceded by attribute");
-                    };
+                    match attribute_state {
+                        AttributeState::Unified => {
+                            // In this case, position is a virtual rule always preceded by the "fid" rule
+                            let attribute_details = details_map
+                                .get_mut("attribute")
+                                .expect("position not preceded by attribute");
+                            let attribute_details = attribute_details
+                                .as_object_mut()
+                                .expect("attribute details was not an object");
+                            let Some(fid_details) = fid_details else {
+                                unimplemented!("position not preceded by attribute");
+                            };
 
-                    attribute_details
-                        .insert("queryWordDistanceScore".into(), position.local_score().into());
-                    let score = Rank::global_score([fid_details, *position].iter().copied());
-                    attribute_details.insert("score".into(), score.into());
+                            attribute_details.insert(
+                                "queryWordDistanceScore".into(),
+                                position.local_score().into(),
+                            );
+                            let score =
+                                Rank::global_score([fid_details, *position].iter().copied());
+                            attribute_details.insert("score".into(), score.into());
 
-                    // do not update the order since this was already done by fid
+                            // do not update the order since this was already done by fid
+                        }
+                        AttributeState::Separated => {
+                            let word_position_details = serde_json::json!({
+                                "order": order,
+                                "score": position.local_score(),
+                            });
+                            details_map.insert("wordPosition".into(), word_position_details);
+                            order += 1;
+                        }
+                    }
                 }
                 ScoreDetails::ExactAttribute(exact_attribute) => {
                     let exactness_details = serde_json::json!({
@@ -294,6 +355,14 @@ impl ScoreDetails {
                 ScoreDetails::Skipped => {
                     details_map
                         .insert("skipped".to_string(), serde_json::json!({ "order": order }));
+                    order += 1;
+                }
+                ScoreDetails::Pin { position } => {
+                    let pin_details = serde_json::json!({
+                        "order": order,
+                        "position": position,
+                    });
+                    details_map.insert("pin".into(), pin_details);
                     order += 1;
                 }
             }

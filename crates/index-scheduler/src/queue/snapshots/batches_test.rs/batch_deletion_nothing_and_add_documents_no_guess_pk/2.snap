@@ -1,0 +1,4 @@
+---
+source: crates/index-scheduler/src/queue/batches_test.rs
+---
+[0,1,]

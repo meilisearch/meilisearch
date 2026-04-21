@@ -15,6 +15,7 @@ use file_store::FileStore;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, BEU32};
+use meilisearch_types::tasks::network::DbTaskNetwork;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use time::format_description::well_known::Rfc3339;
@@ -32,7 +33,7 @@ use crate::{Error, IndexSchedulerOptions, Result, TaskId};
 /// The number of database used by queue itself
 const NUMBER_OF_DATABASES: u32 = 1;
 /// Database const names for the `IndexScheduler`.
-mod db_name {
+pub(crate) mod db_name {
     pub const BATCH_TO_TASKS_MAPPING: &str = "batch-to-tasks-mapping";
 }
 
@@ -257,7 +258,9 @@ impl Queue {
         wtxn: &mut RwTxn,
         kind: &KindWithContent,
         task_id: Option<TaskId>,
+        custom_metadata: Option<String>,
         dry_run: bool,
+        network: Option<DbTaskNetwork>,
     ) -> Result<Task> {
         let next_task_id = self.tasks.next_task_id(wtxn)?;
 
@@ -279,6 +282,8 @@ impl Queue {
             details: kind.default_details(),
             status: Status::Enqueued,
             kind: kind.clone(),
+            network,
+            custom_metadata,
         };
         // For deletion and cancelation tasks, we want to make extra sure that they
         // don't attempt to delete/cancel tasks that are newer than themselves.
@@ -309,7 +314,8 @@ impl Queue {
             | self.tasks.status.get(wtxn, &Status::Failed)?.unwrap_or_default()
             | self.tasks.status.get(wtxn, &Status::Canceled)?.unwrap_or_default();
 
-        let to_delete = RoaringBitmap::from_iter(finished.into_iter().rev().take(100_000));
+        let to_delete =
+            RoaringBitmap::from_sorted_iter(finished.into_iter().take(100_000)).unwrap();
 
         // /!\ the len must be at least 2 or else we might enter an infinite loop where we only delete
         //     the deletion tasks we enqueued ourselves.
@@ -325,7 +331,7 @@ impl Queue {
         );
 
         // it's safe to unwrap here because we checked the len above
-        let newest_task_id = to_delete.iter().last().unwrap();
+        let newest_task_id = to_delete.iter().next_back().unwrap();
         let last_task_to_delete =
             self.tasks.get_task(wtxn, newest_task_id)?.ok_or(Error::CorruptedTaskQueue)?;
 
@@ -342,7 +348,9 @@ impl Queue {
                 tasks: to_delete,
             },
             None,
+            None,
             false,
+            None,
         )?;
 
         Ok(())

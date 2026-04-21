@@ -15,7 +15,7 @@ fn emit_git_variables() -> anyhow::Result<()> {
     // Note: any code that needs VERGEN_ environment variables should take care to define them manually in the Dockerfile and pass them
     // in the corresponding GitHub workflow (publish_docker.yml).
     // This is due to the Dockerfile building the binary outside of the git directory.
-    let mut builder = vergen_git2::Git2Builder::default();
+    let mut builder = vergen_gitcl::GitclBuilder::default();
 
     builder.branch(true);
     builder.commit_timestamp(true);
@@ -25,5 +25,5 @@ fn emit_git_variables() -> anyhow::Result<()> {
 
     let git2 = builder.build()?;
 
-    vergen_git2::Emitter::default().fail_on_error().add_instructions(&git2)?.emit()
+    vergen_gitcl::Emitter::default().fail_on_error().add_instructions(&git2)?.emit()
 }

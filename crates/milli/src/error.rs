@@ -10,17 +10,26 @@ use rhai::EvalAltResult;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::documents::{self, DocumentsBatchCursorError};
-use crate::thread_pool_no_abort::PanicCatched;
+use crate::thread_pool_no_abort::CaughtPanic;
 use crate::vector::settings::EmbeddingSettings;
 use crate::{CriterionError, DocumentId, FieldId, Object, SortError};
 
 pub fn is_reserved_keyword(keyword: &str) -> bool {
-    [RESERVED_GEO_FIELD_NAME, "_geoDistance", "_geoPoint", "_geoRadius", "_geoBoundingBox"]
-        .contains(&keyword)
+    [
+        RESERVED_GEO_FIELD_NAME,
+        RESERVED_GEOJSON_FIELD_NAME,
+        "_geoDistance",
+        "_geoPoint",
+        "_geoRadius",
+        "_geoBoundingBox",
+        "_geoPolygon",
+    ]
+    .contains(&keyword)
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum Error {
     #[error("internal: {0}.")]
@@ -54,7 +63,7 @@ pub enum InternalError {
     #[error(transparent)]
     RayonThreadPool(#[from] ThreadPoolBuildError),
     #[error(transparent)]
-    PanicInThreadPool(#[from] PanicCatched),
+    PanicInThreadPool(#[from] CaughtPanic),
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),
     #[error(transparent)]
@@ -78,6 +87,10 @@ pub enum InternalError {
     #[error(transparent)]
     ArroyError(#[from] arroy::Error),
     #[error(transparent)]
+    HannoyError(#[from] hannoy::Error),
+    #[error(transparent)]
+    CelluliteError(#[from] cellulite::Error),
+    #[error(transparent)]
     VectorEmbeddingError(#[from] crate::vector::Error),
 }
 
@@ -95,6 +108,14 @@ pub enum SerializationError {
     Encoding { db_name: Option<&'static str> },
     #[error("number is not a valid finite number")]
     InvalidNumberSerialization,
+    #[error("failed to serialize index filter to filter string")]
+    FailedToSerializeFilter,
+}
+
+impl From<cellulite::Error> for Error {
+    fn from(error: cellulite::Error) -> Self {
+        Self::UserError(UserError::CelluliteError(error))
+    }
 }
 
 #[derive(Error, Debug)]
@@ -105,8 +126,13 @@ pub enum FieldIdMapMissingEntry {
     FieldName { field_name: String, process: &'static str },
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Error, Debug)]
 pub enum UserError {
+    #[error(transparent)]
+    CelluliteError(#[from] cellulite::Error),
+    #[error("Malformed geojson: {0}")]
+    MalformedGeojson(serde_json::Error),
     #[error("A document cannot contain more than 65,535 fields.")]
     AttributeLimitReached,
     #[error(transparent)]
@@ -151,6 +177,8 @@ and can not be more than 511 bytes.", .document_id.to_string()
     },
     #[error(transparent)]
     InvalidGeoField(#[from] Box<GeoError>),
+    #[error(transparent)]
+    GeoJsonError(#[from] geojson::Error),
     #[error("Invalid vector dimensions: expected: `{}`, found: `{}`.", .expected, .found)]
     InvalidVectorDimensions { expected: usize, found: usize },
     #[error("Invalid vector dimensions in document with id `{document_id}` in `._vectors.{embedder_name}`.\n  - note: embedding #{embedding_index} has dimensions {found}\n  - note: embedder `{embedder_name}` requires {expected}")]
@@ -181,6 +209,10 @@ and can not be more than 511 bytes.", .document_id.to_string()
         operator: String,
         rule_index: usize,
     },
+    #[error("Filter operator `{operator} is not allowed for the special attribute `_shard`.\n  - Note: allowed operators: =, !=, IN. \n  - Note: other operators are not allowed for the special attribute `_shard`.")]
+    FilterShardOperatorNotAllowed { operator: String },
+    #[error("Shard `{shard}` does not exist")]
+    FilterShardNotExist { shard: String },
     #[error("Attribute `{}` is not sortable. {}",
         .field,
         match .valid_fields.is_empty() {
@@ -353,7 +385,7 @@ and can not be more than 511 bytes.", .document_id.to_string()
         context: crate::vector::settings::NestingContext,
         field: crate::vector::settings::MetaEmbeddingSetting,
     },
-    #[error("`.embedders.{embedder_name}.model`: Invalid model `{model}` for OpenAI. Supported models: {:?}", crate::vector::openai::EmbeddingModel::supported_models())]
+    #[error("`.embedders.{embedder_name}.model`: Invalid model `{model}` for OpenAI. Supported models: {:?}", crate::vector::embedder::openai::EmbeddingModel::supported_models())]
     InvalidOpenAiModel { embedder_name: String, model: String },
     #[error("`.embedders.{embedder_name}`: Missing field `{field}` (note: this field is mandatory for source `{source_}`)")]
     MissingFieldForSource {
@@ -402,10 +434,15 @@ and can not be more than 511 bytes.", .document_id.to_string()
     DocumentEditionRuntimeError(Box<EvalAltResult>),
     #[error("Document edition runtime error encountered while compiling the function: {0}")]
     DocumentEditionCompilationError(rhai::ParseError),
+    #[error("`.chat.documentTemplate`: Invalid document template: {0}.")]
+    InvalidChatSettingsDocumentTemplate(crate::prompt::error::NewPromptError),
     #[error("`.chat.documentTemplateMaxBytes`: `documentTemplateMaxBytes` cannot be zero")]
     InvalidChatSettingsDocumentTemplateMaxBytes,
     #[error("{0}")]
     DocumentEmbeddingError(String),
+    #[error("Mixed usage of the attribute, attributeRank, and wordPosition ranking rules. \
+        You must either use the attribute ranking rule alone or the attributeRank and wordPosition ranking rules.")]
+    MixedAttributeRankingRulesUsage,
 }
 
 impl From<crate::vector::Error> for Error {
@@ -436,6 +473,29 @@ impl From<arroy::Error> for Error {
             | arroy::Error::MissingMetadata(_)
             | arroy::Error::CannotDecodeKeyMode { .. } => {
                 Error::InternalError(InternalError::ArroyError(value))
+            }
+        }
+    }
+}
+
+impl From<hannoy::Error> for Error {
+    fn from(value: hannoy::Error) -> Self {
+        match value {
+            hannoy::Error::Heed(heed) => heed.into(),
+            hannoy::Error::Io(io) => io.into(),
+            hannoy::Error::InvalidVecDimension { expected, received } => {
+                Error::UserError(UserError::InvalidVectorDimensions { expected, found: received })
+            }
+            hannoy::Error::BuildCancelled => Error::InternalError(InternalError::AbortedIndexation),
+            hannoy::Error::DatabaseFull
+            | hannoy::Error::InvalidItemAppend
+            | hannoy::Error::UnmatchingDistance { .. }
+            | hannoy::Error::NeedBuild(_)
+            | hannoy::Error::MissingKey { .. }
+            | hannoy::Error::MissingMetadata(_)
+            | hannoy::Error::UnknownVersion { .. }
+            | hannoy::Error::CannotDecodeKeyMode { .. } => {
+                Error::InternalError(InternalError::HannoyError(value))
             }
         }
     }
@@ -581,6 +641,31 @@ impl From<Infallible> for Error {
     }
 }
 
+pub fn handle_store_mdb_error(
+    database_name: &'static str,
+    key: &[u8],
+    value_length: Option<usize>,
+    error: heed::Error,
+) -> Error {
+    match error {
+        heed::Error::Mdb(MdbError::MapFull) => Error::from(error),
+        heed::Error::Mdb(mdb_error) => match value_length {
+            Some(len) => Error::InternalError(InternalError::StorePut {
+                database_name,
+                key: key.into(),
+                value_length: len,
+                error: mdb_error.into(),
+            }),
+            None => Error::InternalError(InternalError::StoreDeletion {
+                database_name,
+                key: key.into(),
+                error: mdb_error.into(),
+            }),
+        },
+        non_mdb_error => Error::from(non_mdb_error),
+    }
+}
+
 impl From<HeedError> for Error {
     fn from(error: HeedError) -> Error {
         use self::Error::*;
@@ -596,7 +681,7 @@ impl From<HeedError> for Error {
             // TODO use the encoding
             HeedError::Encoding(_) => InternalError(Serialization(Encoding { db_name: None })),
             HeedError::Decoding(_) => InternalError(Serialization(Decoding { db_name: None })),
-            HeedError::EnvAlreadyOpened { .. } => UserError(EnvAlreadyOpened),
+            HeedError::EnvAlreadyOpened => UserError(EnvAlreadyOpened),
         }
     }
 }

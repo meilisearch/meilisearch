@@ -1,18 +1,17 @@
 use std::collections::{BTreeSet, VecDeque};
 
-use crate::{
-    constants::RESERVED_GEO_FIELD_NAME,
-    documents::{geo_sort::next_bucket, GeoSortParameter},
-    heed_codec::{
-        facet::{FacetGroupKeyCodec, FacetGroupValueCodec},
-        BytesRefCodec,
-    },
-    is_faceted,
-    search::facet::{ascending_facet_sort, descending_facet_sort},
-    AscDesc, DocumentId, Member, UserError,
-};
 use heed::Database;
 use roaring::RoaringBitmap;
+
+use crate::constants::{
+    RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME,
+};
+use crate::documents::geo_sort::next_bucket;
+use crate::documents::GeoSortParameter;
+use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
+use crate::heed_codec::BytesRefCodec;
+use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
+use crate::{is_faceted, AscDesc, DocumentId, Member, UserError};
 
 #[derive(Debug, Clone, Copy)]
 enum AscDescId {
@@ -90,7 +89,7 @@ impl Iterator for SortedDocumentsIterator<'_> {
         };
 
         // Otherwise don't directly iterate over children, skip them if we know we will go further
-        let mut to_skip = n - 1;
+        let mut to_skip = n;
         while to_skip > 0 {
             if let Err(e) = SortedDocumentsIterator::update_current(
                 current_child,
@@ -111,7 +110,7 @@ impl Iterator for SortedDocumentsIterator<'_> {
                 continue;
             } else {
                 // The current iterator is large enough, so we can forward the call to it.
-                return inner.nth(to_skip + 1);
+                return inner.nth(to_skip);
             }
         }
 
@@ -243,15 +242,25 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
     ) -> crate::Result<SortedDocumentsIterator<'ctx>> {
         let size = candidates.len() as usize;
 
+        // Get documents that have this facet field
+        let faceted_candidates = index.exists_faceted_documents_ids(rtxn, field_id)?;
+        // Documents that don't have this facet field should be returned at the end
+        let not_faceted_candidates = &candidates - &faceted_candidates;
+        // Only sort candidates that have the facet field
+        let faceted_candidates = candidates & faceted_candidates;
+        let mut not_faceted_candidates = Some(not_faceted_candidates);
+
         // Perform the sort on the first field
         let (number_iter, string_iter) = if ascending {
-            let number_iter = ascending_facet_sort(rtxn, number_db, field_id, candidates.clone())?;
-            let string_iter = ascending_facet_sort(rtxn, string_db, field_id, candidates)?;
+            let number_iter =
+                ascending_facet_sort(rtxn, number_db, field_id, faceted_candidates.clone())?;
+            let string_iter = ascending_facet_sort(rtxn, string_db, field_id, faceted_candidates)?;
 
             (itertools::Either::Left(number_iter), itertools::Either::Left(string_iter))
         } else {
-            let number_iter = descending_facet_sort(rtxn, number_db, field_id, candidates.clone())?;
-            let string_iter = descending_facet_sort(rtxn, string_db, field_id, candidates)?;
+            let number_iter =
+                descending_facet_sort(rtxn, number_db, field_id, faceted_candidates.clone())?;
+            let string_iter = descending_facet_sort(rtxn, string_db, field_id, faceted_candidates)?;
 
             (itertools::Either::Right(number_iter), itertools::Either::Right(string_iter))
         };
@@ -259,17 +268,37 @@ impl<'ctx> SortedDocumentsIteratorBuilder<'ctx> {
         // Create builders for the next level of the tree
         let number_iter = number_iter.map(|r| r.map(|(d, _)| d));
         let string_iter = string_iter.map(|r| r.map(|(d, _)| d));
-        let next_children = number_iter.chain(string_iter).map(move |r| {
-            Ok(SortedDocumentsIteratorBuilder {
-                index,
-                rtxn,
-                number_db,
-                string_db,
-                fields: next_fields,
-                candidates: r?,
-                geo_candidates,
+        // Chain faceted documents with non-faceted documents at the end
+        let next_children = number_iter
+            .chain(string_iter)
+            .map(move |r| {
+                Ok(SortedDocumentsIteratorBuilder {
+                    index,
+                    rtxn,
+                    number_db,
+                    string_db,
+                    fields: next_fields,
+                    candidates: r?,
+                    geo_candidates,
+                })
             })
-        });
+            .chain(std::iter::from_fn(move || {
+                // Once all faceted candidates have been processed, return the non-faceted ones
+                if let Some(not_faceted) = not_faceted_candidates.take() {
+                    if !not_faceted.is_empty() {
+                        return Some(Ok(SortedDocumentsIteratorBuilder {
+                            index,
+                            rtxn,
+                            number_db,
+                            string_db,
+                            fields: next_fields,
+                            candidates: not_faceted,
+                            geo_candidates,
+                        }));
+                    }
+                }
+                None
+            }));
 
         Ok(SortedDocumentsIterator::Branch {
             current_child: None,
@@ -401,10 +430,14 @@ pub fn recursive_sort<'ctx>(
         };
         if let Some((field, ascending)) = field {
             if is_faceted(&field, &sortable_fields) {
+                // The field may be in sortable_fields but not in fields_ids_map if no document
+                // has ever contained this field. In that case, we just skip this sort criterion
+                // since there are no values to sort by. Documents will be returned in their
+                // default order for this field.
                 if let Some(field_id) = fields_ids_map.id(&field) {
                     fields.push(AscDescId::Facet { field_id, ascending });
-                    continue;
                 }
+                continue;
             }
             return Err(UserError::InvalidDocumentSortableAttribute {
                 field: field.to_string(),
@@ -414,9 +447,10 @@ pub fn recursive_sort<'ctx>(
         }
         if let Some((target_point, ascending)) = geofield {
             if sortable_fields.contains(RESERVED_GEO_FIELD_NAME) {
-                if let (Some(lat), Some(lng)) =
-                    (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
-                {
+                if let (Some(lat), Some(lng)) = (
+                    fields_ids_map.id(RESERVED_GEO_LAT_FIELD_NAME),
+                    fields_ids_map.id(RESERVED_GEO_LNG_FIELD_NAME),
+                ) {
                     need_geo_candidates = true;
                     fields.push(AscDescId::Geo { field_ids: [lat, lng], target_point, ascending });
                     continue;

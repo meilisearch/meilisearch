@@ -19,6 +19,7 @@
 //! word           = (alphanumeric | _ | - | .)+
 //! geoRadius      = "_geoRadius(" WS* float WS* "," WS* float WS* "," float WS* ")"
 //! geoBoundingBox = "_geoBoundingBox([" WS * float WS* "," WS* float WS* "], [" WS* float WS* "," WS* float WS* "]")
+//! geoPolygon     = "_geoPolygon([[" WS* float WS* "," WS* float WS* "],+])"
 //! ```
 //!
 //! Other BNF grammar used to handle some specific errors:
@@ -59,7 +60,7 @@ use nom::character::complete::{char, multispace0};
 use nom::combinator::{cut, eof, map, opt};
 use nom::multi::{many0, separated_list1};
 use nom::number::complete::recognize_float;
-use nom::sequence::{delimited, preceded, terminated, tuple};
+use nom::sequence::{delimited, preceded, separated_pair, terminated, tuple};
 use nom::Finish;
 pub use nom::Slice;
 use nom_locate::LocatedSpan;
@@ -71,73 +72,156 @@ use crate::condition::parse_vectors_exists;
 use crate::error::IResultExt;
 
 pub type Span<'a> = LocatedSpan<&'a str, &'a str>;
+pub type OwnedSpan = LocatedSpan<String, String>;
 
 type IResult<'a, Ret> = nom::IResult<Span<'a>, Ret, Error<'a>>;
 
-const MAX_FILTER_DEPTH: usize = 200;
+const MAX_FILTER_DEPTH: usize = 150;
 
-#[derive(Debug, Clone, Eq)]
-pub struct Token<'a> {
-    /// The token in the original input, it should be used when possible.
-    span: Span<'a>,
-    /// If you need to modify the original input you can use the `value` field
-    /// to store your modified input.
-    value: Option<String>,
+/// Copy the Cow<str> behaviour because span doesn't support `LocatedSpan<Cow<str>, Cow<str>>`.
+#[derive(Debug, Clone)]
+pub enum CowSpan<'a> {
+    Borrowed(Span<'a>),
+    Owned(OwnedSpan),
 }
 
-impl PartialEq for Token<'_> {
-    fn eq(&self, other: &Self) -> bool {
-        self.span.fragment() == other.span.fragment()
-    }
-}
-
-impl<'a> Token<'a> {
-    pub fn new(span: Span<'a>, value: Option<String>) -> Self {
-        Self { span, value }
+impl<'a> CowSpan<'a> {
+    pub fn fragment(&self) -> &str {
+        match self {
+            CowSpan::Borrowed(span) => span.fragment(),
+            CowSpan::Owned(span) => span.fragment(),
+        }
     }
 
-    /// Returns the string contained in the span of the `Token`.
-    /// This is only useful in the tests. You should always use
-    /// the value.
-    #[cfg(test)]
-    pub fn lexeme(&self) -> &str {
-        &self.span
+    pub fn extra(&self) -> &str {
+        match self {
+            CowSpan::Borrowed(span) => span.extra,
+            CowSpan::Owned(span) => &span.extra,
+        }
     }
 
-    /// Return the string contained in the token.
-    pub fn value(&self) -> &str {
-        self.value.as_ref().map_or(&self.span, |value| value)
+    pub fn into_owned(self) -> CowSpan<'static> {
+        match self {
+            CowSpan::Borrowed(span) => {
+                let fragment = span.fragment().to_string();
+                let extra = span.extra.to_string();
+
+                CowSpan::Owned(OwnedSpan::new_extra(fragment, extra))
+            }
+            CowSpan::Owned(span) => CowSpan::Owned(span),
+        }
     }
 
-    pub fn as_external_error(&self, error: impl std::error::Error) -> Error<'a> {
-        Error::new_from_external(self.span, error)
-    }
-
-    /// Returns a copy of the span this token was created with.
-    pub fn original_span(&self) -> Span<'a> {
-        self.span
-    }
-
-    pub fn parse_finite_float(&self) -> Result<f64, Error> {
-        let value: f64 = self.value().parse().map_err(|e| self.as_external_error(e))?;
-        if value.is_finite() {
-            Ok(value)
-        } else {
-            Err(Error::new_from_kind(self.span, ErrorKind::NonFiniteFloat))
+    pub fn get_utf8_column(&self) -> Option<usize> {
+        match self {
+            CowSpan::Borrowed(span) => Some(span.get_utf8_column()),
+            // When owning a span, we don't know the original column because we lost the reference to the original input.
+            CowSpan::Owned(_) => None,
         }
     }
 }
 
-impl<'a> From<Span<'a>> for Token<'a> {
+impl<'a> From<Span<'a>> for CowSpan<'a> {
     fn from(span: Span<'a>) -> Self {
-        Self { span, value: None }
+        CowSpan::Borrowed(span)
     }
 }
 
-/// Allow [Token] to be constructed from &[str]
-impl<'a> From<&'a str> for Token<'a> {
+impl From<OwnedSpan> for CowSpan<'_> {
+    fn from(span: OwnedSpan) -> Self {
+        CowSpan::Owned(span)
+    }
+}
+
+/// Allow [CowSpan] to be constructed from &[str]
+impl<'a> From<&'a str> for CowSpan<'a> {
     fn from(s: &'a str) -> Self {
-        Token::from(Span::new_extra(s, s))
+        CowSpan::from(Span::new_extra(s, s))
+    }
+}
+
+/// Allow [CowSpan] to be constructed from String
+impl From<String> for CowSpan<'_> {
+    fn from(s: String) -> Self {
+        CowSpan::from(OwnedSpan::new_extra(s.clone(), s))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Token<'a> {
+    /// The token in the original input, it should be used when possible.
+    span: CowSpan<'a>,
+    /// If you need to modify the original input you can use the `modified_fragment` field
+    /// to store your modified input.
+    modified_fragment: Option<String>,
+}
+
+impl PartialEq for Token<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.original_fragment() == other.original_fragment()
+    }
+}
+
+impl Eq for Token<'_> {}
+
+impl<'a> Token<'a> {
+    /// Returns the original fragment of the token.
+    pub fn original_fragment(&self) -> &str {
+        self.span.fragment()
+    }
+
+    /// Return the fragment of the token.
+    /// If the token has been modified, the modified value is returned.
+    pub fn fragment(&self) -> &str {
+        self.modified_fragment.as_ref().map_or(self.span.fragment(), |v| v)
+    }
+
+    /// Returns the extra fragment of the token.
+    pub fn extra(&self) -> &str {
+        self.span.extra()
+    }
+
+    /// Returns the modified value of the token.
+    /// This is only useful in the tests. You should always use
+    /// the fragment.
+    #[cfg(test)]
+    pub fn modified_fragment(&self) -> Option<&str> {
+        self.modified_fragment.as_deref()
+    }
+
+    pub fn modify_fragment(&mut self, new: String) {
+        self.modified_fragment = Some(new);
+    }
+
+    pub fn with_modified_fragment(self, modified_fragment: Option<String>) -> Self {
+        Self { span: self.span, modified_fragment }
+    }
+
+    pub fn to_external_error(&self, error: impl std::error::Error) -> Error<'a> {
+        Error::new_from_external(self.span.clone(), error)
+    }
+
+    pub fn parse_finite_float(&self) -> Result<f64, Error<'a>> {
+        let value: f64 = self.fragment().parse().map_err(|e| self.to_external_error(e))?;
+        if value.is_finite() {
+            Ok(value)
+        } else {
+            Err(Error::new_from_kind(self.span.clone(), ErrorKind::NonFiniteFloat))
+        }
+    }
+
+    pub fn get_utf8_column(&self) -> Option<usize> {
+        self.span.get_utf8_column()
+    }
+
+    pub fn into_owned(self) -> Token<'static> {
+        Token { span: self.span.into_owned(), modified_fragment: self.modified_fragment }
+    }
+}
+
+impl<'a, T: Into<CowSpan<'a>>> From<T> for Token<'a> {
+    fn from(span: T) -> Self {
+        Token { span: span.into(), modified_fragment: None }
     }
 }
 
@@ -150,6 +234,86 @@ pub enum VectorFilter<'a> {
     None,
 }
 
+impl<'a> VectorFilter<'a> {
+    pub fn into_owned(self) -> VectorFilter<'static> {
+        match self {
+            Self::Fragment(token) => VectorFilter::Fragment(token.into_owned()),
+            Self::DocumentTemplate => VectorFilter::DocumentTemplate,
+            Self::UserProvided => VectorFilter::UserProvided,
+            Self::Regenerate => VectorFilter::Regenerate,
+            Self::None => VectorFilter::None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IndexFilterCondition<'a> {
+    Not(Box<Self>),
+    Condition { fid: Token<'a>, op: Condition<'a> },
+    In { fid: Token<'a>, els: Vec<Token<'a>> },
+    Or(Vec<Self>),
+    And(Vec<Self>),
+    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
+    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
+    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
+    GeoPolygon { points: Vec<[Token<'a>; 2]> },
+}
+
+impl<'a> IndexFilterCondition<'a> {
+    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token<'a>> {
+        FidIter { stack: vec![(depth, self)] }
+    }
+}
+
+impl IndexFilterCondition<'_> {
+    pub fn into_owned(self) -> IndexFilterCondition<'static> {
+        match self {
+            Self::Not(condition) => IndexFilterCondition::Not(Box::new((*condition).into_owned())),
+            Self::Condition { fid, op } => {
+                IndexFilterCondition::Condition { fid: fid.into_owned(), op: op.into_owned() }
+            }
+            Self::In { fid, els } => IndexFilterCondition::In {
+                fid: fid.into_owned(),
+                els: els.into_iter().map(|el| el.into_owned()).collect(),
+            },
+            Self::Or(subfilters) => IndexFilterCondition::Or(
+                subfilters.into_iter().map(|filter| filter.into_owned()).collect(),
+            ),
+            Self::And(subfilters) => IndexFilterCondition::And(
+                subfilters.into_iter().map(|filter| filter.into_owned()).collect(),
+            ),
+            Self::VectorExists { fid, embedder, filter } => IndexFilterCondition::VectorExists {
+                fid: fid.into_owned(),
+                embedder: embedder.map(|embedder| embedder.into_owned()),
+                filter: filter.into_owned(),
+            },
+            Self::GeoLowerThan { point: [point0, point1], radius, resolution } => {
+                IndexFilterCondition::GeoLowerThan {
+                    point: [point0.into_owned(), point1.into_owned()],
+                    radius: radius.into_owned(),
+                    resolution: resolution.map(|resolution| resolution.into_owned()),
+                }
+            }
+            Self::GeoBoundingBox {
+                top_right_point: [top_right_point0, top_right_point1],
+                bottom_left_point: [bottom_left_point0, bottom_left_point1],
+            } => IndexFilterCondition::GeoBoundingBox {
+                top_right_point: [top_right_point0.into_owned(), top_right_point1.into_owned()],
+                bottom_left_point: [
+                    bottom_left_point0.into_owned(),
+                    bottom_left_point1.into_owned(),
+                ],
+            },
+            Self::GeoPolygon { points } => IndexFilterCondition::GeoPolygon {
+                points: points
+                    .into_iter()
+                    .map(|[point0, point1]| [point0.into_owned(), point1.into_owned()])
+                    .collect(),
+            },
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FilterCondition<'a> {
     Not(Box<Self>),
@@ -158,8 +322,10 @@ pub enum FilterCondition<'a> {
     Or(Vec<Self>),
     And(Vec<Self>),
     VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
-    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a> },
+    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
     GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
+    GeoPolygon { points: Vec<[Token<'a>; 2]> },
+    Foreign { fid: Token<'a>, op: Box<Self> },
 }
 
 pub enum TraversedElement<'a> {
@@ -168,7 +334,7 @@ pub enum TraversedElement<'a> {
 }
 
 impl<'a> FilterCondition<'a> {
-    pub fn use_contains_operator(&self) -> Option<&Token> {
+    pub fn use_contains_operator(&self) -> Option<&Token<'a>> {
         match self {
             FilterCondition::Condition { fid: _, op } => match op {
                 Condition::GreaterThan(_)
@@ -191,11 +357,13 @@ impl<'a> FilterCondition<'a> {
             FilterCondition::VectorExists { .. }
             | FilterCondition::GeoLowerThan { .. }
             | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::GeoPolygon { .. }
             | FilterCondition::In { .. } => None,
+            FilterCondition::Foreign { fid: _, op } => op.use_contains_operator(),
         }
     }
 
-    pub fn use_vector_filter(&self) -> Option<&Token> {
+    pub fn use_vector_filter(&self) -> Option<&Token<'a>> {
         match self {
             FilterCondition::Condition { .. } => None,
             FilterCondition::Not(this) => this.use_vector_filter(),
@@ -204,33 +372,51 @@ impl<'a> FilterCondition<'a> {
             }
             FilterCondition::GeoLowerThan { .. }
             | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::GeoPolygon { .. }
             | FilterCondition::In { .. } => None,
             FilterCondition::VectorExists { fid, .. } => Some(fid),
+            FilterCondition::Foreign { fid: _, op } => op.use_vector_filter(),
         }
     }
 
-    pub fn fids(&self, depth: usize) -> Box<dyn Iterator<Item = &Token> + '_> {
-        if depth == 0 {
-            return Box::new(std::iter::empty());
-        }
+    pub fn use_field(&self, field: &str) -> Option<&Token<'a>> {
         match self {
             FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
-                Box::new(std::iter::once(fid))
+                (fid.fragment() == field).then_some(fid)
             }
-            FilterCondition::Not(filter) => {
-                let depth = depth.saturating_sub(1);
-                filter.fids(depth)
+            FilterCondition::Not(this) => this.use_field(field),
+            FilterCondition::Or(seq) | FilterCondition::And(seq) => {
+                seq.iter().find_map(|filter| filter.use_field(field))
             }
-            FilterCondition::And(subfilters) | FilterCondition::Or(subfilters) => {
-                let depth = depth.saturating_sub(1);
-                Box::new(subfilters.iter().flat_map(move |f| f.fids(depth)))
+            FilterCondition::GeoLowerThan { .. }
+            | FilterCondition::GeoBoundingBox { .. }
+            | FilterCondition::GeoPolygon { .. }
+            | FilterCondition::VectorExists { .. } => None,
+            FilterCondition::Foreign { fid, op } => {
+                (fid.fragment() == field).then_some(fid).or_else(|| op.use_field(field))
             }
-            _ => Box::new(std::iter::empty()),
         }
+    }
+
+    pub fn use_foreign_operator(&self) -> Option<&Token<'a>> {
+        ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }.next().and_then(|filter| {
+            match filter {
+                FilterCondition::Foreign { fid, .. } => Some(fid),
+                _ => None,
+            }
+        })
+    }
+
+    pub fn list_foreign_filters(&self) -> impl Iterator<Item = &FilterCondition<'a>> {
+        ForeignFilterIter { stack: vec![(MAX_FILTER_DEPTH, self)] }
+    }
+
+    pub fn fids(&self, depth: usize) -> impl Iterator<Item = &Token<'a>> {
+        FidIter { stack: vec![(depth, self)] }
     }
 
     /// Returns the first token found at the specified depth, `None` if no token at this depth.
-    pub fn token_at_depth(&self, depth: usize) -> Option<&Token> {
+    pub fn token_at_depth(&self, depth: usize) -> Option<&Token<'a>> {
         match self {
             FilterCondition::Condition { fid, .. } if depth == 0 => Some(fid),
             FilterCondition::Or(subfilters) => {
@@ -262,6 +448,95 @@ impl<'a> FilterCondition<'a> {
         }
         let span = Span::new_extra(input, input);
         parse_filter(span).finish().map(|(_rem, output)| Some(output))
+    }
+}
+
+/// Iterator listing the `Foreign` filters of a filter condition.
+struct ForeignFilterIter<'a, 'b> {
+    stack: Vec<(usize, &'a FilterCondition<'b>)>,
+}
+
+impl<'a, 'b> Iterator for ForeignFilterIter<'a, 'b> {
+    type Item = &'a FilterCondition<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                FilterCondition::Foreign { .. } => return Some(current),
+
+                FilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                FilterCondition::And(others) | FilterCondition::Or(others) if depth > 0 => {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Iterator listing the `fids` of a filter condition or an index filter condition.
+struct FidIter<'a, T> {
+    stack: Vec<(usize, &'a T)>,
+}
+
+impl<'a, 'b> Iterator for FidIter<'a, FilterCondition<'b>> {
+    type Item = &'a Token<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                FilterCondition::Condition { fid, .. } | FilterCondition::In { fid, .. } => {
+                    return Some(fid)
+                }
+
+                FilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                FilterCondition::And(others) | FilterCondition::Or(others) if depth > 0 => {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                FilterCondition::Foreign { fid, .. } => return Some(fid),
+
+                _ => {}
+            }
+        }
+    }
+}
+
+impl<'a, 'b> Iterator for FidIter<'a, IndexFilterCondition<'b>> {
+    type Item = &'a Token<'b>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            let (depth, current) = self.stack.pop()?;
+
+            match current {
+                IndexFilterCondition::Condition { fid, .. }
+                | IndexFilterCondition::In { fid, .. } => return Some(fid),
+
+                IndexFilterCondition::Not(next) if depth > 0 => {
+                    self.stack.push((depth - 1, next));
+                }
+
+                IndexFilterCondition::And(others) | IndexFilterCondition::Or(others)
+                    if depth > 0 =>
+                {
+                    self.stack.extend(std::iter::repeat(depth - 1).zip(others.iter()));
+                }
+
+                _ => {}
+            }
+        }
     }
 }
 
@@ -300,7 +575,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
     // everything after `IN` can be a failure
     let (input, _) = cut_with_err(ws(tag("]")), |_| {
         if eof::<_, ()>(input).is_ok() {
-            Error::new_from_kind(input, ErrorKind::InClosingBracket)
+            Error::new_from_kind(input.into(), ErrorKind::InClosingBracket)
         } else {
             let expected_value_kind = match parse_value(input) {
                 Err(nom::Err::Error(e)) => match e.kind() {
@@ -309,7 +584,7 @@ fn parse_in_body(input: Span) -> IResult<Vec<Token>> {
                 },
                 _ => ExpectedValueKind::Other,
             };
-            Error::new_from_kind(input, ErrorKind::InExpectedValue(expected_value_kind))
+            Error::new_from_kind(input.into(), ErrorKind::InExpectedValue(expected_value_kind))
         }
     })(input)?;
 
@@ -338,7 +613,10 @@ fn parse_not_in(input: Span) -> IResult<FilterCondition> {
 /// or             = and ("OR" and)
 fn parse_or(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
-        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::DepthLimitReached,
+        )));
     }
     let (input, first_filter) = parse_and(input, depth + 1)?;
     // if we found a `OR` then we MUST find something next
@@ -358,7 +636,10 @@ fn parse_or(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// and            = not ("AND" not)*
 fn parse_and(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
-        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::DepthLimitReached,
+        )));
     }
     let (input, first_filter) = parse_not(input, depth + 1)?;
     // if we found a `AND` then we MUST find something next
@@ -380,7 +661,10 @@ fn parse_and(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// If we parse a `NOT` we MUST parse something behind.
 fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
-        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::DepthLimitReached,
+        )));
     }
     alt((
         map(
@@ -394,27 +678,51 @@ fn parse_not(input: Span, depth: usize) -> IResult<FilterCondition> {
     ))(input)
 }
 
+/// foreign      = WS* "_foreign(string WS* "," WS* value WS*)
+/// If we parse `_foreign` we MUST parse the rest of the expression.
+fn parse_foreign(input: Span, depth: usize) -> IResult<FilterCondition> {
+    let (mut params_span, _) = tuple((multispace0, word_exact("_foreign")))(input)?;
+    params_span.extra = input.fragment();
+
+    // if we were able to parse `_foreign` and can't parse the rest of the input we return a failure
+    delimited(char('('), ws(|input| parse_foreign_operator(input, depth)), char(')'))(params_span)
+        .map_cut(ErrorKind::Foreign)
+}
+
+fn parse_foreign_operator(input: Span, depth: usize) -> IResult<FilterCondition> {
+    let (input, (fid, op)) =
+        separated_pair(parse_value, ws(tag(",")), |input| parse_or(input, depth))(input)?;
+    Ok((input, FilterCondition::Foreign { fid, op: op.into() }))
+}
+
 /// geoRadius      = WS* "_geoRadius(float WS* "," WS* float WS* "," WS* float)
 /// If we parse `_geoRadius` we MUST parse the rest of the expression.
 fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     // we want to allow space BEFORE the _geoRadius but not after
-    let parsed = preceded(
-        tuple((multispace0, word_exact("_geoRadius"))),
-        // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
-        cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
-    )(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::GeoRadius)));
+
+    let (input, _) = tuple((multispace0, word_exact("_geoRadius")))(input)?;
+
+    // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
+
+    let parsed =
+        delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))(input)
+            .map_cut(ErrorKind::GeoRadius);
 
     let (input, args) = parsed?;
 
-    if args.len() != 3 {
-        return Err(nom::Err::Failure(Error::new_from_kind(input, ErrorKind::GeoRadius)));
+    if !(3..=4).contains(&args.len()) {
+        return Err(Error::failure_from_kind(
+            input.into(),
+            ErrorKind::GeoRadiusArgumentCount(args.len()),
+        ));
     }
 
     let res = FilterCondition::GeoLowerThan {
         point: [args[0].into(), args[1].into()],
         radius: args[2].into(),
+        resolution: args.get(3).cloned().map(Token::from),
     };
+
     Ok((input, res))
 }
 
@@ -422,29 +730,77 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
 /// If we parse `_geoBoundingBox` we MUST parse the rest of the expression.
 fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     // we want to allow space BEFORE the _geoBoundingBox but not after
-    let parsed = preceded(
-        tuple((multispace0, word_exact("_geoBoundingBox"))),
-        // if we were able to parse `_geoBoundingBox` and can't parse the rest of the input we return a failure
-        cut(delimited(
-            char('('),
-            separated_list1(
-                tag(","),
-                ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
-            ),
-            char(')'),
-        )),
+
+    let (input, _) = tuple((multispace0, word_exact("_geoBoundingBox")))(input)?;
+
+    // if we were able to parse `_geoBoundingBox` and can't parse the rest of the input we return a failure
+
+    let (input, args) = delimited(
+        char('('),
+        separated_list1(
+            tag(","),
+            ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
+        ),
+        char(')'),
     )(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::GeoBoundingBox)));
+    .map_cut(ErrorKind::GeoBoundingBox)?;
 
-    let (input, args) = parsed?;
+    if args.len() != 2 {
+        return Err(Error::failure_from_kind(input.into(), ErrorKind::GeoBoundingBox));
+    }
 
-    if args.len() != 2 || args[0].len() != 2 || args[1].len() != 2 {
-        return Err(Error::failure_from_kind(input, ErrorKind::GeoBoundingBox));
+    if let Some(offending) = args.iter().find(|a| a.len() != 2) {
+        let context = offending.first().unwrap_or(&input);
+        return Err(Error::failure_from_kind(
+            (*context).into(),
+            ErrorKind::GeoCoordinatesNotPair(offending.len()),
+        ));
     }
 
     let res = FilterCondition::GeoBoundingBox {
         top_right_point: [args[0][0].into(), args[0][1].into()],
         bottom_left_point: [args[1][0].into(), args[1][1].into()],
+    };
+    Ok((input, res))
+}
+
+/// geoPolygon     = "_geoPolygon([[" WS* float WS* "," WS* float WS* "],+])"
+/// If we parse `_geoPolygon` we MUST parse the rest of the expression.
+fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
+    // we want to allow space BEFORE the _geoPolygon but not after
+
+    let (input, _) = tuple((multispace0, word_exact("_geoPolygon")))(input)?;
+
+    // if we were able to parse `_geoPolygon` and can't parse the rest of the input we return a failure
+
+    let (input, args): (_, Vec<Vec<LocatedSpan<_, _>>>) = delimited(
+        char('('),
+        separated_list1(
+            tag(","),
+            ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
+        ),
+        preceded(opt(ws(char(','))), char(')')), // Tolerate trailing comma
+    )(input)
+    .map_cut(ErrorKind::GeoPolygon)?;
+
+    if args.len() < 3 {
+        let context = args.last().and_then(|a| a.last()).unwrap_or(&input);
+        return Err(Error::failure_from_kind(
+            (*context).into(),
+            ErrorKind::GeoPolygonNotEnoughPoints(args.len()),
+        ));
+    }
+
+    if let Some(offending) = args.iter().find(|a| a.len() != 2) {
+        let context = offending.first().unwrap_or(&input);
+        return Err(Error::failure_from_kind(
+            (*context).into(),
+            ErrorKind::GeoCoordinatesNotPair(offending.len()),
+        ));
+    }
+
+    let res = FilterCondition::GeoPolygon {
+        points: args.into_iter().map(|a| [a[0].into(), a[1].into()]).collect(),
     };
     Ok((input, res))
 }
@@ -458,9 +814,11 @@ fn parse_geo_point(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geoPoint` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     ))(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoPoint"))))?;
+    .map_err(|e| {
+        e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geoPoint")))
+    })?;
     // if we succeeded we still return a `Failure` because geoPoints are not allowed
-    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geoPoint")))
+    Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geoPoint")))
 }
 
 /// geoPoint      = WS* "_geoDistance(float WS* "," WS* float WS* "," WS* float)
@@ -472,9 +830,11 @@ fn parse_geo_distance(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geoDistance` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     ))(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geoDistance"))))?;
+    .map_err(|e| {
+        e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geoDistance")))
+    })?;
     // if we succeeded we still return a `Failure` because `geoDistance` filters are not allowed
-    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geoDistance")))
+    Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geoDistance")))
 }
 
 /// geo      = WS* "_geo(float WS* "," WS* float WS* "," WS* float)
@@ -486,9 +846,9 @@ fn parse_geo(input: Span) -> IResult<FilterCondition> {
         // if we were able to parse `_geo` we are going to return a Failure whatever happens next.
         cut(delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))),
     ))(input)
-    .map_err(|e| e.map(|_| Error::new_from_kind(input, ErrorKind::ReservedGeo("_geo"))))?;
+    .map_err(|e| e.map(|_| Error::new_from_kind(input.into(), ErrorKind::ReservedGeo("_geo"))))?;
     // if we succeeded we still return a `Failure` because `_geo` filter is not allowed
-    Err(Error::failure_from_kind(input, ErrorKind::ReservedGeo("_geo")))
+    Err(Error::failure_from_kind(input.into(), ErrorKind::ReservedGeo("_geo")))
 }
 
 fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
@@ -507,7 +867,10 @@ fn parse_error_reserved_keyword(input: Span) -> IResult<FilterCondition> {
 /// primary        = (WS* "(" WS* expression WS* ")" WS*) | geoRadius | condition | exists | not_exists | to
 fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
     if depth > MAX_FILTER_DEPTH {
-        return Err(nom::Err::Error(Error::new_from_kind(input, ErrorKind::DepthLimitReached)));
+        return Err(nom::Err::Error(Error::new_from_kind(
+            input.into(),
+            ErrorKind::DepthLimitReached,
+        )));
     }
     alt((
         // if we find a first parenthesis, then we must parse an expression and find the closing parenthesis
@@ -515,11 +878,11 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
             ws(char('(')),
             cut(|input| parse_expression(input, depth + 1)),
             cut_with_err(ws(char(')')), |c| {
-                Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(c.char()))
+                Error::new_from_kind(input.into(), ErrorKind::MissingClosingDelimiter(c.char()))
             }),
         ),
-        parse_geo_radius,
-        parse_geo_bounding_box,
+        // Made a random block of functions because we reached the maximum number of elements per alt
+        alt((parse_geo_radius, parse_geo_bounding_box, parse_geo_polygon)),
         parse_in,
         parse_not_in,
         parse_condition,
@@ -533,6 +896,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_not_contains,
         parse_starts_with,
         parse_not_starts_with,
+        |input| parse_foreign(input, depth),
         // the next lines are only for error handling and are written at the end to have the less possible performance impact
         parse_geo,
         parse_geo_distance,
@@ -540,7 +904,7 @@ fn parse_primary(input: Span, depth: usize) -> IResult<FilterCondition> {
         parse_error_reserved_keyword,
     ))(input)
     // if the inner parsers did not match enough information to return an accurate error
-    .map_err(|e| e.map_err(|_| Error::new_from_kind(input, ErrorKind::InvalidPrimary)))
+    .map_err(|e| e.map_err(|_| Error::new_from_kind(input.into(), ErrorKind::InvalidPrimary)))
 }
 
 /// expression     = or
@@ -551,6 +915,82 @@ pub fn parse_expression(input: Span, depth: usize) -> IResult<FilterCondition> {
 /// filter     = expression EOF
 pub fn parse_filter(input: Span) -> IResult<FilterCondition> {
     terminated(|input| parse_expression(input, 0), eof)(input)
+}
+
+impl std::fmt::Display for IndexFilterCondition<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IndexFilterCondition::Not(filter) => {
+                write!(f, "NOT ({filter})")
+            }
+            IndexFilterCondition::Condition { fid, op } => {
+                write!(f, "{fid} {op}")
+            }
+            IndexFilterCondition::In { fid, els } => {
+                write!(f, "{fid} IN[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            IndexFilterCondition::Or(els) => {
+                write!(f, "OR[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            IndexFilterCondition::And(els) => {
+                write!(f, "AND[")?;
+                for el in els {
+                    write!(f, "{el}, ")?;
+                }
+                write!(f, "]")
+            }
+            IndexFilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
+                write!(f, "_vectors")?;
+                if let Some(embedder) = embedder {
+                    write!(f, ".{:?}", embedder.fragment())?;
+                }
+                match inner {
+                    VectorFilter::Fragment(fragment) => {
+                        write!(f, ".fragments.{:?}", fragment.fragment())?
+                    }
+                    VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
+                    VectorFilter::UserProvided => write!(f, ".userProvided")?,
+                    VectorFilter::Regenerate => write!(f, ".regenerate")?,
+                    VectorFilter::None => (),
+                }
+                write!(f, " EXISTS")
+            }
+            IndexFilterCondition::GeoLowerThan { point, radius, resolution: None } => {
+                write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
+            }
+            IndexFilterCondition::GeoLowerThan { point, radius, resolution: Some(resolution) } => {
+                write!(f, "_geoRadius({}, {}, {}, {})", point[0], point[1], radius, resolution)
+            }
+            IndexFilterCondition::GeoBoundingBox {
+                top_right_point: top_left_point,
+                bottom_left_point: bottom_right_point,
+            } => {
+                write!(
+                    f,
+                    "_geoBoundingBox([{}, {}], [{}, {}])",
+                    top_left_point[0],
+                    top_left_point[1],
+                    bottom_right_point[0],
+                    bottom_right_point[1]
+                )
+            }
+            IndexFilterCondition::GeoPolygon { points } => {
+                write!(f, "_geoPolygon([")?;
+                for point in points {
+                    write!(f, "[{}, {}], ", point[0], point[1])?;
+                }
+                write!(f, "])")
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for FilterCondition<'_> {
@@ -586,11 +1026,11 @@ impl std::fmt::Display for FilterCondition<'_> {
             FilterCondition::VectorExists { fid: _, embedder, filter: inner } => {
                 write!(f, "_vectors")?;
                 if let Some(embedder) = embedder {
-                    write!(f, ".{:?}", embedder.value())?;
+                    write!(f, ".{:?}", embedder.fragment())?;
                 }
                 match inner {
                     VectorFilter::Fragment(fragment) => {
-                        write!(f, ".fragments.{:?}", fragment.value())?
+                        write!(f, ".fragments.{:?}", fragment.fragment())?
                     }
                     VectorFilter::DocumentTemplate => write!(f, ".documentTemplate")?,
                     VectorFilter::UserProvided => write!(f, ".userProvided")?,
@@ -599,8 +1039,11 @@ impl std::fmt::Display for FilterCondition<'_> {
                 }
                 write!(f, " EXISTS")
             }
-            FilterCondition::GeoLowerThan { point, radius } => {
+            FilterCondition::GeoLowerThan { point, radius, resolution: None } => {
                 write!(f, "_geoRadius({}, {}, {})", point[0], point[1], radius)
+            }
+            FilterCondition::GeoLowerThan { point, radius, resolution: Some(resolution) } => {
+                write!(f, "_geoRadius({}, {}, {}, {})", point[0], point[1], radius, resolution)
             }
             FilterCondition::GeoBoundingBox {
                 top_right_point: top_left_point,
@@ -614,6 +1057,16 @@ impl std::fmt::Display for FilterCondition<'_> {
                     bottom_right_point[0],
                     bottom_right_point[1]
                 )
+            }
+            FilterCondition::GeoPolygon { points } => {
+                write!(f, "_geoPolygon([")?;
+                for point in points {
+                    write!(f, "[{}, {}], ", point[0], point[1])?;
+                }
+                write!(f, "])")
+            }
+            FilterCondition::Foreign { fid, op } => {
+                write!(f, "_foreign({fid}, {op})")
             }
         }
     }
@@ -640,7 +1093,7 @@ impl std::fmt::Display for Condition<'_> {
 
 impl std::fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{{{}}}", self.value())
+        write!(f, "{{{}}}", self.fragment())
     }
 }
 
@@ -653,10 +1106,10 @@ pub mod tests {
     /// Create a raw [Token]. You must specify the string that appear BEFORE your element followed by your element
     pub fn rtok<'a>(before: &'a str, value: &'a str) -> Token<'a> {
         // if the string is empty we still need to return 1 for the line number
-        let lines = before.is_empty().then_some(1).unwrap_or_else(|| before.lines().count());
+        let lines = if before.is_empty() { 1 } else { before.lines().count() };
         let offset = before.chars().count();
         // the extra field is not checked in the tests so we can set it to nothing
-        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "") }.into()
+        unsafe { Span::new_from_raw_offset(offset, lines as u32, value, "").into() }
     }
 
     #[track_caller]
@@ -778,11 +1231,16 @@ pub mod tests {
         insta::assert_snapshot!(p("_geoRadius(12, 13, 14)"), @"_geoRadius({12}, {13}, {14})");
         insta::assert_snapshot!(p("NOT _geoRadius(12, 13, 14)"), @"NOT (_geoRadius({12}, {13}, {14}))");
         insta::assert_snapshot!(p("_geoRadius(12,13,14)"), @"_geoRadius({12}, {13}, {14})");
+        insta::assert_snapshot!(p("_geoRadius(12,13,14,1000)"), @"_geoRadius({12}, {13}, {14}, {1000})");
 
         // Test geo bounding box
         insta::assert_snapshot!(p("_geoBoundingBox([12, 13], [14, 15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
         insta::assert_snapshot!(p("NOT _geoBoundingBox([12, 13], [14, 15])"), @"NOT (_geoBoundingBox([{12}, {13}], [{14}, {15}]))");
         insta::assert_snapshot!(p("_geoBoundingBox([12,13],[14,15])"), @"_geoBoundingBox([{12}, {13}], [{14}, {15}])");
+
+        // Test geo polygon
+        insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15], [16, 17])"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], [{16}, {17}], ])");
+        insta::assert_snapshot!(p("_geoPolygon([12, 13], [14, 15], [-1.2,2939.2], [1,1])"), @"_geoPolygon([[{12}, {13}], [{14}, {15}], [{-1.2}, {2939.2}], [{1}, {1}], ])");
 
         // Test OR + AND
         insta::assert_snapshot!(p("channel = ponce AND 'dog race' != 'bernese mountain'"), @"AND[{channel} = {ponce}, {dog race} != {bernese mountain}, ]");
@@ -800,16 +1258,21 @@ pub mod tests {
         // Test recursion
         // This is the most that is allowed
         insta::assert_snapshot!(
-            p("(((((((((((((((((((((((((((((((((((((((((((((((((x = 1)))))))))))))))))))))))))))))))))))))))))))))))))"),
+            p("((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))"),
             @"{x} = {1}"
         );
         insta::assert_snapshot!(
-            p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
+            p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
             @"NOT ({x} = {1})"
         );
 
         // Confusing keywords
         insta::assert_snapshot!(p(r#"NOT "OR" EXISTS AND "EXISTS" NOT EXISTS"#), @"AND[NOT ({OR} EXISTS), NOT ({EXISTS} EXISTS), ]");
+
+        // Test foreign
+        insta::assert_snapshot!(p("_foreign(channel, subscribers = 1000)"), @"_foreign({channel}, {subscribers} = {1000})");
+        insta::assert_snapshot!(p("_foreign(channel, channel = ponce AND subscribers > 1000)"), @"_foreign({channel}, AND[{channel} = {ponce}, {subscribers} > {1000}, ])");
+        insta::assert_snapshot!(p("_foreign(channel, channel = ponce AND ( 'dog race' != 'bernese mountain' OR subscribers > 1000 ))"), @"_foreign({channel}, AND[{channel} = {ponce}, OR[{dog race} != {bernese mountain}, {subscribers} > {1000}, ], ])");
     }
 
     #[test]
@@ -840,50 +1303,80 @@ pub mod tests {
         11:12 channel = 🐻 AND followers < 100
         "###);
 
-        insta::assert_snapshot!(p("'OR'"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `\'OR\'`.
+        insta::assert_snapshot!(p("'OR'"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `\'OR\'`.
         1:5 'OR'
-        "###);
+        ");
 
         insta::assert_snapshot!(p("OR"), @r###"
         Was expecting a value but instead got `OR`, which is a reserved keyword. To use `OR` as a field name or a value, surround it by quotes.
         1:3 OR
         "###);
 
-        insta::assert_snapshot!(p("channel Ponce"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `channel Ponce`.
+        insta::assert_snapshot!(p("channel Ponce"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `channel Ponce`.
         1:14 channel Ponce
-        "###);
+        ");
 
-        insta::assert_snapshot!(p("channel = Ponce OR"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` but instead got nothing.
+        insta::assert_snapshot!(p("channel = Ponce OR"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` but instead got nothing.
         19:19 channel = Ponce OR
-        "###);
+        ");
 
-        insta::assert_snapshot!(p("_geoRadius"), @r###"
-        The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
-        1:11 _geoRadius
-        "###);
+        insta::assert_snapshot!(p("_geoRadius"), @r"
+        The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.
+        11:11 _geoRadius
+        ");
 
-        insta::assert_snapshot!(p("_geoRadius = 12"), @r###"
-        The `_geoRadius` filter expects three arguments: `_geoRadius(latitude, longitude, radius)`.
-        1:16 _geoRadius = 12
-        "###);
+        insta::assert_snapshot!(p("_geoRadius = 12"), @r"
+        The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.
+        11:16 _geoRadius = 12
+        ");
 
-        insta::assert_snapshot!(p("_geoBoundingBox"), @r###"
+        insta::assert_snapshot!(p("_geoBoundingBox"), @r"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        1:16 _geoBoundingBox
-        "###);
+        16:16 _geoBoundingBox
+        ");
 
-        insta::assert_snapshot!(p("_geoBoundingBox = 12"), @r###"
+        insta::assert_snapshot!(p("_geoBoundingBox = 12"), @r"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        1:21 _geoBoundingBox = 12
-        "###);
+        16:21 _geoBoundingBox = 12
+        ");
 
-        insta::assert_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r###"
+        insta::assert_snapshot!(p("_geoBoundingBox(1.0, 1.0)"), @r"
         The `_geoBoundingBox` filter expects two pairs of arguments: `_geoBoundingBox([latitude, longitude], [latitude, longitude])`.
-        1:26 _geoBoundingBox(1.0, 1.0)
-        "###);
+        17:26 _geoBoundingBox(1.0, 1.0)
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon([1,2,3])"), @r"
+        The `_geoPolygon` filter expects at least 3 points but only 1 were specified
+        18:19 _geoPolygon([1,2,3])
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon(1,2,3)"), @r"
+        The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
+        13:19 _geoPolygon(1,2,3)
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2],[1,2,3])"), @r"
+        Was expecting 2 coordinates but instead found 3.
+        26:27 _geoPolygon([1,2],[1,2],[1,2,3])
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon([1,2],[1,2,3])"), @r"
+        The `_geoPolygon` filter expects at least 3 points but only 2 were specified
+        24:25 _geoPolygon([1,2],[1,2,3])
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon(1)"), @r"
+        The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
+        13:15 _geoPolygon(1)
+        ");
+
+        insta::assert_snapshot!(p("_geoPolygon([1,2)"), @r"
+        The `_geoPolygon` filter doesn't match the expected format: `_geoPolygon([latitude, longitude], [latitude, longitude])`.
+        17:18 _geoPolygon([1,2)
+        ");
 
         insta::assert_snapshot!(p("_geoPoint(12, 13, 14)"), @r###"
         `_geoPoint` is a reserved keyword and thus can't be used as a filter expression. Use the `_geoRadius(latitude, longitude, distance)` or `_geoBoundingBox([latitude, longitude], [latitude, longitude])` built-in rules to filter on `_geo` coordinates.
@@ -940,15 +1433,15 @@ pub mod tests {
         34:35 channel = mv OR followers >= 1000)
         "###);
 
-        insta::assert_snapshot!(p("colour NOT EXIST"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `colour NOT EXIST`.
+        insta::assert_snapshot!(p("colour NOT EXIST"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `colour NOT EXIST`.
         1:17 colour NOT EXIST
-        "###);
+        ");
 
-        insta::assert_snapshot!(p("subscribers 100 TO1000"), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `subscribers 100 TO1000`.
+        insta::assert_snapshot!(p("subscribers 100 TO1000"), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `subscribers 100 TO1000`.
         1:23 subscribers 100 TO1000
-        "###);
+        ");
 
         insta::assert_snapshot!(p("channel = ponce ORdog != 'bernese mountain'"), @r###"
         Found unexpected characters at the end of the filter: `ORdog != \'bernese mountain\'`. You probably forgot an `OR` or an `AND` rule.
@@ -992,14 +1485,14 @@ pub mod tests {
 
         insta::assert_snapshot!(p("((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))"), @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
-        51:106 ((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))
+        38:106 ((((((((((((((((((((((((((((((((((((((((((((((((((x = 1))))))))))))))))))))))))))))))))))))))))))))))))))
         "###);
 
         insta::assert_snapshot!(
             p("NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1"),
             @r###"
         The filter exceeded the maximum depth limit. Try rewriting the filter so that it contains fewer nested conditions.
-        797:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
+        597:802 NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT NOT x = 1
         "###
         );
 
@@ -1073,38 +1566,38 @@ pub mod tests {
         5:7 NOT OR EXISTS AND EXISTS NOT EXISTS
         "###);
 
-        insta::assert_snapshot!(p(r#"value NULL"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NULL`.
+        insta::assert_snapshot!(p(r#"value NULL"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NULL`.
         1:11 value NULL
-        "###);
-        insta::assert_snapshot!(p(r#"value NOT NULL"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NOT NULL`.
+        ");
+        insta::assert_snapshot!(p(r#"value NOT NULL"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NOT NULL`.
         1:15 value NOT NULL
-        "###);
-        insta::assert_snapshot!(p(r#"value EMPTY"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value EMPTY`.
+        ");
+        insta::assert_snapshot!(p(r#"value EMPTY"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value EMPTY`.
         1:12 value EMPTY
-        "###);
-        insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value NOT EMPTY`.
+        ");
+        insta::assert_snapshot!(p(r#"value NOT EMPTY"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value NOT EMPTY`.
         1:16 value NOT EMPTY
-        "###);
-        insta::assert_snapshot!(p(r#"value IS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS`.
+        ");
+        insta::assert_snapshot!(p(r#"value IS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS`.
         1:9 value IS
-        "###);
-        insta::assert_snapshot!(p(r#"value IS NOT"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT`.
+        ");
+        insta::assert_snapshot!(p(r#"value IS NOT"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS NOT`.
         1:13 value IS NOT
-        "###);
-        insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS EXISTS`.
+        ");
+        insta::assert_snapshot!(p(r#"value IS EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS EXISTS`.
         1:16 value IS EXISTS
-        "###);
-        insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r###"
-        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `value IS NOT EXISTS`.
+        ");
+        insta::assert_snapshot!(p(r#"value IS NOT EXISTS"#), @r"
+        Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `value IS NOT EXISTS`.
         1:20 value IS NOT EXISTS
-        "###);
+        ");
     }
 
     #[test]
@@ -1127,42 +1620,42 @@ pub mod tests {
         let filter = Fc::parse("field = value").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 1);
-        assert_eq!(fids[0].value(), "field");
+        assert_eq!(fids[0].fragment(), "field");
 
         let filter = Fc::parse("field IN [1, 2, 3]").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 1);
-        assert_eq!(fids[0].value(), "field");
+        assert_eq!(fids[0].fragment(), "field");
 
         let filter = Fc::parse("field != value").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 1);
-        assert_eq!(fids[0].value(), "field");
+        assert_eq!(fids[0].fragment(), "field");
 
         let filter = Fc::parse("field1 = value1 AND field2 = value2").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 2);
-        assert!(fids[0].value() == "field1");
-        assert!(fids[1].value() == "field2");
+        assert!(fids[1].fragment() == "field1");
+        assert!(fids[0].fragment() == "field2");
 
         let filter = Fc::parse("field1 = value1 OR field2 = value2").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(MAX_FILTER_DEPTH).collect();
         assert_eq!(fids.len(), 2);
-        assert!(fids[0].value() == "field1");
-        assert!(fids[1].value() == "field2");
+        assert!(fids[1].fragment() == "field1");
+        assert!(fids[0].fragment() == "field2");
 
-        let depth = 2;
+        let depth = 1;
         let filter =
             Fc::parse("field1 = value1 AND (field2 = value2 OR field3 = value3)").unwrap().unwrap();
         let fids: Vec<_> = filter.fids(depth).collect();
         assert_eq!(fids.len(), 1);
-        assert_eq!(fids[0].value(), "field1");
+        assert_eq!(fids[0].fragment(), "field1");
     }
 
     #[test]
     fn token_from_str() {
         let s = "test string that should not be parsed";
         let token: Token = s.into();
-        assert_eq!(token.value(), s);
+        assert_eq!(token.fragment(), s);
     }
 }

@@ -3,13 +3,16 @@ use std::cmp::Reverse;
 use big_s::S;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
+use http_client::policy::IpPolicy;
 use itertools::Itertools;
 use maplit::hashset;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexerConfig, Settings};
+use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{AscDesc, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy};
+use milli::{
+    AscDesc, CreateOrOpen, Criterion, Index, Member, Search, SearchResult, TermsMatchingStrategy,
+};
 use rand::Rng;
 use Criterion::*;
 
@@ -27,7 +30,8 @@ macro_rules! test_criterion {
             let index = search::setup_search_index_with_criteria(&criteria);
             let rtxn = index.read_txn().unwrap();
 
-            let mut search = Search::new(&rtxn, &index);
+            let progress = Progress::default();
+            let mut search = Search::new(&rtxn, &index, &progress);
             search.query(search::TEST_QUERY);
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
             search.terms_matching_strategy($optional_word);
@@ -236,12 +240,21 @@ fn criteria_mixup() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(criteria.clone());
-        builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+        builder
+            .execute(
+                &|| false,
+                &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
+                Default::default(),
+            )
+            .unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&rtxn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&rtxn, &index, &progress);
         search.query(search::TEST_QUERY);
         search.limit(EXTERNAL_DOCUMENTS_IDS.len());
         search.terms_matching_strategy(ALLOW_OPTIONAL_WORDS);
@@ -265,7 +278,7 @@ fn criteria_ascdesc() {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
     options.map_size(12 * 1024 * 1024); // 10 MB
-    let index = Index::new(options, &path, true).unwrap();
+    let index = Index::new(options, &path, CreateOrOpen::create_without_shards()).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
@@ -276,7 +289,15 @@ fn criteria_ascdesc() {
         S("name"),
         S("age"),
     });
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
 
     wtxn.commit().unwrap();
     let mut wtxn = index.write_txn().unwrap();
@@ -289,7 +310,7 @@ fn criteria_ascdesc() {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = RuntimeEmbedders::default();
-    let mut indexer = indexer::DocumentOperation::new();
+    let mut indexer = indexer::IndexOperations::new();
 
     let mut file = tempfile::tempfile().unwrap();
     (0..ASC_DESC_CANDIDATES_THRESHOLD + 1).for_each(|_| {
@@ -319,7 +340,7 @@ fn criteria_ascdesc() {
     file.sync_all().unwrap();
 
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, MissingDocumentPolicy::default()).unwrap();
     let (document_changes, _operation_stats, primary_key) = indexer
         .into_changes(
             &indexer_alloc,
@@ -329,6 +350,7 @@ fn criteria_ascdesc() {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )
         .unwrap();
 
@@ -344,6 +366,8 @@ fn criteria_ascdesc() {
         embedders,
         &|| false,
         &Progress::default(),
+        // NO DANGER: test
+        &IpPolicy::danger_always_allow(),
         &Default::default(),
     )
     .unwrap();
@@ -359,12 +383,21 @@ fn criteria_ascdesc() {
         let mut wtxn = index.write_txn().unwrap();
         let mut builder = Settings::new(&mut wtxn, &index, &config);
         builder.set_criteria(vec![criterion.clone()]);
-        builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+        builder
+            .execute(
+                &|| false,
+                &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
+                Default::default(),
+            )
+            .unwrap();
         wtxn.commit().unwrap();
 
         let rtxn = index.read_txn().unwrap();
 
-        let mut search = Search::new(&rtxn, &index);
+        let progress = Progress::default();
+        let mut search = Search::new(&rtxn, &index, &progress);
         search.limit(ASC_DESC_CANDIDATES_THRESHOLD + 1);
 
         let SearchResult { documents_ids, .. } = search.execute().unwrap();

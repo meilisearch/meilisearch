@@ -3,22 +3,24 @@ use std::io::Write;
 use big_s::S;
 use bumpalo::Bump;
 use heed::EnvOpenOptions;
+use http_client::policy::IpPolicy;
 use maplit::{btreemap, hashset};
 
 use crate::progress::Progress;
+use crate::sharding::Shards;
 use crate::update::new::indexer;
-use crate::update::{IndexerConfig, Settings};
+use crate::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use crate::vector::RuntimeEmbedders;
-use crate::{db_snap, Criterion, FilterableAttributesRule, Index};
+use crate::{db_snap, CreateOrOpen, Criterion, FilterableAttributesRule, Index};
 pub const CONTENT: &str = include_str!("../../../../tests/assets/test_set.ndjson");
 use crate::constants::RESERVED_GEO_FIELD_NAME;
 
-pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
+pub fn setup_search_index_with_criteria(criteria: &[Criterion], shards: Option<Shards>) -> Index {
     let path = tempfile::tempdir().unwrap();
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
     options.map_size(10 * 1024 * 1024); // 10 MiB
-    let index = Index::new(options, &path, true).unwrap();
+    let index = Index::new(options, &path, CreateOrOpen::Create { shards }).unwrap();
 
     let mut wtxn = index.write_txn().unwrap();
     let config = IndexerConfig::default();
@@ -44,7 +46,15 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         S("america") => vec![S("the united states")],
     });
     builder.set_searchable_fields(vec![S("title"), S("description")]);
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
     wtxn.commit().unwrap();
 
     // index documents
@@ -56,7 +66,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = RuntimeEmbedders::default();
-    let mut indexer = indexer::DocumentOperation::new();
+    let mut indexer = indexer::IndexOperations::new();
 
     let mut file = tempfile::tempfile().unwrap();
     file.write_all(CONTENT.as_bytes()).unwrap();
@@ -64,7 +74,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
     let payload = unsafe { memmap2::Mmap::map(&file).unwrap() };
 
     // index documents
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, operation_stats, primary_key) = indexer
@@ -76,6 +86,7 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )
         .unwrap();
 
@@ -95,6 +106,8 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
         embedders,
         &|| false,
         &Progress::default(),
+        // NO DANGER: test
+        &IpPolicy::danger_always_allow(),
         &Default::default(),
     )
     .unwrap();
@@ -107,6 +120,6 @@ pub fn setup_search_index_with_criteria(criteria: &[Criterion]) -> Index {
 
 #[test]
 fn snapshot_integration_dataset() {
-    let index = setup_search_index_with_criteria(&[Criterion::Attribute]);
+    let index = setup_search_index_with_criteria(&[Criterion::Attribute], None);
     db_snap!(index, word_position_docids, @"3c9347a767bceef3beb31465f1e5f3ae");
 }

@@ -258,7 +258,7 @@ pub fn make_ngram(
         partially_initialized_term_from_word(ctx, &ngram_str, max_nbr_typos, is_prefix, true)?;
 
     // Now add the synonyms
-    let index_synonyms = ctx.index.synonyms(ctx.txn)?;
+    let index_synonyms = ctx.get_synonyms()?;
 
     term.zero_typo.synonyms.extend(
         index_synonyms.get(&words).cloned().unwrap_or_default().into_iter().map(|words| {

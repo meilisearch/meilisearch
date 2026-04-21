@@ -10,22 +10,23 @@ use time::OffsetDateTime;
 use super::super::channel::*;
 use crate::database_stats::DatabaseStats;
 use crate::documents::PrimaryKey;
+use crate::error::handle_store_mdb_error;
 use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::progress::Progress;
 use crate::update::settings::InnerIndexSettings;
 use crate::vector::db::IndexEmbeddingConfig;
 use crate::vector::settings::EmbedderAction;
-use crate::vector::{ArroyWrapper, Embedder, Embeddings, RuntimeEmbedders};
-use crate::{Error, Index, InternalError, Result, UserError};
+use crate::vector::{Embedder, Embeddings, RuntimeEmbedders, VectorStore};
+use crate::{DocumentId, Error, Index, InternalError, Result, UserError};
 
 pub fn write_to_db(
     mut writer_receiver: WriterBbqueueReceiver<'_>,
     finished_extraction: &AtomicBool,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    arroy_writers: &HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
+    vector_stores: &HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
 ) -> Result<ChannelCongestion> {
-    // Used by by the ArroySetVector to copy the embedding into an
+    // Used by by the HannoySetVector to copy the embedding into an
     // aligned memory area, required by arroy to accept a new vector.
     let mut aligned_embedding = Vec::new();
     let span = tracing::trace_span!(target: "indexing::write_db", "all");
@@ -45,18 +46,18 @@ pub fn write_to_db(
                 let database_name = database.database_name();
                 let database = database.database(index);
                 if let Err(error) = database.put(wtxn, &key, &value) {
-                    return Err(Error::InternalError(InternalError::StorePut {
+                    return Err(handle_store_mdb_error(
                         database_name,
-                        key: bstr::BString::from(&key[..]),
-                        value_length: value.len(),
+                        &key,
+                        Some(value.len()),
                         error,
-                    }));
+                    ));
                 }
             }
             ReceiverAction::LargeVectors(large_vectors) => {
                 let LargeVectors { docid, embedder_id, .. } = large_vectors;
                 let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                    vector_stores.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 for embedding in large_vectors.read_embeddings(*dimensions) {
                     embeddings.push(embedding.to_vec()).unwrap();
@@ -68,24 +69,32 @@ pub fn write_to_db(
                 large_vector @ LargeVector { docid, embedder_id, extractor_id, .. },
             ) => {
                 let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                    vector_stores.get(&embedder_id).expect("requested a missing embedder");
                 let embedding = large_vector.read_embedding(*dimensions);
                 writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
             }
+            ReceiverAction::LargeGeoJson(LargeGeoJson { docid, geojson }) => {
+                // It cannot be a deletion because it's large. Deletions are always small
+                let geojson: &[u8] = &geojson;
+                index
+                    .cellulite
+                    .add_raw_zerometry(wtxn, docid, geojson)
+                    .map_err(InternalError::CelluliteError)?;
+            }
         }
 
-        // Every time the is a message in the channel we search
+        // Every time there is a message in the channel we search
         // for new entries in the BBQueue buffers.
         write_from_bbqueue(
             &mut writer_receiver,
             index,
             wtxn,
-            arroy_writers,
+            vector_stores,
             &mut aligned_embedding,
         )?;
     }
 
-    write_from_bbqueue(&mut writer_receiver, index, wtxn, arroy_writers, &mut aligned_embedding)?;
+    write_from_bbqueue(&mut writer_receiver, index, wtxn, vector_stores, &mut aligned_embedding)?;
 
     Ok(ChannelCongestion {
         attempts: writer_receiver.sent_messages_attempts(),
@@ -115,8 +124,8 @@ pub fn build_vectors<MSP>(
     wtxn: &mut RwTxn<'_>,
     progress: &Progress,
     index_embeddings: Vec<IndexEmbeddingConfig>,
-    arroy_memory: Option<usize>,
-    arroy_writers: &mut HashMap<u8, (&str, &Embedder, ArroyWrapper, usize)>,
+    vector_memory: Option<usize>,
+    vector_stores: &mut HashMap<u8, (&str, &Embedder, VectorStore, usize)>,
     embeder_actions: Option<&BTreeMap<String, EmbedderAction>>,
     must_stop_processing: &MSP,
 ) -> Result<()>
@@ -129,18 +138,18 @@ where
 
     let seed = rand::random();
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-    for (_index, (embedder_name, _embedder, writer, dimensions)) in arroy_writers {
+    for (_index, (embedder_name, _embedder, writer, dimensions)) in vector_stores {
         let dimensions = *dimensions;
         let is_being_quantized = embeder_actions
             .and_then(|actions| actions.get(*embedder_name).map(|action| action.is_being_quantized))
             .unwrap_or(false);
         writer.build_and_quantize(
             wtxn,
-            progress,
+            progress.clone(),
             &mut rng,
             dimensions,
             is_being_quantized,
-            arroy_memory,
+            vector_memory,
             must_stop_processing,
         )?;
     }
@@ -156,6 +165,7 @@ pub(super) fn update_index(
     new_fields_ids_map: FieldIdMapWithMetadata,
     new_primary_key: Option<PrimaryKey<'_>>,
     embedders: RuntimeEmbedders,
+    embedder_ip_policy: &http_client::policy::IpPolicy,
     field_distribution: std::collections::BTreeMap<String, u64>,
     document_ids: roaring::RoaringBitmap,
 ) -> Result<()> {
@@ -163,7 +173,8 @@ pub(super) fn update_index(
     if let Some(new_primary_key) = new_primary_key {
         index.put_primary_key(wtxn, new_primary_key.name())?;
     }
-    let mut inner_index_settings = InnerIndexSettings::from_index(index, wtxn, Some(embedders))?;
+    let mut inner_index_settings =
+        InnerIndexSettings::from_index(index, wtxn, embedder_ip_policy, Some(embedders))?;
     inner_index_settings.recompute_searchables(wtxn, index)?;
     index.put_field_distribution(wtxn, &field_distribution)?;
     index.put_documents_ids(wtxn, &document_ids)?;
@@ -181,7 +192,7 @@ pub fn write_from_bbqueue(
     writer_receiver: &mut WriterBbqueueReceiver<'_>,
     index: &Index,
     wtxn: &mut RwTxn<'_>,
-    arroy_writers: &HashMap<u8, (&str, &crate::vector::Embedder, ArroyWrapper, usize)>,
+    vector_stores: &HashMap<u8, (&str, &crate::vector::Embedder, VectorStore, usize)>,
     aligned_embedding: &mut Vec<f32>,
 ) -> crate::Result<()> {
     while let Some(frame_with_header) = writer_receiver.recv_frame() {
@@ -193,12 +204,12 @@ pub fn write_from_bbqueue(
                 match operation.key_value(frame) {
                     (key, Some(value)) => {
                         if let Err(error) = database.put(wtxn, key, value) {
-                            return Err(Error::InternalError(InternalError::StorePut {
+                            return Err(handle_store_mdb_error(
                                 database_name,
-                                key: key.into(),
-                                value_length: value.len(),
+                                key,
+                                Some(value.len()),
                                 error,
-                            }));
+                            ));
                         }
                     }
                     (key, None) => match database.delete(wtxn, key) {
@@ -212,26 +223,22 @@ pub fn write_from_bbqueue(
                         }
                         Ok(_) => (),
                         Err(error) => {
-                            return Err(Error::InternalError(InternalError::StoreDeletion {
-                                database_name,
-                                key: key.into(),
-                                error,
-                            }));
+                            return Err(handle_store_mdb_error(database_name, key, None, error));
                         }
                     },
                 }
             }
-            EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid }) => {
-                for (_index, (_name, _embedder, writer, dimensions)) in arroy_writers {
+            EntryHeader::DeleteVector(DeleteVector { docid }) => {
+                for (_index, (_name, _embedder, writer, dimensions)) in vector_stores {
                     let dimensions = *dimensions;
                     writer.del_items(wtxn, dimensions, docid)?;
                 }
             }
-            EntryHeader::ArroySetVectors(asvs) => {
-                let ArroySetVectors { docid, embedder_id, .. } = asvs;
+            EntryHeader::SetVectors(asvs) => {
+                let SetVectors { docid, embedder_id, .. } = asvs;
                 let frame = frame_with_header.frame();
                 let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                    vector_stores.get(&embedder_id).expect("requested a missing embedder");
                 let mut embeddings = Embeddings::new(*dimensions);
                 let all_embeddings = asvs.read_all_embeddings_into_vec(frame, aligned_embedding);
                 writer.del_items(wtxn, *dimensions, docid)?;
@@ -245,12 +252,10 @@ pub fn write_from_bbqueue(
                     writer.add_items(wtxn, docid, &embeddings)?;
                 }
             }
-            EntryHeader::ArroySetVector(
-                asv @ ArroySetVector { docid, embedder_id, extractor_id, .. },
-            ) => {
+            EntryHeader::SetVector(asv @ SetVector { docid, embedder_id, extractor_id, .. }) => {
                 let frame = frame_with_header.frame();
                 let (_, _, writer, dimensions) =
-                    arroy_writers.get(&embedder_id).expect("requested a missing embedder");
+                    vector_stores.get(&embedder_id).expect("requested a missing embedder");
                 let embedding = asv.read_all_embeddings_into_vec(frame, aligned_embedding);
 
                 if embedding.is_empty() {
@@ -264,6 +269,19 @@ pub fn write_from_bbqueue(
                     }
                     writer.add_item_in_store(wtxn, docid, extractor_id, embedding)?;
                 }
+            }
+            EntryHeader::CelluliteItem(docid) => {
+                let frame = frame_with_header.frame();
+                let skip = EntryHeader::variant_size() + std::mem::size_of::<DocumentId>();
+                let geojson = &frame[skip..];
+
+                index
+                    .cellulite
+                    .add_raw_zerometry(wtxn, docid, geojson)
+                    .map_err(InternalError::CelluliteError)?;
+            }
+            EntryHeader::CelluliteRemove(docid) => {
+                index.cellulite.delete(wtxn, docid).map_err(InternalError::CelluliteError)?;
             }
         }
     }

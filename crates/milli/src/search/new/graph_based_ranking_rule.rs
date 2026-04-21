@@ -53,48 +53,49 @@ use super::{QueryGraph, RankingRule, RankingRuleOutput, SearchContext};
 use crate::score_details::Rank;
 use crate::search::new::query_term::LocatedQueryTermSubset;
 use crate::search::new::ranking_rule_graph::PathVisitor;
-use crate::{Result, TermsMatchingStrategy};
+use crate::search::new::ranking_rules::RankingRuleId;
+use crate::{Deadline, Result, TermsMatchingStrategy};
 
 pub type Words = GraphBasedRankingRule<WordsGraph>;
 impl GraphBasedRankingRule<WordsGraph> {
     pub fn new(terms_matching_strategy: TermsMatchingStrategy) -> Self {
-        Self::new_with_id("words".to_owned(), Some(terms_matching_strategy))
+        Self::new_with_id(RankingRuleId::Words, Some(terms_matching_strategy))
     }
 }
 pub type Proximity = GraphBasedRankingRule<ProximityGraph>;
 impl GraphBasedRankingRule<ProximityGraph> {
     pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
-        Self::new_with_id("proximity".to_owned(), terms_matching_strategy)
+        Self::new_with_id(RankingRuleId::Proximity, terms_matching_strategy)
     }
 }
 pub type Fid = GraphBasedRankingRule<FidGraph>;
 impl GraphBasedRankingRule<FidGraph> {
     pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
-        Self::new_with_id("fid".to_owned(), terms_matching_strategy)
+        Self::new_with_id(RankingRuleId::WordPosition, terms_matching_strategy)
     }
 }
 pub type Position = GraphBasedRankingRule<PositionGraph>;
 impl GraphBasedRankingRule<PositionGraph> {
     pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
-        Self::new_with_id("position".to_owned(), terms_matching_strategy)
+        Self::new_with_id(RankingRuleId::WordPosition, terms_matching_strategy)
     }
 }
 pub type Typo = GraphBasedRankingRule<TypoGraph>;
 impl GraphBasedRankingRule<TypoGraph> {
     pub fn new(terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
-        Self::new_with_id("typo".to_owned(), terms_matching_strategy)
+        Self::new_with_id(RankingRuleId::Typo, terms_matching_strategy)
     }
 }
 pub type Exactness = GraphBasedRankingRule<ExactnessGraph>;
 impl GraphBasedRankingRule<ExactnessGraph> {
     pub fn new() -> Self {
-        Self::new_with_id("exactness".to_owned(), None)
+        Self::new_with_id(RankingRuleId::Exactness, None)
     }
 }
 
 /// A generic graph-based ranking rule
 pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {
-    id: String,
+    id: RankingRuleId,
     terms_matching_strategy: Option<TermsMatchingStrategy>,
     // When the ranking rule is not iterating over its buckets,
     // its state is `None`.
@@ -102,7 +103,10 @@ pub struct GraphBasedRankingRule<G: RankingRuleGraphTrait> {
 }
 impl<G: RankingRuleGraphTrait> GraphBasedRankingRule<G> {
     /// Creates the ranking rule with the given identifier
-    pub fn new_with_id(id: String, terms_matching_strategy: Option<TermsMatchingStrategy>) -> Self {
+    pub fn new_with_id(
+        id: RankingRuleId,
+        terms_matching_strategy: Option<TermsMatchingStrategy>,
+    ) -> Self {
         Self { id, terms_matching_strategy, state: None }
     }
 }
@@ -124,7 +128,7 @@ pub struct GraphBasedRankingRuleState<G: RankingRuleGraphTrait> {
 }
 
 impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBasedRankingRule<G> {
-    fn id(&self) -> String {
+    fn id(&self) -> RankingRuleId {
         self.id.clone()
     }
 
@@ -135,6 +139,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         _logger: &mut dyn SearchLogger<QueryGraph>,
         _universe: &RoaringBitmap,
         query_graph: &QueryGraph,
+        _deadline: &Deadline,
     ) -> Result<()> {
         // the `next_max_cost` is the successor integer to the maximum cost of the paths in the graph.
         //
@@ -217,6 +222,7 @@ impl<'ctx, G: RankingRuleGraphTrait> RankingRule<'ctx, QueryGraph> for GraphBase
         ctx: &mut SearchContext<'ctx>,
         logger: &mut dyn SearchLogger<QueryGraph>,
         universe: &RoaringBitmap,
+        _deadline: &Deadline,
     ) -> Result<Option<RankingRuleOutput<QueryGraph>>> {
         // Will crash if `next_bucket` is called before `start_iteration` or after `end_iteration`,
         // should never happen

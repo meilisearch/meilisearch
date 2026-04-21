@@ -1,8 +1,10 @@
 use std::sync::{Arc, RwLock};
 
-use meilisearch_types::features::{InstanceTogglableFeatures, Network, RuntimeTogglableFeatures};
+use meilisearch_types::features::{InstanceTogglableFeatures, RuntimeTogglableFeatures};
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RwTxn, WithoutTls};
+use meilisearch_types::network::route::Status;
+use meilisearch_types::network::{Network, RemoteAvailability};
 
 use crate::error::FeatureNotEnabledError;
 use crate::Result;
@@ -24,6 +26,7 @@ pub(crate) struct FeatureData {
     persisted: Database<Str, SerdeJson<RuntimeTogglableFeatures>>,
     runtime: Arc<RwLock<RuntimeTogglableFeatures>>,
     network: Arc<RwLock<Network>>,
+    remote_availability: Arc<RemoteAvailability>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -35,6 +38,10 @@ impl RoFeatures {
     fn new(data: &FeatureData) -> Self {
         let runtime = data.runtime_features();
         Self { runtime }
+    }
+
+    pub fn from_runtime_features(features: RuntimeTogglableFeatures) -> Self {
+        Self { runtime: features }
     }
 
     pub fn runtime_features(&self) -> RuntimeTogglableFeatures {
@@ -93,6 +100,19 @@ impl RoFeatures {
         }
     }
 
+    pub fn check_dynamic_search_rules(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.dynamic_search_rules {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "dynamic search rules",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/884",
+            }
+            .into())
+        }
+    }
+
     pub fn check_network(&self, disabled_action: &'static str) -> Result<()> {
         if self.runtime.network {
             Ok(())
@@ -114,6 +134,19 @@ impl RoFeatures {
                 disabled_action: "Getting the documents of an enqueued task",
                 feature: "get task documents route",
                 issue_link: "https://github.com/orgs/meilisearch/discussions/808",
+            }
+            .into())
+        }
+    }
+
+    pub fn check_task_queue_compaction_route(&self) -> Result<()> {
+        if self.runtime.task_queue_compaction_route {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action: "Using the /tasks/compact route",
+                feature: "task queue compaction route",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/883",
             }
             .into())
         }
@@ -157,6 +190,19 @@ impl RoFeatures {
             .into())
         }
     }
+
+    pub fn check_foreign_keys_setting(&self, disabled_action: &'static str) -> Result<()> {
+        if self.runtime.foreign_keys {
+            Ok(())
+        } else {
+            Err(FeatureNotEnabledError {
+                disabled_action,
+                feature: "foreign_keys",
+                issue_link: "https://github.com/orgs/meilisearch/discussions/873",
+            }
+            .into())
+        }
+    }
 }
 
 impl FeatureData {
@@ -190,6 +236,7 @@ impl FeatureData {
             persisted: runtime_features_db,
             runtime,
             network: Arc::new(RwLock::new(network)),
+            remote_availability: Arc::new(RemoteAvailability::new()),
         })
     }
 
@@ -234,6 +281,18 @@ impl FeatureData {
     }
 
     pub fn network(&self) -> Network {
-        Network::clone(&*self.network.read().unwrap())
+        let mut network = Network::clone(&*self.network.read().unwrap());
+        for (remote_name, remote) in network.remotes.iter_mut() {
+            remote.status = if self.remote_availability.is_available(remote_name) {
+                Status::Available
+            } else {
+                Status::Unavailable
+            };
+        }
+        network
+    }
+
+    pub fn remote_availability(&self) -> &RemoteAvailability {
+        &self.remote_availability
     }
 }

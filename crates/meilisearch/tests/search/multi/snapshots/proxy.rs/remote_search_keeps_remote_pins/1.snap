@@ -1,0 +1,25 @@
+---
+source: crates/meilisearch/tests/search/multi/proxy.rs
+---
+[
+  {
+    "id": "remote",
+    "title": "Batman",
+    "_federation": {
+      "indexUid": "test",
+      "queriesPosition": 1,
+      "weightedRankingScore": 1.0,
+      "remote": "ms1"
+    }
+  },
+  {
+    "id": "local",
+    "title": "Batman Returns",
+    "_federation": {
+      "indexUid": "test",
+      "queriesPosition": 0,
+      "weightedRankingScore": 1.0,
+      "remote": "ms0"
+    }
+  }
+]

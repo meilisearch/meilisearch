@@ -54,6 +54,7 @@ impl MultiSearchAggregator {
             attributes_to_highlight: _,
             show_ranking_score: _,
             show_ranking_score_details: _,
+            show_performance_details: _,
             show_matches_position: _,
             filter: _,
             sort: _,
@@ -67,6 +68,8 @@ impl MultiSearchAggregator {
             hybrid: _,
             ranking_score_threshold: _,
             locales: _,
+            personalize: _,
+            use_network: _,
         } in &federated_search.queries
         {
             if let Some(federation_options) = federation_options {

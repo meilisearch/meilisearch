@@ -2185,11 +2185,14 @@ async fn import_dump_v6_containing_experimental_features() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
@@ -2312,11 +2315,14 @@ async fn import_dump_v6_containing_batches_and_enqueued_tasks() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
@@ -2419,11 +2425,14 @@ async fn generate_and_import_dump_containing_vectors() {
       "logsRoute": false,
       "editDocumentsByFunction": false,
       "containsFilter": false,
+      "dynamicSearchRules": false,
       "network": false,
       "getTaskDocumentsRoute": false,
+      "taskQueueCompactionRoute": false,
       "compositeEmbedders": false,
       "chatCompletions": false,
-      "multimodal": false
+      "multimodal": false,
+      "foreignKeys": false
     }
     "###);
 
@@ -2445,8 +2454,9 @@ async fn generate_and_import_dump_containing_vectors() {
         "words",
         "typo",
         "proximity",
-        "attribute",
+        "attributeRank",
         "sort",
+        "wordPosition",
         "exactness"
       ],
       "stopWords": [],

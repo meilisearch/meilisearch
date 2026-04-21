@@ -15,11 +15,10 @@ use big_s::S;
 use maplit::hashset;
 use meili_snap::insta;
 
+use crate::criterion::AttributeState;
 use crate::index::tests::TempIndex;
 use crate::search::new::tests::collect_field_values;
-use crate::{
-    score_details, AscDesc, Criterion, Member, Search, SearchResult, TermsMatchingStrategy,
-};
+use crate::{score_details, AscDesc, Criterion, Member, SearchResult, TermsMatchingStrategy};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -184,7 +183,7 @@ fn test_sort() {
     let index = create_index();
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("letter")))]);
@@ -219,7 +218,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("rank")))]);
@@ -254,7 +253,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Asc(Member::Field(S("vague")))]);
@@ -289,7 +288,7 @@ fn test_sort() {
     ]
     "###);
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Desc(Member::Field(S("vague")))]);
@@ -338,7 +337,7 @@ fn test_redacted() {
 
     let txn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&txn, &index);
+    let mut s = index.search(&txn);
     s.terms_matching_strategy(TermsMatchingStrategy::Last);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![
@@ -346,10 +345,12 @@ fn test_redacted() {
         AscDesc::Asc(Member::Field(S("letter"))),
     ]);
 
+    let attribute_state = AttributeState::from_criteria(index.criteria(&txn).unwrap());
+
     let SearchResult { documents_ids, document_scores, .. } = s.execute().unwrap();
     let document_scores_json: Vec<_> = document_scores
         .iter()
-        .map(|scores| score_details::ScoreDetails::to_json_map(scores.iter()))
+        .map(|scores| score_details::ScoreDetails::to_json_map(attribute_state, scores.iter()))
         .collect();
     insta::assert_snapshot!(format!("{documents_ids:?}"), @"[0, 2, 4, 5, 22, 23, 13, 1, 3, 12, 21, 11, 20, 6, 7, 8, 9, 10, 14, 15]");
     insta::assert_json_snapshot!(document_scores_json);

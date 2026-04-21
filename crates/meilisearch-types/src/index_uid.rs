@@ -4,15 +4,16 @@ use std::fmt;
 use std::str::FromStr;
 
 use deserr::Deserr;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::error::{Code, ErrorCode};
 
-/// An index uid is composed of only ascii alphanumeric characters, - and _, between 1 and 400
-/// bytes long
-#[derive(Debug, Clone, PartialEq, Eq, Deserr, PartialOrd, Ord, Serialize, ToSchema)]
+#[derive(
+    Debug, Clone, Deserialize, PartialEq, Eq, Deserr, PartialOrd, Ord, Serialize, ToSchema,
+)]
 #[deserr(try_from(String) = IndexUid::try_from -> IndexUidFormatError)]
+#[serde(try_from = "String")]
 #[schema(value_type = String, example = "movies")]
 pub struct IndexUid(String);
 

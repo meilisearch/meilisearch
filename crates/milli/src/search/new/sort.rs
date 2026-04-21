@@ -7,7 +7,8 @@ use crate::heed_codec::facet::{FacetGroupKeyCodec, OrderedF64Codec};
 use crate::heed_codec::{BytesRefCodec, StrRefCodec};
 use crate::score_details::{self, ScoreDetails};
 use crate::search::facet::{ascending_facet_sort, descending_facet_sort};
-use crate::{FieldId, Index, Result};
+use crate::search::new::ranking_rules::RankingRuleId;
+use crate::{Deadline, FieldId, Index, Result};
 
 pub trait RankingRuleOutputIter<'ctx, Query> {
     fn next_bucket(&mut self) -> Result<Option<RankingRuleOutput<Query>>>;
@@ -79,14 +80,18 @@ impl<'ctx, Query> Sort<'ctx, Query> {
             return Ok(false);
         };
 
-        Ok(!displayed_fields.iter().any(|&field| field == field_name))
+        Ok(!displayed_fields.contains(&field_name))
     }
 }
 
 impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx, Query> {
-    fn id(&self) -> String {
+    fn id(&self) -> RankingRuleId {
         let Self { field_name, is_ascending, .. } = self;
-        format!("{field_name}:{}", if *is_ascending { "asc" } else { "desc" })
+        if *is_ascending {
+            RankingRuleId::Asc(field_name.clone())
+        } else {
+            RankingRuleId::Desc(field_name.clone())
+        }
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::sort")]
@@ -96,6 +101,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         _logger: &mut dyn SearchLogger<Query>,
         parent_candidates: &RoaringBitmap,
         parent_query: &Query,
+        _deadline: &Deadline,
     ) -> Result<()> {
         let iter: RankingRuleOutputIterWrapper<'ctx, Query> = match self.field_id {
             Some(field_id) => {
@@ -194,6 +200,7 @@ impl<'ctx, Query: RankingRuleQueryTrait> RankingRule<'ctx, Query> for Sort<'ctx,
         _ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Query>,
         universe: &RoaringBitmap,
+        _deadline: &Deadline,
     ) -> Result<Option<RankingRuleOutput<Query>>> {
         let iter = self.iter.as_mut().unwrap();
         if let Some(mut bucket) = iter.next_bucket()? {

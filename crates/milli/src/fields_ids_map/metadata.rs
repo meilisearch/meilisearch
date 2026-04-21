@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::num::NonZeroU16;
 
 use charabia::Language;
@@ -6,31 +6,57 @@ use heed::RoTxn;
 
 use super::FieldsIdsMap;
 use crate::attribute_patterns::{match_field_legacy, PatternMatch};
-use crate::constants::{RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+};
+use crate::order_by_map::OrderByMap;
 use crate::{
-    is_faceted_by, FieldId, FilterableAttributesFeatures, FilterableAttributesRule, Index,
-    LocalizedAttributesRule, Result, Weight,
+    is_faceted_by, Criterion, FieldId, FilterableAttributesFeatures, FilterableAttributesRule,
+    Index, LocalizedAttributesRule, OrderBy, Result, Weight,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Metadata {
     /// The weight as defined in the FieldidsWeightsMap of the searchable attribute if it is searchable.
     pub searchable: Option<Weight>,
+    /// The field is part of the exact attributes.
+    pub exact: bool,
     /// The field is part of the sortable attributes.
     pub sortable: bool,
     /// The field is defined as the distinct attribute.
     pub distinct: bool,
     /// The field has been defined as asc/desc in the ranking rules.
-    pub asc_desc: bool,
+    pub asc_desc: Option<FieldSortOrder>,
     /// The field is a geo field (`_geo`, `_geo.lat`, `_geo.lng`).
     pub geo: bool,
+    /// The field is a geo json field (`_geojson`).
+    pub geo_json: bool,
+    /// The field is defined as a field that can be displayed.
+    pub displayed: bool,
     /// The id of the localized attributes rule if the field is localized.
     pub localized_attributes_rule_id: Option<NonZeroU16>,
     /// The id of the filterable attributes rule if the field is filterable.
     pub filterable_attributes_rule_id: Option<NonZeroU16>,
+    /// How that field will be sorted by.
+    pub sort_by: OrderBy,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FieldSortOrder {
+    Asc,
+    Desc,
+}
+
+impl std::fmt::Display for FieldSortOrder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FieldSortOrder::Asc => write!(f, "asc"),
+            FieldSortOrder::Desc => write!(f, "desc"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldIdMapWithMetadata {
     fields_ids_map: FieldsIdsMap,
     builder: MetadataBuilder,
@@ -174,7 +200,7 @@ impl Metadata {
     }
 
     pub fn is_asc_desc(&self) -> bool {
-        self.asc_desc
+        self.asc_desc.is_some()
     }
 
     pub fn is_geo(&self) -> bool {
@@ -202,35 +228,63 @@ impl Metadata {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MetadataBuilder {
     searchable_attributes: Option<Vec<String>>,
+    exact_searchable_attributes: Vec<String>,
     filterable_attributes: Vec<FilterableAttributesRule>,
     sortable_attributes: HashSet<String>,
     localized_attributes: Option<Vec<LocalizedAttributesRule>>,
     distinct_attribute: Option<String>,
-    asc_desc_attributes: HashSet<String>,
+    asc_desc_attributes: HashMap<String, FieldSortOrder>,
+    displayed_attributes: Option<HashSet<String>>,
+    fields_metadata: BTreeMap<String, Metadata>,
+    order_by_map: OrderByMap,
 }
 
 impl MetadataBuilder {
     pub fn from_index(index: &Index, rtxn: &RoTxn) -> Result<Self> {
         let searchable_attributes = index
             .user_defined_searchable_fields(rtxn)?
-            .map(|fields| fields.into_iter().map(|s| s.to_string()).collect());
+            .map(|fields| fields.into_iter().map(String::from).collect());
+        let exact_searchable_attributes =
+            index.exact_attributes(rtxn)?.into_iter().map(String::from).collect();
         let filterable_attributes = index.filterable_attributes_rules(rtxn)?;
         let sortable_attributes = index.sortable_fields(rtxn)?;
         let localized_attributes = index.localized_attributes_rules(rtxn)?;
-        let distinct_attribute = index.distinct_field(rtxn)?.map(|s| s.to_string());
-        let asc_desc_attributes = index.asc_desc_fields(rtxn)?;
+        let distinct_attribute = index.distinct_field(rtxn)?.map(String::from);
+        let asc_desc_attributes = index
+            .criteria(rtxn)?
+            .into_iter()
+            .filter_map(|criterion| match criterion {
+                Criterion::Asc(field) => Some((field, FieldSortOrder::Asc)),
+                Criterion::Desc(field) => Some((field, FieldSortOrder::Desc)),
+                _otherwise => None,
+            })
+            .collect();
 
-        Ok(Self::new(
+        let displayed_attributes = index
+            .displayed_fields(rtxn)?
+            .map(|fields| fields.into_iter().map(String::from).collect());
+
+        let mut this = Self {
             searchable_attributes,
+            exact_searchable_attributes,
             filterable_attributes,
             sortable_attributes,
             localized_attributes,
             distinct_attribute,
             asc_desc_attributes,
-        ))
+            displayed_attributes,
+            fields_metadata: BTreeMap::default(),
+            order_by_map: index.sort_facet_values_by(rtxn)?,
+        };
+
+        for field_name in index.fields_ids_map(rtxn)?.names() {
+            this.fields_metadata.insert(field_name.to_owned(), this.metadata_for_field(field_name));
+        }
+
+        Ok(this)
     }
 
     /// Build a new `MetadataBuilder` from the given parameters.
@@ -238,11 +292,12 @@ impl MetadataBuilder {
     /// This is used for testing, prefer using `MetadataBuilder::from_index` instead.
     pub fn new(
         searchable_attributes: Option<Vec<String>>,
+        exact_searchable_attributes: Vec<String>,
         filterable_attributes: Vec<FilterableAttributesRule>,
         sortable_attributes: HashSet<String>,
         localized_attributes: Option<Vec<LocalizedAttributesRule>>,
         distinct_attribute: Option<String>,
-        asc_desc_attributes: HashSet<String>,
+        asc_desc_attributes: HashMap<String, FieldSortOrder>,
     ) -> Self {
         let searchable_attributes = match searchable_attributes {
             Some(fields) if fields.iter().any(|f| f == "*") => None,
@@ -252,11 +307,15 @@ impl MetadataBuilder {
 
         Self {
             searchable_attributes,
+            exact_searchable_attributes,
             filterable_attributes,
             sortable_attributes,
             localized_attributes,
             distinct_attribute,
             asc_desc_attributes,
+            displayed_attributes: None,
+            fields_metadata: BTreeMap::default(),
+            order_by_map: OrderByMap::default(),
         }
     }
 
@@ -265,12 +324,16 @@ impl MetadataBuilder {
             // Vectors fields are not searchable, filterable, distinct or asc_desc
             return Metadata {
                 searchable: None,
+                exact: false,
                 sortable: false,
                 distinct: false,
-                asc_desc: false,
+                asc_desc: None,
                 geo: false,
+                geo_json: false,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id: None,
+                displayed: self.is_field_displayed(field),
+                sort_by: OrderBy::default(),
             };
         }
 
@@ -291,12 +354,32 @@ impl MetadataBuilder {
             // Geo fields are not searchable, distinct or asc_desc
             return Metadata {
                 searchable: None,
+                exact: false,
                 sortable,
                 distinct: false,
-                asc_desc: false,
+                asc_desc: None,
                 geo: true,
+                geo_json: false,
                 localized_attributes_rule_id: None,
                 filterable_attributes_rule_id,
+                displayed: self.is_field_displayed(field),
+                sort_by: self.order_by_map.get(field),
+            };
+        }
+        if match_field_legacy(RESERVED_GEOJSON_FIELD_NAME, field) == PatternMatch::Match {
+            debug_assert!(!sortable, "geojson fields should not be sortable");
+            return Metadata {
+                searchable: None,
+                exact: false,
+                sortable,
+                distinct: false,
+                asc_desc: None,
+                geo: false,
+                geo_json: true,
+                localized_attributes_rule_id: None,
+                filterable_attributes_rule_id,
+                displayed: self.is_field_displayed(field),
+                sort_by: self.order_by_map.get(field),
             };
         }
 
@@ -310,9 +393,11 @@ impl MetadataBuilder {
             None => Some(0),
         };
 
+        let exact = self.exact_searchable_attributes.iter().any(|attr| is_faceted_by(field, attr));
+
         let distinct =
             self.distinct_attribute.as_ref().is_some_and(|distinct_field| field == distinct_field);
-        let asc_desc = self.asc_desc_attributes.contains(field);
+        let asc_desc = self.asc_desc_attributes.get(field).copied();
 
         let localized_attributes_rule_id = self
             .localized_attributes
@@ -324,13 +409,21 @@ impl MetadataBuilder {
 
         Metadata {
             searchable,
+            exact,
             sortable,
             distinct,
             asc_desc,
             geo: false,
+            geo_json: false,
             localized_attributes_rule_id,
             filterable_attributes_rule_id,
+            displayed: self.is_field_displayed(field),
+            sort_by: self.order_by_map.get(field),
         }
+    }
+
+    fn is_field_displayed(&self, field: &str) -> bool {
+        self.displayed_attributes.as_ref().map(|attrs| attrs.contains(field)).unwrap_or(true)
     }
 
     pub fn searchable_attributes(&self) -> Option<&[String]> {
@@ -347,5 +440,9 @@ impl MetadataBuilder {
 
     pub fn localized_attributes_rules(&self) -> Option<&[LocalizedAttributesRule]> {
         self.localized_attributes.as_deref()
+    }
+
+    pub fn fields_metadata(&self) -> &BTreeMap<String, Metadata> {
+        &self.fields_metadata
     }
 }

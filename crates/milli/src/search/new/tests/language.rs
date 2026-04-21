@@ -1,5 +1,5 @@
 use crate::index::tests::TempIndex;
-use crate::{Search, SearchResult};
+use crate::SearchResult;
 
 #[test]
 fn test_kanji_language_detection() {
@@ -14,7 +14,7 @@ fn test_kanji_language_detection() {
         .unwrap();
 
     let txn = index.write_txn().unwrap();
-    let mut search = Search::new(&txn, &index);
+    let mut search = index.search(&txn);
 
     search.query("東京");
     let SearchResult { documents_ids, .. } = search.execute().unwrap();

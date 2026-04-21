@@ -163,6 +163,8 @@ impl CompatV5ToV6 {
                     enqueued_at: task_view.enqueued_at,
                     started_at: task_view.started_at,
                     finished_at: task_view.finished_at,
+                    network: None,
+                    custom_metadata: None,
                 };
 
                 (task, content_file)
@@ -207,6 +209,12 @@ impl CompatV5ToV6 {
 
     pub fn webhooks(&self) -> Option<&v6::Webhooks> {
         None
+    }
+
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(String, v6::DynamicSearchRule)>> + '_>> {
+        Ok(Box::new(std::iter::empty()))
     }
 }
 
@@ -347,6 +355,7 @@ impl<T> From<v5::Settings<T>> for v6::Settings<v6::Unchecked> {
                 v5::settings::Setting::Reset => v6::Setting::Reset,
                 v5::settings::Setting::NotSet => v6::Setting::NotSet,
             },
+            foreign_keys: v6::Setting::NotSet,
             sortable_attributes: settings.sortable_attributes.into(),
             ranking_rules: {
                 match settings.ranking_rules {
@@ -469,6 +478,7 @@ pub(crate) mod test {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::ArchiveExt;
 
     #[test]
     fn compat_v5_v6() {
@@ -477,7 +487,7 @@ pub(crate) mod test {
         let mut dump = BufReader::new(dump);
         let gz = GzDecoder::new(&mut dump);
         let mut archive = tar::Archive::new(gz);
-        archive.unpack(dir.path()).unwrap();
+        archive.safe_unpack(dir.path()).unwrap();
 
         let mut dump = v5::V5Reader::open(dir).unwrap().to_v6();
 

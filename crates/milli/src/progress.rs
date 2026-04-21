@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use enum_iterator::Sequence;
+use enum_iterator::Sequence as _;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use serde::Serialize;
@@ -50,23 +50,88 @@ struct InnerProgress {
 }
 
 impl Progress {
-    pub fn update_progress<P: Step>(&self, sub_progress: P) {
-        let mut inner = self.steps.write().unwrap();
+    /// Update the progress and return `Updated` if the step was started, `NotUpdated` if it was already started.
+    /// Return `Failed` if the RWLock failed to lock.
+    pub fn update_progress<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        let mut inner = match self.steps.write() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to start progress step `{}`: {error}", sub_progress.name());
+                return UpdateStepStatus::NotUpdated;
+            }
+        };
         let InnerProgress { steps, durations } = &mut *inner;
 
-        let now = Instant::now();
         let step_type = TypeId::of::<P>();
         if let Some(idx) = steps.iter().position(|(id, _, _)| *id == step_type) {
+            if steps[idx].1.name() == sub_progress.name() {
+                // The step is already started, so we don't need to start it again.
+                return UpdateStepStatus::NotUpdated;
+            }
+
+            let now = Instant::now();
             push_steps_durations(steps, durations, now, idx);
             steps.truncate(idx);
+            steps.push((step_type, Box::new(sub_progress), now));
+        } else {
+            steps.push((step_type, Box::new(sub_progress), Instant::now()));
         }
 
-        steps.push((step_type, Box::new(sub_progress), now));
+        UpdateStepStatus::Updated
+    }
+
+    /// End a step that has been started without having to start a new step.
+    /// Update the progress and return `Updated` if the step was ended, `NotUpdated` if it was already ended.
+    /// Return `Failed` if the RWLock failed to lock.
+    fn end_progress_step<P: Step>(&self, sub_progress: P) -> UpdateStepStatus {
+        let mut inner = match self.steps.write() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to end progress step `{}`: {error}", sub_progress.name());
+                return UpdateStepStatus::NotUpdated;
+            }
+        };
+
+        let InnerProgress { steps, durations } = &mut *inner;
+
+        let step_type = TypeId::of::<P>();
+        match steps
+            .iter()
+            .position(|(id, s, _)| *id == step_type && s.name() == sub_progress.name())
+        {
+            Some(idx) => {
+                let now = Instant::now();
+                push_steps_durations(steps, durations, now, idx);
+                steps.truncate(idx);
+                UpdateStepStatus::Updated
+            }
+            None => UpdateStepStatus::NotUpdated,
+        }
+    }
+
+    /// Update the progress and return a scoped progress step that will end the progress step when dropped.
+    pub fn update_progress_scoped<P: Step + Copy>(&self, step: P) -> ScopedProgressStep<'_, P> {
+        match self.update_progress(step) {
+            UpdateStepStatus::Updated => ScopedProgressStep { progress: self, step: Some(step) },
+            UpdateStepStatus::NotUpdated => {
+                tracing::warn!(
+                    "Step `{}` can't be scoped because it was already started",
+                    step.name()
+                );
+                ScopedProgressStep { progress: self, step: None }
+            }
+        }
     }
 
     // TODO: This code should be in meilisearch_types but cannot because milli can't depend on meilisearch_types
-    pub fn as_progress_view(&self) -> ProgressView {
-        let inner = self.steps.read().unwrap();
+    pub fn as_progress_view(&self) -> Option<ProgressView> {
+        let inner = match self.steps.read() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to read progress: {error}");
+                return None;
+            }
+        };
         let InnerProgress { steps, .. } = &*inner;
 
         let mut percentage = 0.0;
@@ -84,17 +149,32 @@ impl Progress {
             });
         }
 
-        ProgressView { steps: step_view, percentage: percentage * 100.0 }
+        Some(ProgressView { steps: step_view, percentage: percentage * 100.0 })
     }
 
     pub fn accumulated_durations(&self) -> IndexMap<String, String> {
-        let mut inner = self.steps.write().unwrap();
-        let InnerProgress { steps, durations, .. } = &mut *inner;
+        let inner = match self.steps.read() {
+            Ok(inner) => inner,
+            Err(error) => {
+                tracing::error!("Failed to read progress: {error}");
+                return IndexMap::new();
+            }
+        };
+        let InnerProgress { steps, durations, .. } = &*inner;
+        let mut durations = durations.clone();
 
         let now = Instant::now();
-        push_steps_durations(steps, durations, now, 0);
+        push_steps_durations(steps, &mut durations, now, 0);
 
-        durations.drain(..).map(|(name, duration)| (name, format!("{duration:.2?}"))).collect()
+        let mut accumulated_durations = IndexMap::new();
+        for (name, duration) in durations.drain(..) {
+            accumulated_durations.entry(name).and_modify(|d| *d += duration).or_insert(duration);
+        }
+
+        accumulated_durations
+            .into_iter()
+            .map(|(name, duration)| (name, format!("{duration:.2?}")))
+            .collect()
     }
 
     // TODO: ideally we should expose the progress in a way that let arroy use it directly
@@ -120,13 +200,16 @@ fn push_steps_durations(
 }
 
 /// This trait lets you use the AtomicSubStep defined right below.
-/// The name must be a const that never changed but that can't be enforced by the type system because it make the trait non object-safe.
-/// By forcing the Default trait + the &'static str we make it harder to miss-use the trait.
+/// The name must be a const that never changed but that can't be enforced
+/// by the type system because it make the trait non object-safe. By forcing
+/// the Default trait + the &'static str we make it harder to miss-use the
+/// trait.
 pub trait NamedStep: 'static + Send + Sync + Default {
     fn name(&self) -> &'static str;
 }
 
-/// Structure to quickly define steps that need very quick, lockless updating of their current step.
+/// Structure to quickly define steps that need very quick, lockless
+/// updating of their current step.
 /// You can use this struct if:
 /// - The name of the step doesn't change
 /// - The total number of steps doesn't change
@@ -210,6 +293,7 @@ macro_rules! make_atomic_progress {
 }
 
 make_atomic_progress!(Document alias AtomicDocumentStep => "document");
+make_atomic_progress!(Database alias AtomicDatabaseStep => "database");
 make_atomic_progress!(Payload alias AtomicPayloadStep => "payload");
 
 make_enum_progress! {
@@ -222,25 +306,46 @@ make_enum_progress! {
     }
 }
 
+/// Real-time progress information for a batch or task that is currently
+/// being processed. Use this to display progress bars or status updates to
+/// users.
 #[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ProgressView {
+    /// A hierarchical list of processing steps currently being executed.
+    /// Steps are listed from outermost to innermost, with each step
+    /// representing a more granular operation within its parent step.
     pub steps: Vec<ProgressStepView>,
+    /// The overall completion percentage of the operation (0.0 to 100.0).
+    /// This is calculated by combining the progress of all nested steps,
+    /// weighted by their relative importance.
     pub percentage: f32,
 }
 
+/// Information about a single processing step within a batch or task. Each
+/// step has a name, current progress, and total items to process.
 #[derive(Debug, Serialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ProgressStepView {
+    /// A human-readable name describing what this processing step is doing.
+    /// Examples include "indexing documents", "computing embeddings",
+    /// "building word cache", etc.
     pub current_step: Cow<'static, str>,
+    /// The number of items that have been processed so far in this step.
+    /// Compare with `total` to calculate the percentage complete for this
+    /// specific step.
     pub finished: u32,
+    /// The total number of items to process in this step. When `finished`
+    /// equals `total`, this step is complete and processing moves to the
+    /// next step.
     pub total: u32,
 }
 
 /// Used when the name can change but it's still the same step.
-/// To avoid conflicts on the `TypeId`, create a unique type every time you use this step:
+/// To avoid conflicts on the `TypeId`, create a unique type every time you
+/// use this step:
 /// ```text
 /// enum UpgradeVersion {}
 ///
@@ -291,6 +396,7 @@ impl Step for arroy::MainStep {
             arroy::MainStep::WritingNodesToDatabase => "writing nodes to database",
             arroy::MainStep::DeleteExtraneousTrees => "delete extraneous trees",
             arroy::MainStep::WriteTheMetadata => "write the metadata",
+            arroy::MainStep::ConvertingHannoyToArroy => "converting hannoy to arroy",
         }
         .into()
     }
@@ -316,4 +422,51 @@ impl Step for arroy::SubStep {
     fn total(&self) -> u32 {
         self.max
     }
+}
+
+// Integration with steppe
+
+impl steppe::Progress for Progress {
+    fn update(&self, sub_progress: impl steppe::Step) {
+        self.update_progress(Compat(sub_progress));
+    }
+}
+
+struct Compat<T: steppe::Step>(T);
+
+impl<T: steppe::Step> Step for Compat<T> {
+    fn name(&self) -> Cow<'static, str> {
+        self.0.name()
+    }
+
+    fn current(&self) -> u32 {
+        self.0.current().try_into().unwrap_or(u32::MAX)
+    }
+
+    fn total(&self) -> u32 {
+        self.0.total().try_into().unwrap_or(u32::MAX)
+    }
+}
+
+pub struct ScopedProgressStep<'a, P: Step + Copy> {
+    progress: &'a Progress,
+    step: Option<P>,
+}
+
+impl<'a, P: Step + Copy> Drop for ScopedProgressStep<'a, P> {
+    fn drop(&mut self) {
+        if let Some(step) = self.step {
+            if self.progress.end_progress_step(step) == UpdateStepStatus::NotUpdated {
+                tracing::warn!("Step `{}` has already been ended", step.name());
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateStepStatus {
+    /// The step was updated.
+    Updated,
+    /// The step did not change.
+    NotUpdated,
 }

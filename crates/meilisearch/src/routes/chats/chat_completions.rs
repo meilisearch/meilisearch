@@ -20,6 +20,7 @@ use async_openai::types::{
 use async_openai::Client;
 use bumpalo::Bump;
 use futures::StreamExt;
+use index_scheduler::filter::{filter_into_index_filter, filters_into_index_filters_unchecked};
 use index_scheduler::IndexScheduler;
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::{Code, ResponseError};
@@ -30,7 +31,10 @@ use meilisearch_types::features::{
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::index::ChatConfig;
-use meilisearch_types::milli::{all_obkv_to_json, obkv_to_json, OrderBy, PatternMatch, TimeBudget};
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{
+    all_obkv_to_json, obkv_to_json, OrderBy, PatternMatch, TotalProcessingTimeStep,
+};
 use meilisearch_types::{Document, Index};
 use serde::Deserialize;
 use serde_json::json;
@@ -56,15 +60,78 @@ use crate::metrics::{
 };
 use crate::routes::chats::utils::SseEventSender;
 use crate::routes::indexes::search::search_kind;
-use crate::search::{add_search_rules, prepare_search, search_from_kind, SearchQuery};
+use crate::search::{
+    add_search_rules, parse_filter, prepare_search, search_from_kind, SearchQuery,
+};
 use crate::search_queue::SearchQueue;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(chat)));
-}
-
-/// Get a chat completion
-async fn chat(
+/// Request a chat completion
+#[routes::path(
+    params(
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
+    security(("Bearer" = ["chatsCompletions", "*"])),
+    request_body(content = async_openai::types::CreateChatCompletionRequest, content_type = "application/json"),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 200, description = "Start a conversation.", body = async_openai::types::CreateChatCompletionResponse, content_type = "application/json", example = json!(
+            {
+                "id": "chatcmpl-abc123",
+                "choices": [
+                  {
+                    "index": 0,
+                    "message": {
+                      "content": "After searching the Steam database, here are some game recommendations related to your query:\n\n1. **Game Dev Tycoon**: This game might interest you, as it involves developing games, which could resonate with your work as a developer working on selling a search engine. It is a casual, strategy, and simulation game where you simulate a game development studio.\n\n2. **Mad Games Tycoon**: Another game that could be relevant is Mad Games Tycoon. In this game, you build up your own games, similar to the process of creating and selling software, which could provide insights and inspiration for your work.\n\n3. **Airline Tycoon 2**: While not directly related to search engines, Airline Tycoon 2 involves strategic decision-making and business management, which could offer valuable lessons for selling a product like a search engine.\n\nThese games provide a mix of strategic thinking, simulation, and development aspects that might appeal to you as a developer working on selling a search engine.",
+                      "refusal": null,
+                      "tool_calls": null,
+                      "role": "assistant",
+                      "function_call": null,
+                      "audio": null
+                    },
+                    "finish_reason": "stop",
+                    "logprobs": null
+                  }
+                ],
+                "created": 1747922647,
+                "model": "gpt-3.5-turbo-0125",
+                "service_tier": "default",
+                "system_fingerprint": null,
+                "object": "chat.completion",
+                "usage": {
+                  "prompt_tokens": 1515,
+                  "completion_tokens": 197,
+                  "total_tokens": 1712,
+                  "prompt_tokens_details": {
+                    "audio_tokens": 0,
+                    "cached_tokens": 0
+                  },
+                  "completion_tokens_details": {
+                    "accepted_prediction_tokens": 0,
+                    "audio_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                  }
+                }
+              }
+        )),
+    ),
+)]
+pub async fn chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
     chats_param: web::Path<ChatsParam>,
@@ -262,6 +329,7 @@ async fn process_search_request(
     filter: Option<String>,
 ) -> Result<(Index, Vec<Document>, String), ResponseError> {
     let index = index_scheduler.index(&index_uid)?;
+    let progress = Progress::default();
     let rtxn = index.static_read_txn()?;
     let ChatConfig { description: _, prompt: _, search_parameters } = index.chat_config(&rtxn)?;
     let mut query = SearchQuery {
@@ -285,20 +353,56 @@ async fn process_search_request(
     let search_kind =
         search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
 
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
+    progress.update_progress(TotalProcessingTimeStep::Search);
     let features = index_scheduler.features();
     let index_cloned = index.clone();
-    let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
-        let time_budget = match index_cloned
-            .search_cutoff(&rtxn)
-            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.clone())))?
-        {
-            Some(cutoff) => TimeBudget::new(Duration::from_millis(cutoff)),
-            None => TimeBudget::default(),
-        };
 
-        let (search, _is_finite_pagination, _max_total_hits, _offset) =
-            prepare_search(&index_cloned, &rtxn, &query, &search_kind, time_budget, features)?;
+    let filter = match &query.filter {
+        Some(filter) => {
+            let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
+            filter
+                .map(|f| {
+                    if features.runtime_features().foreign_keys && f.use_foreign_filter().is_some()
+                    {
+                        filter_into_index_filter(
+                            f,
+                            &index,
+                            &rtxn,
+                            index_scheduler,
+                            &progress,
+                            &index_uid,
+                        )
+                    } else {
+                        filters_into_index_filters_unchecked(vec![Some(f)]).map(|mut filters| {
+                            // there is exactly one filter that can't be None
+                            filters.pop().unwrap().unwrap()
+                        })
+                    }
+                })
+                .transpose()?
+                // we need to own the filter because it's sent to spawn_blocking
+                .map(|f| f.into_owned())
+        }
+        None => None,
+    };
+
+    let output = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+        let deadline = index_cloned
+            .search_deadline(&rtxn)
+            .map_err(|e| MeilisearchHttpError::from_milli(e, Some(index_uid.clone())))?;
+
+        let (search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
+            &index_cloned,
+            &rtxn,
+            &query,
+            filter,
+            &search_kind,
+            deadline,
+            features,
+            &progress,
+        )?;
 
         match search_from_kind(index_uid, search_kind, search) {
             Ok((search_results, _)) => Ok((rtxn, Ok(search_results))),
@@ -389,7 +493,7 @@ async fn non_streamed_chat(
     };
 
     let config = Config::new(&chat_settings);
-    let client = Client::with_config(config);
+    let client = Client::with_config(index_scheduler.ip_policy().clone(), config);
     let auth_token = extract_token_from_request(&req)?.unwrap();
     let system_role = chat_settings.source.system_role(&chat_completion.model);
     // TODO do function support later
@@ -472,6 +576,13 @@ async fn non_streamed_chat(
     Ok(HttpResponse::Ok().json(response))
 }
 
+fn sse_chat_response(rx: tokio::sync::mpsc::Receiver<Event>) -> impl Responder {
+    Sse::from_infallible_receiver(rx)
+        .with_retry_duration(Duration::from_secs(10))
+        .customize()
+        .insert_header(("X-Accel-Buffering", "no"))
+}
+
 async fn streamed_chat(
     index_scheduler: GuardedData<ActionPolicy<{ actions::CHAT_COMPLETIONS }>, Data<IndexScheduler>>,
     auth_ctrl: web::Data<AuthController>,
@@ -526,7 +637,7 @@ async fn streamed_chat(
     let tx = SseEventSender::new(tx);
     let workspace_uid = workspace_uid.to_string();
     let _join_handle = Handle::current().spawn(async move {
-        let client = Client::with_config(config.clone());
+        let client = Client::with_config(index_scheduler.ip_policy().clone(), config.clone());
         let mut global_tool_calls = HashMap::<u32, Call>::new();
 
         // Limit the number of internal calls to satisfy the search requests of the LLM
@@ -560,7 +671,7 @@ async fn streamed_chat(
     aggregate.succeed(start_time.elapsed());
     analytics.publish(aggregate, &req);
 
-    Ok(Sse::from_infallible_receiver(rx).with_retry_duration(Duration::from_secs(10)))
+    Ok(sse_chat_response(rx))
 }
 
 /// Updates the chat completion with the new messages, streams the LLM tokens,

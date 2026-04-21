@@ -14,8 +14,11 @@ use super::chat::ChatSearchParams;
 use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
-use crate::attribute_patterns::PatternMatch;
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::attribute_patterns::{match_field_legacy, PatternMatch};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME,
+    RESERVED_GEO_LNG_FIELD_NAME,
+};
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes};
@@ -26,13 +29,15 @@ use crate::index::{
     DEFAULT_MIN_WORD_LEN_TWO_TYPOS,
 };
 use crate::order_by_map::OrderByMap;
-use crate::progress::{EmbedderStats, Progress};
-use crate::prompt::{default_max_bytes, default_template_text, PromptData};
+use crate::progress::{EmbedderStats, Progress, VariableNameStep};
+use crate::prompt::{default_max_bytes, default_template_text, Prompt, PromptData};
 use crate::proximity::ProximityPrecision;
 use crate::update::index_documents::IndexDocumentsMethod;
 use crate::update::new::indexer::reindex;
+use crate::update::new::steps::SettingsIndexerStep;
 use crate::update::{IndexDocuments, UpdateIndexingStep};
 use crate::vector::db::{FragmentConfigs, IndexEmbeddingConfig};
+use crate::vector::embedder::{openai, rest};
 use crate::vector::json_template::JsonTemplate;
 use crate::vector::settings::{
     EmbedderAction, EmbedderSource, EmbeddingSettings, EmbeddingValidationContext, NestingContext,
@@ -40,15 +45,18 @@ use crate::vector::settings::{
 };
 use crate::vector::{
     Embedder, EmbeddingConfig, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
+    VectorStoreBackend,
 };
 use crate::{
-    ChannelCongestion, FieldId, FilterableAttributesRule, Index, LocalizedAttributesRule, Result,
+    ChannelCongestion, FieldId, FilterableAttributesRule, ForeignKey, Index,
+    LocalizedAttributesRule, Result,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Default, Debug, Clone, PartialEq, Eq, Copy)]
 pub enum Setting<T> {
     Set(T),
     Reset,
+    #[default]
     NotSet,
 }
 
@@ -65,12 +73,6 @@ where
             deserr::Value::Null => Ok(Setting::Reset),
             _ => T::deserialize_from_value(value, location).map(Setting::Set),
         }
-    }
-}
-
-impl<T> Default for Setting<T> {
-    fn default() -> Self {
-        Self::NotSet
     }
 }
 
@@ -173,6 +175,7 @@ pub struct Settings<'a, 't, 'i> {
     displayed_fields: Setting<Vec<String>>,
     filterable_fields: Setting<Vec<FilterableAttributesRule>>,
     sortable_fields: Setting<HashSet<String>>,
+    foreign_keys: Setting<Vec<ForeignKey>>,
     criteria: Setting<Vec<Criterion>>,
     stop_words: Setting<BTreeSet<String>>,
     non_separator_tokens: Setting<BTreeSet<String>>,
@@ -198,6 +201,7 @@ pub struct Settings<'a, 't, 'i> {
     prefix_search: Setting<PrefixSearch>,
     facet_search: Setting<bool>,
     chat: Setting<ChatSettings>,
+    vector_store: Setting<VectorStoreBackend>,
 }
 
 impl<'a, 't, 'i> Settings<'a, 't, 'i> {
@@ -213,6 +217,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             displayed_fields: Setting::NotSet,
             filterable_fields: Setting::NotSet,
             sortable_fields: Setting::NotSet,
+            foreign_keys: Setting::NotSet,
             criteria: Setting::NotSet,
             stop_words: Setting::NotSet,
             non_separator_tokens: Setting::NotSet,
@@ -237,6 +242,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
             indexer_config,
         }
     }
@@ -271,6 +277,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
     pub fn reset_sortable_fields(&mut self) {
         self.sortable_fields = Setting::Reset;
+    }
+
+    pub fn set_foreign_keys(&mut self, keys: Vec<ForeignKey>) {
+        self.foreign_keys = Setting::Set(keys);
+    }
+
+    pub fn reset_foreign_keys(&mut self) {
+        self.foreign_keys = Setting::Reset;
     }
 
     pub fn reset_criteria(&mut self) {
@@ -475,6 +489,14 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.chat = Setting::Reset;
     }
 
+    pub fn set_vector_store(&mut self, value: VectorStoreBackend) {
+        self.vector_store = Setting::Set(value);
+    }
+
+    pub fn reset_vector_store(&mut self) {
+        self.vector_store = Setting::Reset;
+    }
+
     #[tracing::instrument(
         level = "trace"
         skip(self, progress_callback, should_abort, settings_diff, embedder_stats),
@@ -485,6 +507,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         progress_callback: &FP,
         should_abort: &FA,
         settings_diff: InnerIndexSettingsDiff,
+        embedder_ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: &Arc<EmbedderStats>,
     ) -> Result<()>
     where
@@ -502,6 +525,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.index,
             self.indexer_config,
             IndexDocumentsMethod::ReplaceDocuments,
+            embedder_ip_policy,
             false,
         )?;
 
@@ -518,6 +542,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             &progress_callback,
             &should_abort,
             embedder_stats,
+            embedder_ip_policy,
         )?;
 
         indexing_builder.execute_raw(output)?;
@@ -540,7 +565,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(true)
     }
 
-    fn update_distinct_field(&mut self) -> Result<bool> {
+    fn update_distinct_attribute(&mut self) -> Result<bool> {
         match self.distinct_field {
             Setting::Set(ref attr) => {
                 self.index.put_distinct_field(self.wtxn, attr)?;
@@ -779,7 +804,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    fn update_filterable(&mut self) -> Result<()> {
+    fn update_filterable_attributes(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
                 self.index.put_filterable_attributes_rules(self.wtxn, fields)?;
@@ -792,7 +817,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    fn update_sortable(&mut self) -> Result<()> {
+    fn update_sortable_attributes(&mut self) -> Result<()> {
         match self.sortable_fields {
             Setting::Set(ref fields) => {
                 let mut new_fields = HashSet::new();
@@ -803,6 +828,19 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             }
             Setting::Reset => {
                 self.index.delete_sortable_fields(self.wtxn)?;
+            }
+            Setting::NotSet => (),
+        }
+        Ok(())
+    }
+
+    fn update_foreign_keys(&mut self) -> Result<()> {
+        match self.foreign_keys {
+            Setting::Set(ref keys) => {
+                self.index.put_foreign_keys(self.wtxn, keys)?;
+            }
+            Setting::Reset => {
+                self.index.delete_foreign_keys(self.wtxn)?;
             }
             Setting::NotSet => (),
         }
@@ -1343,6 +1381,10 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     },
                 };
 
+                // Validate the document template syntax
+                Prompt::new(prompt.template.clone(), prompt.max_bytes)
+                    .map_err(UserError::InvalidChatSettingsDocumentTemplate)?;
+
                 let search_parameters = match new_search_parameters {
                     Setting::Set(sp) => {
                         let ChatSearchParams {
@@ -1416,10 +1458,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    pub fn legacy_execute<FP, FA>(
+    fn legacy_execute<FP, FA>(
         mut self,
         progress_callback: FP,
         should_abort: FA,
+        ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<()>
     where
@@ -1428,11 +1471,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
     {
         self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-        let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+        let old_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
         // never trigger re-indexing
         self.update_displayed()?;
-        self.update_distinct_field()?;
+        self.update_distinct_attribute()?;
         self.update_criteria()?;
         self.update_primary_key()?;
         self.update_authorize_typos()?;
@@ -1442,10 +1486,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_sort_facet_values_by()?;
         self.update_pagination_max_total_hits()?;
         self.update_search_cutoff()?;
+        self.update_foreign_keys()?;
 
         // could trigger re-indexing
-        self.update_filterable()?;
-        self.update_sortable()?;
+        self.update_filterable_attributes()?;
+        self.update_sortable_attributes()?;
         self.update_stop_words()?;
         self.update_non_separator_tokens()?;
         self.update_separator_tokens()?;
@@ -1462,7 +1507,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         let embedding_config_updates = self.update_embedding_configs()?;
 
-        let mut new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+        let mut new_inner_settings =
+            InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
         new_inner_settings.recompute_searchables(self.wtxn, self.index)?;
 
         let primary_key_id = self
@@ -1479,7 +1525,77 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         );
 
         if inner_settings_diff.any_reindexing_needed() {
-            self.reindex(&progress_callback, &should_abort, inner_settings_diff, &embedder_stats)?;
+            self.reindex(
+                &progress_callback,
+                &should_abort,
+                inner_settings_diff,
+                ip_policy,
+                &embedder_stats,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn execute_vector_backend<'indexer, MSP>(
+        &mut self,
+        must_stop_processing: &'indexer MSP,
+        progress: &'indexer Progress,
+    ) -> Result<()>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        let old_backend = self.index.get_vector_store(self.wtxn)?.unwrap_or_default();
+
+        let new_backend = match self.vector_store {
+            Setting::Set(new_backend) => {
+                self.index.put_vector_store(self.wtxn, new_backend)?;
+                new_backend
+            }
+            Setting::Reset => {
+                self.index.delete_vector_store(self.wtxn)?;
+                VectorStoreBackend::default()
+            }
+            Setting::NotSet => return Ok(()),
+        };
+
+        if old_backend == new_backend {
+            return Ok(());
+        }
+
+        let embedders = self.index.embedding_configs();
+        let embedding_configs = embedders.embedding_configs(self.wtxn)?;
+        enum VectorStoreBackendChangeIndex {}
+        let embedder_count = embedding_configs.len();
+
+        let rtxn = self.index.read_txn()?;
+
+        for (i, config) in embedding_configs.into_iter().enumerate() {
+            if must_stop_processing() {
+                return Err(crate::InternalError::AbortedIndexation.into());
+            }
+            let embedder_name = &config.name;
+            progress.update_progress(VariableNameStep::<VectorStoreBackendChangeIndex>::new(
+                format!("Changing vector store backend for embedder `{embedder_name}`"),
+                i as u32,
+                embedder_count as u32,
+            ));
+            let quantized = config.config.quantized();
+            let embedder_id = embedders.embedder_id(self.wtxn, &config.name)?.unwrap();
+            let vector_store = crate::vector::VectorStore::new(
+                old_backend,
+                self.index.vector_store,
+                embedder_id,
+                quantized,
+            );
+
+            vector_store.change_backend(
+                &rtxn,
+                self.wtxn,
+                progress.clone(),
+                must_stop_processing,
+                self.indexer_config.max_memory,
+            )?;
         }
 
         Ok(())
@@ -1489,17 +1605,24 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         mut self,
         must_stop_processing: &'indexer MSP,
         progress: &'indexer Progress,
+        ip_policy: &http_client::policy::IpPolicy,
         embedder_stats: Arc<EmbedderStats>,
     ) -> Result<Option<ChannelCongestion>>
     where
         MSP: Fn() -> bool + Sync,
     {
+        progress.update_progress(SettingsIndexerStep::ChangingVectorStore);
+        // execute any pending vector store backend change
+        self.execute_vector_backend(must_stop_processing, progress)?;
+
         // force the old indexer if the environment says so
         if self.indexer_config.experimental_no_edition_2024_for_settings {
+            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
             return self
                 .legacy_execute(
                     |indexing_step| tracing::debug!(update = ?indexing_step),
                     must_stop_processing,
+                    ip_policy,
                     embedder_stats,
                 )
                 .map(|_| None);
@@ -1507,47 +1630,63 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         // only use the new indexer when only the embedder possibly changed
         if let Self {
-            searchable_fields: Setting::NotSet,
+            searchable_fields: _,
             displayed_fields: Setting::NotSet,
-            filterable_fields: Setting::NotSet,
-            sortable_fields: Setting::NotSet,
-            criteria: Setting::NotSet,
-            stop_words: Setting::NotSet,
-            non_separator_tokens: Setting::NotSet,
-            separator_tokens: Setting::NotSet,
-            dictionary: Setting::NotSet,
-            distinct_field: Setting::NotSet,
+            filterable_fields: _,
+            sortable_fields: _,
+            foreign_keys: _,
+            criteria: _,
+            stop_words: Setting::NotSet, // TODO (require force reindexing of searchables)
+            non_separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
+            separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
+            dictionary: Setting::NotSet, // TODO (require force reindexing of searchables)
+            distinct_field: _,
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
             min_word_len_two_typos: Setting::NotSet,
             min_word_len_one_typo: Setting::NotSet,
-            exact_words: Setting::NotSet,
-            exact_attributes: Setting::NotSet,
+            exact_words: Setting::NotSet, // TODO (require force reindexing of searchables)
+            exact_attributes: _,
             max_values_per_facet: Setting::NotSet,
             sort_facet_values_by: Setting::NotSet,
             pagination_max_total_hits: Setting::NotSet,
-            proximity_precision: Setting::NotSet,
+            proximity_precision: _,
             embedder_settings: _,
             search_cutoff: Setting::NotSet,
-            localized_attributes_rules: Setting::NotSet,
-            prefix_search: Setting::NotSet,
+            localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
+            prefix_search: Setting::NotSet,              // TODO continue with this
             facet_search: Setting::NotSet,
-            disable_on_numbers: Setting::NotSet,
+            disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
             chat: Setting::NotSet,
+            vector_store: Setting::NotSet,
             wtxn: _,
             index: _,
             indexer_config: _,
         } = &self
         {
+            progress.update_progress(SettingsIndexerStep::UsingExperimentalIndexer);
+
             self.index.set_updated_at(self.wtxn, &OffsetDateTime::now_utc())?;
 
-            let old_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+            let old_inner_settings =
+                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
             // Update index settings
             let embedding_config_updates = self.update_embedding_configs()?;
+            self.update_user_defined_searchable_attributes()?;
+            self.update_exact_attributes()?;
+            self.update_proximity_precision()?;
+            self.update_filterable_attributes()?;
+            self.update_sortable_attributes()?;
+            self.update_distinct_attribute()?;
+            self.update_foreign_keys()?;
+            self.update_criteria()?;
 
-            let new_inner_settings = InnerIndexSettings::from_index(self.index, self.wtxn, None)?;
+            // Note that we don't need to update the searchables here,
+            // as it will be done after the settings update.
+            let new_inner_settings =
+                InnerIndexSettings::from_index(self.index, self.wtxn, ip_policy, None)?;
 
             let primary_key_id = self
                 .index
@@ -1571,6 +1710,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                     &inner_settings_diff,
                     must_stop_processing,
                     progress,
+                    ip_policy,
                     embedder_stats,
                 )
                 .map(Some)
@@ -1578,9 +1718,12 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
                 Ok(None)
             }
         } else {
+            progress.update_progress(SettingsIndexerStep::UsingStableIndexer);
+
             self.legacy_execute(
                 |indexing_step| tracing::debug!(update = ?indexing_step),
                 must_stop_processing,
+                ip_policy,
                 embedder_stats,
             )
             .map(|_| None)
@@ -1610,7 +1753,7 @@ pub struct InnerIndexSettingsDiff {
 
 impl InnerIndexSettingsDiff {
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::settings")]
-    pub(crate) fn new(
+    pub fn new(
         old_settings: InnerIndexSettings,
         new_settings: InnerIndexSettings,
         primary_key_id: Option<FieldId>,
@@ -1775,7 +1918,10 @@ impl InnerIndexSettingsDiff {
     }
 
     pub fn any_reindexing_needed(&self) -> bool {
-        self.reindex_searchable() || self.reindex_facets() || self.reindex_vectors()
+        self.reindex_searchable()
+            || self.reindex_facets()
+            || self.reindex_vectors()
+            || self.reindex_geojson()
     }
 
     pub fn reindex_searchable(&self) -> bool {
@@ -1797,10 +1943,13 @@ impl InnerIndexSettingsDiff {
             Some(DelAddOperation::DeletionAndAddition)
         } else if let Some(only_additional_fields) = &self.only_additional_fields {
             let additional_field = self.new.fields_ids_map.name(id).unwrap();
-            if only_additional_fields.contains(additional_field) {
-                Some(DelAddOperation::Addition)
-            } else {
+            if only_additional_fields
+                .iter()
+                .all(|f| match_field_legacy(f, additional_field) == PatternMatch::NoMatch)
+            {
                 None
+            } else {
+                Some(DelAddOperation::Addition)
             }
         } else if self.cache_user_defined_searchables {
             Some(DelAddOperation::DeletionAndAddition)
@@ -1884,6 +2033,11 @@ impl InnerIndexSettingsDiff {
         !self.embedding_config_updates.is_empty()
     }
 
+    pub fn reindex_geojson(&self) -> bool {
+        self.old.filterable_attributes_rules.iter().any(|rule| rule.has_geojson())
+            != self.new.filterable_attributes_rules.iter().any(|rule| rule.has_geojson())
+    }
+
     pub fn settings_update_only(&self) -> bool {
         self.settings_update_only
     }
@@ -1892,10 +2046,15 @@ impl InnerIndexSettingsDiff {
         self.old.geo_fields_ids != self.new.geo_fields_ids
             || (!self.settings_update_only && self.new.geo_fields_ids.is_some())
     }
+
+    pub fn run_geojson_indexing(&self) -> bool {
+        self.old.geojson_fid != self.new.geojson_fid
+            || (!self.settings_update_only && self.new.geojson_fid.is_some())
+    }
 }
 
 #[derive(Clone)]
-pub(crate) struct InnerIndexSettings {
+pub struct InnerIndexSettings {
     pub stop_words: Option<fst::Set<Vec<u8>>>,
     pub allowed_separators: Option<BTreeSet<String>>,
     pub dictionary: Option<BTreeSet<String>>,
@@ -1912,6 +2071,7 @@ pub(crate) struct InnerIndexSettings {
     pub runtime_embedders: RuntimeEmbedders,
     pub embedder_category_id: HashMap<String, u8>,
     pub geo_fields_ids: Option<(FieldId, FieldId)>,
+    pub geojson_fid: Option<FieldId>,
     pub prefix_search: PrefixSearch,
     pub facet_search: bool,
 }
@@ -1920,6 +2080,7 @@ impl InnerIndexSettings {
     pub fn from_index(
         index: &Index,
         rtxn: &heed::RoTxn<'_>,
+        ip_policy: &http_client::policy::IpPolicy,
         runtime_embedders: Option<RuntimeEmbedders>,
     ) -> Result<Self> {
         let stop_words = index.stop_words(rtxn)?;
@@ -1931,7 +2092,7 @@ impl InnerIndexSettings {
         let proximity_precision = index.proximity_precision(rtxn)?.unwrap_or_default();
         let runtime_embedders = match runtime_embedders {
             Some(embedding_configs) => embedding_configs,
-            None => embedders(index.embedding_configs().embedding_configs(rtxn)?)?,
+            None => embedders(index.embedding_configs().embedding_configs(rtxn)?, ip_policy)?,
         };
         let embedder_category_id = index
             .embedding_configs()
@@ -1944,22 +2105,26 @@ impl InnerIndexSettings {
             Some(_) if index.is_geo_enabled(rtxn)? => {
                 // if `_geo` is faceted then we get the `lat` and `lng`
                 let field_ids = fields_ids_map
-                    .insert("_geo.lat")
-                    .zip(fields_ids_map.insert("_geo.lng"))
+                    .insert(RESERVED_GEO_LAT_FIELD_NAME)
+                    .zip(fields_ids_map.insert(RESERVED_GEO_LNG_FIELD_NAME))
                     .ok_or(UserError::AttributeLimitReached)?;
                 Some(field_ids)
             }
             _ => None,
         };
+        let geojson_fid = fields_ids_map.id(RESERVED_GEOJSON_FIELD_NAME);
         let localized_attributes_rules =
             index.localized_attributes_rules(rtxn)?.unwrap_or_default();
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
         let sortable_fields = index.sortable_fields(rtxn)?;
         let asc_desc_fields = index.asc_desc_fields(rtxn)?;
         let distinct_field = index.distinct_field(rtxn)?.map(|f| f.to_string());
-        let user_defined_searchable_attributes = index
-            .user_defined_searchable_fields(rtxn)?
-            .map(|fields| fields.into_iter().map(|f| f.to_string()).collect());
+        let user_defined_searchable_attributes = match index.user_defined_searchable_fields(rtxn)? {
+            Some(fields) if fields.contains(&"*") => None,
+            Some(fields) => Some(fields.into_iter().map(|f| f.to_string()).collect()),
+            None => None,
+        };
+
         let builder = MetadataBuilder::from_index(index, rtxn)?;
         let fields_ids_map = FieldIdMapWithMetadata::new(fields_ids_map, builder);
         let disabled_typos_terms = index.disabled_typos_terms(rtxn)?;
@@ -1979,6 +2144,7 @@ impl InnerIndexSettings {
             runtime_embedders,
             embedder_category_id,
             geo_fields_ids,
+            geojson_fid,
             prefix_search,
             facet_search,
             disabled_typos_terms,
@@ -2019,7 +2185,10 @@ impl InnerIndexSettings {
     }
 }
 
-fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbedders> {
+fn embedders(
+    embedding_configs: Vec<IndexEmbeddingConfig>,
+    ip_policy: &http_client::policy::IpPolicy,
+) -> Result<RuntimeEmbedders> {
     let res: Result<_> = embedding_configs
         .into_iter()
         .map(
@@ -2032,7 +2201,7 @@ fn embedders(embedding_configs: Vec<IndexEmbeddingConfig>) -> Result<RuntimeEmbe
 
                 let embedder =
                     // cache_cap: no cache needed for indexing purposes
-                    Arc::new(Embedder::new(embedder_options.clone(), 0)
+                    Arc::new(Embedder::new(embedder_options.clone(), 0, ip_policy.clone())
                         .map_err(crate::vector::Error::from)
                         .map_err(crate::Error::from)?);
 
@@ -2208,39 +2377,29 @@ pub fn validate_embedding_settings(
     if let Some(request) = request.as_ref().set() {
         let request = match with_fragments {
             WithFragments::Yes { indexing_fragments, search_fragments } => {
-                crate::vector::rest::RequestData::new(
-                    request.to_owned(),
-                    indexing_fragments,
-                    search_fragments,
-                )
-                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+                rest::RequestData::new(request.to_owned(), indexing_fragments, search_fragments)
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
             }
-            WithFragments::No => crate::vector::rest::RequestData::new(
-                request.to_owned(),
-                Default::default(),
-                Default::default(),
-            )
-            .map_err(|error| crate::UserError::VectorEmbeddingError(error.into())),
+            WithFragments::No => {
+                rest::RequestData::new(request.to_owned(), Default::default(), Default::default())
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+            }
             WithFragments::Maybe => {
                 let mut indexing_fragments = BTreeMap::new();
                 indexing_fragments.insert("test".to_string(), serde_json::json!("test"));
-                crate::vector::rest::RequestData::new(
-                    request.to_owned(),
-                    indexing_fragments,
-                    Default::default(),
-                )
-                .or_else(|_| {
-                    crate::vector::rest::RequestData::new(
-                        request.to_owned(),
-                        Default::default(),
-                        Default::default(),
-                    )
-                })
-                .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
+                rest::RequestData::new(request.to_owned(), indexing_fragments, Default::default())
+                    .or_else(|_| {
+                        rest::RequestData::new(
+                            request.to_owned(),
+                            Default::default(),
+                            Default::default(),
+                        )
+                    })
+                    .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))
             }
         }?;
         if let Some(response) = response.as_ref().set() {
-            crate::vector::rest::Response::new(response.to_owned(), &request)
+            rest::Response::new(response.to_owned(), &request)
                 .map_err(|error| crate::UserError::VectorEmbeddingError(error.into()))?;
         }
     }
@@ -2293,11 +2452,12 @@ pub fn validate_embedding_settings(
     match inferred_source {
         EmbedderSource::OpenAi => {
             if let Setting::Set(model) = &model {
-                let model = crate::vector::openai::EmbeddingModel::from_name(model.as_str())
-                    .ok_or(crate::error::UserError::InvalidOpenAiModel {
+                let model = openai::EmbeddingModel::from_name(model.as_str()).ok_or(
+                    crate::error::UserError::InvalidOpenAiModel {
                         embedder_name: name.to_owned(),
                         model: model.clone(),
-                    })?;
+                    },
+                )?;
                 if let Setting::Set(dimensions) = dimensions {
                     if !model.supports_overriding_dimensions()
                         && dimensions != model.default_dimensions()
@@ -2481,8 +2641,32 @@ fn deserialize_sub_embedder(
 /// Implement this trait for the settings delta type.
 /// This is used in the new settings update flow and will allow to easily replace the old settings delta type: `InnerIndexSettingsDiff`.
 pub trait SettingsDelta {
-    fn new_embedders(&self) -> &RuntimeEmbedders;
+    fn old_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
+
+    fn old_searchable_attributes(&self) -> &Option<Vec<String>>;
+    fn new_searchable_attributes(&self) -> &Option<Vec<String>>;
+
+    fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms;
+    fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms;
+
+    fn old_proximity_precision(&self) -> &ProximityPrecision;
+    fn new_proximity_precision(&self) -> &ProximityPrecision;
+
+    fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
+    fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
+
+    fn old_match_faceted_field(&self, field_name: &str) -> PatternMatch;
+    fn new_match_faceted_field(&self, field_name: &str) -> PatternMatch;
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+
+    fn old_geojson_field_id(&self) -> Option<FieldId>;
+    fn new_geojson_field_id(&self) -> Option<FieldId>;
+
     fn old_embedders(&self) -> &RuntimeEmbedders;
+    fn new_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction>;
     fn try_for_each_fragment_diff<F, E>(
@@ -2492,7 +2676,6 @@ pub trait SettingsDelta {
     ) -> std::result::Result<(), E>
     where
         F: FnMut(FragmentDiff) -> std::result::Result<(), E>;
-    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
 }
 
 pub struct FragmentDiff<'a> {
@@ -2501,26 +2684,75 @@ pub struct FragmentDiff<'a> {
 }
 
 impl SettingsDelta for InnerIndexSettingsDiff {
-    fn new_embedders(&self) -> &RuntimeEmbedders {
-        &self.new.runtime_embedders
+    fn old_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
+        &self.old.fields_ids_map
+    }
+    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
+        &self.new.fields_ids_map
+    }
+
+    fn old_searchable_attributes(&self) -> &Option<Vec<String>> {
+        &self.old.user_defined_searchable_attributes
+    }
+    fn new_searchable_attributes(&self) -> &Option<Vec<String>> {
+        &self.new.user_defined_searchable_attributes
+    }
+
+    fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms {
+        &self.old.disabled_typos_terms
+    }
+    fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms {
+        &self.new.disabled_typos_terms
+    }
+
+    fn old_proximity_precision(&self) -> &ProximityPrecision {
+        &self.old.proximity_precision
+    }
+    fn new_proximity_precision(&self) -> &ProximityPrecision {
+        &self.new.proximity_precision
+    }
+
+    fn old_filterable_rules(&self) -> &[FilterableAttributesRule] {
+        &self.old.filterable_attributes_rules
+    }
+    fn new_filterable_rules(&self) -> &[FilterableAttributesRule] {
+        &self.new.filterable_attributes_rules
+    }
+
+    fn old_match_faceted_field(&self, field_name: &str) -> PatternMatch {
+        self.old.match_faceted_field(field_name)
+    }
+    fn new_match_faceted_field(&self, field_name: &str) -> PatternMatch {
+        self.new.match_faceted_field(field_name)
+    }
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.old.geo_fields_ids
+    }
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.new.geo_fields_ids
+    }
+
+    fn old_geojson_field_id(&self) -> Option<FieldId> {
+        self.old.geojson_fid
+    }
+    fn new_geojson_field_id(&self) -> Option<FieldId> {
+        self.new.geojson_fid
     }
 
     fn old_embedders(&self) -> &RuntimeEmbedders {
         &self.old.runtime_embedders
     }
+    fn new_embedders(&self) -> &RuntimeEmbedders {
+        &self.new.runtime_embedders
+    }
 
     fn new_embedder_category_id(&self) -> &HashMap<String, u8> {
         &self.new.embedder_category_id
     }
-
     fn embedder_actions(&self) -> &BTreeMap<String, EmbedderAction> {
         &self.embedding_config_updates
     }
-
-    fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata {
-        &self.new.fields_ids_map
-    }
-
     fn try_for_each_fragment_diff<F, E>(
         &self,
         embedder_name: &str,

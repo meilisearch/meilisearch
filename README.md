@@ -39,8 +39,11 @@
 ## 🖥 Examples
 
 - [**Movies**](https://where2watch.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=organization) — An application to help you find streaming platforms to watch movies using [hybrid search](https://www.meilisearch.com/solutions/hybrid-search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos).
+- [**Flickr**](https://flickr.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=organization) — Search and explore one hundred million Flickr images with semantic search.
 - [**Ecommerce**](https://ecommerce.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Ecommerce website using disjunctive [facets](https://www.meilisearch.com/docs/learn/fine_tuning_results/faceted_search?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos), range and rating filtering, and pagination.
-- [**Songs**](https://music.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Search through 47 million of songs.
+- [**Home Booking**](https://www.meilisearch.com/docs/resources/demos/home_booking) - A conversational search demo for finding holiday rentals using natural language.
+- [**Search Playground**](https://www.meilisearch.com/docs/resources/demos/playground) — An interactive playground to explore Meilisearch search features.
+- [**Personalization**](https://www.meilisearch.com/docs/resources/demos/personalized_search) — A demo showcasing personalized search results tailored to individual users.
 - [**SaaS**](https://saas.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) — Search for contacts, deals, and companies in this [multi-tenant](https://www.meilisearch.com/docs/learn/security/multitenancy_tenant_tokens?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=demos) CRM application.
 
 See the list of all our example apps in our [demos repository](https://github.com/meilisearch/demos).
@@ -58,7 +61,12 @@ See the list of all our example apps in our [demos repository](https://github.co
 - **[Multi-Tenancy](https://www.meilisearch.com/docs/learn/security/multitenancy_tenant_tokens?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** personalize search results for any number of application tenants
 - **Highly Customizable:** customize Meilisearch to your specific needs or use our out-of-the-box and hassle-free presets
 - **[RESTful API](https://www.meilisearch.com/docs/reference/api/overview?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=features):** integrate Meilisearch in your technical stack with our plugins and SDKs
-- **AI-ready:** works out of the box with [langchain](https://www.meilisearch.com/with/langchain) and the [model context protocol](https://github.com/meilisearch/meilisearch-mcp)
+- **[Conversational search](https://www.meilisearch.com/docs/capabilities/conversational_search/overview):** let users ask questions in natural language and get AI-generated answers grounded in your search results
+- **[Personalization](https://www.meilisearch.com/docs/capabilities/personalization/overview):** tailor search results to individual users based on their preferences and behavior
+- **Search rules:** define custom rules to dynamically adjust search behavior based on context
+- **[Document relations](https://www.meilisearch.com/docs/capabilities/indexing/how_to/document_relations):** link documents across indexes to enrich search results with related data
+- **[Replication & sharding](https://www.meilisearch.com/docs/resources/self_hosting/sharding/overview):** scale horizontally by distributing your data across multiple nodes
+- **AI-ready:** works out of the box with [LangChain](https://www.meilisearch.com/with/LangChain) and the [Model Context Protocol (MCP)](https://github.com/meilisearch/meilisearch-mcp)
 - **Easy to install, deploy, and maintain**
 
 ## 📖 Documentation
@@ -89,6 +97,34 @@ We also offer a wide range of dedicated guides to all Meilisearch features, such
 
 Finally, for more in-depth information, refer to our articles explaining fundamental Meilisearch concepts such as [documents](https://www.meilisearch.com/docs/learn/core_concepts/documents?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced) and [indexes](https://www.meilisearch.com/docs/learn/core_concepts/indexes?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=advanced).
 
+## 🧾 Editions & Licensing
+
+Meilisearch is available in two editions:
+
+### 🧪 Community Edition (CE)
+
+- Fully open source under the [MIT license](./LICENSE)
+- Core search engine with fast and relevant full-text, semantic or hybrid search
+- Free to use for anyone, including commercial usage
+
+### 🏢 Enterprise Edition (EE)
+
+- Includes advanced features such as:
+  - Sharding
+  - S3-streaming snapshots
+- Governed by a [commercial license](./LICENSE-EE) or the [Business Source License 1.1](https://mariadb.com/bsl11)
+- Not allowed in production without a commercial agreement with Meilisearch.
+  - You may use, modify, and distribute the Licensed Work for non-production purposes only, such as testing, development, or evaluation.
+
+Want access to Enterprise features? → Contact us at [sales@meilisearch.com](maito:sales@meilisearch.com).
+
+### 📦 External crates
+
+Meilisearch vendors the following MIT-licensed external crates with code modifications to use the HTTP client located in `crates/http-clients`:
+
+- `external-crates/async-openai` and `external-crates/async-openai-macros` from <https://github.com/64bit/async-openai>
+- `external-crates/reqwest-eventsource` from <https://github.com/jpopesculian/reqwest-eventsource>
+
 ## 📊 Telemetry
 
 Meilisearch collects **anonymized** user data to help us improve our product. You can [deactivate this](https://www.meilisearch.com/docs/learn/what_is_meilisearch/telemetry?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=telemetry#how-to-disable-data-collection) whenever you want.
@@ -101,7 +137,7 @@ If you want to know more about the kind of data we collect and what we use it fo
 
 Meilisearch is a search engine created by [Meili](https://www.meilisearch.com/careers), a software development company headquartered in France and with team members all over the world. Want to know more about us? [Check out our blog!](https://blog.meilisearch.com/?utm_campaign=oss&utm_source=github&utm_medium=meilisearch&utm_content=contact)
 
-🗞 [Subscribe to our newsletter](https://meilisearch.us2.list-manage.com/subscribe?u=27870f7b71c908a8b359599fb&id=79582d828e) if you don't want to miss any updates! We promise we won't clutter your mailbox: we only send one edition every two months.
+🗞 [Subscribe to our newsletter](https://share-eu1.hsforms.com/1LN5N0x_GQgq7ss7tXmSykwfg3aq) if you don't want to miss any updates! We promise we won't clutter your mailbox: we only send one edition every two months.
 
 💌 Want to make a suggestion or give feedback? Here are some of the channels where you can reach us:
 

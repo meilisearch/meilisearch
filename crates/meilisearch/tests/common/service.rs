@@ -8,10 +8,12 @@ use actix_web::http::StatusCode;
 use actix_web::test;
 use actix_web::test::TestRequest;
 use actix_web::web::Data;
+use http_client::policy::IpPolicy;
 use index_scheduler::IndexScheduler;
 use meilisearch::analytics::Analytics;
+use meilisearch::personalization::PersonalizationService;
 use meilisearch::search_queue::SearchQueue;
-use meilisearch::{create_app, Opt, SubscriberForSecondLayer};
+use meilisearch::{create_app, Opt, ServicesData, SubscriberForSecondLayer};
 use meilisearch_auth::AuthController;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::Layer;
@@ -49,8 +51,16 @@ impl Service {
         body: impl AsRef<str>,
         headers: Vec<(&str, &str)>,
     ) -> (Value, StatusCode) {
-        let mut req =
-            test::TestRequest::post().uri(url.as_ref()).set_payload(body.as_ref().to_string());
+        self.post_raw(url, body.as_ref().to_string(), headers).await
+    }
+
+    pub async fn post_raw(
+        &self,
+        url: impl AsRef<str>,
+        body: impl Into<bytes::Bytes>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req = test::TestRequest::post().uri(url.as_ref()).set_payload(body);
         for header in headers {
             req = req.insert_header(header);
         }
@@ -73,8 +83,17 @@ impl Service {
         body: impl AsRef<str>,
         headers: Vec<(&str, &str)>,
     ) -> (Value, StatusCode) {
-        let mut req =
-            test::TestRequest::put().uri(url.as_ref()).set_payload(body.as_ref().to_string());
+        self.put_raw(url, body.as_ref().to_string(), headers).await
+    }
+
+    /// Send a test put request from a bytes.
+    pub async fn put_raw(
+        &self,
+        url: impl AsRef<str>,
+        body: impl Into<bytes::Bytes>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req = test::TestRequest::put().uri(url.as_ref()).set_payload(body);
         for header in headers {
             req = req.insert_header(header);
         }
@@ -89,6 +108,19 @@ impl Service {
     ) -> (Value, StatusCode) {
         let mut req = test::TestRequest::put().uri(url.as_ref());
         req = self.encode(req, body, encoder);
+        self.request(req).await
+    }
+
+    pub async fn patch_raw(
+        &self,
+        url: impl AsRef<str>,
+        body: impl Into<bytes::Bytes>,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let mut req = test::TestRequest::patch().uri(url.as_ref()).set_payload(body);
+        for header in headers {
+            req = req.insert_header(header);
+        }
         self.request(req).await
     }
 
@@ -135,14 +167,30 @@ impl Service {
             self.options.experimental_search_queue_size,
             NonZeroUsize::new(1).unwrap(),
         );
+        let personalization_service = self
+            .options
+            .experimental_personalization_api_key
+            .clone()
+            .map(|api_key| {
+                PersonalizationService::cohere(
+                    api_key,
+                    // NO DANGER: test
+                    IpPolicy::danger_always_allow(),
+                )
+            })
+            .unwrap_or_else(PersonalizationService::disabled);
 
         actix_web::test::init_service(create_app(
-            self.index_scheduler.clone().into(),
-            self.auth.clone().into(),
-            Data::new(search_queue),
+            ServicesData {
+                index_scheduler: self.index_scheduler.clone().into(),
+                auth: self.auth.clone().into(),
+                search_queue: Data::new(search_queue),
+                personalization_service: Data::new(personalization_service),
+                logs_route_handle: Data::new(route_layer_handle),
+                logs_stderr_handle: Data::new(stderr_layer_handle),
+                analytics: Data::new(Analytics::no_analytics()),
+            },
             self.options.clone(),
-            (route_layer_handle, stderr_layer_handle),
-            Data::new(Analytics::no_analytics()),
             true,
         ))
         .await

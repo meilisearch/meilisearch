@@ -13,9 +13,9 @@
 //! What is going to happen at this point is that you're going to send a oneshot::Sender over an async mpsc channel.
 //! Then, the queue/scheduler is going to either:
 //! - Drop your oneshot channel => that means there are too many searches going on, and yours won't be executed.
-//!                                You should exit and free all the RAM you use ASAP.
+//!   You should exit and free all the RAM you use ASAP.
 //! - Sends you a Permit => that will unlock the method, and you will be able to process your search.
-//!                         And should drop the Permit only once you have freed all the RAM consumed by the method.
+//!   And should drop the Permit only once you have freed all the RAM consumed by the method.
 
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicUsize, Ordering};

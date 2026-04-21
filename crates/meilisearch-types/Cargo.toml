@@ -11,38 +11,49 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-actix-web = { version = "4.11.0", default-features = false }
-anyhow = "1.0.98"
-bumpalo = "3.18.1"
+actix-web = { version = "4.12.0", default-features = false }
+anyhow = "1.0.100"
+base64 = "0.22.1"
+bumpalo = "3.19.0"
 bumparaw-collections = "0.1.4"
 byte-unit = { version = "5.1.6", features = ["serde"] }
-convert_case = "0.8.0"
-csv = "1.3.1"
-deserr = { version = "0.6.3", features = ["actix-web"] }
+convert_case = "0.9.0"
+csv = "1.4.0"
+deserr = { version = "0.6.4", features = ["actix-web"] }
 either = { version = "1.15.0", features = ["serde"] }
-enum-iterator = "2.1.0"
+enum-iterator = "2.3.0"
 file-store = { path = "../file-store" }
-flate2 = "1.1.2"
+flate2 = "1.1.5"
 fst = "0.4.7"
-memmap2 = "0.9.7"
+itertools = "0.14.0"
+memmap2 = "0.9.9"
 milli = { path = "../milli" }
+papaya = "0.2.4"
 roaring = { version = "0.10.12", features = ["serde"] }
 rustc-hash = "2.1.1"
-serde = { version = "1.0.219", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
 serde-cs = "0.2.4"
-serde_json = { version = "1.0.140", features = ["preserve_order"] }
-tar = "0.4.44"
-tempfile = "3.20.0"
-thiserror = "2.0.12"
-time = { version = "0.3.41", features = [
+serde_json = { version = "1.0.145", features = ["preserve_order"] }
+tar = "0.4.45"
+tempfile = "3.23.0"
+thiserror = "2.0.17"
+time = { version = "0.3.47", features = [
     "serde-well-known",
     "formatting",
     "parsing",
     "macros",
 ] }
-tokio = "1.45"
-utoipa = { version = "5.4.0", features = ["macros"] }
-uuid = { version = "1.17.0", features = ["serde", "v4"] }
+tokio = "1.48"
+urlencoding = "2.1.3"
+utoipa = { version = "5.4.0", features = [
+    "macros",
+    "non_strict_integers",
+    "preserve_order",
+    "uuid",
+    "time",
+    "openapi_extensions",
+] }
+uuid = { version = "1.18.1", features = ["serde", "v4"] }
 
 [dev-dependencies]
 # fixed version due to format breakages in v1.40
@@ -56,6 +67,9 @@ all-tokenizations = ["milli/all-tokenizations"]
 # chinese specialized tokenization
 chinese = ["milli/chinese"]
 chinese-pinyin = ["milli/chinese-pinyin"]
+
+enterprise = ["milli/enterprise"]
+
 # hebrew specialized tokenization
 hebrew = ["milli/hebrew"]
 # japanese specialized tokenization

@@ -11,12 +11,12 @@ use meilisearch_types::settings::{
 };
 use meilisearch_types::tasks::KindWithContent;
 use tracing::debug;
-use utoipa::OpenApi;
 
 use super::settings_analytics::*;
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
+use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
@@ -38,28 +38,20 @@ macro_rules! make_setting_routes {
             make_setting_route!($route, $update_verb, $type, $err_ty, $attr, $camelcase_attr, $analytics);
         )*
 
-        #[derive(OpenApi)]
-        #[openapi(
-            paths(update_all, get_all, delete_all, $( $attr::get, $attr::update, $attr::delete,)*),
+        #[routes::routes(
+            routes(
+                "" => [patch(update_all), get(get_all), delete(delete_all)],
+                $( $route => [get($attr::get), $update_verb($attr::update), delete($attr::delete)]),*
+            ),
+            tag = "Settings",
             tags(
                 (
                     name = "Settings",
-                    description = "Use the /settings route to customize search settings for a given index. You can either modify all index settings at once using the update settings endpoint, or use a child route to configure a single setting.",
-                    external_docs(url = "https://www.meilisearch.com/docs/reference/api/settings"),
+                    description = "Configure search and index behavior. Update all settings at once via PATCH /indexes/{indexUid}/settings, or use a sub-route to get, update, or reset a single setting.",
                 ),
             ),
         )]
         pub struct SettingsApi;
-
-        pub fn configure(cfg: &mut web::ServiceConfig) {
-            use crate::extractors::sequential_extractor::SeqHandler;
-            cfg.service(
-                web::resource("")
-                .route(web::patch().to(SeqHandler(update_all)))
-                .route(web::get().to(SeqHandler(get_all)))
-                .route(web::delete().to(SeqHandler(delete_all))))
-                $(.service($attr::resources()))*;
-        }
 
         pub const ALL_SETTINGS_NAMES: &[&str] = &[$(stringify!($attr)),*];
     };
@@ -76,29 +68,24 @@ macro_rules! make_setting_route {
             use meilisearch_types::index_uid::IndexUid;
             use meilisearch_types::milli::update::Setting;
             use meilisearch_types::settings::{settings, Settings};
-            use meilisearch_types::tasks::KindWithContent;
             use tracing::debug;
             use $crate::analytics::Analytics;
             use $crate::extractors::authentication::policies::*;
             use $crate::extractors::authentication::GuardedData;
             use $crate::extractors::sequential_extractor::SeqHandler;
             use $crate::Opt;
-            use $crate::routes::{is_dry_run, get_task_id, SummarizedTaskView};
+            use $crate::routes::SummarizedTaskView;
             #[allow(unused_imports)]
             use super::*;
 
-            #[utoipa::path(
-                delete,
-                path = concat!("{indexUid}/settings", $route),
-                tag = "Settings",
+            #[routes::path(
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 operation_id = concat!("delete", $camelcase_attr),
                 summary = concat!("Reset ", $camelcase_attr),
-                description = concat!("Reset an index's ", $camelcase_attr, " to its default value"),
-                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
-                request_body = $type,
+                description = concat!("Resets the `", $camelcase_attr, "` setting to its default value."),
+                params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
-                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
                             "taskUid": 147,
                             "indexUid": "movies",
@@ -107,12 +94,20 @@ macro_rules! make_setting_route {
                             "enqueuedAt": "2024-08-08T17:05:55.791772Z"
                         }
                     )),
-                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
                             "type": "auth",
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                        }
+                    )),
+                    (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "Index `movies` not found.",
+                            "code": "index_not_found",
+                            "type": "invalid_request",
+                            "link": "https://docs.meilisearch.com/errors#index_not_found"
                         }
                     )),
                 )
@@ -130,39 +125,22 @@ macro_rules! make_setting_route {
 
                 let new_settings = Settings { $attr: Setting::Reset.into(), ..Default::default() };
 
-                let allow_index_creation =
-                    index_scheduler.filters().allow_index_creation(&index_uid);
-
-                let task = KindWithContent::SettingsUpdate {
-                    index_uid: index_uid.to_string(),
-                    new_settings: Box::new(new_settings),
-                    is_deletion: true,
-                    allow_index_creation,
-                };
-                let uid = get_task_id(&req, &opt)?;
-                let dry_run = is_dry_run(&req, &opt)?;
-                let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-                        .await??
-                        .into();
+                let task = register_new_settings(new_settings, true, index_scheduler, &req, index_uid, opt).await?;
 
                 debug!(returns = ?task, "Delete settings");
                 Ok(HttpResponse::Accepted().json(task))
             }
 
 
-            #[utoipa::path(
-                $update_verb,
-                path = concat!("{indexUid}/settings", $route),
-                tag = "Settings",
+            #[routes::path(
                 security(("Bearer" = ["settings.update", "settings.*", "*"])),
                 operation_id = concat!(stringify!($update_verb), $camelcase_attr),
                 summary = concat!("Update ", $camelcase_attr),
-                description = concat!("Update an index's user defined ", $camelcase_attr),
-                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
-                request_body = $type,
+                description = concat!("Updates the `", $camelcase_attr, "` setting for the index. Send the new value in the request body; send null to reset to default."),
+                params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+                request_body(content = $type),
                 responses(
-                    (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+                    (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
                         {
                             "taskUid": 147,
                             "indexUid": "movies",
@@ -171,12 +149,20 @@ macro_rules! make_setting_route {
                             "enqueuedAt": "2024-08-08T17:05:55.791772Z"
                         }
                     )),
-                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
                             "type": "auth",
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                        }
+                    )),
+                    (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "Index `movies` not found.",
+                            "code": "index_not_found",
+                            "type": "invalid_request",
+                            "link": "https://docs.meilisearch.com/errors#index_not_found"
                         }
                     )),
                 )
@@ -211,51 +197,37 @@ macro_rules! make_setting_route {
                     ..Default::default()
                 };
 
-                let new_settings = $crate::routes::indexes::settings::validate_settings(
-                    new_settings,
-                    &index_scheduler,
-                )?;
-
-                let allow_index_creation =
-                    index_scheduler.filters().allow_index_creation(&index_uid);
-
-                let task = KindWithContent::SettingsUpdate {
-                    index_uid: index_uid.to_string(),
-                    new_settings: Box::new(new_settings),
-                    is_deletion: false,
-                    allow_index_creation,
-                };
-                let uid = get_task_id(&req, &opt)?;
-                let dry_run = is_dry_run(&req, &opt)?;
-                let task: SummarizedTaskView =
-                    tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-                        .await??
-                        .into();
+                let task = register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
 
                 debug!(returns = ?task, "Update settings");
                 Ok(HttpResponse::Accepted().json(task))
             }
 
 
-            #[utoipa::path(
-                get,
-                path = concat!("{indexUid}/settings", $route),
-                tag = "Settings",
+            #[routes::path(
                 summary = concat!("Get ", $camelcase_attr),
-                description = concat!("Get an user defined ", $camelcase_attr),
+                description = concat!("Returns the current value of the `", $camelcase_attr, "` setting for the index."),
                 security(("Bearer" = ["settings.get", "settings.*", "*"])),
                 operation_id = concat!("get", $camelcase_attr),
-                params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+                params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
                 responses(
-                    (status = 200, description = concat!($camelcase_attr, " is returned"), body = $type, content_type = "application/json", example = json!(
+                    (status = 200, description = concat!("Returns the current value of the `", $camelcase_attr, "` setting."), body = $type, content_type = "application/json", example = json!(
                         <$type>::default()
                     )),
-                    (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+                    (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
                         {
                             "message": "The Authorization header is missing. It must use the bearer authorization method.",
                             "code": "missing_authorization_header",
                             "type": "auth",
                             "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+                        }
+                    )),
+                    (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+                        {
+                            "message": "Index `movies` not found.",
+                            "code": "index_not_found",
+                            "type": "invalid_request",
+                            "link": "https://docs.meilisearch.com/errors#index_not_found"
                         }
                     )),
                 )
@@ -520,17 +492,27 @@ make_setting_routes!(
         camelcase_attr: "chat",
         analytics: ChatAnalytics
     },
+    {
+        route: "/foreign-keys",
+        update_verb: put,
+        value_type: Vec<meilisearch_types::milli::ForeignKey>,
+        err_type: meilisearch_types::deserr::DeserrJsonError<
+            meilisearch_types::error::deserr_codes::InvalidSettingsForeignKeys,
+        >,
+        attr: foreign_keys,
+        camelcase_attr: "foreignKeys",
+        analytics: ForeignKeysAnalytics
+    },
 );
 
-#[utoipa::path(
-    patch,
-    path = "{indexUid}/settings",
-    tag = "Settings",
+#[routes::path(
+    summary = "Update all settings",
+    description = "Updates one or more settings for the index. Only the fields sent in the body are changed. Pass null for a setting to reset it to its default. If the index does not exist, it is created.\n\nSee also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
-    request_body = Settings<Unchecked>,
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    request_body(content = Settings<Unchecked>),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -539,7 +521,7 @@ make_setting_routes!(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -547,27 +529,37 @@ make_setting_routes!(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
     )
 )]
 /// Update settings
 ///
-/// Update the settings of an index.
-/// Passing null to an index setting will reset it to its default value.
-/// Updates in the settings route are partial. This means that any parameters not provided in the body will be left unchanged.
-/// If the provided index does not exist, it will be created.
+/// Update the settings of an index. Updates are partial: only the fields you send are changed.
+///
+/// Passing `null` for a setting will reset it to its default.
+///
+/// If the index does not exist, it will be created.
+///
+/// See also: [Configuring index settings on the Cloud](https://www.meilisearch.com/docs/learn/configuration/configuring_index_settings).
 pub async fn update_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
     body: AwebJson<Settings<Unchecked>, DeserrJsonError>,
     req: HttpRequest,
-    opt: web::Data<Opt>,
-    analytics: web::Data<Analytics>,
+    opt: Data<Opt>,
+    analytics: Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let index_uid = IndexUid::try_from(index_uid.into_inner())?;
 
-    let new_settings = body.into_inner();
+    let new_settings: Settings<Unchecked> = body.into_inner();
     debug!(parameters = ?new_settings, "Update all settings");
-    let new_settings = validate_settings(new_settings, &index_scheduler)?;
 
     analytics.publish(
         SettingsAnalytics {
@@ -584,6 +576,7 @@ pub async fn update_all(
             filterable_attributes: FilterableAttributesAnalytics::new(
                 new_settings.filterable_attributes.as_ref().set(),
             ),
+            foreign_keys: ForeignKeysAnalytics::new(new_settings.foreign_keys.as_ref().set()),
             distinct_attribute: DistinctAttributeAnalytics::new(
                 new_settings.distinct_attribute.as_ref().set(),
             ),
@@ -614,36 +607,100 @@ pub async fn update_all(
         &req,
     );
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
-    let task = KindWithContent::SettingsUpdate {
-        index_uid,
-        new_settings: Box::new(new_settings),
-        is_deletion: false,
-        allow_index_creation,
-    };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+    let task =
+        register_new_settings(new_settings, false, index_scheduler, &req, index_uid, opt).await?;
 
     debug!(returns = ?task, "Update all settings");
     Ok(HttpResponse::Accepted().json(task))
 }
 
-#[utoipa::path(
-    get,
-    path = "{indexUid}/settings",
-    tag = "Settings",
-    security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+async fn register_new_settings(
+    new_settings: Settings<Unchecked>,
+    is_deletion: bool,
+    index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
+    req: &HttpRequest,
+    index_uid: IndexUid,
+    opt: Data<Opt>,
+) -> Result<SummarizedTaskView, ResponseError> {
+    let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader_and_version(req, &network)?;
+
+    // validate settings unless this is a duplicated task
+    let new_settings = if task_network.is_none() {
+        validate_settings(new_settings, &index_scheduler)?
+    } else {
+        new_settings
+    };
+
+    let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
+    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
+    let task = KindWithContent::SettingsUpdate {
+        index_uid: index_uid.clone(),
+        new_settings: Box::new(new_settings.clone()),
+        is_deletion,
+        allow_index_creation,
+    };
+    let uid = get_task_id(req, &opt)?;
+    let dry_run = is_dry_run(req, &opt)?;
+
+    let scheduler = index_scheduler.clone();
+    let mut task = tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+    })
+    .await??;
+
+    if let Some(task_network) = task.network.take() {
+        proxy(
+            &index_scheduler,
+            Some(&index_uid),
+            req,
+            task_network,
+            network,
+            Body::inline(new_settings),
+            &task,
+        )
+        .await?;
+    }
+
+    Ok(task.into())
+}
+
+#[routes::path(
+    summary = "List all settings",
+    description = "Returns all settings of the index. Each setting is returned with its current value or the default if not set.",
+    security(("Bearer" = ["settings.get", "settings.*", "*"])),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Settings are returned", body = Settings<Unchecked>, content_type = "application/json", example = json!(
-            Settings::<Unchecked>::default()
-        )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 200, description = "Returns all settings with their current or default values. Same structure as the PATCH request body.", body = Settings<Unchecked>, content_type = "application/json", example = json!({
+            "displayedAttributes": ["id", "title", "description", "url"],
+            "searchableAttributes": ["title", "description"],
+            "filterableAttributes": ["release_date", "genre"],
+            "sortableAttributes": ["release_date"],
+            "rankingRules": ["words", "typo", "proximity", "attributeRank", "sort", "wordPosition", "exactness"],
+            "stopWords": ["the", "a"],
+            "nonSeparatorTokens": ["@", "#"],
+            "separatorTokens": ["|"],
+            "dictionary": ["J. R. R."],
+            "synonyms": { "phone": ["iPhone"] },
+            "distinctAttribute": null,
+            "typoTolerance": {
+                "enabled": true,
+                "minWordSizeForTypos": { "oneTypo": 5, "twoTypos": 9 },
+                "disableOnWords": [],
+                "disableOnAttributes": ["title"],
+                "disableOnNumbers": false
+            },
+            "faceting": { "maxValuesPerFacet": 100, "sortFacetValuesBy": { "genre": "count" } },
+            "pagination": { "maxTotalHits": 1000 },
+            "proximityPrecision": "byWord",
+            "embedders": { "default": { "source": "openAi", "model": "text-embedding-3-small", "documentTemplate": "{{doc.title}}: {{doc.overview}}" } },
+            "searchCutoffMs": null,
+            "localizedAttributes": [{ "locales": ["jpn"], "attributePatterns": ["*_ja"] }],
+            "facetSearch": true,
+            "prefixSearch": "indexingTime",
+            "chat": { "description": "A comprehensive movie database", "documentTemplateMaxBytes": 400, "searchParameters": { "limit": 20 } }
+        })),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -651,11 +708,19 @@ pub async fn update_all(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
     )
 )]
-/// All settings
+/// List settings
 ///
-/// This route allows you to retrieve, configure, or reset all of an index's settings at once.
+/// Retrieve all settings of an index in a single request. Returns every configurable option and its current or default value.
 pub async fn get_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_GET }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -665,22 +730,28 @@ pub async fn get_all(
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
     let mut new_settings = settings(&index, &rtxn, SecretPolicy::HideSecrets)?;
-    if index_scheduler.features().check_chat_completions("showing index `chat` settings").is_err() {
+
+    let features = index_scheduler.features();
+
+    if features.check_chat_completions("showing index `chat` settings").is_err() {
         new_settings.chat = Setting::NotSet;
+    }
+
+    if features.check_foreign_keys_setting("showing index `foreignKeys` settings").is_err() {
+        new_settings.foreign_keys = Setting::NotSet;
     }
 
     debug!(returns = ?new_settings, "Get all settings");
     Ok(HttpResponse::Ok().json(new_settings))
 }
 
-#[utoipa::path(
-    delete,
-    path = "{indexUid}/settings",
-    tag = "Settings",
+#[routes::path(
+    summary = "Reset all settings",
+    description = "Resets all settings of the index to their default values.",
     security(("Bearer" = ["settings.update", "settings.*", "*"])),
-    params(("indexUid", example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
     responses(
-        (status = 200, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 147,
                 "indexUid": "movies",
@@ -689,7 +760,7 @@ pub async fn get_all(
                 "enqueuedAt": "2024-08-08T17:05:55.791772Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -697,11 +768,19 @@ pub async fn get_all(
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
             }
         )),
+        (status = 404, description = "Index not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "Index `movies` not found.",
+                "code": "index_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#index_not_found"
+            }
+        )),
     )
 )]
 /// Reset settings
 ///
-/// Reset all the settings of an index to their default value.
+/// Reset all settings of an index to their default values.
 pub async fn delete_all(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SETTINGS_UPDATE }>, Data<IndexScheduler>>,
     index_uid: web::Path<String>,
@@ -712,20 +791,8 @@ pub async fn delete_all(
 
     let new_settings = Settings::cleared().into_unchecked();
 
-    let allow_index_creation = index_scheduler.filters().allow_index_creation(&index_uid);
-    let index_uid = IndexUid::try_from(index_uid.into_inner())?.into_inner();
-    let task = KindWithContent::SettingsUpdate {
-        index_uid,
-        new_settings: Box::new(new_settings),
-        is_deletion: true,
-        allow_index_creation,
-    };
-    let uid = get_task_id(&req, &opt)?;
-    let dry_run = is_dry_run(&req, &opt)?;
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+    let task =
+        register_new_settings(new_settings, true, index_scheduler, &req, index_uid, opt).await?;
 
     debug!(returns = ?task, "Delete all settings");
     Ok(HttpResponse::Accepted().json(task))
@@ -768,6 +835,10 @@ fn validate_settings(
 
     if let Setting::Set(_chat) = &settings.chat {
         features.check_chat_completions("setting `chat` in the index settings")?;
+    }
+
+    if let Setting::Set(_) = &settings.foreign_keys {
+        features.check_foreign_keys_setting("setting `foreignKeys` in the index settings")?;
     }
 
     Ok(settings.validate()?)

@@ -93,13 +93,14 @@ async fn federation_empty_list() {
 
     let (response, code) = server.multi_search(json!({"federation": {}, "queries": []})).await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 0
+      "estimatedTotalHits": 0,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -164,7 +165,7 @@ async fn simple_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     [
       {
         "indexUid": "SHARED_DOCUMENTS",
@@ -182,7 +183,8 @@ async fn simple_search_single_index() {
         "processingTimeMs": "[duration]",
         "limit": 20,
         "offset": 0,
-        "estimatedTotalHits": 1
+        "estimatedTotalHits": 1,
+        "requestUid": "[uuid]"
       },
       {
         "indexUid": "SHARED_DOCUMENTS",
@@ -200,7 +202,8 @@ async fn simple_search_single_index() {
         "processingTimeMs": "[duration]",
         "limit": 20,
         "offset": 0,
-        "estimatedTotalHits": 1
+        "estimatedTotalHits": 1,
+        "requestUid": "[uuid]"
       }
     ]
     "###);
@@ -217,7 +220,7 @@ async fn federation_single_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -237,7 +240,8 @@ async fn federation_single_search_single_index() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 1
+      "estimatedTotalHits": 1,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -256,7 +260,7 @@ async fn federation_multiple_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -308,7 +312,8 @@ async fn federation_multiple_search_single_index() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 5
+      "estimatedTotalHits": 5,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -325,7 +330,7 @@ async fn federation_two_search_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -358,7 +363,8 @@ async fn federation_two_search_single_index() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 2
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -457,7 +463,7 @@ async fn simple_search_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response["results"], { ".**.processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     [
       {
         "indexUid": "SHARED_DOCUMENTS",
@@ -475,7 +481,8 @@ async fn simple_search_two_indexes() {
         "processingTimeMs": "[duration]",
         "limit": 20,
         "offset": 0,
-        "estimatedTotalHits": 1
+        "estimatedTotalHits": 1,
+        "requestUid": "[uuid]"
       },
       {
         "indexUid": "SHARED_NESTED_DOCUMENTS",
@@ -516,7 +523,8 @@ async fn simple_search_two_indexes() {
         "processingTimeMs": "[duration]",
         "limit": 20,
         "offset": 0,
-        "estimatedTotalHits": 2
+        "estimatedTotalHits": 2,
+        "requestUid": "[uuid]"
       }
     ]
     "###);
@@ -535,7 +543,7 @@ async fn federation_two_search_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -596,7 +604,8 @@ async fn federation_two_search_two_indexes() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -626,7 +635,7 @@ async fn federation_multiple_search_multiple_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -795,7 +804,8 @@ async fn federation_multiple_search_multiple_indexes() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 12
+      "estimatedTotalHits": 12,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -930,7 +940,7 @@ async fn federation_one_query_error() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `title` is not filterable. Available filterable attribute patterns are: `cattos`, `doggos`, `father`.\n1:6 title = toto",
+      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `title` is not filterable. Available filterable attribute patterns are: `cattos`, `doggos`, `father`.\ntitle = toto",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1101,7 +1111,7 @@ async fn federation_filter() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(response, @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1140,7 +1150,8 @@ async fn federation_filter() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1177,7 +1188,7 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1266,7 +1277,8 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -1278,7 +1290,7 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1353,7 +1365,8 @@ async fn federation_sort_same_indexes_same_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1449,7 +1462,7 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1538,7 +1551,8 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -1551,7 +1565,7 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1626,7 +1640,8 @@ async fn federation_sort_same_indexes_different_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1704,7 +1719,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1831,7 +1846,8 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 10
+      "estimatedTotalHits": 10,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -1844,7 +1860,7 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1915,7 +1931,8 @@ async fn federation_sort_different_indexes_same_criterion_same_direction() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 6
+      "estimatedTotalHits": 6,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1936,7 +1953,7 @@ async fn federation_sort_different_ranking_rules() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2063,7 +2080,8 @@ async fn federation_sort_different_ranking_rules() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 10
+      "estimatedTotalHits": 10,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -2078,7 +2096,7 @@ async fn federation_sort_different_ranking_rules() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2]`, `SHARED_SCORE_DOCUMENTS.rankingRules[0..=3]`: relevancy rule(s) words, typo, proximity, attribute\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare a relevancy rule with a sort rule\n",
+      "message": "Inside `.queries[1]`: The results of queries #2 and #1 are incompatible: \n  1. `queries[2]`, `SHARED_SCORE_DOCUMENTS.rankingRules[0..=3]`: relevancy rule(s) words, typo, proximity, attributeRank\n  2. `queries[1].sort[0]`, `movies-[uuid].rankingRules[0]`: descending sort rule(s) on field `title`\n  - cannot compare a relevancy rule with a sort rule\n",
       "code": "invalid_multi_search_query_ranking_rules",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_ranking_rules"
@@ -2142,7 +2160,7 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2269,7 +2287,8 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 10
+      "estimatedTotalHits": 10,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -2282,7 +2301,7 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -2353,7 +2372,8 @@ async fn federation_sort_different_indexes_different_criterion_same_direction() 
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 6
+      "estimatedTotalHits": 6,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -2424,7 +2444,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2527,7 +2547,8 @@ async fn federation_limit_offset() {
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 0,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2549,7 +2570,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2564,7 +2585,8 @@ async fn federation_limit_offset() {
           "processingTimeMs": "[duration]",
           "limit": 1,
           "offset": 0,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2586,7 +2608,7 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2673,7 +2695,8 @@ async fn federation_limit_offset() {
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 2,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2695,13 +2718,374 @@ async fn federation_limit_offset() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [],
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 12,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+}
+
+#[actix_rt::test]
+async fn federation_page_hits_per_page() {
+    let server = Server::new_shared();
+    let index = shared_index_with_documents().await;
+    let nested_index = shared_index_with_nested_documents().await;
+    let score_index = shared_index_with_score_documents().await;
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"hitsPerPage": 1}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [
+            {
+              "title": "Gläss",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 0,
+                "weightedRankingScore": 1.0
+              }
+            }
+          ],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 1,
+          "page": 1,
+          "totalPages": 12,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"page": 2, "hitsPerPage": 5}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [
+            {
+              "title": "Escape Room",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 3,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "id": 951,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 4,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Batman the dark knight returns: Part 1",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Batman the dark knight returns: Part 2",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "id": 654,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 2,
+                "weightedRankingScore": 0.7803030303030303
+              }
+            }
+          ],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 5,
+          "page": 2,
+          "totalPages": 3,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"page": 12}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 20,
+          "page": 12,
+          "totalPages": 1,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"page": 0}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 20,
+          "page": 0,
+          "totalPages": 1,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+}
+
+#[actix_rt::test]
+async fn federation_page_overrides_limit_offset() {
+    let server = Server::new_shared();
+    let index = shared_index_with_documents().await;
+    let nested_index = shared_index_with_nested_documents().await;
+    let score_index = shared_index_with_score_documents().await;
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"limit": 1, "hitsPerPage": 2}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [
+            {
+              "title": "Gläss",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 0,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "id": 852,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 2,
+                "weightedRankingScore": 1.0
+              }
+            }
+          ],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 2,
+          "page": 1,
+          "totalPages": 6,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
+        }
+        "###);
+    }
+
+    {
+        let (response, code) = server
+            .multi_search(json!({"federation": {"offset": 2, "page": 1}, "queries": [
+            {"indexUid" : index.uid, "q": "glass", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "captain", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "pésti", "attributesToRetrieve": ["id"]},
+            {"indexUid" : index.uid, "q": "Escape", "attributesToRetrieve": ["title"]},
+            {"indexUid" : nested_index.uid, "q": "jean", "attributesToRetrieve": ["id"]},
+            {"indexUid" : score_index.uid, "q": "jean", "attributesToRetrieve": ["title"]},
+            {"indexUid" : index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "the bat", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "badman returns", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman", "attributesToRetrieve": ["title"]},
+            {"indexUid" : score_index.uid, "q": "batman returns", "attributesToRetrieve": ["title"]},
+            ]}))
+            .await;
+        snapshot!(code, @"200 OK");
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
+        {
+          "hits": [
+            {
+              "title": "Gläss",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 0,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "id": 852,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 2,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "title": "Batman",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "title": "Batman Returns",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 10,
+                "weightedRankingScore": 1.0
+              }
+            },
+            {
+              "title": "Captain Marvel",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 1,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Escape Room",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 3,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "id": 951,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 4,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Batman the dark knight returns: Part 1",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "title": "Batman the dark knight returns: Part 2",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 9,
+                "weightedRankingScore": 0.9848484848484848
+              }
+            },
+            {
+              "id": 654,
+              "_federation": {
+                "indexUid": "SHARED_NESTED_DOCUMENTS",
+                "queriesPosition": 2,
+                "weightedRankingScore": 0.7803030303030303
+              }
+            },
+            {
+              "title": "Badman",
+              "_federation": {
+                "indexUid": "SHARED_SCORE_DOCUMENTS",
+                "queriesPosition": 8,
+                "weightedRankingScore": 0.5
+              }
+            },
+            {
+              "title": "How to Train Your Dragon: The Hidden World",
+              "_federation": {
+                "indexUid": "SHARED_DOCUMENTS",
+                "queriesPosition": 6,
+                "weightedRankingScore": 0.4166666666666667
+              }
+            }
+          ],
+          "processingTimeMs": "[duration]",
+          "hitsPerPage": 20,
+          "page": 1,
+          "totalPages": 1,
+          "totalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2731,7 +3115,7 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2861,7 +3245,8 @@ async fn federation_formatting() {
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 0,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2883,7 +3268,7 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -2898,7 +3283,8 @@ async fn federation_formatting() {
           "processingTimeMs": "[duration]",
           "limit": 1,
           "offset": 0,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -2920,7 +3306,7 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [
             {
@@ -3007,7 +3393,8 @@ async fn federation_formatting() {
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 2,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -3029,13 +3416,14 @@ async fn federation_formatting() {
             ]}))
             .await;
         snapshot!(code, @"200 OK");
-        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+        snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
         {
           "hits": [],
           "processingTimeMs": "[duration]",
           "limit": 20,
           "offset": 12,
-          "estimatedTotalHits": 12
+          "estimatedTotalHits": 12,
+          "requestUid": "[uuid]"
         }
         "###);
     }
@@ -3098,7 +3486,7 @@ async fn federation_null_weight() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3137,7 +3525,8 @@ async fn federation_null_weight() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -3244,7 +3633,7 @@ async fn federation_federated_contains_facets() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3280,7 +3669,8 @@ async fn federation_federated_contains_facets() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -3298,6 +3688,83 @@ async fn federation_federated_contains_facets() {
       "code": "invalid_multi_search_query_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_facets"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_contains_two_distincts() {
+    let server = Server::new_shared();
+
+    let index = server.unique_index_with_prefix("fruits");
+
+    let (value, _) = index
+        .update_settings(
+            json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST"]}),
+        )
+        .await;
+
+    server.wait_task(value.uid()).await.succeeded();
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index.add_documents(documents, None).await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    // fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {"distinct": "BOOST"}, "queries": [
+        {"indexUid": index.uid, "q": "apple red"},
+        {"indexUid": index.uid, "q": "apple red", "distinct": "BOOST"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Inside `.queries[1]`: Using `distinct` options is not allowed in federated queries when it also appears in `.federation.distinct`.\n - Hint: remove `distinct` from query #1 or remove `federation` from the request\n  - Note: `distinct` at the query level is discouraged in federated search.",
+      "code": "invalid_multi_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_distinct"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_distinct_not_filterable() {
+    let server = Server::new_shared();
+
+    let index0 = server.unique_index_with_prefix("fruits");
+    let index1 = server.unique_index_with_prefix("fruits-no-filterable");
+
+    let (value, _) = index0
+        .update_settings(
+            json!({"searchableAttributes": ["name"], "filterableAttributes": ["BOOST"]}),
+        )
+        .await;
+
+    server.wait_task(value.uid()).await.succeeded();
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index0.add_documents(documents, None).await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    let documents = FRUITS_DOCUMENTS.clone();
+    let (value, _) = index1.add_documents(documents, None).await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    // fails
+    let (response, code) = server
+        .multi_search(json!({"federation": {"distinct": "BOOST"}, "queries": [
+        {"indexUid": index0.uid, "q": "apple red"},
+        {"indexUid": index1.uid, "q": "apple red"},
+        ]}))
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(response), @r###"
+    {
+      "message": "Inside `.queries[1]`: Index `fruits-no-filterable-[uuid]`: Attribute `BOOST` is not filterable and thus, cannot be used as distinct attribute. This index does not have configured filterable attributes.",
+      "code": "invalid_search_distinct",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_search_distinct"
     }
     "###);
 }
@@ -3488,7 +3955,7 @@ async fn federation_vector_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3532,6 +3999,7 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "semanticHitCount": 4
     }
     "###);
@@ -3545,7 +4013,7 @@ async fn federation_vector_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3589,6 +4057,7 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "semanticHitCount": 4
     }
     "###);
@@ -3603,7 +4072,7 @@ async fn federation_vector_single_index() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3651,6 +4120,7 @@ async fn federation_vector_single_index() {
       "limit": 20,
       "offset": 0,
       "estimatedTotalHits": 4,
+      "requestUid": "[uuid]",
       "semanticHitCount": 3
     }
     "###);
@@ -3703,7 +4173,7 @@ async fn federation_vector_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -3907,10 +4377,6 @@ async fn federation_vector_two_indexes() {
           }
         }
       ],
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 8,
       "queryVectors": {
         "0": [
           1.0,
@@ -3922,9 +4388,14 @@ async fn federation_vector_two_indexes() {
           0.6
         ]
       },
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 8,
+      "requestUid": "[uuid]",
       "semanticHitCount": 6
     }
-    "#);
+    "###);
 
     // hybrid search, distinct embedder
     let (response, code) = server
@@ -3934,7 +4405,7 @@ async fn federation_vector_two_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".**._rankingScore" => "[score]", ".**.requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4146,10 +4617,6 @@ async fn federation_vector_two_indexes() {
           "_rankingScore": "[score]"
         }
       ],
-      "processingTimeMs": "[duration]",
-      "limit": 20,
-      "offset": 0,
-      "estimatedTotalHits": 8,
       "queryVectors": {
         "0": [
           1.0,
@@ -4161,9 +4628,304 @@ async fn federation_vector_two_indexes() {
           0.6
         ]
       },
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 8,
+      "requestUid": "[uuid]",
       "semanticHitCount": 8
     }
-    "#);
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_distinct_one_index() {
+    let server = Server::new_shared();
+    let movies_index = shared_movies_index().await;
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            movies_index.uid.clone():["title", "color"]
+          },
+          "mergeFacets": {},
+          "distinct": "color"
+        }, "queries": [
+          {"indexUid" : movies_index.uid.clone(), "q": "Shazam", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Captain", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Escape", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Dragon", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Glass", "attributesToRetrieve": ["title"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-[uuid]",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.9848484848484848
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "facetDistribution": {
+        "color": {
+          "blue": 1,
+          "green": 1,
+          "red": 1,
+          "yellow": 1
+        },
+        "title": {
+          "Escape Room": 1,
+          "Shazam!": 1
+        }
+      },
+      "facetStats": {},
+      "requestUid": "[uuid]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_distinct_two_indexes() {
+    let server = Server::new_shared();
+    let movies_index = shared_movies_index().await;
+    let other_movies_index = server.unique_index_with_prefix("movies-2");
+
+    let documents = DOCUMENTS.clone();
+    let (response, _code) = other_movies_index.add_documents(documents, None).await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (value, _) = other_movies_index
+        .update_settings(json!({
+            "sortableAttributes": ["title"],
+            "filterableAttributes": ["title", "color"],
+            "rankingRules": [
+                "sort",
+                "words",
+                "typo",
+                "proximity",
+                "attribute",
+                "exactness"
+            ]
+        }))
+        .await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            movies_index.uid.clone():["title", "color"],
+            other_movies_index.uid.clone():["title","color"]
+          },
+          "mergeFacets": {},
+          "distinct": "color"
+        }, "queries": [
+          {"indexUid" : movies_index.uid.clone(), "q": "Shazam", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Captain", "attributesToRetrieve": ["title"] },
+          {"indexUid" : other_movies_index.uid.clone(), "q": "Escape", "attributesToRetrieve": ["title"] },
+          {"indexUid" : other_movies_index.uid.clone(), "q": "Dragon", "attributesToRetrieve": ["title"] },
+          {"indexUid" : movies_index.uid.clone(), "q": "Glass", "attributesToRetrieve": ["title"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "title": "Shazam!",
+          "_federation": {
+            "indexUid": "movies-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        },
+        {
+          "title": "Escape Room",
+          "_federation": {
+            "indexUid": "movies-2-[uuid]",
+            "queriesPosition": 2,
+            "weightedRankingScore": 0.9848484848484848
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 2,
+      "facetDistribution": {
+        "color": {
+          "blue": 1,
+          "green": 1,
+          "red": 1,
+          "yellow": 1
+        },
+        "title": {
+          "Escape Room": 1,
+          "Shazam!": 1
+        }
+      },
+      "facetStats": {},
+      "requestUid": "[uuid]"
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn federation_distinct_two_indexes_nested() {
+    let server = Server::new_shared();
+    let first_index = server.unique_index_with_prefix("test-0");
+    let second_index = server.unique_index_with_prefix("test-1");
+
+    let (response, _code) = first_index
+        .add_documents(
+            json!({
+              "id": 0,
+              "root": {
+                "nested": 0
+              },
+              "root.nested": 1
+            }),
+            None,
+        )
+        .await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (response, _code) = second_index
+        .add_documents(
+            json!({
+              "id": 1,
+              "root": {
+                "nested": 1
+              },
+              "root.nested": 2
+            }),
+            None,
+        )
+        .await;
+    server.wait_task(response.uid()).await.succeeded();
+
+    let (value, _) = first_index
+        .update_settings(json!({
+            "filterableAttributes": ["root.nested"],
+        }))
+        .await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    let (value, _) = second_index
+        .update_settings(json!({
+            "filterableAttributes": ["root.nested"],
+        }))
+        .await;
+    server.wait_task(value.uid()).await.succeeded();
+
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            first_index.uid.clone():["root.nested"],
+            second_index.uid.clone():["root.nested"]
+          },
+          "mergeFacets": {},
+          "distinct": "root.nested"
+        }, "queries": [
+          {"indexUid" : first_index.uid.clone(), "q": "", "attributesToRetrieve": ["id"] },
+          {"indexUid" : second_index.uid.clone(), "q": "", "attributesToRetrieve": ["id"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": 0,
+          "_federation": {
+            "indexUid": "test-0-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 1,
+      "facetDistribution": {
+        "root.nested": {
+          "0": 1,
+          "1": 1
+        }
+      },
+      "facetStats": {
+        "root.nested": {
+          "min": 0.0,
+          "max": 2.0
+        }
+      },
+      "requestUid": "[uuid]"
+    }
+    "###);
+
+    // since they're placeholder search, reversing the query order should invert which document is picked
+    let (response, code) = server
+        .multi_search(json!({"federation": {
+          "facetsByIndex": {
+            first_index.uid.clone():["root.nested"],
+            second_index.uid.clone():["root.nested"]
+          },
+          "mergeFacets": {},
+          "distinct": "root.nested"
+        }, "queries": [
+          {"indexUid" : second_index.uid.clone(), "q": "", "attributesToRetrieve": ["id"] },
+          {"indexUid" : first_index.uid.clone(), "q": "", "attributesToRetrieve": ["id"] },
+        ]}))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "hits": [
+        {
+          "id": 1,
+          "_federation": {
+            "indexUid": "test-1-[uuid]",
+            "queriesPosition": 0,
+            "weightedRankingScore": 1.0
+          }
+        }
+      ],
+      "processingTimeMs": "[duration]",
+      "limit": 20,
+      "offset": 0,
+      "estimatedTotalHits": 1,
+      "facetDistribution": {
+        "root.nested": {
+          "1": 1,
+          "2": 1
+        }
+      },
+      "facetStats": {
+        "root.nested": {
+          "min": 0.0,
+          "max": 2.0
+        }
+      },
+      "requestUid": "[uuid]"
+    }
+    "###);
 }
 
 #[actix_rt::test]
@@ -4209,7 +4971,7 @@ async fn federation_facets_different_indexes_same_facet() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4380,7 +5142,8 @@ async fn federation_facets_different_indexes_same_facet() {
           },
           "stats": {}
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -4399,7 +5162,7 @@ async fn federation_facets_different_indexes_same_facet() {
     ]}))
     .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4541,7 +5304,8 @@ async fn federation_facets_different_indexes_same_facet() {
           "Shazam!": 1
         }
       },
-      "facetStats": {}
+      "facetStats": {},
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -4561,7 +5325,7 @@ async fn federation_facets_different_indexes_same_facet() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4686,7 +5450,8 @@ async fn federation_facets_different_indexes_same_facet() {
           "distribution": {},
           "stats": {}
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -4748,7 +5513,7 @@ async fn federation_facets_same_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4806,7 +5571,8 @@ async fn federation_facets_same_indexes() {
             }
           }
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -4822,7 +5588,7 @@ async fn federation_facets_same_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4908,7 +5674,8 @@ async fn federation_facets_same_indexes() {
             }
           }
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -4925,7 +5692,7 @@ async fn federation_facets_same_indexes() {
         ]}))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -4987,7 +5754,8 @@ async fn federation_facets_same_indexes() {
           "min": 2.0,
           "max": 6.0
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -5040,7 +5808,7 @@ async fn federation_inconsistent_merge_order() {
       ]}))
       .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -5217,7 +5985,8 @@ async fn federation_inconsistent_merge_order() {
           },
           "stats": {}
         }
-      }
+      },
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -5264,7 +6033,7 @@ async fn federation_inconsistent_merge_order() {
  ]}))
  .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]" }), @r###"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -5404,7 +6173,8 @@ async fn federation_inconsistent_merge_order() {
           "Batman Returns": 1
         }
       },
-      "facetStats": {}
+      "facetStats": {},
+      "requestUid": "[uuid]"
     }
     "###);
 }

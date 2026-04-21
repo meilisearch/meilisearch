@@ -8,7 +8,8 @@ use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::deserr_codes::{
     InvalidMultiSearchFacetsByIndex, InvalidMultiSearchMaxValuesPerFacet,
     InvalidMultiSearchMergeFacets, InvalidMultiSearchQueryPosition, InvalidMultiSearchRemote,
-    InvalidMultiSearchWeight, InvalidSearchLimit, InvalidSearchOffset,
+    InvalidMultiSearchWeight, InvalidSearchDistinct, InvalidSearchHitsPerPage, InvalidSearchLimit,
+    InvalidSearchOffset, InvalidSearchPage, InvalidSearchShowPerformanceDetails,
 };
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
@@ -16,9 +17,11 @@ use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::OrderBy;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use super::super::{ComputedFacets, FacetStats, HitsInfo, SearchHit, SearchQueryWithIndex};
 use crate::milli::vector::Embedding;
+use crate::search::{SearchMetadata, SearchResult};
 
 pub const DEFAULT_FEDERATED_WEIGHT: f64 = 1.0;
 
@@ -28,19 +31,25 @@ pub const INDEX_UID: &str = "indexUid";
 pub const QUERIES_POSITION: &str = "queriesPosition";
 pub const WEIGHTED_RANKING_SCORE: &str = "weightedRankingScore";
 pub const WEIGHTED_SCORE_VALUES: &str = "weightedScoreValues";
+pub const PINNED_POSITION: &str = "pinnedPosition";
 pub const FEDERATION_REMOTE: &str = "remote";
+pub const FEDERATION_EXTRA_DOCUMENT: &str = "extra_document";
 
+/// Options for federated multi-search queries
 #[derive(Debug, Default, Clone, PartialEq, Serialize, deserr::Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 pub struct FederationOptions {
+    /// Weight to apply to results from this query (default: 1.0)
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchWeight>)]
     #[schema(value_type = f64)]
     pub weight: Weight,
 
+    /// Remote server to send this query to
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchRemote>)]
     pub remote: Option<String>,
 
+    /// Position of this query in the list of queries
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchQueryPosition>)]
     pub query_position: Option<usize>,
 }
@@ -75,71 +84,204 @@ impl std::ops::Deref for Weight {
     }
 }
 
+/// Configuration for federated multi-search
 #[derive(Debug, Clone, deserr::Deserr, Serialize, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct Federation {
+    /// Maximum number of results to return across all queries
     #[deserr(default = super::super::DEFAULT_SEARCH_LIMIT(), error = DeserrJsonError<InvalidSearchLimit>)]
     pub limit: usize,
+    /// Number of results to skip
     #[deserr(default = super::super::DEFAULT_SEARCH_OFFSET(), error = DeserrJsonError<InvalidSearchOffset>)]
     pub offset: usize,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchPage>)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<usize>,
+    #[deserr(default, error = DeserrJsonError<InvalidSearchHitsPerPage>)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hits_per_page: Option<usize>,
+    /// Facets to retrieve per index
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchFacetsByIndex>)]
     pub facets_by_index: BTreeMap<IndexUid, Option<Vec<String>>>,
+    /// Options for merging facets from multiple indexes
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMergeFacets>)]
+    #[schema(required = false)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_facets: Option<MergeFacets>,
+
+    /// Restrict search to documents with unique values of the specified attribute across all queries.
+    ///
+    /// 1. This applies across all queries in the request, regardless of index or remote of origin.
+    /// 2. This overrides the index-level distinct attribute.
+    /// 3. This requires that the passed field can be set as distinct in all the participating indexes.
+    #[deserr(default, error = DeserrJsonError<InvalidSearchDistinct>)]
+    #[schema(required = false)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub distinct: Option<String>,
+
+    /// Whether to include performance details in the response
+    #[deserr(default, error = DeserrJsonError<InvalidSearchShowPerformanceDetails>)]
+    pub show_performance_details: bool,
 }
 
+impl Default for Federation {
+    fn default() -> Self {
+        Self {
+            limit: super::super::DEFAULT_SEARCH_LIMIT(),
+            offset: super::super::DEFAULT_SEARCH_OFFSET(),
+            page: Default::default(),
+            hits_per_page: Default::default(),
+            facets_by_index: Default::default(),
+            merge_facets: Default::default(),
+            distinct: Default::default(),
+            show_performance_details: Default::default(),
+        }
+    }
+}
+
+impl Federation {
+    pub fn is_exhaustive(&self) -> bool {
+        self.page.is_some() || self.hits_per_page.is_some()
+    }
+}
+
+/// Options for merging facets from multiple indexes in federated search.
+/// When multiple indexes are queried, this controls how their facet values
+/// are combined into a single facet distribution.
 #[derive(Copy, Clone, Debug, deserr::Deserr, Serialize, Default, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidMultiSearchMergeFacets>, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct MergeFacets {
+    /// The maximum number of facet values to return for each facet after
+    /// merging. Values from all indexes are combined and sorted before
+    /// truncation. If not specified, uses the default limit from the index
+    /// settings.
     #[deserr(default, error = DeserrJsonError<InvalidMultiSearchMaxValuesPerFacet>)]
     pub max_values_per_facet: Option<usize>,
 }
 
+/// Request body for federated multi-search across multiple indexes. This
+/// allows you to execute multiple search queries in a single request and
+/// optionally combine their results into a unified response. Use this for
+/// cross-index search scenarios or to reduce network round-trips.
 #[derive(Debug, deserr::Deserr, Serialize, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
 #[serde(rename_all = "camelCase")]
 pub struct FederatedSearch {
+    /// An array of search queries to execute. Each query can target a
+    /// different index and have its own parameters. When `federation` is
+    /// `null`, results are returned separately for each query. When
+    /// `federation` is set, results are merged.
+    #[schema(required = true)]
     pub queries: Vec<SearchQueryWithIndex>,
+    /// Configuration for combining results from multiple queries into a
+    /// single response. When set, results are merged and ranked together.
+    /// When `null`, each query's results are returned separately in an
+    /// array.
     #[deserr(default)]
+    #[schema(required = false, value_type = Option<Federation>)]
     pub federation: Option<Federation>,
 }
 
+/// Response from a federated multi-search query
 #[derive(Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct FederatedSearchResult {
+    /// Combined search results from all queries
     pub hits: Vec<SearchHit>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub query_vectors: Option<BTreeMap<usize, Embedding>>,
+    /// Total processing time in milliseconds
     pub processing_time_ms: u128,
+    /// Pagination information
     #[serde(flatten)]
     pub hits_info: HitsInfo,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub query_vectors: Option<BTreeMap<usize, Embedding>>,
+    #[schema(value_type = Option<BTreeMap<String, BTreeMap<String, u64>>>)]
+    pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
+    /// Merged facet statistics across all indexes
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facet_stats: Option<BTreeMap<String, FacetStats>>,
+    /// Facets grouped by index
+    #[serde(default, skip_serializing_if = "FederatedFacets::is_empty")]
+    pub facets_by_index: FederatedFacets,
+    /// Unique identifier for the request
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_uid: Option<Uuid>,
+    /// Metadata for each query
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Vec<SearchMetadata>>,
+
+    /// Errors from remote servers
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_errors: Option<BTreeMap<String, ResponseError>>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub semantic_hit_count: Option<u32>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<BTreeMap<String, BTreeMap<String, u64>>>)]
-    pub facet_distribution: Option<BTreeMap<String, IndexMap<String, u64>>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub facet_stats: Option<BTreeMap<String, FacetStats>>,
-    #[serde(default, skip_serializing_if = "FederatedFacets::is_empty")]
-    pub facets_by_index: FederatedFacets,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub remote_errors: Option<BTreeMap<String, ResponseError>>,
+    #[schema(value_type = Option<Value>)]
+    pub performance_details: Option<IndexMap<String, String>>,
 
     // These fields are only used for analytics purposes
     #[serde(skip)]
     pub degraded: bool,
     #[serde(skip)]
     pub used_negative_operator: bool,
+}
+
+impl FederatedSearchResult {
+    pub fn into_search_result(self, query: String, index_uid: &str) -> SearchResult {
+        let Self {
+            hits,
+            query_vectors,
+            processing_time_ms,
+            hits_info,
+            mut facet_distribution,
+            mut facet_stats,
+            facets_by_index,
+            request_uid,
+            metadata,
+            remote_errors,
+            semantic_hit_count,
+            degraded,
+            used_negative_operator,
+            performance_details,
+        } = self;
+        let query_vector =
+            query_vectors.and_then(|mut query_vectors| query_vectors.pop_last().map(|(_, v)| v));
+        let metadata = metadata.and_then(|mut metadata| metadata.pop());
+        let FederatedFacets(mut facets) = facets_by_index;
+        if let Some(ComputedFacets { mut distribution, mut stats }) = facets.remove(index_uid) {
+            let facet_distribution = facet_distribution.get_or_insert_default();
+            facet_distribution.append(&mut distribution);
+            let facet_stats = facet_stats.get_or_insert_default();
+            facet_stats.append(&mut stats);
+        }
+        SearchResult {
+            hits,
+            query,
+            query_vector,
+            processing_time_ms,
+            hits_info,
+            facet_distribution,
+            facet_stats,
+            request_uid,
+            metadata,
+            remote_errors,
+            semantic_hit_count,
+            degraded,
+            used_negative_operator,
+            performance_details,
+        }
+    }
 }
 
 impl fmt::Debug for FederatedSearchResult {
@@ -156,6 +298,9 @@ impl fmt::Debug for FederatedSearchResult {
             facet_stats,
             facets_by_index,
             remote_errors,
+            request_uid,
+            metadata,
+            performance_details: _, // not part of the debug output because it's an Option and is always displayed in a dedicated log.
         } = self;
 
         let mut debug = f.debug_struct("SearchResult");
@@ -187,6 +332,12 @@ impl fmt::Debug for FederatedSearchResult {
         }
         if let Some(remote_errors) = remote_errors {
             debug.field("remote_errors", &remote_errors);
+        }
+        if let Some(request_uid) = request_uid {
+            debug.field("request_uid", &request_uid);
+        }
+        if let Some(metadata) = metadata {
+            debug.field("metadata", &metadata);
         }
 
         debug.finish()

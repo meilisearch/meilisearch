@@ -1,7 +1,12 @@
 mod autobatcher;
 #[cfg(test)]
 mod autobatcher_test;
+#[cfg(not(feature = "enterprise"))]
+pub mod community_edition;
 mod create_batch;
+#[cfg(feature = "enterprise")]
+pub mod enterprise_edition;
+
 mod process_batch;
 mod process_dump_creation;
 mod process_export;
@@ -18,13 +23,13 @@ mod test_embedders;
 mod test_failure;
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
-use convert_case::{Case, Casing as _};
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::heed::{Env, WithoutTls};
-use meilisearch_types::milli;
+use meilisearch_types::milli::update::S3SnapshotOptions;
+use meilisearch_types::milli::{self, MustStopProcessing};
 use meilisearch_types::tasks::Status;
 use process_batch::ProcessBatchInfo;
 use rayon::current_num_threads;
@@ -34,23 +39,6 @@ use synchronoise::SignalEvent;
 
 use crate::processing::{AtomicTaskStep, BatchProgress};
 use crate::{Error, IndexScheduler, IndexSchedulerOptions, Result, TickOutcome};
-
-#[derive(Default, Clone, Debug)]
-pub struct MustStopProcessing(Arc<AtomicBool>);
-
-impl MustStopProcessing {
-    pub fn get(&self) -> bool {
-        self.0.load(Ordering::Relaxed)
-    }
-
-    pub fn must_stop(&self) {
-        self.0.store(true, Ordering::Relaxed);
-    }
-
-    pub fn reset(&self) {
-        self.0.store(false, Ordering::Relaxed);
-    }
-}
 
 pub struct Scheduler {
     /// A boolean that can be set to true to stop the currently processing tasks.
@@ -85,13 +73,19 @@ pub struct Scheduler {
     /// 0 disables the cache.
     pub(crate) embedding_cache_cap: usize,
 
+    /// IP policy for requests performed by the index scheduler.
+    pub(crate) ip_policy: http_client::policy::IpPolicy,
+
     /// Snapshot compaction status.
     pub(crate) experimental_no_snapshot_compaction: bool,
+
+    /// S3 Snapshot options.
+    pub(crate) s3_snapshot_options: Option<S3SnapshotOptions>,
 }
 
 impl Scheduler {
-    pub(crate) fn private_clone(&self) -> Scheduler {
-        Scheduler {
+    pub(crate) fn private_clone(&self) -> Self {
+        Self {
             must_stop_processing: self.must_stop_processing.clone(),
             wake_up: self.wake_up.clone(),
             autobatching_enabled: self.autobatching_enabled,
@@ -103,23 +97,56 @@ impl Scheduler {
             version_file_path: self.version_file_path.clone(),
             embedding_cache_cap: self.embedding_cache_cap,
             experimental_no_snapshot_compaction: self.experimental_no_snapshot_compaction,
+            s3_snapshot_options: self.s3_snapshot_options.clone(),
+            ip_policy: self.ip_policy.clone(),
         }
     }
 
     pub fn new(options: &IndexSchedulerOptions, auth_env: Env<WithoutTls>) -> Scheduler {
+        let IndexSchedulerOptions {
+            version_file_path,
+            auth_path: _,
+            tasks_path: _,
+            update_file_path: _,
+            indexes_path: _,
+            snapshots_path,
+            dumps_path,
+            cli_webhook_url: _,
+            cli_webhook_authorization: _,
+            task_db_size: _,
+            index_base_map_size: _,
+            enable_mdb_writemap: _,
+            index_growth_amount: _,
+            index_count: _,
+            indexer_config,
+            autobatching_enabled,
+            cleanup_enabled: _,
+            max_number_of_tasks: _,
+            max_number_of_batched_tasks,
+            batched_tasks_size_limit,
+            export_default_payload_size_bytes: _,
+            instance_features: _,
+            auto_upgrade: _,
+            embedding_cache_cap,
+            ip_policy,
+            experimental_no_snapshot_compaction,
+        } = options;
+
         Scheduler {
             must_stop_processing: MustStopProcessing::default(),
             // we want to start the loop right away in case meilisearch was ctrl+Ced while processing things
             wake_up: Arc::new(SignalEvent::auto(true)),
-            autobatching_enabled: options.autobatching_enabled,
-            max_number_of_batched_tasks: options.max_number_of_batched_tasks,
-            batched_tasks_size_limit: options.batched_tasks_size_limit,
-            dumps_path: options.dumps_path.clone(),
-            snapshots_path: options.snapshots_path.clone(),
+            autobatching_enabled: *autobatching_enabled,
+            max_number_of_batched_tasks: *max_number_of_batched_tasks,
+            batched_tasks_size_limit: *batched_tasks_size_limit,
+            dumps_path: dumps_path.clone(),
+            snapshots_path: snapshots_path.clone(),
             auth_env,
-            version_file_path: options.version_file_path.clone(),
-            embedding_cache_cap: options.embedding_cache_cap,
-            experimental_no_snapshot_compaction: options.experimental_no_snapshot_compaction,
+            version_file_path: version_file_path.clone(),
+            embedding_cache_cap: *embedding_cache_cap,
+            ip_policy: ip_policy.clone(),
+            experimental_no_snapshot_compaction: *experimental_no_snapshot_compaction,
+            s3_snapshot_options: indexer_config.s3_snapshot_options.clone(),
         }
     }
 }
@@ -145,6 +172,8 @@ impl IndexScheduler {
             self.breakpoint(crate::test_utils::Breakpoint::Start);
         }
 
+        let previous_processing_batch = self.processing_tasks.write().unwrap().stop_processing();
+
         if self.cleanup_enabled {
             let mut wtxn = self.env.write_txn()?;
             self.queue.cleanup_task_queue(&mut wtxn)?;
@@ -152,11 +181,16 @@ impl IndexScheduler {
         }
 
         let rtxn = self.env.read_txn().map_err(Error::HeedTransaction)?;
-        let (batch, mut processing_batch) =
-            match self.create_next_batch(&rtxn).map_err(|e| Error::CreateBatch(Box::new(e)))? {
-                Some(batch) => batch,
-                None => return Ok(TickOutcome::WaitForSignal),
-            };
+        let (batch, mut processing_batch) = match self
+            .create_next_batch(&rtxn, &previous_processing_batch.processing)
+            .map_err(|e| Error::CreateBatch(Box::new(e)))?
+        {
+            Some(batch) => batch,
+            None => {
+                *self.processing_tasks.write().unwrap() = previous_processing_batch;
+                return Ok(TickOutcome::WaitForSignal);
+            }
+        };
         let index_uid = batch.index_uid().map(ToOwned::to_owned);
         drop(rtxn);
 
@@ -186,7 +220,12 @@ impl IndexScheduler {
                 let handle = std::thread::Builder::new()
                     .name(String::from("batch-operation"))
                     .spawn_scoped(s, move || {
-                        cloned_index_scheduler.process_batch(batch, processing_batch, p)
+                        cloned_index_scheduler.process_batch(
+                            batch,
+                            processing_batch,
+                            p,
+                            &self.network(),
+                        )
                     })
                     .unwrap();
 
@@ -227,7 +266,14 @@ impl IndexScheduler {
         self.maybe_fail(crate::test_utils::FailureLocation::AcquiringWtxn)?;
 
         progress.update_progress(BatchProgress::WritingTasksToDisk);
+
         processing_batch.finished();
+        // whether the batch made progress.
+        // a batch make progress if it failed or if it contains at least one fully processed (or cancelled) task.
+        //
+        // if a batch did not make progress, it means that all of its tasks are waiting on the scheduler to make progress,
+        // and so we must wait for new tasks. Such a batch is not persisted to DB, and is resumed on the next tick.
+        let mut batch_made_progress = false;
         let mut stop_scheduler_forever = false;
         let mut wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
         let mut canceled = RoaringBitmap::new();
@@ -248,7 +294,11 @@ impl IndexScheduler {
                 #[allow(unused_variables)]
                 for (i, mut task) in tasks.into_iter().enumerate() {
                     task_progress.fetch_add(1, Ordering::Relaxed);
-                    processing_batch.update(&mut task);
+                    processing_batch.update_from_task(&task);
+                    if !matches!(task.status, Status::Processing | Status::Enqueued) {
+                        batch_made_progress = true;
+                        processing_batch.finish_task(&mut task);
+                    }
                     if task.status == Status::Canceled {
                         canceled.insert(task.uid);
                         canceled_by = task.canceled_by;
@@ -268,7 +318,7 @@ impl IndexScheduler {
 
                     self.queue
                         .tasks
-                        .update_task(&mut wtxn, &task)
+                        .update_task(&mut wtxn, &mut task)
                         .map_err(|e| Error::UnrecoverableError(Box::new(e)))?;
                 }
                 if let Some(canceled_by) = canceled_by {
@@ -315,6 +365,9 @@ impl IndexScheduler {
             }
             // In case of a failure we must get back and patch all the tasks with the error.
             Err(err) => {
+                // always persist failed batches
+                batch_made_progress = true;
+
                 #[cfg(test)]
                 self.breakpoint(crate::test_utils::Breakpoint::ProcessBatchFailed);
                 let (task_progress, task_progress_obj) = AtomicTaskStep::new(ids.len() as u32);
@@ -338,7 +391,10 @@ impl IndexScheduler {
                     task.status = Status::Failed;
                     task.error = Some(error.clone());
                     task.details = task.details.map(|d| d.to_failed());
-                    processing_batch.update(&mut task);
+                    processing_batch.update_from_task(&task);
+                    if !matches!(task.status, Status::Processing | Status::Enqueued) {
+                        processing_batch.finish_task(&mut task);
+                    }
 
                     #[cfg(test)]
                     self.maybe_fail(
@@ -349,7 +405,7 @@ impl IndexScheduler {
 
                     self.queue
                         .tasks
-                        .update_task(&mut wtxn, &task)
+                        .update_task(&mut wtxn, &mut task)
                         .map_err(|e| Error::UnrecoverableError(Box::new(e)))?;
                 }
             }
@@ -361,44 +417,12 @@ impl IndexScheduler {
         let ProcessBatchInfo { congestion, pre_commit_dabases_sizes, post_commit_dabases_sizes } =
             process_batch_info;
 
-        processing_batch.stats.progress_trace =
-            progress.accumulated_durations().into_iter().map(|(k, v)| (k, v.into())).collect();
-        processing_batch.stats.write_channel_congestion = congestion.map(|congestion| {
-            let mut congestion_info = serde_json::Map::new();
-            congestion_info.insert("attempts".into(), congestion.attempts.into());
-            congestion_info.insert("blocking_attempts".into(), congestion.blocking_attempts.into());
-            congestion_info.insert("blocking_ratio".into(), congestion.congestion_ratio().into());
-            congestion_info
-        });
-        processing_batch.stats.internal_database_sizes = pre_commit_dabases_sizes
-            .iter()
-            .flat_map(|(dbname, pre_size)| {
-                post_commit_dabases_sizes
-                    .get(dbname)
-                    .map(|post_size| {
-                        use std::cmp::Ordering::{Equal, Greater, Less};
-
-                        use byte_unit::Byte;
-                        use byte_unit::UnitType::Binary;
-
-                        let post = Byte::from_u64(*post_size as u64).get_appropriate_unit(Binary);
-                        let diff_size = post_size.abs_diff(*pre_size) as u64;
-                        let diff = Byte::from_u64(diff_size).get_appropriate_unit(Binary);
-                        let sign = match post_size.cmp(pre_size) {
-                            Equal => return None,
-                            Greater => "+",
-                            Less => "-",
-                        };
-
-                        Some((
-                            dbname.to_case(Case::Camel),
-                            format!("{post:#.2} ({sign}{diff:#.2})").into(),
-                        ))
-                    })
-                    .into_iter()
-                    .flatten()
-            })
-            .collect();
+        processing_batch.write_stats(
+            &progress,
+            congestion,
+            pre_commit_dabases_sizes,
+            post_commit_dabases_sizes,
+        );
 
         if let Some(congestion) = congestion {
             tracing::debug!(
@@ -411,46 +435,49 @@ impl IndexScheduler {
 
         tracing::debug!("call trace: {:?}", progress.accumulated_durations());
 
-        self.queue.write_batch(&mut wtxn, processing_batch, &ids)?;
+        if batch_made_progress {
+            self.queue.write_batch(&mut wtxn, processing_batch, &ids)?;
+        }
 
         #[cfg(test)]
         self.maybe_fail(crate::test_utils::FailureLocation::CommittingWtxn)?;
 
         wtxn.commit().map_err(Error::HeedTransaction)?;
 
-        // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
-        // and then become « not found » for some time until the commit everything is written and the final commit is made.
-        self.processing_tasks.write().unwrap().stop_processing();
+        if batch_made_progress {
+            // We should stop processing AFTER everything is processed and written to disk otherwise, a batch (which only lives in RAM) may appear in the processing task
+            // and then become « not found » for some time until the commit everything is written and the final commit is made.
+            self.processing_tasks.write().unwrap().stop_processing();
 
-        // Once the tasks are committed, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
-        tracing::debug!("Deleting the update files");
+            // Once the tasks are committed, we should delete all the update files associated ASAP to avoid leaking files in case of a restart
+            tracing::debug!("Deleting the update files");
 
-        //We take one read transaction **per thread**. Then, every thread is going to pull out new IDs from the roaring bitmap with the help of an atomic shared index into the bitmap
-        let idx = AtomicU32::new(0);
-        (0..current_num_threads()).into_par_iter().try_for_each(|_| -> Result<()> {
-            let rtxn = self.read_txn()?;
-            while let Some(id) = ids.select(idx.fetch_add(1, Ordering::Relaxed)) {
-                let task = self
-                    .queue
-                    .tasks
-                    .get_task(&rtxn, id)
-                    .map_err(|e| Error::UnrecoverableError(Box::new(e)))?
-                    .ok_or(Error::CorruptedTaskQueue)?;
-                if let Err(e) = self.queue.delete_persisted_task_data(&task) {
-                    tracing::error!(
+            //We take one read transaction **per thread**. Then, every thread is going to pull out new IDs from the roaring bitmap with the help of an atomic shared index into the bitmap
+            let idx = AtomicU32::new(0);
+            (0..current_num_threads()).into_par_iter().try_for_each(|_| -> Result<()> {
+                let rtxn = self.read_txn()?;
+                while let Some(id) = ids.select(idx.fetch_add(1, Ordering::Relaxed)) {
+                    let task = self
+                        .queue
+                        .tasks
+                        .get_task(&rtxn, id)
+                        .map_err(|e| Error::UnrecoverableError(Box::new(e)))?
+                        .ok_or(Error::CorruptedTaskQueue)?;
+                    if let Err(e) = self.queue.delete_persisted_task_data(&task) {
+                        tracing::error!(
                         "Failure to delete the content files associated with task {}. Error: {e}",
                         task.uid
                     );
+                    }
                 }
-            }
-            Ok(())
-        })?;
+                Ok(())
+            })?;
 
-        self.notify_webhooks(ids);
+            self.notify_webhooks(ids);
+        }
 
         #[cfg(test)]
         self.breakpoint(crate::test_utils::Breakpoint::AfterProcessing);
-
         if stop_scheduler_forever {
             Ok(TickOutcome::StopProcessingForever)
         } else {

@@ -1,19 +1,16 @@
 use heed::RwTxn;
 
-use super::UpgradeIndex;
-use crate::progress::Progress;
+use super::{UpgradeIndex, UpgradeParams};
 use crate::{make_enum_progress, Index, Result};
 
-#[allow(non_camel_case_types)]
-pub(super) struct V1_12_To_V1_12_3 {}
+pub(super) struct FixFieldDistribution {}
 
-impl UpgradeIndex for V1_12_To_V1_12_3 {
+impl UpgradeIndex for FixFieldDistribution {
     fn upgrade(
         &self,
         wtxn: &mut RwTxn,
         index: &Index,
-        _original: (u32, u32, u32),
-        progress: Progress,
+        UpgradeParams { progress, .. }: UpgradeParams<'_>,
     ) -> Result<bool> {
         make_enum_progress! {
             enum FieldDistribution {
@@ -21,31 +18,37 @@ impl UpgradeIndex for V1_12_To_V1_12_3 {
             }
         };
         progress.update_progress(FieldDistribution::RebuildingFieldDistribution);
-        crate::update::new::reindex::field_distribution(index, wtxn, &progress)?;
+        crate::update::new::reindex::field_distribution(index, wtxn, progress)?;
         Ok(true)
     }
 
-    fn target_version(&self) -> (u32, u32, u32) {
-        (1, 12, 3)
+    fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
+        initial_version < (1, 12, 3)
+    }
+
+    fn description(&self) -> &'static str {
+        "Recomputing field distribution which was wrong before v1.12.3"
     }
 }
 
-#[allow(non_camel_case_types)]
-pub(super) struct V1_12_3_To_V1_13_0 {}
+pub(super) struct RecomputeStats {}
 
-impl UpgradeIndex for V1_12_3_To_V1_13_0 {
+impl UpgradeIndex for RecomputeStats {
     fn upgrade(
         &self,
         _wtxn: &mut RwTxn,
         _index: &Index,
-        _original: (u32, u32, u32),
-        _progress: Progress,
+        _params: UpgradeParams<'_>,
     ) -> Result<bool> {
         // recompute the indexes stats
         Ok(true)
     }
 
-    fn target_version(&self) -> (u32, u32, u32) {
-        (1, 13, 0)
+    fn must_upgrade(&self, initial_version: (u32, u32, u32)) -> bool {
+        initial_version < (1, 13, 0)
+    }
+
+    fn description(&self) -> &'static str {
+        "Recomputing stats"
     }
 }

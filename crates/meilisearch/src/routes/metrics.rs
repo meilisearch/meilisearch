@@ -1,44 +1,44 @@
-use actix_web::http::header;
 use actix_web::web::{self, Data};
 use actix_web::HttpResponse;
 use index_scheduler::{IndexScheduler, Query};
 use meilisearch_auth::AuthController;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::progress::ProgressStepView;
 use meilisearch_types::tasks::Status;
 use prometheus::{Encoder, TextEncoder};
 use time::OffsetDateTime;
-use utoipa::OpenApi;
 
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
 use crate::routes::create_all_stats;
 use crate::search_queue::SearchQueue;
 
-#[derive(OpenApi)]
-#[openapi(paths(get_metrics))]
+#[routes::routes(
+    routes(
+        "" => get(get_metrics),
+    ),
+    tag = "Stats",
+)]
 pub struct MetricApi;
 
-pub fn configure(config: &mut web::ServiceConfig) {
-    config.service(web::resource("").route(web::get().to(get_metrics)));
-}
-
-/// Get prometheus metrics
+/// Get Prometheus metrics
 ///
-/// Retrieve metrics on the engine. See https://www.meilisearch.com/docs/learn/experimental/metrics
-/// Currently, [the feature is experimental](https://www.meilisearch.com/docs/learn/experimental/overview)
-/// which means it must be enabled.
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Stats",
+/// Return metrics for the engine in Prometheus format. This is an [experimental feature](https://www.meilisearch.com/docs/learn/experimental/overview) and must be enabled before use.
+#[routes::path(
     security(("Bearer" = ["metrics.get", "metrics.*", "*"])),
     responses(
-        (status = 200, description = "The metrics of the instance", body = String, content_type = "text/plain", example = json!(
+        (status = 200, description = "The metrics of the instance.", body = String, content_type = "text/plain", example = json!(
             r#"
 # HELP meilisearch_db_size_bytes Meilisearch DB Size In Bytes
 # TYPE meilisearch_db_size_bytes gauge
 meilisearch_db_size_bytes 1130496
+# HELP meilisearch_batch_running_progress_trace The currently running progress trace
+# TYPE meilisearch_batch_running_progress_trace gauge
+meilisearch_batch_running_progress_trace{batch_uid="0",step_name="document"} 0.710618582519409
+meilisearch_batch_running_progress_trace{batch_uid="0",step_name="extracting word proximity"} 0.2222222222222222
+meilisearch_batch_running_progress_trace{batch_uid="0",step_name="indexing"} 0.6666666666666666
+meilisearch_batch_running_progress_trace{batch_uid="0",step_name="processing tasks"} 0
 # HELP meilisearch_http_requests_total Meilisearch HTTP requests total
 # TYPE meilisearch_http_requests_total counter
 meilisearch_http_requests_total{method="GET",path="/metrics",status="400"} 1
@@ -62,6 +62,13 @@ meilisearch_http_response_time_seconds_bucket{method="GET",path="/metrics",le="1
 meilisearch_http_response_time_seconds_bucket{method="GET",path="/metrics",le="+Inf"} 0
 meilisearch_http_response_time_seconds_sum{method="GET",path="/metrics"} 0
 meilisearch_http_response_time_seconds_count{method="GET",path="/metrics"} 0
+# HELP meilisearch_last_finished_batches_progress_trace_ms The last few batches progress trace in milliseconds
+# TYPE meilisearch_last_finished_batches_progress_trace_ms gauge
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks"} 19360
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes"} 368
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes > preparing payloads"} 367
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks > computing document changes > preparing payloads > payload"} 367
+meilisearch_last_finished_batches_progress_trace_ms{batch_uid="0",step_name="processing tasks > indexing"} 18970
 # HELP meilisearch_index_count Meilisearch Index Count
 # TYPE meilisearch_index_count gauge
 meilisearch_index_count 1
@@ -99,7 +106,7 @@ meilisearch_nb_tasks{kind="types",value="taskDeletion"} 0
 meilisearch_used_db_size_bytes 409600
 "#
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -149,6 +156,50 @@ pub async fn get_metrics(
         }
     }
 
+    // Fetch and expose the current progressing step
+    crate::metrics::MEILISEARCH_BATCH_RUNNING_PROGRESS_TRACE.reset();
+    let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
+        &Query { statuses: Some(vec![Status::Processing]), ..Query::default() },
+        auth_filters,
+    )?;
+    if let Some(batch) = batches.into_iter().next() {
+        let batch_uid = batch.uid.to_string();
+        if let Some(progress) = batch.progress {
+            for ProgressStepView { current_step, finished, total } in progress.steps {
+                crate::metrics::MEILISEARCH_BATCH_RUNNING_PROGRESS_TRACE
+                    .with_label_values(&[batch_uid.as_str(), current_step.as_ref()])
+                    // We return the completion ratio of the current step
+                    .set(finished as f64 / total as f64);
+            }
+        }
+    }
+
+    crate::metrics::MEILISEARCH_LAST_FINISHED_BATCHES_PROGRESS_TRACE_MS.reset();
+    let (batches, _total) = index_scheduler.get_batches_from_authorized_indexes(
+        // Fetch the finished batches...
+        &Query {
+            statuses: Some(vec![Status::Succeeded, Status::Failed]),
+            limit: Some(1),
+            ..Query::default()
+        },
+        auth_filters,
+    )?;
+    // ...and get the last batch only.
+    if let Some(batch) = batches.into_iter().next() {
+        let batch_uid = batch.uid.to_string();
+        for (step_name, duration_str) in batch.stats.progress_trace {
+            let Some(duration_str) = duration_str.as_str() else { continue };
+            match humantime::parse_duration(duration_str) {
+                Ok(duration) => {
+                    crate::metrics::MEILISEARCH_LAST_FINISHED_BATCHES_PROGRESS_TRACE_MS
+                        .with_label_values(&[&batch_uid, &step_name])
+                        .set(duration.as_millis() as i64);
+                }
+                Err(e) => tracing::error!("Failed to parse duration: {e}"),
+            }
+        }
+    }
+
     if let Some(last_update) = response.last_update {
         crate::metrics::MEILISEARCH_LAST_UPDATE.set(last_update.unix_timestamp());
     }
@@ -181,5 +232,6 @@ pub async fn get_metrics(
 
     let response = String::from_utf8(buffer).expect("Failed to convert bytes to string");
 
-    Ok(HttpResponse::Ok().insert_header(header::ContentType(mime::TEXT_PLAIN)).body(response))
+    let content_type = ("content-type", prometheus::TEXT_FORMAT);
+    Ok(HttpResponse::Ok().insert_header(content_type).body(response))
 }

@@ -8,13 +8,14 @@ use bumpalo::Bump;
 use clap::Parser;
 use either::Either;
 use fuzzers::Operation;
+use http_client::policy::IpPolicy;
 use milli::documents::mmap_from_objects;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::IndexerConfig;
+use milli::update::{IndexerConfig, MissingDocumentPolicy};
 use milli::vector::RuntimeEmbedders;
-use milli::Index;
+use milli::{CreateOrOpen, Index};
 use serde_json::Value;
 use tempfile::TempDir;
 
@@ -64,7 +65,8 @@ fn main() {
                 Some(path) => TempDir::new_in(path).unwrap(),
                 None => TempDir::new().unwrap(),
             };
-            let index = Index::new(options, tempdir.path(), true).unwrap();
+            let index =
+                Index::new(options, tempdir.path(), CreateOrOpen::create_without_shards()).unwrap();
             let indexer_config = IndexerConfig::default();
 
             std::thread::scope(|s| {
@@ -90,7 +92,7 @@ fn main() {
 
                             let indexer_alloc = Bump::new();
                             let embedders = RuntimeEmbedders::default();
-                            let mut indexer = indexer::DocumentOperation::new();
+                            let mut indexer = indexer::IndexOperations::new();
 
                             let mut operations = Vec::new();
                             for op in batch.0 {
@@ -113,9 +115,12 @@ fn main() {
 
                             for op in &operations {
                                 match op {
-                                    Either::Left(documents) => {
-                                        indexer.replace_documents(documents).unwrap()
-                                    }
+                                    Either::Left(documents) => indexer
+                                        .replace_documents(
+                                            documents,
+                                            MissingDocumentPolicy::default(),
+                                        )
+                                        .unwrap(),
                                     Either::Right(ids) => indexer.delete_documents(ids),
                                 }
                             }
@@ -129,6 +134,7 @@ fn main() {
                                     &mut new_fields_ids_map,
                                     &|| false,
                                     Progress::default(),
+                                    None,
                                 )
                                 .unwrap();
 
@@ -144,12 +150,14 @@ fn main() {
                                 embedders,
                                 &|| false,
                                 &Progress::default(),
+                                &IpPolicy::deny_all_local_ips(),
                                 &Default::default(),
                             )
                             .unwrap();
 
                             // after executing a batch we check if the database is corrupted
-                            let res = index.search(&wtxn).execute().unwrap();
+                            let progress = Progress::default();
+                            let res = index.search(&wtxn, &progress).execute().unwrap();
                             index.documents(&wtxn, res.documents_ids).unwrap();
                             progression.fetch_add(1, Ordering::Relaxed);
                         }

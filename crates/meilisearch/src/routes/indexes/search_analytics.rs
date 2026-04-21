@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 
 use crate::aggregate_methods;
 use crate::analytics::{Aggregate, AggregateMethod};
+use crate::metrics::MEILISEARCH_PERSONALIZED_SEARCH_REQUESTS;
 use crate::search::{
     SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
     DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
@@ -95,6 +96,12 @@ pub struct SearchAggregator<Method: AggregateMethod> {
     show_ranking_score_details: bool,
     ranking_score_threshold: bool,
 
+    // personalization
+    total_personalized: usize,
+
+    // transparent network requests
+    total_explicit_use_network: usize,
+
     marker: std::marker::PhantomData<Method>,
 }
 
@@ -103,32 +110,35 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
     pub fn from_query(query: &SearchQuery) -> Self {
         let SearchQuery {
             q,
-            vector,
-            media,
             offset,
             limit,
             page,
             hits_per_page,
             attributes_to_retrieve: _,
-            retrieve_vectors,
             attributes_to_crop: _,
             crop_length,
+            crop_marker,
             attributes_to_highlight: _,
+            highlight_pre_tag,
+            highlight_post_tag,
             show_matches_position,
-            show_ranking_score,
-            show_ranking_score_details,
             filter,
             sort,
             distinct,
             facets: _,
-            highlight_pre_tag,
-            highlight_post_tag,
-            crop_marker,
             matching_strategy,
             attributes_to_search_on,
-            hybrid,
             ranking_score_threshold,
             locales,
+            hybrid,
+            vector,
+            retrieve_vectors,
+            media,
+            personalize,
+            use_network,
+            show_ranking_score,
+            show_ranking_score_details,
+            show_performance_details: _,
         } = query;
 
         let mut ret = Self::default();
@@ -204,6 +214,16 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             ret.locales = locales.iter().copied().collect();
         }
 
+        // personalization
+        if personalize.is_some() {
+            ret.total_personalized = 1;
+            MEILISEARCH_PERSONALIZED_SEARCH_REQUESTS.inc();
+        }
+
+        if use_network.unwrap_or_default() {
+            ret.total_explicit_use_network = 1;
+        }
+
         ret.highlight_pre_tag = *highlight_pre_tag != DEFAULT_HIGHLIGHT_PRE_TAG();
         ret.highlight_post_tag = *highlight_post_tag != DEFAULT_HIGHLIGHT_POST_TAG();
         ret.crop_marker = *crop_marker != DEFAULT_CROP_MARKER();
@@ -229,11 +249,15 @@ impl<Method: AggregateMethod> SearchAggregator<Method> {
             query_vector: _,
             processing_time_ms,
             hits_info: _,
-            semantic_hit_count: _,
             facet_distribution: _,
             facet_stats: _,
+            request_uid: _,
+            metadata: _,
+            remote_errors: _,
+            semantic_hit_count: _,
             degraded,
             used_negative_operator,
+            performance_details: _,
         } = result;
 
         self.total_succeeded = self.total_succeeded.saturating_add(1);
@@ -294,6 +318,8 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             total_used_negative_operator,
             ranking_score_threshold,
             mut locales,
+            total_personalized,
+            total_explicit_use_network,
             marker: _,
         } = *new;
 
@@ -379,6 +405,13 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
         // locales
         self.locales.append(&mut locales);
 
+        // personalization
+        self.total_personalized = self.total_personalized.saturating_add(total_personalized);
+
+        // network
+        self.total_explicit_use_network =
+            self.total_explicit_use_network.saturating_add(total_explicit_use_network);
+
         self
     }
 
@@ -424,6 +457,8 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
             total_used_negative_operator,
             ranking_score_threshold,
             locales,
+            total_personalized,
+            total_explicit_use_network,
             marker: _,
         } = *self;
 
@@ -497,6 +532,12 @@ impl<Method: AggregateMethod> Aggregate for SearchAggregator<Method> {
                 "show_ranking_score_details": show_ranking_score_details,
                 "ranking_score_threshold": ranking_score_threshold,
             },
+            "personalization": {
+                "total_personalized": total_personalized,
+            },
+            "network": {
+                "total_explicit_use_network": total_explicit_use_network,
+            }
         })
     }
 }

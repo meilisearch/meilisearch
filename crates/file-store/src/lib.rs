@@ -60,7 +60,7 @@ impl FileStore {
 
     /// Returns the file corresponding to the requested uuid.
     pub fn get_update(&self, uuid: Uuid) -> Result<StdFile> {
-        let path = self.get_update_path(uuid);
+        let path = self.update_path(uuid);
         let file = match StdFile::open(path) {
             Ok(file) => file,
             Err(e) => {
@@ -72,7 +72,7 @@ impl FileStore {
     }
 
     /// Returns the path that correspond to this uuid, the path could not exists.
-    pub fn get_update_path(&self, uuid: Uuid) -> PathBuf {
+    pub fn update_path(&self, uuid: Uuid) -> PathBuf {
         self.path.join(uuid.to_string())
     }
 
@@ -148,11 +148,10 @@ impl File {
         Ok(Self { path: PathBuf::new(), file: None })
     }
 
-    pub fn persist(self) -> Result<()> {
-        if let Some(file) = self.file {
-            file.persist(&self.path)?;
-        }
-        Ok(())
+    pub fn persist(self) -> Result<Option<StdFile>> {
+        let Some(file) = self.file else { return Ok(None) };
+
+        Ok(Some(file.persist(&self.path)?))
     }
 }
 

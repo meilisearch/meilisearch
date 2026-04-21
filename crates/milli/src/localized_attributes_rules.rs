@@ -18,6 +18,7 @@ use crate::{AttributePatterns, FieldId};
 /// The pattern `*attribute_name*` matches any attribute name that contains `attribute_name`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct LocalizedAttributesRule {
+    #[schema(value_type = Vec<String>)]
     pub attribute_patterns: AttributePatterns,
     #[schema(value_type = Vec<String>)]
     pub locales: Vec<Language>,

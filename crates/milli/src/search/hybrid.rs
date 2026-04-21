@@ -6,9 +6,12 @@ use roaring::RoaringBitmap;
 
 use crate::score_details::{ScoreDetails, ScoreValue, ScoringStrategy};
 use crate::search::new::{distinct_fid, distinct_single_docid};
+use crate::search::steps::SearchStep;
 use crate::search::SemanticSearch;
 use crate::vector::{Embedding, SearchQuery};
-use crate::{Index, MatchingWords, Result, Search, SearchResult};
+use crate::{
+    merge_positioned_hits_into_page, Index, MatchingWords, PinDoc, Result, Search, SearchResult,
+};
 
 struct ScoreWithRatioResult {
     matching_words: MatchingWords,
@@ -21,6 +24,9 @@ struct ScoreWithRatioResult {
 
 type ScoreWithRatio = (Vec<ScoreDetails>, f32);
 
+// NOTE: Pinned documents (ScoreDetails::Pin) are extracted before the score-based merge so they
+// never reach this comparator. The merge-level extraction ensures pins are re-injected at their
+// target positions after the organic merge completes.
 #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
 fn compare_scores(
     &(ref left_scores, left_ratio): &ScoreWithRatio,
@@ -92,14 +98,40 @@ impl ScoreWithRatioResult {
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
     fn merge(
-        vector_results: Self,
-        keyword_results: Self,
+        mut vector_results: Self,
+        mut keyword_results: Self,
         from: usize,
         length: usize,
         distinct: Option<&str>,
         index: &Index,
         rtxn: &RoTxn<'_>,
     ) -> Result<(SearchResult, u32)> {
+        // Pinned documents carry ScoreDetails::Pin, which is a placement directive, not a score.
+        // We extract them before the score-based merge, merge organic results normally, then
+        // merge the pins into the requested page in linear time.
+        let mut pins: Vec<PinDoc> = Vec::new();
+        let mut pinned_doc_ids = RoaringBitmap::new();
+
+        for results in [&mut keyword_results.document_scores, &mut vector_results.document_scores] {
+            results.retain(|(doc_id, (scores, _))| {
+                if let Some(ScoreDetails::Pin { position }) = scores.first() {
+                    if pinned_doc_ids.insert(*doc_id) {
+                        pins.push(PinDoc { pos: *position, doc_id: *doc_id });
+                    }
+                    false
+                } else {
+                    true
+                }
+            });
+        }
+        pins.sort_by_key(|pin| pin.pos);
+
+        // When pins are present we need the organic prefix up to the end of the
+        // requested page, then we merge pins into that prefix before slicing the
+        // page. This naturally pumps late pins forward when organic results run out.
+        let (ranked_from, ranked_length) =
+            if pins.is_empty() { (from, length) } else { (0, from.saturating_add(length)) };
+
         #[derive(Clone, Copy)]
         enum ResultSource {
             Semantic,
@@ -115,7 +147,9 @@ impl ScoreWithRatioResult {
         );
 
         let distinct_fid = distinct_fid(distinct, index, rtxn)?;
-        let mut excluded_documents = RoaringBitmap::new();
+        // Seed excluded_documents with pinned docids so they don't appear as organic results
+        // (they'll be re-injected at their target positions after the merge).
+        let mut excluded_documents = pinned_doc_ids.clone();
         for res in vector_results
             .document_scores
             .into_iter()
@@ -151,10 +185,10 @@ impl ScoreWithRatioResult {
 
                 Some(Ok(item))
             })
-            // start skipping **after** the filter
-            .skip(from)
-            // take **after** skipping
-            .take(length)
+            // start skipping after the filter, adjusted for pin slots
+            .skip(ranked_from)
+            // take after skipping, adjusted for pin slots
+            .take(ranked_length)
         {
             let ((docid, (main_score, _sub_score)), source) = res?;
             if let ResultSource::Semantic = source {
@@ -164,6 +198,9 @@ impl ScoreWithRatioResult {
             // TODO: pass both scores to documents_score in some way?
             document_scores.push(main_score);
         }
+
+        (documents_ids, document_scores) =
+            merge_pins_into_page(&pins, from, length, documents_ids, document_scores);
 
         // compute the set of candidates from both sets
         let candidates = vector_results.candidates | keyword_results.candidates;
@@ -195,6 +232,30 @@ impl ScoreWithRatioResult {
     }
 }
 
+fn merge_pins_into_page(
+    pins: &[PinDoc],
+    from: usize,
+    length: usize,
+    documents_ids: Vec<u32>,
+    document_scores: Vec<Vec<ScoreDetails>>,
+) -> (Vec<u32>, Vec<Vec<ScoreDetails>>) {
+    if pins.is_empty() {
+        return (documents_ids, document_scores);
+    }
+
+    let organic_hits = documents_ids.into_iter().zip(document_scores).collect();
+    let merged_hits = merge_positioned_hits_into_page(
+        pins.to_vec(),
+        from,
+        length,
+        organic_hits,
+        |pin| pin.pos,
+        |pin| (pin.doc_id, vec![ScoreDetails::Pin { position: pin.pos }]),
+    );
+
+    merged_hits.into_iter().unzip()
+}
+
 impl Search<'_> {
     #[tracing::instrument(level = "trace", skip_all, target = "search::hybrid")]
     pub fn execute_hybrid(&self, semantic_ratio: f32) -> Result<(SearchResult, Option<u32>)> {
@@ -218,9 +279,11 @@ impl Search<'_> {
             rtxn: self.rtxn,
             index: self.index,
             semantic: self.semantic.clone(),
-            time_budget: self.time_budget.clone(),
+            deadline: self.deadline.clone(),
             ranking_score_threshold: self.ranking_score_threshold,
             locales: self.locales.clone(),
+            progress: self.progress,
+            pins: self.pins.clone(),
         };
 
         let semantic = search.semantic.take();
@@ -241,6 +304,7 @@ impl Search<'_> {
             Some(vector_query) => vector_query,
             None => {
                 // attempt to embed the vector
+                self.progress.update_progress(SearchStep::EmbedQuery);
                 let span = tracing::trace_span!(target: "search::hybrid", "embed_one");
                 let _entered = span.enter();
 
@@ -330,7 +394,7 @@ fn return_keyword_results(
     }: SearchResult,
 ) -> (SearchResult, Option<u32>) {
     let (documents_ids, document_scores) = if offset >= documents_ids.len() ||
-    // technically redudant because documents_ids.len() == document_scores.len(),
+    // technically redundant because documents_ids.len() == document_scores.len(),
     // defensive programming
     offset >= document_scores.len()
     {

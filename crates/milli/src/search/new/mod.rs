@@ -21,7 +21,7 @@ mod vector_sort;
 #[cfg(test)]
 mod tests;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ops::AddAssign;
 use std::time::Duration;
 
@@ -56,13 +56,22 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::GeoSortParameter;
 use crate::index::PrefixSearch;
 use crate::localized_attributes_rules::LocalizedFieldIds;
+use crate::progress::Progress;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
+use crate::search::facet::IndexFilter;
 use crate::search::new::distinct::apply_distinct_rule;
+use crate::search::steps::SearchStep;
 use crate::vector::Embedder;
 use crate::{
-    AscDesc, DocumentId, FieldId, Filter, Index, Member, Result, TermsMatchingStrategy, TimeBudget,
+    AscDesc, Deadline, DocumentId, FieldId, Index, Member, PinDoc, Result, TermsMatchingStrategy,
     UserError, Weight,
 };
+
+/// Cache for synonyms to avoid repeated database access
+#[derive(Default)]
+pub struct SynonymCache {
+    pub cache: Option<HashMap<Vec<String>, Vec<Vec<String>>>>,
+}
 
 /// A structure used throughout the execution of a search query.
 pub struct SearchContext<'ctx> {
@@ -73,6 +82,7 @@ pub struct SearchContext<'ctx> {
     pub phrase_interner: DedupInterner<Phrase>,
     pub term_interner: Interner<QueryTerm>,
     pub phrase_docids: PhraseDocIdsCache,
+    pub synonym_cache: SynonymCache,
     pub restricted_fids: Option<RestrictedFids>,
     pub prefix_search: PrefixSearch,
     pub vector_store_stats: Option<VectorStoreStats>,
@@ -103,6 +113,7 @@ impl<'ctx> SearchContext<'ctx> {
             phrase_interner: <_>::default(),
             term_interner: <_>::default(),
             phrase_docids: <_>::default(),
+            synonym_cache: <_>::default(),
             restricted_fids: None,
             prefix_search,
             vector_store_stats: None,
@@ -111,6 +122,17 @@ impl<'ctx> SearchContext<'ctx> {
 
     pub fn is_prefix_search_allowed(&self) -> bool {
         self.prefix_search != PrefixSearch::Disabled
+    }
+
+    /// Get synonyms with caching to avoid repeated database access
+    pub fn get_synonyms(&mut self) -> Result<&HashMap<Vec<String>, Vec<Vec<String>>>> {
+        match self.synonym_cache.cache {
+            Some(ref synonyms) => Ok(synonyms),
+            None => {
+                let synonyms = self.index.synonyms(self.txn)?;
+                Ok(self.synonym_cache.cache.insert(synonyms))
+            }
+        }
     }
 
     pub fn attributes_to_search_on(
@@ -157,8 +179,15 @@ impl<'ctx> SearchContext<'ctx> {
                 Some((_name, fid, weight)) => (*fid, *weight),
                 // The field is not searchable but the user didn't define any searchable attributes
                 None if user_defined_searchable.is_none() => continue,
-                // The field is not searchable => User error
+                // The field is not searchable
                 None => {
+                    // field exists in user settings
+                    if let Some(defined_searchable) = &user_defined_searchable {
+                        if defined_searchable.iter().any(|s| s == field_name) {
+                            continue;
+                        }
+                    }
+                    // field does not exist in user settings => user error
                     let (valid_fields, hidden_fields) = self.index.remove_hidden_fields(
                         self.txn,
                         searchable_fields_weights.iter().map(|(name, _, _)| name),
@@ -275,7 +304,9 @@ fn resolve_universe(
     query_graph: &QueryGraph,
     matching_strategy: TermsMatchingStrategy,
     logger: &mut dyn SearchLogger<QueryGraph>,
+    progress: &Progress,
 ) -> Result<RoaringBitmap> {
+    let _step = progress.update_progress_scoped(SearchStep::EvaluateQuery);
     resolve_maximally_reduced_query_graph(
         ctx,
         initial_universe,
@@ -332,6 +363,8 @@ fn get_ranking_rules_for_placeholder_search<'ctx>(
             crate::Criterion::Words
             | crate::Criterion::Typo
             | crate::Criterion::Attribute
+            | crate::Criterion::AttributeRank
+            | crate::Criterion::WordPosition
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness => continue,
             crate::Criterion::Sort => {
@@ -394,6 +427,8 @@ fn get_ranking_rules_for_vector<'ctx>(
             | crate::Criterion::Typo
             | crate::Criterion::Proximity
             | crate::Criterion::Attribute
+            | crate::Criterion::AttributeRank
+            | crate::Criterion::WordPosition
             | crate::Criterion::Exactness => {
                 if !vector {
                     let vector_candidates = ctx.index.documents_ids(ctx.txn)?;
@@ -457,6 +492,8 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut proximity = false;
     let mut sort = false;
     let mut attribute = false;
+    let mut attribute_rank = false;
+    let mut word_position = false;
     let mut exactness = false;
     let mut sorted_fields = HashSet::new();
     let mut geo_sorted = false;
@@ -505,11 +542,25 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
                 ranking_rules.push(Box::new(Proximity::new(None)));
             }
             crate::Criterion::Attribute => {
-                if attribute {
+                if attribute || attribute_rank || word_position {
                     continue;
                 }
                 attribute = true;
                 ranking_rules.push(Box::new(Fid::new(None)));
+                ranking_rules.push(Box::new(Position::new(None)));
+            }
+            crate::Criterion::AttributeRank => {
+                if attribute || attribute_rank {
+                    continue;
+                }
+                attribute_rank = true;
+                ranking_rules.push(Box::new(Fid::new(None)));
+            }
+            crate::Criterion::WordPosition => {
+                if attribute || word_position {
+                    continue;
+                }
+                word_position = true;
                 ranking_rules.push(Box::new(Position::new(None)));
             }
             crate::Criterion::Sort => {
@@ -612,9 +663,11 @@ fn resolve_sort_criteria<'ctx, Query: RankingRuleQueryTrait>(
 pub fn filtered_universe(
     index: &Index,
     txn: &RoTxn<'_>,
-    filters: &Option<Filter<'_>>,
+    filters: &Option<IndexFilter<'_>>,
+    progress: &Progress,
 ) -> Result<RoaringBitmap> {
     Ok(if let Some(filters) = filters {
+        let _step = progress.update_progress_scoped(SearchStep::EvaluateFilter);
         filters.evaluate(txn, index)?
     } else {
         index.documents_ids(txn)?
@@ -637,8 +690,10 @@ pub fn execute_vector_search(
     embedder_name: &str,
     embedder: &Embedder,
     quantized: bool,
-    time_budget: TimeBudget,
+    deadline: Deadline,
     ranking_score_threshold: Option<f64>,
+    progress: &Progress,
+    pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
@@ -659,6 +714,7 @@ pub fn execute_vector_search(
     let placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery> =
         &mut placeholder_search_logger;
 
+    let _step = progress.update_progress_scoped(SearchStep::SemanticRanking);
     let BucketSortOutput { docids, scores, all_candidates, degraded } = bucket_sort(
         ctx,
         ranking_rules,
@@ -669,10 +725,11 @@ pub fn execute_vector_search(
         length,
         scoring_strategy,
         placeholder_search_logger,
-        time_budget,
+        deadline,
         ranking_score_threshold,
         exhaustive_number_hits,
         max_total_hits,
+        pins,
     )?;
 
     Ok(PartialSearchResult {
@@ -703,15 +760,18 @@ pub fn execute_search(
     words_limit: Option<usize>,
     placeholder_search_logger: &mut dyn SearchLogger<PlaceholderQuery>,
     query_graph_logger: &mut dyn SearchLogger<QueryGraph>,
-    time_budget: TimeBudget,
+    deadline: Deadline,
     ranking_score_threshold: Option<f64>,
     locales: Option<&Vec<Language>>,
+    progress: &Progress,
+    pins: Vec<PinDoc>,
 ) -> Result<PartialSearchResult> {
     check_sort_criteria(ctx, sort_criteria.as_ref())?;
 
     let mut used_negative_operator = false;
     let mut located_query_terms = None;
     let query_terms = if let Some(query) = query {
+        let _step = progress.update_progress_scoped(SearchStep::TokenizeQuery);
         let span = tracing::trace_span!(target: "search::tokens", "tokenizer_builder");
         let entered = span.enter();
 
@@ -815,9 +875,16 @@ pub fn execute_search(
             terms_matching_strategy,
         )?;
 
-        universe &=
-            resolve_universe(ctx, &universe, &graph, terms_matching_strategy, query_graph_logger)?;
+        universe &= resolve_universe(
+            ctx,
+            &universe,
+            &graph,
+            terms_matching_strategy,
+            query_graph_logger,
+            progress,
+        )?;
 
+        let _step = progress.update_progress_scoped(SearchStep::KeywordRanking);
         bucket_sort(
             ctx,
             ranking_rules,
@@ -828,14 +895,16 @@ pub fn execute_search(
             length,
             scoring_strategy,
             query_graph_logger,
-            time_budget,
+            deadline,
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
+            pins,
         )?
     } else {
         let ranking_rules =
             get_ranking_rules_for_placeholder_search(ctx, sort_criteria, geo_param)?;
+        let _step = progress.update_progress_scoped(SearchStep::PlaceholderRanking);
         bucket_sort(
             ctx,
             ranking_rules,
@@ -846,10 +915,11 @@ pub fn execute_search(
             length,
             scoring_strategy,
             placeholder_search_logger,
-            time_budget,
+            deadline,
             ranking_score_threshold,
             exhaustive_number_hits,
             max_total_hits,
+            pins,
         )?
     };
 

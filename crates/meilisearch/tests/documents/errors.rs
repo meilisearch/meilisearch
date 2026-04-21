@@ -134,14 +134,14 @@ async fn get_all_documents_bad_filter() {
 
     let (response, code) = index.get_all_documents_raw("?filter=doggo").await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r###"
+    snapshot!(json_string!(response), @r#"
     {
-      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `doggo`.\n1:6 doggo",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `doggo`.\n1:6 doggo",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
-    "###);
+    "#);
 
     let (response, code) = index.get_all_documents_raw("?filter=doggo=bernese").await;
     snapshot!(code, @"400 Bad Request");
@@ -523,14 +523,14 @@ async fn delete_document_by_filter() {
     // send bad filter
     let (response, code) = index.delete_document_by_filter(json!({ "filter": "hello"})).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(response, @r###"
+    snapshot!(response, @r#"
     {
-      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `hello`.\n1:6 hello",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `hello`.\n1:6 hello",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
-    "###);
+    "#);
 
     // send empty filter
     let (response, code) = index.delete_document_by_filter(json!({ "filter": ""})).await;
@@ -724,14 +724,14 @@ async fn fetch_document_by_filter() {
 
     let (response, code) = index.fetch_documents(json!({ "filter": "cool doggo" })).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(response, @r###"
+    snapshot!(response, @r#"
     {
-      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, or `_geoBoundingBox` at `cool doggo`.\n1:11 cool doggo",
+      "message": "Was expecting an operation `=`, `!=`, `>=`, `>`, `<=`, `<`, `IN`, `NOT IN`, `TO`, `EXISTS`, `NOT EXISTS`, `IS NULL`, `IS NOT NULL`, `IS EMPTY`, `IS NOT EMPTY`, `CONTAINS`, `NOT CONTAINS`, `STARTS WITH`, `NOT STARTS WITH`, `_geoRadius`, `_geoBoundingBox` or `_geoPolygon` at `cool doggo`.\n1:11 cool doggo",
       "code": "invalid_document_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_document_filter"
     }
-    "###);
+    "#);
 
     let (response, code) = index.fetch_documents(json!({ "filter": "doggo = bernese" })).await;
     snapshot!(code, @"400 Bad Request");

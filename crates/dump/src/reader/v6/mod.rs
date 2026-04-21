@@ -3,15 +3,16 @@ use std::fs::{self, File};
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
+use super::Document;
+use crate::{Error, IndexMetadata, Result, Version};
+use meilisearch_types::dynamic_search_rules::RuleUid;
 pub use meilisearch_types::milli;
-use meilisearch_types::milli::vector::hf::OverridePooling;
+use meilisearch_types::milli::vector::embedder::hf::OverridePooling;
+use roaring::RoaringBitmap;
 use tempfile::TempDir;
 use time::OffsetDateTime;
 use tracing::debug;
 use uuid::Uuid;
-
-use super::Document;
-use crate::{Error, IndexMetadata, Result, Version};
 
 pub type Metadata = crate::Metadata;
 
@@ -24,8 +25,9 @@ pub type Batch = meilisearch_types::batches::Batch;
 pub type Key = meilisearch_types::keys::Key;
 pub type ChatCompletionSettings = meilisearch_types::features::ChatCompletionSettings;
 pub type RuntimeTogglableFeatures = meilisearch_types::features::RuntimeTogglableFeatures;
-pub type Network = meilisearch_types::features::Network;
+pub type Network = meilisearch_types::network::Network;
 pub type Webhooks = meilisearch_types::webhooks::WebhooksDumpView;
+pub type DynamicSearchRule = meilisearch_types::dynamic_search_rules::DynamicSearchRule;
 
 // ===== Other types to clarify the code of the compat module
 // everything related to the tasks
@@ -56,6 +58,9 @@ pub struct V6Reader {
     instance_uid: Option<Uuid>,
     metadata: Metadata,
     tasks: BufReader<File>,
+    // This is just a second handler to the tasks to read
+    // them a second time and be able to extract batches.
+    tasks2: BufReader<File>,
     batches: Option<BufReader<File>>,
     keys: BufReader<File>,
     features: Option<RuntimeTogglableFeatures>,
@@ -95,17 +100,28 @@ impl V6Reader {
             Err(e) => return Err(e.into()),
         };
 
-        let network = match fs::read(dump.path().join("network.json")) {
-            Ok(network_file) => Some(serde_json::from_reader(&*network_file)?),
-            Err(error) => match error.kind() {
-                // Allows the file to be missing, this will only result in all experimental features disabled.
-                ErrorKind::NotFound => {
-                    debug!("`network.json` not found in dump");
-                    None
-                }
-                _ => return Err(error.into()),
-            },
-        };
+        let mut network: Option<meilisearch_types::network::Network> =
+            match fs::read(dump.path().join("network.json")) {
+                Ok(network_file) => Some(serde_json::from_reader(&*network_file)?),
+                Err(error) => match error.kind() {
+                    // Allows the file to be missing, this will only result in all experimental features disabled.
+                    ErrorKind::NotFound => {
+                        debug!("`network.json` not found in dump");
+                        None
+                    }
+                    _ => return Err(error.into()),
+                },
+            };
+
+        // Sharding is removed at dump import time.
+        // This property is relied upon by <crates/milli/src/update/new/indexer/partial_dump.rs> in function `shard_docids`
+        if let Some(network) = &mut network {
+            // as dumps are typically imported in a different machine as the emitter (otherwise dumpless upgrade would be used),
+            // we decide to remove the self to avoid alias issues
+            network.local = None;
+            // for the same reason we disable automatic sharding
+            network.leader = None;
+        }
 
         let webhooks = match fs::read(dump.path().join("webhooks.json")) {
             Ok(webhooks_file) => Some(serde_json::from_reader(&*webhooks_file)?),
@@ -122,6 +138,7 @@ impl V6Reader {
             metadata: serde_json::from_reader(&*meta_file)?,
             instance_uid,
             tasks: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
+            tasks2: BufReader::new(File::open(dump.path().join("tasks").join("queue.jsonl"))?),
             batches,
             keys: BufReader::new(File::open(dump.path().join("keys.jsonl"))?),
             features,
@@ -187,12 +204,48 @@ impl V6Reader {
         }))
     }
 
+    /// A way to read the tasks a second time to extract the batches.
+    fn tasks2(&mut self) -> Box<dyn Iterator<Item = Result<Task>> + '_> {
+        Box::new(
+            (&mut self.tasks2)
+                .lines()
+                .map(|line| -> Result<_> { Ok(serde_json::from_str(&line?)?) }),
+        )
+    }
+
     pub fn batches(&mut self) -> Box<dyn Iterator<Item = Result<Batch>> + '_> {
+        // Get batches but filter batches so that those whose tasks have been
+        // deleted are not returned. This is due to bug #5827 that caused them
+        // not to be deleted before version 1.18.
+
+        let mut task_uids = RoaringBitmap::new();
+        let mut faulty = false;
+        for task in self.tasks2() {
+            let Ok(task) = task else {
+                // If we can't read the tasks, just give up trying to filter
+                // the batches. The database may contain orphan batches, but
+                // that's not a big deal.
+                faulty = true;
+                break;
+            };
+            task_uids.insert(task.uid);
+        }
+
         match self.batches.as_mut() {
-            Some(batches) => Box::new((batches).lines().map(|line| -> Result<_> {
-                let batch = serde_json::from_str(&line?)?;
-                Ok(batch)
-            })),
+            Some(batches) => Box::new(
+                batches
+                    .lines()
+                    .map(|line| -> Result<Batch> { Ok(serde_json::from_str(&line?)?) })
+                    .filter(move |batch| match batch {
+                        Ok(batch) => {
+                            faulty
+                                || batch.stats.status.values().any(|t| task_uids.contains(*t))
+                                || batch.stats.types.values().any(|t| task_uids.contains(*t))
+                                || batch.stats.index_uids.values().any(|t| task_uids.contains(*t))
+                        }
+                        Err(_) => true,
+                    }),
+            ),
             None => Box::new(std::iter::empty()) as Box<dyn Iterator<Item = Result<Batch>> + '_>,
         }
     }
@@ -241,6 +294,33 @@ impl V6Reader {
 
     pub fn webhooks(&self) -> Option<&Webhooks> {
         self.webhooks.as_ref()
+    }
+
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(RuleUid, DynamicSearchRule)>> + '_>> {
+        let entries = match fs::read_dir(self.dump.path().join("dynamic-search-rules")) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Box::new(std::iter::empty())),
+            Err(e) => return Err(e.into()),
+        };
+        Ok(Box::new(
+            entries
+                .map(|entry| -> Result<Option<_>> {
+                    let entry = entry?;
+                    let file_name = entry.file_name();
+                    let path = Path::new(&file_name);
+                    if entry.file_type()?.is_file() && path.extension() == Some(OsStr::new("json"))
+                    {
+                        let file = File::open(entry.path())?;
+                        let rule: DynamicSearchRule = serde_json::from_reader(file)?;
+                        Ok(Some((rule.uid.clone(), rule)))
+                    } else {
+                        Ok(None)
+                    }
+                })
+                .filter_map(|entry| entry.transpose()),
+        ))
     }
 }
 

@@ -124,8 +124,79 @@ macro_rules! gen_seq {
     };
 }
 
-// Not working for a single argument, but then, it is not really necessary.
-// gen_seq! { SeqFromRequestFut1; A }
+// implementation for arity=1, useless but lets us always use the handler
+// implementation has to be manual because the macro has `,` issues
+pin_project! {
+    pub struct SeqFromRequestFut1<A:FromRequest>{
+        #[pin]A:ExtractFuture<A::Future,A,A::Error>,
+    }
+}
+impl<A: FromRequest> Future for SeqFromRequestFut1<A> {
+    type Output = Result<SeqFromRequest<(A,)>, actix_web::Error>;
+    fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+        let mut count_fut = 0;
+        let mut count_finished = 0;
+        count_fut += 1;
+        match this.A.as_mut().project() {
+            ExtractProj::Future { fut } => match fut.poll(cx) {
+                Poll::Ready(Ok(output)) => {
+                    count_finished += 1;
+                    let _ = this.A.as_mut().project_replace(ExtractFuture::Done { output });
+                }
+                Poll::Ready(Err(error)) => {
+                    count_finished += 1;
+                    let _ = this.A.as_mut().project_replace(ExtractFuture::Error { error });
+                }
+                Poll::Pending => (),
+            },
+            ExtractProj::Done { .. } => count_finished += 1,
+            ExtractProj::Error { .. } => {
+                if count_finished == count_fut {
+                    match this.A.project_replace(ExtractFuture::Empty) {
+                        ExtractReplaceProj::Error { error } => {
+                            return Poll::Ready(Err(error.into()))
+                        }
+                        _ => unreachable!("Invalid future state"),
+                    }
+                } else {
+                    count_finished += 1;
+                }
+            }
+            ExtractProj::Empty => {
+                unreachable!("From request polled after being finished. {}", stringify!(A))
+            }
+        }
+        if count_fut == count_finished {
+            let result = (match this.A.project_replace(ExtractFuture::Empty) {
+                ExtractReplaceProj::Done { output } => output,
+                ExtractReplaceProj::Error { error } => return Poll::Ready(Err(error.into())),
+                _ => unreachable!("Invalid future state"),
+            },);
+            Poll::Ready(Ok(SeqFromRequest(result)))
+        } else {
+            Poll::Pending
+        }
+    }
+}
+impl<A: FromRequest> FromRequest for SeqFromRequest<(A,)> {
+    type Error = actix_web::Error;
+    type Future = SeqFromRequestFut1<A>;
+    fn from_request(req: &HttpRequest, payload: &mut Payload) -> Self::Future {
+        SeqFromRequestFut1 { A: ExtractFuture::Future { fut: A::from_request(req, payload) } }
+    }
+}
+impl<Han, A: FromRequest> Handler<SeqFromRequest<(A,)>> for SeqHandler<Han>
+where
+    Han: Handler<(A,)>,
+{
+    type Output = Han::Output;
+    type Future = Han::Future;
+    fn call(&self, args: SeqFromRequest<(A,)>) -> Self::Future {
+        self.0.call(args.0)
+    }
+}
+
 gen_seq! { SeqFromRequestFut2; A B }
 gen_seq! { SeqFromRequestFut3; A B C }
 gen_seq! { SeqFromRequestFut4; A B C D }

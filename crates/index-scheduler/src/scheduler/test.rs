@@ -4,6 +4,7 @@ use big_s::S;
 use meili_snap::{json_string, snapshot};
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::milli::update::IndexDocumentsMethod::*;
+use meilisearch_types::milli::update::MissingDocumentPolicy;
 use meilisearch_types::milli::{self};
 use meilisearch_types::settings::SettingEmbeddingSettings;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
@@ -15,7 +16,7 @@ use crate::test_utils::Breakpoint::*;
 use crate::test_utils::{
     index_creation_task, read_json, replace_document_import_task, sample_documents,
 };
-use crate::IndexScheduler;
+use crate::{IndexScheduler, Query};
 
 #[test]
 fn insert_task_while_another_task_is_processing() {
@@ -294,6 +295,7 @@ fn document_addition_and_index_deletion() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -404,6 +406,103 @@ fn swap_indexes() {
 }
 
 #[test]
+fn swap_indexes_with_correct_task_allocations() {
+    let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+
+    let to_enqueue = [index_creation_task("a", "id"), index_creation_task("b", "id")];
+
+    for task in to_enqueue {
+        let _ = index_scheduler.register(task, None, false).unwrap();
+        index_scheduler.assert_internally_consistent();
+    }
+
+    handle.advance_n_successful_batches(2);
+
+    let (file0, count0) = sample_documents(&index_scheduler, 1, 1);
+    let (file1, count1) = sample_documents(&index_scheduler, 2, 2);
+    let (file2, count2) = sample_documents(&index_scheduler, 3, 3);
+    let (file3, count3) = sample_documents(&index_scheduler, 4, 4);
+
+    file0.persist().unwrap();
+    file1.persist().unwrap();
+    file2.persist().unwrap();
+    file3.persist().unwrap();
+
+    index_scheduler
+        .register(replace_document_import_task("a", Some("id"), 1, count0), None, false)
+        .unwrap();
+
+    index_scheduler
+        .register(replace_document_import_task("a", Some("id"), 2, count1), None, false)
+        .unwrap();
+
+    index_scheduler
+        .register(replace_document_import_task("b", Some("id"), 3, count2), None, false)
+        .unwrap();
+
+    index_scheduler
+        .register(replace_document_import_task("b", Some("id"), 4, count3), None, false)
+        .unwrap();
+
+    handle.advance_n_successful_batches(2);
+
+    let (a_tasks, _) = index_scheduler
+        .get_tasks_from_authorized_indexes(
+            &Query { index_uids: Some(vec!["a".to_string()]), ..Default::default() },
+            &AuthFilter::default(),
+        )
+        .unwrap();
+
+    assert_eq!(a_tasks.len(), 3);
+
+    let (b_tasks, _) = index_scheduler
+        .get_tasks_from_authorized_indexes(
+            &Query { index_uids: Some(vec!["b".to_string()]), ..Default::default() },
+            &AuthFilter::default(),
+        )
+        .unwrap();
+
+    assert_eq!(b_tasks.len(), 3);
+
+    index_scheduler
+        .register(
+            KindWithContent::IndexSwap {
+                swaps: vec![IndexSwap { indexes: ("a".to_owned(), "b".to_owned()), rename: false }],
+            },
+            None,
+            false,
+        )
+        .unwrap();
+
+    handle.advance_one_successful_batch();
+
+    let (a_after_tasks, _) = index_scheduler
+        .get_tasks_from_authorized_indexes(
+            &Query { index_uids: Some(vec!["a".to_string()]), ..Default::default() },
+            &AuthFilter::default(),
+        )
+        .unwrap();
+
+    let (b_after_tasks, _) = index_scheduler
+        .get_tasks_from_authorized_indexes(
+            &Query { index_uids: Some(vec!["b".to_string()]), ..Default::default() },
+            &AuthFilter::default(),
+        )
+        .unwrap();
+
+    assert_eq!(a_after_tasks.len(), 3);
+    assert_eq!(a_after_tasks.len(), b_after_tasks.len());
+
+    for (a, b) in a_tasks.iter().zip(b_after_tasks.iter()) {
+        assert_eq!(a.uid, b.uid);
+    }
+
+    for (b, a) in b_tasks.iter().zip(a_after_tasks.iter()) {
+        assert_eq!(b.uid, a.uid);
+    }
+}
+
+#[test]
 fn swap_indexes_errors() {
     let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
 
@@ -482,6 +581,7 @@ fn document_addition_and_index_deletion_on_unexisting_index() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -722,7 +822,7 @@ fn basic_get_stats() {
     let kind = index_creation_task("whalo", "fish");
     let _task = index_scheduler.register(kind, None, false).unwrap();
 
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -742,10 +842,12 @@ fn basic_get_stats() {
         "documentEdition": 0,
         "dumpCreation": 0,
         "export": 0,
+        "indexCompaction": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
         "indexUpdate": 0,
+        "networkTopologyChange": 0,
         "settingsUpdate": 0,
         "snapshotCreation": 0,
         "taskCancelation": 0,
@@ -753,10 +855,10 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 
     handle.advance_till([Start, BatchCreated]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -776,10 +878,12 @@ fn basic_get_stats() {
         "documentEdition": 0,
         "dumpCreation": 0,
         "export": 0,
+        "indexCompaction": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
         "indexUpdate": 0,
+        "networkTopologyChange": 0,
         "settingsUpdate": 0,
         "snapshotCreation": 0,
         "taskCancelation": 0,
@@ -787,7 +891,7 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 
     handle.advance_till([
         InsideProcessBatch,
@@ -797,7 +901,7 @@ fn basic_get_stats() {
         Start,
         BatchCreated,
     ]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -817,10 +921,12 @@ fn basic_get_stats() {
         "documentEdition": 0,
         "dumpCreation": 0,
         "export": 0,
+        "indexCompaction": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
         "indexUpdate": 0,
+        "networkTopologyChange": 0,
         "settingsUpdate": 0,
         "snapshotCreation": 0,
         "taskCancelation": 0,
@@ -828,7 +934,7 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 
     // now we make one more batch, the started_at field of the new tasks will be past `second_start_time`
     handle.advance_till([
@@ -839,7 +945,7 @@ fn basic_get_stats() {
         Start,
         BatchCreated,
     ]);
-    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r#"
+    snapshot!(json_string!(index_scheduler.get_stats().unwrap()), @r###"
     {
       "indexes": {
         "catto": 1,
@@ -859,10 +965,12 @@ fn basic_get_stats() {
         "documentEdition": 0,
         "dumpCreation": 0,
         "export": 0,
+        "indexCompaction": 0,
         "indexCreation": 3,
         "indexDeletion": 0,
         "indexSwap": 0,
         "indexUpdate": 0,
+        "networkTopologyChange": 0,
         "settingsUpdate": 0,
         "snapshotCreation": 0,
         "taskCancelation": 0,
@@ -870,7 +978,7 @@ fn basic_get_stats() {
         "upgradeDatabase": 0
       }
     }
-    "#);
+    "###);
 }
 
 #[test]

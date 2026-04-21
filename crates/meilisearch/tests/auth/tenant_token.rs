@@ -187,7 +187,7 @@ macro_rules! compute_forbidden_search {
 
 #[actix_rt::test]
 async fn search_authorized_simple_token() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"*": {}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
@@ -239,7 +239,7 @@ async fn search_authorized_simple_token() {
 
 #[actix_rt::test]
 async fn search_authorized_filter_token() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"*": {"filter": "color = blue"}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
@@ -292,7 +292,7 @@ async fn search_authorized_filter_token() {
 
 #[actix_rt::test]
 async fn filter_search_authorized_filter_token() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"*": {"filter": "color = blue"}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
@@ -353,7 +353,7 @@ async fn filter_search_authorized_filter_token() {
 /// Tests that those Tenant Token are incompatible with the REFUSED_KEYS defined above.
 #[actix_rt::test]
 async fn error_search_token_forbidden_parent_key() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         hashmap! {
             "searchRules" => json!({"*": {}}),
             "exp" => json!((OffsetDateTime::now_utc() + Duration::hours(1)).unix_timestamp())
@@ -389,7 +389,7 @@ async fn error_search_token_forbidden_parent_key() {
 
 #[actix_rt::test]
 async fn error_search_forbidden_token() {
-    let tenant_tokens = vec![
+    let tenant_tokens = [
         // bad index
         hashmap! {
             "searchRules" => json!({"products": {}}),

@@ -5,16 +5,16 @@ on:
   workflow_dispatch:
     inputs:
       docker_image:
-        description: 'The Meilisearch Docker image used'
+        description: "The Meilisearch Docker image used"
         required: false
         default: nightly
   schedule:
-    - cron: '0 6 * * *' # Every day at 6:00am
+    - cron: "0 6 * * *" # Every day at 6:00am
 
 env:
-  MEILI_MASTER_KEY: 'masterKey'
-  MEILI_NO_ANALYTICS: 'true'
-  DISABLE_COVERAGE: 'true'
+  MEILI_MASTER_KEY: "masterKey"
+  MEILI_NO_ANALYTICS: "true"
+  DISABLE_COVERAGE: "true"
 
 jobs:
   define-docker-image:
@@ -22,21 +22,25 @@ jobs:
     outputs:
       docker-image: ${{ steps.define-image.outputs.docker-image }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - name: Define the Docker image we need to use
         id: define-image
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DOCKER_IMAGE_INPUT: ${{ github.event.inputs.docker_image }}
         run: |
-          event=${{ github.event_name }}
           echo "docker-image=nightly" >> $GITHUB_OUTPUT
-          if [[ $event == 'workflow_dispatch' ]]; then
-            echo "docker-image=${{ github.event.inputs.docker_image }}" >> $GITHUB_OUTPUT
+          if [[ "$EVENT_NAME" == 'workflow_dispatch' ]]; then
+            echo "docker-image=$DOCKER_IMAGE_INPUT" >> $GITHUB_OUTPUT
           fi
       - name: Docker image is ${{ steps.define-image.outputs.docker-image }}
-        run: echo "Docker image is ${{ steps.define-image.outputs.docker-image }}"
+        env:
+          DOCKER_IMAGE: ${{ steps.define-image.outputs.docker-image }}
+        run: echo "Docker image is $DOCKER_IMAGE"
 
-##########
-## SDKs ##
-##########
+  ##########
+  ## SDKs ##
+  ##########
 
   meilisearch-dotnet-tests:
     needs: define-docker-image
@@ -46,11 +50,11 @@ jobs:
       MEILISEARCH_VERSION: ${{ needs.define-docker-image.outputs.docker-image }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-dotnet
       - name: Setup .NET Core
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "8.0.x"
       - name: Install dependencies
@@ -68,19 +72,20 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-dart
       - uses: dart-lang/setup-dart@v1
         with:
-          sdk: 'latest'
+          sdk: "latest"
       - name: Install dependencies
         run: dart pub get
       - name: Run integration tests
@@ -92,18 +97,19 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: stable
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-go
       - name: Get dependencies
@@ -122,26 +128,27 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-java
       - name: Set up Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
-          java-version: 8
-          distribution: 'zulu'
+          java-version: 17
+          distribution: "temurin"
           cache: gradle
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
       - name: Build and run unit and integration tests
-        run: ./gradlew build integrationTest
+        run: ./gradlew build integrationTest --info
 
   meilisearch-js-tests:
     needs: define-docker-image
@@ -149,34 +156,29 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-js
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          cache: 'yarn'
+          cache: "pnpm"
       - name: Install dependencies
-        run: yarn --dev
+        run: pnpm install
       - name: Run tests
-        run: yarn test
+        run: pnpm test
       - name: Build project
-        run: yarn build
-      - name: Run ESM env
-        run: yarn test:env:esm
-      - name: Run Node.js env
-        run: yarn test:env:nodejs
-      - name: Run node typescript env
-        run: yarn test:env:node-ts
-      - name: Run Browser env
-        run: yarn test:env:browser
+        run: pnpm build
 
   meilisearch-php-tests:
     needs: define-docker-image
@@ -184,14 +186,15 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-php
       - name: Install PHP
@@ -213,18 +216,19 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-python
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
       - name: Install pipenv
         uses: dschep/install-pipenv-action@v1
       - name: Install dependencies
@@ -238,14 +242,15 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-ruby
       - name: Set up Ruby 3
@@ -263,14 +268,15 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-rust
       - name: Build
@@ -284,22 +290,23 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-swift
       - name: Run tests
         run: swift test
 
-########################
-## FRONT-END PLUGINS ##
-########################
+  ########################
+  ## FRONT-END PLUGINS ##
+  ########################
 
   meilisearch-js-plugins-tests:
     needs: define-docker-image
@@ -307,30 +314,33 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-js-plugins
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
       - name: Setup node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          cache: yarn
+          cache: pnpm
       - name: Install dependencies
-        run: yarn install
+        run: pnpm install
       - name: Run tests
-        run: yarn test
+        run: pnpm test
       - name: Build all the playgrounds and the packages
-        run: yarn build
+        run: pnpm build
 
-########################
-## BACK-END PLUGINS ###
-########################
+  ########################
+  ## BACK-END PLUGINS ###
+  ########################
 
   meilisearch-rails-tests:
     needs: define-docker-image
@@ -338,16 +348,17 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     env:
-      RAILS_VERSION: '7.0'
+      RAILS_VERSION: "7.0"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-rails
       - name: Install SQLite dependencies
@@ -370,14 +381,15 @@ jobs:
     runs-on: ubuntu-latest
     services:
       meilisearch:
-        image: getmeili/meilisearch:${{ needs.define-docker-image.outputs.docker-image }}
+        image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
         env:
           MEILI_MASTER_KEY: ${{ env.MEILI_MASTER_KEY }}
           MEILI_NO_ANALYTICS: ${{ env.MEILI_NO_ANALYTICS }}
+          MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
         ports:
-          - '7700:7700'
+          - "7700:7700"
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
           repository: meilisearch/meilisearch-symfony
       - name: Install PHP

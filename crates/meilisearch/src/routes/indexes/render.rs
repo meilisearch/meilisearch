@@ -11,8 +11,7 @@ use meilisearch_types::error::deserr_codes::{
     InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputInline,
     InvalidRenderTemplate, InvalidRenderTemplateId, InvalidRenderTemplateInline,
 };
-use meilisearch_types::error::Code;
-use meilisearch_types::error::ResponseError;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
@@ -25,7 +24,7 @@ use meilisearch_types::{heed, milli, Index};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::DoubleActionPolicy;
@@ -33,13 +32,13 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::indexes::render_analytics::RenderAggregator;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(render_post),
+#[routes::routes(
+    routes("" => post(render_post)),
+    tag = "Template",
     tags((
         name = "Render documents",
         description = "The /render route allows rendering templates used by Meilisearch.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/render"),   
+        external_docs(url = "https://www.meilisearch.com/docs/reference/api/render"),
     )),
 )]
 pub struct RenderApi;
@@ -49,12 +48,9 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
 }
 
 /// Render documents with POST
-#[utoipa::path(
-    post,
-    path = "{indexUid}/render",
-    tag = "Render documents",
+#[routes::path(
     security(("Bearer" = ["settings.get,documents.get", "*.get", "*"])),
-    params(("indexUid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
+    params(("index_uid" = String, Path, example = "movies", description = "Index Unique Identifier", nullable = false)),
     request_body = RenderQuery,
     responses(
         (status = 200, description = "The rendered result is returned along with the template", body = RenderResult, content_type = "application/json", example = json!(
@@ -209,9 +205,12 @@ impl From<RenderError<'_>> for ResponseError {
         }
 
         fn format_token(token: &Token<'_>) -> String {
-            let base_column = token.original_span().get_utf8_column();
-            let size = token.original_span().fragment().chars().count();
-            format!("`{}` (cols {}:{})", token.value(), base_column, base_column + size)
+            if let Some(base_column) = token.get_utf8_column() {
+                let size = token.fragment().chars().count();
+                format!("`{}` (cols {}:{})", token.fragment(), base_column, base_column + size)
+            } else {
+                format!("`{}`", token.fragment())
+            }
         }
 
         match error {
@@ -234,7 +233,7 @@ impl From<RenderError<'_>> for ResponseError {
             MissingEmbedderName { mut available } => {
                 available.sort_unstable();
                 ResponseError::from_msg(
-                    format!("Template ID configured with `embedders` but no embedder name provided.\n  Hint: Available embedders are {}.", 
+                    format!("Template ID configured with `embedders` but no embedder name provided.\n  Hint: Available embedders are {}.",
                         available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
                     Code::InvalidRenderTemplateId,
                 )
@@ -369,23 +368,30 @@ fn parse_template_id_fragment<'a>(
     embedding_config: &IndexEmbeddingConfig,
     embedder: Token<'a>,
 ) -> Result<serde_json::Value, RenderError<'a>> {
-    let get_available =
-        [EmbedderOptions::indexing_fragments, EmbedderOptions::search_fragments][kind as usize];
+    let get_available = || match kind {
+        FragmentKind::Indexing => {
+            either::Either::Left(embedding_config.config.embedder_options.indexing_fragments())
+        }
+        FragmentKind::Search => {
+            either::Either::Right(embedding_config.config.embedder_options.search_fragments())
+        }
+    };
+
     let get_specific =
         [EmbedderOptions::indexing_fragment, EmbedderOptions::search_fragment][kind as usize];
 
     let fragment = name.ok_or_else(|| MissingFragment {
         embedder: embedder.clone(),
         kind,
-        available: get_available(&embedding_config.config.embedder_options),
+        available: get_available().map(ToString::to_string).collect(),
     })?;
 
-    let fragment = get_specific(&embedding_config.config.embedder_options, fragment.value())
+    let fragment = get_specific(&embedding_config.config.embedder_options, fragment.fragment())
         .ok_or_else(|| FragmentDoesNotExist {
             embedder,
             fragment,
             kind,
-            available: get_available(&embedding_config.config.embedder_options),
+            available: get_available().map(ToString::to_string).collect(),
         })?;
 
     Ok(fragment.clone())
@@ -418,7 +424,7 @@ fn parse_template_id<'a>(
     };
 
     let root = next_part()?.ok_or(EmptyTemplateId)?;
-    let template = match root.value() {
+    let template = match root.fragment() {
         "embedders" => {
             let index_embedding_configs = index.embedding_configs();
             let embedding_configs = index_embedding_configs.embedding_configs(rtxn)?;
@@ -429,21 +435,29 @@ fn parse_template_id<'a>(
 
             let embedding_config = embedding_configs
                 .iter()
-                .find(|config| config.name == embedder.value())
+                .find(|config| config.name == embedder.fragment())
                 .ok_or_else(|| EmbedderDoesNotExist {
                     embedder: embedder.clone(),
                     available: get_embedders(),
                 })?;
 
-            let get_indexing = || embedding_config.config.embedder_options.indexing_fragments();
-            let get_search = || embedding_config.config.embedder_options.search_fragments();
+            let get_indexing = || {
+                embedding_config
+                    .config
+                    .embedder_options
+                    .indexing_fragments()
+                    .map(ToString::to_string)
+            };
+            let get_search = || {
+                embedding_config.config.embedder_options.search_fragments().map(ToString::to_string)
+            };
 
             let template_kind = next_part()?.ok_or_else(|| MissingTemplateAfterEmbedder {
                 embedder: embedder.clone(),
-                indexing: get_indexing(),
-                search: get_search(),
+                indexing: get_indexing().collect(),
+                search: get_search().collect(),
             })?;
-            match template_kind.value() {
+            match template_kind.fragment() {
                 "documentTemplate" if !embedding_config.fragments.as_slice().is_empty() => {
                     return Err(EmbedderUsesFragments { embedder });
                 }
@@ -473,8 +487,8 @@ fn parse_template_id<'a>(
                     return Err(UnknownTemplatePrefix {
                         embedder,
                         found: template_kind,
-                        indexing: get_indexing(),
-                        search: get_search(),
+                        indexing: get_indexing().collect(),
+                        search: get_search().collect(),
                     })
                 }
             }
@@ -482,7 +496,7 @@ fn parse_template_id<'a>(
         "chatCompletions" => {
             let template_name = next_part()?.ok_or(MissingChatCompletionTemplate)?;
 
-            if template_name.value() != "documentTemplate" {
+            if template_name.fragment() != "documentTemplate" {
                 return Err(UnknownChatCompletionTemplate(template_name));
             }
 

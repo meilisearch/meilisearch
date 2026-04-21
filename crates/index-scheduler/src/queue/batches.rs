@@ -66,7 +66,7 @@ impl BatchQueue {
         NUMBER_OF_DATABASES
     }
 
-    pub(super) fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self> {
+    pub(crate) fn new(env: &Env<WithoutTls>, wtxn: &mut RwTxn) -> Result<Self> {
         Ok(Self {
             all_batches: env.create_database(wtxn, Some(db_name::ALL_BATCHES))?,
             status: env.create_database(wtxn, Some(db_name::BATCH_STATUS))?,
@@ -127,7 +127,12 @@ impl BatchQueue {
         status: Status,
         bitmap: &RoaringBitmap,
     ) -> Result<()> {
-        Ok(self.status.put(wtxn, &status, bitmap)?)
+        if bitmap.is_empty() {
+            self.status.delete(wtxn, &status)?;
+        } else {
+            self.status.put(wtxn, &status, bitmap)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn update_status(
@@ -275,19 +280,27 @@ impl BatchQueue {
     pub(crate) fn get_existing_batches(
         &self,
         rtxn: &RoTxn,
-        tasks: impl IntoIterator<Item = BatchId>,
+        batches: impl IntoIterator<Item = BatchId>,
         processing: &ProcessingTasks,
     ) -> Result<Vec<Batch>> {
-        tasks
+        batches
             .into_iter()
             .map(|batch_id| {
                 if Some(batch_id) == processing.batch.as_ref().map(|batch| batch.uid) {
                     let mut batch = processing.batch.as_ref().unwrap().to_batch();
                     batch.progress = processing.get_progress_view();
+                    // Add progress_trace from the current progress state
+                    if let Some(progress) = &processing.progress {
+                        batch.stats.progress_trace = progress
+                            .accumulated_durations()
+                            .into_iter()
+                            .map(|(k, v)| (k, v.into()))
+                            .collect();
+                    }
                     Ok(batch)
                 } else {
                     self.get_batch(rtxn, batch_id)
-                        .and_then(|task| task.ok_or(Error::CorruptedTaskQueue))
+                        .and_then(|batch| batch.ok_or(Error::CorruptedTaskQueue))
                 }
             })
             .collect::<Result<_>>()

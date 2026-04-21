@@ -82,7 +82,7 @@ fn test_geo_sort() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&rtxn, &index);
+    let mut s = index.search(&rtxn);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
 
     s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
@@ -118,7 +118,7 @@ fn test_geo_sort_with_following_ranking_rules() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&rtxn, &index);
+    let mut s = index.search(&rtxn);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![
         AscDesc::Asc(Member::Geo([0., 0.])),
@@ -159,7 +159,7 @@ fn test_geo_sort_reached_max_bucket_size() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&rtxn, &index);
+    let mut s = index.search(&rtxn);
     s.geo_max_bucket_size(2);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![
@@ -219,7 +219,7 @@ fn test_geo_sort_around_the_edge_of_the_flat_earth() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&rtxn, &index);
+    let mut s = index.search(&rtxn);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
 
     // --- asc
@@ -295,7 +295,7 @@ fn geo_sort_mixed_with_words() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&rtxn, &index);
+    let mut s = index.search(&rtxn);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
 
@@ -406,7 +406,7 @@ fn geo_sort_without_any_geo_faceted_documents() {
 
     let rtxn = index.read_txn().unwrap();
 
-    let mut s = Search::new(&rtxn, &index);
+    let mut s = index.search(&rtxn);
     s.scoring_strategy(crate::score_details::ScoringStrategy::Detailed);
     s.sort_criteria(vec![AscDesc::Asc(Member::Geo([0., 0.]))]);
 

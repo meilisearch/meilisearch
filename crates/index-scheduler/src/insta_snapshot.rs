@@ -6,7 +6,7 @@ use meilisearch_types::heed::types::{SerdeBincode, SerdeJson, Str};
 use meilisearch_types::heed::{Database, RoTxn};
 use meilisearch_types::milli::{CboRoaringBitmapCodec, RoaringBitmapCodec, BEU32};
 use meilisearch_types::tasks::{Details, Kind, Status, Task};
-use meilisearch_types::versioning;
+use meilisearch_types::versioning::{self, VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH};
 use roaring::RoaringBitmap;
 
 use crate::index_mapper::IndexMapper;
@@ -27,15 +27,19 @@ pub fn snapshot_index_scheduler(scheduler: &IndexScheduler) -> String {
         queue,
         scheduler,
         persisted,
+        export_default_payload_size_bytes: _,
 
         index_mapper,
         features: _,
+        dynamic_search_rules: _,
         webhooks: _,
         test_breakpoint_sdr: _,
         planned_failures: _,
         run_loop_iteration: _,
         embedders: _,
         chat_settings: _,
+        runtime: _,
+        web_client: _,
     } = scheduler;
 
     let rtxn = env.read_txn().unwrap();
@@ -230,6 +234,8 @@ pub fn snapshot_task(task: &Task) -> String {
         details,
         status,
         kind,
+        network,
+        custom_metadata,
     } = task;
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
@@ -247,6 +253,12 @@ pub fn snapshot_task(task: &Task) -> String {
         snap.push_str(&format!("details: {}, ", &snapshot_details(details)));
     }
     snap.push_str(&format!("kind: {kind:?}"));
+    if let Some(network) = network {
+        snap.push_str(&format!("network: {network:?}, "))
+    }
+    if let Some(custom_metadata) = custom_metadata {
+        snap.push_str(&format!("custom_metadata: {custom_metadata:?}"))
+    }
 
     snap.push('}');
     snap
@@ -311,7 +323,17 @@ fn snapshot_details(d: &Details) -> String {
             format!("{{ url: {url:?}, api_key: {api_key:?}, payload_size: {payload_size:?}, indexes: {indexes:?} }}")
         }
         Details::UpgradeDatabase { from, to } => {
-            format!("{{ from: {from:?}, to: {to:?} }}")
+            if to == &(VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH) {
+                format!("{{ from: {from:?}, to: [current version] }}")
+            } else {
+                format!("{{ from: {from:?}, to: {to:?} }}")
+            }
+        }
+        Details::IndexCompaction { index_uid, pre_compaction_size, post_compaction_size } => {
+            format!("{{ index_uid: {index_uid:?}, pre_compaction_size: {pre_compaction_size:?}, post_compaction_size: {post_compaction_size:?} }}")
+        }
+        Details::NetworkTopologyChange { moved_documents, message } => {
+            format!("{{ moved_documents: {moved_documents:?}, message: {message:?}")
         }
     }
 }
@@ -388,7 +410,21 @@ pub fn snapshot_batch(batch: &Batch) -> String {
 
     snap.push('{');
     snap.push_str(&format!("uid: {uid}, "));
-    snap.push_str(&format!("details: {}, ", serde_json::to_string(details).unwrap()));
+    let details = if let Some(upgrade_to) = &details.upgrade_to {
+        if upgrade_to.as_str()
+            == format!("v{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}").as_str()
+        {
+            let mut details = details.clone();
+
+            details.upgrade_to = Some("[current version]".into());
+            serde_json::to_string(&details).unwrap()
+        } else {
+            serde_json::to_string(details).unwrap()
+        }
+    } else {
+        serde_json::to_string(details).unwrap()
+    };
+    snap.push_str(&format!("details: {details}, "));
     snap.push_str(&format!("stats: {}, ", serde_json::to_string(&stats).unwrap()));
     if !embedder_stats.skip_serializing() {
         snap.push_str(&format!(

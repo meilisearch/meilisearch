@@ -3,6 +3,8 @@ use crate::make_enum_progress;
 make_enum_progress! {
     pub enum IndexingStep {
         PreparingPayloads,
+        AssigningDocumentsIds,
+        ReorderingPayloadOffsets,
         ExtractingDocuments,
         ExtractingFacets,
         ExtractingWords,
@@ -12,12 +14,28 @@ make_enum_progress! {
         MergingWordCaches,
         MergingWordProximity,
         WritingGeoPoints,
+        WritingGeoJson,
+        WritingEmbeddingsToDatabase,
+        DeletingFromAllFilters,
+        DeletingFromFacetsOnly,
+        DeletingFromComparisonsOnly,
         WaitingForDatabaseWrites,
         WaitingForExtractors,
-        WritingEmbeddingsToDatabase,
         PostProcessingFacets,
         PostProcessingWords,
+        BuildingGeoJson,
         Finalizing,
+    }
+}
+
+make_enum_progress! {
+    pub enum SettingsIndexerStep {
+        ChangingVectorStore,
+        UsingStableIndexer,
+        UsingExperimentalIndexer,
+        DeletingOldWordFidDocids,
+        DeletingOldFidWordCountDocids,
+        DeletingOldWordPrefixFidDocids,
     }
 }
 

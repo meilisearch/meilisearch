@@ -214,7 +214,7 @@ pub fn partially_initialized_term_from_word(
     if is_prefix && use_prefix_db.is_none() {
         find_zero_typo_prefix_derivations(ctx, word_interned, &mut prefix_of)?;
     }
-    let synonyms = ctx.index.synonyms(ctx.txn)?;
+    let synonyms = ctx.get_synonyms()?;
     let mut synonym_word_count = 0;
     let synonyms = synonyms
         .get(&vec![word.to_owned()])

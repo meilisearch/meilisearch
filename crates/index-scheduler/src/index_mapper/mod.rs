@@ -5,11 +5,11 @@ use std::{fs, thread};
 
 use meilisearch_types::heed::types::{SerdeJson, Str};
 use meilisearch_types::heed::{Database, Env, RoTxn, RwTxn, WithoutTls};
-use meilisearch_types::milli;
 use meilisearch_types::milli::database_stats::DatabaseStats;
 use meilisearch_types::milli::index::RollbackOutcome;
+use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
-use meilisearch_types::milli::{FieldDistribution, Index};
+use meilisearch_types::milli::{self, CreateOrOpen, FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tracing::error;
@@ -143,10 +143,10 @@ impl IndexStats {
     ///
     /// - rtxn: a RO transaction for the index, obtained from `Index::read_txn()`.
     pub fn new(index: &Index, rtxn: &RoTxn) -> milli::Result<Self> {
-        let arroy_stats = index.arroy_stats(rtxn)?;
+        let vector_store_stats = index.vector_store_stats(rtxn)?;
         Ok(IndexStats {
-            number_of_embeddings: Some(arroy_stats.number_of_embeddings),
-            number_of_embedded_documents: Some(arroy_stats.documents.len()),
+            number_of_embeddings: Some(vector_store_stats.number_of_embeddings),
+            number_of_embedded_documents: Some(vector_store_stats.documents.len()),
             documents_database_stats: index.documents_stats(rtxn)?.unwrap_or_default(),
             number_of_documents: None,
             database_size: index.on_disk_size()?,
@@ -189,6 +189,7 @@ impl IndexMapper {
         mut wtxn: RwTxn,
         name: &str,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
+        shards: Option<Shards>,
     ) -> Result<Index> {
         match self.index(&wtxn, name) {
             Ok(index) => {
@@ -199,7 +200,7 @@ impl IndexMapper {
                 let uuid = Uuid::new_v4();
                 self.index_mapping.put(&mut wtxn, name, &uuid)?;
 
-                let index_path = self.base_path.join(uuid.to_string());
+                let index_path = self.index_path(uuid);
                 fs::create_dir_all(&index_path)?;
 
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
@@ -215,7 +216,7 @@ impl IndexMapper {
                         date,
                         self.enable_mdb_writemap,
                         self.index_base_map_size,
-                        true,
+                        CreateOrOpen::Create { shards },
                     )
                     .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                 let index_rtxn = index.read_txn()?;
@@ -286,7 +287,7 @@ impl IndexMapper {
         };
 
         let index_map = self.index_map.clone();
-        let index_path = self.base_path.join(uuid.to_string());
+        let index_path = self.index_path(uuid);
         let index_name = name.to_string();
         thread::Builder::new()
             .name(String::from("index_deleter"))
@@ -341,6 +342,32 @@ impl IndexMapper {
         Ok(())
     }
 
+    /// Closes the specified index.
+    ///
+    /// This operation involves closing the underlying environment and so can take a long time to complete.
+    ///
+    /// # Panics
+    ///
+    /// - If the Index corresponding to the passed name is concurrently being deleted/resized or cannot be found in the
+    ///   in memory hash map.
+    pub fn close_index(&self, rtxn: &RoTxn, name: &str) -> Result<()> {
+        let uuid = self
+            .index_mapping
+            .get(rtxn, name)?
+            .ok_or_else(|| Error::IndexNotFound(name.to_string()))?;
+
+        // We remove the index from the in-memory index map.
+        self.index_map.write().unwrap().close_for_resize(&uuid, self.enable_mdb_writemap, 0);
+
+        Ok(())
+    }
+
+    /// The number of indexes in the database
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
+    pub fn index_count(&self, rtxn: &RoTxn) -> Result<u64> {
+        Ok(self.index_mapping.len(rtxn)?)
+    }
+
     /// Return an index, may open it if it wasn't already opened.
     pub fn index(&self, rtxn: &RoTxn, name: &str) -> Result<Index> {
         if let Some((current_name, current_index)) =
@@ -388,7 +415,7 @@ impl IndexMapper {
                     } else {
                         continue;
                     };
-                    let index_path = self.base_path.join(uuid.to_string());
+                    let index_path = self.index_path(uuid);
                     // take the lock to reopen the environment.
                     reopen
                         .reopen(&mut self.index_map.write().unwrap(), &index_path)
@@ -405,7 +432,7 @@ impl IndexMapper {
                     // if it's not already there.
                     match index_map.get(&uuid) {
                         Missing => {
-                            let index_path = self.base_path.join(uuid.to_string());
+                            let index_path = self.index_path(uuid);
 
                             break index_map
                                 .create(
@@ -414,7 +441,7 @@ impl IndexMapper {
                                     None,
                                     self.enable_mdb_writemap,
                                     self.index_base_map_size,
-                                    false,
+                                    CreateOrOpen::Open,
                                 )
                                 .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
                         }
@@ -430,6 +457,14 @@ impl IndexMapper {
         };
 
         Ok(index)
+    }
+
+    /// Returns the path of the index.
+    ///
+    /// The folder located at this path is containing the data.mdb,
+    /// the lock.mdb and an optional data.mdb.cpy file.
+    pub fn index_path(&self, uuid: Uuid) -> PathBuf {
+        self.base_path.join(uuid.to_string())
     }
 
     pub fn rollback_index(
@@ -472,7 +507,7 @@ impl IndexMapper {
             };
         }
 
-        let index_path = self.base_path.join(uuid.to_string());
+        let index_path = self.index_path(uuid);
         Index::rollback(milli::heed::EnvOpenOptions::new().read_txn_without_tls(), index_path, to)
             .map_err(|err| crate::Error::from_milli(err, Some(name.to_string())))
     }

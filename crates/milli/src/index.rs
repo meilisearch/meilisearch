@@ -5,6 +5,7 @@ use std::fmt;
 use std::fs::File;
 use std::path::Path;
 
+use cellulite::Cellulite;
 use deserr::Deserr;
 use heed::types::*;
 use heed::{CompactionOption, Database, DatabaseStat, RoTxn, RwTxn, Unspecified, WithoutTls};
@@ -27,13 +28,15 @@ use crate::heed_codec::facet::{
 use crate::heed_codec::version::VersionCodec;
 use crate::heed_codec::{BEU16StrCodec, FstSetCodec, StrBEU16Codec, StrRefCodec};
 use crate::order_by_map::OrderByMap;
+use crate::progress::Progress;
 use crate::prompt::PromptData;
 use crate::proximity::ProximityPrecision;
+use crate::sharding::{DbShardDocids, Shards};
 use crate::update::new::StdResult;
 use crate::vector::db::IndexEmbeddingConfigs;
-use crate::vector::{ArroyStats, ArroyWrapper, Embedding};
+use crate::vector::{Embedding, VectorStore, VectorStoreBackend, VectorStoreStats};
 use crate::{
-    default_criteria, CboRoaringBitmapCodec, Criterion, DocumentId, ExternalDocumentsIds,
+    default_criteria, CboRoaringBitmapCodec, Criterion, Deadline, DocumentId, ExternalDocumentsIds,
     FacetDistribution, FieldDistribution, FieldId, FieldIdMapMissingEntry, FieldIdWordCountCodec,
     FieldidsWeightsMap, FilterableAttributesRule, GeoPoint, LocalizedAttributesRule, ObkvCodec,
     Result, RoaringBitmapCodec, RoaringBitmapLenCodec, Search, U8StrStrCodec, Weight, BEU16, BEU32,
@@ -52,6 +55,7 @@ pub mod main_key {
     pub const HIDDEN_FACETED_FIELDS_KEY: &str = "hidden-faceted-fields";
     pub const FILTERABLE_FIELDS_KEY: &str = "filterable-fields";
     pub const SORTABLE_FIELDS_KEY: &str = "sortable-fields";
+    pub const FOREIGN_KEYS_KEY: &str = "foreign-keys";
     pub const FIELD_DISTRIBUTION_KEY: &str = "fields-distribution";
     pub const FIELDS_IDS_MAP_KEY: &str = "fields-ids-map";
     pub const FIELDIDS_WEIGHTS_MAP_KEY: &str = "fieldids-weights-map";
@@ -87,6 +91,7 @@ pub mod main_key {
     pub const DOCUMENTS_STATS: &str = "documents_stats";
     pub const DISABLED_TYPOS_TERMS: &str = "disabled_typos_terms";
     pub const CHAT: &str = "chat";
+    pub const VECTOR_STORE_BACKEND: &str = "vector_store_backend";
 }
 
 pub mod db_name {
@@ -113,10 +118,12 @@ pub mod db_name {
     pub const FIELD_ID_DOCID_FACET_F64S: &str = "field-id-docid-facet-f64s";
     pub const FIELD_ID_DOCID_FACET_STRINGS: &str = "field-id-docid-facet-strings";
     pub const VECTOR_EMBEDDER_CATEGORY_ID: &str = "vector-embedder-category-id";
-    pub const VECTOR_ARROY: &str = "vector-arroy";
+    pub const SHARD_DOCIDS: &str = "shard-docids";
+    pub const VECTOR_STORE: &str = "vector-arroy";
+    pub const CELLULITE: &str = "cellulite"; // used as a prefix, counted as `Cellulite::nb_dbs`
     pub const DOCUMENTS: &str = "documents";
 }
-const NUMBER_OF_DBS: u32 = 25;
+const NUMBER_OF_DBS: u32 = 26 + Cellulite::nb_dbs();
 
 #[derive(Clone)]
 pub struct Index {
@@ -177,13 +184,30 @@ pub struct Index {
     /// Maps the document id, the facet field id and the strings.
     pub field_id_docid_facet_strings: Database<FieldDocIdFacetStringCodec, Str>,
 
-    /// Maps an embedder name to its id in the arroy store.
+    /// Maps an embedder name to its id in the vector store.
     pub(crate) embedder_category_id: Database<Unspecified, Unspecified>,
-    /// Vector store based on arroy™.
-    pub vector_arroy: arroy::Database<Unspecified>,
+    /// Vector store based on hannoy™.
+    pub vector_store: hannoy::Database<Unspecified>,
+
+    /// Maps a shard name to the docids belonging to this shard
+    pub shard_docids: Database<Str, CboRoaringBitmapCodec>,
+
+    /// Geo store based on cellulite™.
+    pub cellulite: Cellulite,
 
     /// Maps the document id to the document as an obkv store.
     pub(crate) documents: Database<BEU32, ObkvCodec>,
+}
+
+pub enum CreateOrOpen {
+    Open,
+    Create { shards: Option<Shards> },
+}
+
+impl CreateOrOpen {
+    pub fn create_without_shards() -> Self {
+        CreateOrOpen::Create { shards: None }
+    }
 }
 
 impl Index {
@@ -192,7 +216,7 @@ impl Index {
         path: P,
         created_at: time::OffsetDateTime,
         updated_at: time::OffsetDateTime,
-        creation: bool,
+        create_or_open: CreateOrOpen,
     ) -> Result<Index> {
         use db_name::*;
 
@@ -237,7 +261,13 @@ impl Index {
         // vector stuff
         let embedder_category_id =
             env.create_database(&mut wtxn, Some(VECTOR_EMBEDDER_CATEGORY_ID))?;
-        let vector_arroy = env.create_database(&mut wtxn, Some(VECTOR_ARROY))?;
+        let vector_store = env.create_database(&mut wtxn, Some(VECTOR_STORE))?;
+
+        // sharding
+        let shard_docids = env.create_database(&mut wtxn, Some(SHARD_DOCIDS))?;
+
+        // geo
+        let cellulite = cellulite::Cellulite::create_from_env(&env, &mut wtxn, CELLULITE)?;
 
         let documents = env.create_database(&mut wtxn, Some(DOCUMENTS))?;
 
@@ -264,16 +294,32 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_arroy,
+            vector_store,
             embedder_category_id,
+            shard_docids,
+            cellulite,
             documents,
         };
-        if this.get_version(&wtxn)?.is_none() && creation {
-            this.put_version(
-                &mut wtxn,
-                (constants::VERSION_MAJOR, constants::VERSION_MINOR, constants::VERSION_PATCH),
-            )?;
+
+        if let CreateOrOpen::Create { shards } = create_or_open {
+            if this.get_version(&wtxn)?.is_none() {
+                this.put_version(
+                    &mut wtxn,
+                    (constants::VERSION_MAJOR, constants::VERSION_MINOR, constants::VERSION_PATCH),
+                )?;
+                // The database before v1.29 defaulted to using arroy, so we
+                // need to set it explicitly because the new default is hannoy.
+                this.put_vector_store(&mut wtxn, VectorStoreBackend::Hannoy)?;
+            }
+
+            if let Some(shards) = shards {
+                let shard_docids = this.shard_docids();
+                for shard in shards.as_sorted_slice() {
+                    shard_docids.add_shard(&mut wtxn, &shard.name)?;
+                }
+            }
         }
+
         wtxn.commit()?;
 
         Index::set_creation_dates(&this.env, this.main, created_at, updated_at)?;
@@ -284,10 +330,10 @@ impl Index {
     pub fn new<P: AsRef<Path>>(
         options: heed::EnvOpenOptions<WithoutTls>,
         path: P,
-        creation: bool,
+        create_or_open: CreateOrOpen,
     ) -> Result<Index> {
         let now = time::OffsetDateTime::now_utc();
-        Self::new_with_creation_dates(options, path, now, now, creation)
+        Self::new_with_creation_dates(options, path, now, now, create_or_open)
     }
 
     /// Attempts to rollback the index at `path` to the version specified by `requested_version`.
@@ -417,6 +463,10 @@ impl Index {
         self.env.info().map_size
     }
 
+    pub fn try_clone_inner_file(&self) -> heed::Result<File> {
+        self.env.try_clone_inner_file()
+    }
+
     pub fn copy_to_file(&self, file: &mut File, option: CompactionOption) -> Result<()> {
         self.env.copy_to_file(file, option).map_err(Into::into)
     }
@@ -452,6 +502,34 @@ impl Index {
     /// Get the version of the database. `None` if it was never set.
     pub fn get_version(&self, rtxn: &RoTxn<'_>) -> heed::Result<Option<(u32, u32, u32)>> {
         self.main.remap_types::<Str, VersionCodec>().get(rtxn, main_key::VERSION_KEY)
+    }
+
+    /* vector store */
+    /// Writes the vector store
+    pub(crate) fn put_vector_store(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        backend: VectorStoreBackend,
+    ) -> Result<()> {
+        Ok(self.main.remap_types::<Str, SerdeJson<VectorStoreBackend>>().put(
+            wtxn,
+            main_key::VECTOR_STORE_BACKEND,
+            &backend,
+        )?)
+    }
+
+    pub fn get_vector_store(&self, rtxn: &RoTxn<'_>) -> Result<Option<VectorStoreBackend>> {
+        Ok(self
+            .main
+            .remap_types::<Str, SerdeJson<VectorStoreBackend>>()
+            .get(rtxn, main_key::VECTOR_STORE_BACKEND)?)
+    }
+
+    pub(crate) fn delete_vector_store(&self, wtxn: &mut RwTxn<'_>) -> Result<bool> {
+        Ok(self
+            .main
+            .remap_types::<Str, SerdeJson<VectorStoreBackend>>()
+            .delete(wtxn, main_key::VECTOR_STORE_BACKEND)?)
     }
 
     /* documents ids */
@@ -1023,6 +1101,13 @@ impl Index {
         Ok(geo_filter)
     }
 
+    /// Returns true if the geo sorting feature is enabled.
+    pub fn is_geojson_filtering_enabled(&self, rtxn: &RoTxn<'_>) -> Result<bool> {
+        let geojson_filter =
+            self.filterable_attributes_rules(rtxn)?.iter().any(|field| field.has_geojson());
+        Ok(geojson_filter)
+    }
+
     pub fn asc_desc_fields(&self, rtxn: &RoTxn<'_>) -> Result<HashSet<String>> {
         let asc_desc_fields = self
             .criteria(rtxn)?
@@ -1427,8 +1512,8 @@ impl Index {
         FacetDistribution::new(rtxn, self)
     }
 
-    pub fn search<'a>(&'a self, rtxn: &'a RoTxn<'a>) -> Search<'a> {
-        Search::new(rtxn, self)
+    pub fn search<'a>(&'a self, rtxn: &'a RoTxn<'a>, progress: &'a Progress) -> Search<'a> {
+        Search::new(rtxn, self, progress)
     }
 
     /// Returns the index creation time.
@@ -1754,6 +1839,13 @@ impl Index {
         Ok(self.main.remap_types::<Str, BEU64>().get(rtxn, main_key::SEARCH_CUTOFF)?)
     }
 
+    pub fn search_deadline(&self, rtxn: &RoTxn<'_>) -> Result<Deadline> {
+        Ok(match self.search_cutoff(rtxn)? {
+            Some(cutoff) => Deadline::from_budget(std::time::Duration::from_millis(cutoff)),
+            None => Deadline::default(),
+        })
+    }
+
     pub(crate) fn delete_search_cutoff(&self, wtxn: &mut RwTxn<'_>) -> heed::Result<bool> {
         self.main.remap_key_type::<Str>().delete(wtxn, main_key::SEARCH_CUTOFF)
     }
@@ -1769,11 +1861,14 @@ impl Index {
     ) -> Result<BTreeMap<String, EmbeddingsWithMetadata>> {
         let mut res = BTreeMap::new();
         let embedders = self.embedding_configs();
+        let backend = self.get_vector_store(rtxn)?.unwrap_or_default();
+
         for config in embedders.embedding_configs(rtxn)? {
             let embedder_info = embedders.embedder_info(rtxn, &config.name)?.unwrap();
             let has_fragments = config.config.embedder_options.has_fragments();
-            let reader = ArroyWrapper::new(
-                self.vector_arroy,
+            let reader = VectorStore::new(
+                backend,
+                self.vector_store,
                 embedder_info.embedder_id,
                 config.config.quantized(),
             );
@@ -1792,16 +1887,27 @@ impl Index {
         Ok(PrefixSettings { compute_prefixes, max_prefix_length: 4, prefix_count_threshold: 100 })
     }
 
-    pub fn arroy_stats(&self, rtxn: &RoTxn<'_>) -> Result<ArroyStats> {
-        let mut stats = ArroyStats::default();
+    pub fn vector_store_stats(&self, rtxn: &RoTxn<'_>) -> Result<VectorStoreStats> {
+        let mut stats = VectorStoreStats::default();
         let embedding_configs = self.embedding_configs();
+        let backend = self.get_vector_store(rtxn)?.unwrap_or_default();
+
         for config in embedding_configs.embedding_configs(rtxn)? {
             let embedder_id = embedding_configs.embedder_id(rtxn, &config.name)?.unwrap();
-            let reader =
-                ArroyWrapper::new(self.vector_arroy, embedder_id, config.config.quantized());
+            let reader = VectorStore::new(
+                backend,
+                self.vector_store,
+                embedder_id,
+                config.config.quantized(),
+            );
             reader.aggregate_stats(rtxn, &mut stats)?;
         }
         Ok(stats)
+    }
+
+    /// A view of the list of docids per shard.
+    pub fn shard_docids(&self) -> DbShardDocids {
+        DbShardDocids::from_index(self)
     }
 
     /// Check if the word is indexed in the index.
@@ -1842,8 +1948,10 @@ impl Index {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_arroy,
+            vector_store,
             embedder_category_id,
+            shard_docids,
+            cellulite,
             documents,
         } = self;
 
@@ -1913,9 +2021,21 @@ impl Index {
             "field_id_docid_facet_strings",
             field_id_docid_facet_strings.stat(rtxn).map(compute_size)?,
         );
-        sizes.insert("vector_arroy", vector_arroy.stat(rtxn).map(compute_size)?);
+        sizes.insert("vector_store", vector_store.stat(rtxn).map(compute_size)?);
         sizes.insert("embedder_category_id", embedder_category_id.stat(rtxn).map(compute_size)?);
+        sizes.insert("shard_docids", shard_docids.stat(rtxn).map(compute_size)?);
         sizes.insert("documents", documents.stat(rtxn).map(compute_size)?);
+
+        // Cellulite
+        const _CELLULITE_DB_CHECK: () = {
+            if Cellulite::nb_dbs() != 4 {
+                panic!("Cellulite database count has changed, please update the code accordingly.")
+            }
+        };
+        sizes.insert("cellulite_item", cellulite.item_db_stats(rtxn).map(compute_size)?);
+        sizes.insert("cellulite_cell", cellulite.cell_db_stats(rtxn).map(compute_size)?);
+        sizes.insert("cellulite_update", cellulite.update_db_stats(rtxn).map(compute_size)?);
+        sizes.insert("cellulite_metadata", cellulite.metadata_db_stats(rtxn).map(compute_size)?);
 
         Ok(sizes)
     }

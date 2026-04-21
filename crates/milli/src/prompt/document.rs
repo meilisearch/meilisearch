@@ -304,7 +304,7 @@ impl ArrayView for ParseableArray<'_> {
 
     fn get(&self, index: i64) -> Option<&dyn ValueView> {
         let index = convert_index(index, self.size());
-        if index <= 0 {
+        if index < 0 {
             return None;
         }
         let v = self.0.get(index as usize)?;

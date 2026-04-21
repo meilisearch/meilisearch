@@ -193,6 +193,7 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
         visit: VisitFn<'_, G>,
         ctx: &mut VisitorContext<'_, G>,
     ) -> Result<ControlFlow<(), bool>> {
+        #[allow(clippy::manual_contains)] // there is no method contains on mapped interner
         if !ctx
             .all_costs_from_node
             .get(dest_node)
@@ -243,6 +244,8 @@ impl<G: RankingRuleGraphTrait> VisitorState<G> {
 
         // Checking that from the destination node, there is at least
         // one cost that we can visit that corresponds to our remaining budget.
+
+        #[allow(clippy::manual_contains)] // there is no contains on MappedInterner
         if !ctx
             .all_costs_from_node
             .get(dest_node)

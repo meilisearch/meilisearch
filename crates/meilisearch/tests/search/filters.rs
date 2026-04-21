@@ -601,6 +601,70 @@ async fn search_with_pattern_filter_settings_scenario_1() {
 }
 
 #[actix_rt::test]
+async fn remove_comparison_feature_keeps_equality() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // Step 1: Add a filterable attribute with BOTH comparison and equality features
+    let (task, code) = index
+        .update_settings(json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos"],
+            "features": {
+                "facetSearch": false,
+                "filter": { "equality": true, "comparison": true }
+            }
+        }]}))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 2: Add documents
+    let (task, code) = index.add_documents(NESTED_DOCUMENTS.clone(), None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 3: Remove the comparison feature but keep equality
+    let (task, code) = index
+        .update_settings(json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos"],
+            "features": {
+                "facetSearch": false,
+                "filter": { "equality": true, "comparison": false }
+            }
+        }]}))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 4: Test that equality filter still works
+    index
+        .search(json!({ "filter": "cattos = simba" }), |response, code| {
+            snapshot!(code, @"200 OK");
+            // Assert we find the matching document
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 654,
+                "father": "pierre",
+                "mother": "sabine",
+                "doggos": [
+                  {
+                    "name": "gros bill",
+                    "age": 8
+                  }
+                ],
+                "cattos": [
+                  "simba",
+                  "pestiféré"
+                ]
+              }
+            ]
+            "###);
+        })
+        .await;
+}
+
+#[actix_rt::test]
 async fn test_filterable_attributes_priority() {
     // Test that the filterable attributes priority is respected
 
@@ -743,7 +807,7 @@ async fn vector_filter_all_embedders() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -763,9 +827,10 @@ async fn vector_filter_all_embedders() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -840,7 +905,7 @@ async fn vector_filter_specific_embedder() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -860,9 +925,10 @@ async fn vector_filter_specific_embedder() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -875,7 +941,7 @@ async fn vector_filter_user_provided() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -886,9 +952,10 @@ async fn vector_filter_user_provided() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 1
+      "estimatedTotalHits": 1,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -901,7 +968,7 @@ async fn vector_filter_specific_fragment() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -915,9 +982,10 @@ async fn vector_filter_specific_fragment() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 2
+      "estimatedTotalHits": 2,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 
     let (value, _code) = index
         .search_post(json!({
@@ -925,7 +993,7 @@ async fn vector_filter_specific_fragment() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -942,9 +1010,10 @@ async fn vector_filter_specific_fragment() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -977,22 +1046,23 @@ async fn vector_filter_document_template_but_fragments_used() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [],
       "query": "",
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 0
+      "estimatedTotalHits": 0,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
 async fn vector_filter_document_template() {
     let (_mock, setting) = create_mock().await;
-    let server = Server::new().await;
+    let server = crate::vector::get_server_vector().await;
     let index = server.index("doggo");
 
     let (_response, code) = server.set_features(json!({"multimodal": true})).await;
@@ -1024,7 +1094,7 @@ async fn vector_filter_document_template() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1041,9 +1111,10 @@ async fn vector_filter_document_template() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1076,7 +1147,7 @@ async fn vector_filter_negation() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1093,9 +1164,10 @@ async fn vector_filter_negation() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1108,7 +1180,7 @@ async fn vector_filter_or_combination() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1125,9 +1197,10 @@ async fn vector_filter_or_combination() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1140,7 +1213,7 @@ async fn vector_filter_regenerate() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(json_string!(value, { ".processingTimeMs" => "[duration]", ".requestUid" => "[uuid]" }), @r###"
     {
       "hits": [
         {
@@ -1157,7 +1230,58 @@ async fn vector_filter_regenerate() {
       "processingTimeMs": "[duration]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 3
+      "estimatedTotalHits": 3,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
+}
+
+#[actix_rt::test]
+async fn issue_6335() {
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["cattos"],
+        "features": {
+                  "facetSearch": false,
+                  "filter": {"equality": true, "comparison": true}
+        }}]}),
+        &json!({
+            "filter": "cattos < pestiféré"
+        }),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r#"
+            [
+              {
+                "id": 750,
+                "father": "romain",
+                "mother": "michelle",
+                "cattos": [
+                  "enigma"
+                ]
+              },
+              {
+                "id": 951,
+                "father": "jean-baptiste",
+                "mother": "sophie",
+                "doggos": [
+                  {
+                    "name": "turbo",
+                    "age": 5
+                  },
+                  {
+                    "name": "fast",
+                    "age": 6
+                  }
+                ],
+                "cattos": [
+                  "moumoute",
+                  "gomez"
+                ]
+              }
+            ]
+            "#);
+        },
+    )
+    .await;
 }

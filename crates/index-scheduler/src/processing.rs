@@ -22,7 +22,7 @@ impl ProcessingTasks {
     }
 
     pub fn get_progress_view(&self) -> Option<ProgressView> {
-        Some(self.progress.as_ref()?.as_progress_view())
+        self.progress.as_ref()?.as_progress_view()
     }
 
     /// Stores the currently processing tasks, and the date time at which it started.
@@ -42,12 +42,10 @@ impl ProcessingTasks {
 
     /// Set the processing tasks to an empty list
     pub fn stop_processing(&mut self) -> Self {
-        self.progress = None;
-
         Self {
             batch: std::mem::take(&mut self.batch),
             processing: std::mem::take(&mut self.processing),
-            progress: None,
+            progress: std::mem::take(&mut self.progress),
         }
     }
 
@@ -75,14 +73,19 @@ make_enum_progress! {
     pub enum TaskCancelationProgress {
         RetrievingTasks,
         CancelingUpgrade,
+        CleaningCompactionLeftover,
         UpdatingTasks,
     }
 }
 
 make_enum_progress! {
     pub enum TaskDeletionProgress {
+        RetrievingTasks,
+        RetrievingBatchTasks,
         DeletingTasksDateTime,
+        DeletingBatchesDateTime,
         DeletingTasksMetadata,
+        DeletingBatchesMetadata,
         DeletingTasks,
         DeletingBatches,
     }
@@ -109,6 +112,7 @@ make_enum_progress! {
         DumpTheIndexes,
         DumpTheExperimentalFeatures,
         DumpTheWebhooks,
+        DumpDynamicSearchRules,
         CompressTheDump,
     }
 }
@@ -139,6 +143,17 @@ make_enum_progress! {
 }
 
 make_enum_progress! {
+    pub enum IndexCompaction {
+        RetrieveTheIndex,
+        CreateTemporaryFile,
+        CopyAndCompactTheIndex,
+        PersistTheCompactedIndex,
+        CloseTheIndex,
+        ReopenTheIndex,
+    }
+}
+
+make_enum_progress! {
     pub enum InnerSwappingTwoIndexes {
         RetrieveTheTasks,
         UpdateTheTasks,
@@ -150,6 +165,7 @@ make_enum_progress! {
     pub enum DocumentOperationProgress {
         RetrievingConfig,
         ComputingDocumentChanges,
+        ReadingPayloadStats,
         Indexing,
     }
 }
@@ -183,6 +199,47 @@ make_enum_progress! {
         ExportingTheSettings,
         ExportingTheDocuments,
     }
+}
+
+pub mod network {
+    use meilisearch_types::milli::make_enum_progress;
+    use meilisearch_types::tasks::network::NetworkTopologyState as DbNetworkTopologyState;
+
+    make_enum_progress! {
+            pub enum NetworkTopologyState {
+                WaitingForOlderTasks,
+                ExportingDocuments,
+                ImportingDocuments,
+                WaitingForOthers,
+                DeletingDocuments,
+                Finished,
+        }
+    }
+
+    impl From<DbNetworkTopologyState> for self::NetworkTopologyState {
+        fn from(value: DbNetworkTopologyState) -> Self {
+            match value {
+                DbNetworkTopologyState::WaitingForOlderTasks => Self::WaitingForOlderTasks,
+                DbNetworkTopologyState::ExportingDocuments => Self::ExportingDocuments,
+                DbNetworkTopologyState::ImportingDocuments => Self::ImportingDocuments,
+                DbNetworkTopologyState::WaitingForOthers => Self::WaitingForOthers,
+                DbNetworkTopologyState::DeletingDocuments => Self::DeletingDocuments,
+                DbNetworkTopologyState::Finished => Self::Finished,
+            }
+        }
+    }
+
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
+    /// used in VariableNamedStep while ExportingDocuments
+    pub enum ExportIndex {}
+
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
+    /// used in VariableNamedStep while deleting documents
+    pub enum DeleteDocumentsFromIndex {}
+
+    #[cfg(feature = "enterprise")] // only used in enterprise edition for now
+    /// used in VariableNamedStep while waiting for other remotes to finish importing
+    pub enum ImportRemotes {}
 }
 
 make_atomic_progress!(Task alias AtomicTaskStep => "task" );

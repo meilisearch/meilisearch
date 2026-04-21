@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::OrderBy;
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct OrderByMap(HashMap<String, OrderBy>);
 
 impl OrderByMap {

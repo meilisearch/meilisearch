@@ -1,15 +1,15 @@
 use std::fs::File;
 use std::io::{BufReader, Read};
 
-use flate2::bufread::GzDecoder;
-use serde::Deserialize;
-use tempfile::TempDir;
-
 use self::compat::v4_to_v5::CompatV4ToV5;
 use self::compat::v5_to_v6::{CompatIndexV5ToV6, CompatV5ToV6};
 use self::v5::V5Reader;
 use self::v6::{V6IndexReader, V6Reader};
-use crate::{Result, Version};
+use crate::{ArchiveExt, Result, Version};
+use flate2::bufread::GzDecoder;
+use meilisearch_types::index_uid::IndexUid;
+use serde::Deserialize;
+use tempfile::TempDir;
 
 mod compat;
 
@@ -35,7 +35,7 @@ impl DumpReader {
         let mut dump = BufReader::new(dump);
         let gz = GzDecoder::new(&mut dump);
         let mut archive = tar::Archive::new(gz);
-        archive.unpack(path.path())?;
+        archive.safe_unpack(path.path())?;
 
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -145,6 +145,15 @@ impl DumpReader {
             DumpReader::Compat(compat) => compat.webhooks(),
         }
     }
+
+    pub fn dynamic_search_rules(
+        &self,
+    ) -> Result<Box<dyn Iterator<Item = Result<(IndexUid, v6::DynamicSearchRule)>> + '_>> {
+        match self {
+            DumpReader::Current(current) => current.dynamic_search_rules(),
+            DumpReader::Compat(_compat) => Ok(Box::new(std::iter::empty())),
+        }
+    }
 }
 
 impl From<V6Reader> for DumpReader {
@@ -229,12 +238,56 @@ impl From<CompatIndexV5ToV6> for DumpIndexReader {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::fs::File;
+    use std::{fs::File, io::Seek};
 
     use meili_snap::insta;
+    use meilisearch_types::{
+        batches::{Batch, BatchEnqueuedAt, BatchStats},
+        task_view::DetailsView,
+        tasks::{BatchStopReason, Kind, Status},
+    };
+    use time::macros::datetime;
 
     use super::*;
-    use crate::reader::v6::RuntimeTogglableFeatures;
+    use crate::{reader::v6::RuntimeTogglableFeatures, test::create_test_dump_writer};
+
+    #[test]
+    fn import_dump_with_bad_batches() {
+        let (dump, mut batch_writer) = create_test_dump_writer();
+        let bad_batch = Batch {
+            uid: 1,
+            progress: None,
+            details: DetailsView::default(),
+            stats: BatchStats {
+                total_nb_tasks: 1,
+                status: maplit::btreemap! { Status::Succeeded => 666 },
+                types: maplit::btreemap! { Kind::DocumentAdditionOrUpdate => 666 },
+                index_uids: maplit::btreemap! { "doggo".to_string() => 666 },
+                progress_trace: Default::default(),
+                write_channel_congestion: None,
+                internal_database_sizes: Default::default(),
+            },
+            embedder_stats: Default::default(),
+            enqueued_at: Some(BatchEnqueuedAt {
+                earliest: datetime!(2022-11-11 0:00 UTC),
+                oldest: datetime!(2022-11-11 0:00 UTC),
+            }),
+            started_at: datetime!(2022-11-20 0:00 UTC),
+            finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+            stop_reason: BatchStopReason::Unspecified.to_string(),
+        };
+        batch_writer.push_batch(&bad_batch).unwrap();
+        batch_writer.flush().unwrap();
+
+        let mut file = tempfile::tempfile().unwrap();
+        dump.persist_to(&mut file).unwrap();
+        file.rewind().unwrap();
+
+        let mut dump = DumpReader::open(file).unwrap();
+        let read_batches = dump.batches().unwrap().map(|b| b.unwrap()).collect::<Vec<_>>();
+
+        assert!(!read_batches.iter().any(|b| b.uid == 1));
+    }
 
     #[test]
     fn import_dump_v6_with_vectors() {
@@ -434,7 +487,11 @@ pub(crate) mod test {
         // network
 
         let network = dump.network().unwrap().unwrap();
-        insta::assert_snapshot!(network.local.as_ref().unwrap(), @"ms-0");
+
+        // since v1.29 we are dropping `local` and `leader` on import
+        insta::assert_snapshot!(network.local.is_none(), @"true");
+        insta::assert_snapshot!(network.leader.is_none(), @"true");
+
         insta::assert_snapshot!(network.remotes.get("ms-0").as_ref().unwrap().url, @"http://localhost:7700");
         insta::assert_snapshot!(network.remotes.get("ms-0").as_ref().unwrap().search_api_key.is_none(), @"true");
         insta::assert_snapshot!(network.remotes.get("ms-1").as_ref().unwrap().url, @"http://localhost:7701");

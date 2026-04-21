@@ -4,10 +4,12 @@ use roaring::RoaringBitmap;
 use rstar::RTree;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
+use crate::constants::{RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME};
 use crate::documents::geo_sort::{fill_cache, next_bucket};
 use crate::documents::{GeoSortParameter, GeoSortStrategy};
 use crate::score_details::{self, ScoreDetails};
-use crate::{GeoPoint, Result, SearchContext, SearchLogger};
+use crate::search::new::ranking_rules::RankingRuleId;
+use crate::{Deadline, GeoPoint, Result, SearchContext, SearchLogger};
 
 pub struct GeoSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
@@ -73,8 +75,8 @@ impl<Q: RankingRuleQueryTrait> GeoSort<Q> {
 }
 
 impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
-    fn id(&self) -> String {
-        "geo_sort".to_owned()
+    fn id(&self) -> RankingRuleId {
+        RankingRuleId::GeoSort
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::geo_sort")]
@@ -84,6 +86,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
         query: &Q,
+        _deadline: &Deadline,
     ) -> Result<()> {
         assert!(self.query.is_none());
 
@@ -96,8 +99,10 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         }
 
         let fid_map = ctx.index.fields_ids_map(ctx.txn)?;
-        let lat = fid_map.id("_geo.lat").expect("geo candidates but no fid for lat");
-        let lng = fid_map.id("_geo.lng").expect("geo candidates but no fid for lng");
+        let lat =
+            fid_map.id(RESERVED_GEO_LAT_FIELD_NAME).expect("geo candidates but no fid for lat");
+        let lng =
+            fid_map.id(RESERVED_GEO_LNG_FIELD_NAME).expect("geo candidates but no fid for lng");
         self.field_ids = Some([lat, lng]);
         self.fill_buffer(ctx, &geo_candidates)?;
         Ok(())
@@ -110,6 +115,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for GeoSort<Q> {
         ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
+        _deadline: &Deadline,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
         let query = self.query.as_ref().unwrap().clone();
 

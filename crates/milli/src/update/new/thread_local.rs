@@ -47,6 +47,8 @@ unsafe impl<T> MostlySend for RefCell<T> where T: MostlySend {}
 
 unsafe impl<T> MostlySend for Option<T> where T: MostlySend {}
 
+unsafe impl MostlySend for () {}
+
 impl<T> FullySend<T> {
     pub fn into(self) -> T {
         self.0
@@ -138,7 +140,7 @@ impl<T: MostlySend> ThreadLocal<T> {
         self.inner.get_or_default().as_ref()
     }
 
-    pub fn iter_mut(&mut self) -> IterMut<T> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         IterMut(self.inner.iter_mut())
     }
 }

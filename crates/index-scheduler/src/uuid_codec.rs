@@ -17,7 +17,7 @@ impl<'a> BytesDecode<'a> for UuidCodec {
 impl BytesEncode<'_> for UuidCodec {
     type EItem = Uuid;
 
-    fn bytes_encode(item: &Self::EItem) -> Result<Cow<[u8]>, BoxedError> {
+    fn bytes_encode(item: &Self::EItem) -> Result<Cow<'_, [u8]>, BoxedError> {
         Ok(Cow::Borrowed(item.as_bytes()))
     }
 }

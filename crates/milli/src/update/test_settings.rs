@@ -6,6 +6,7 @@ use meili_snap::snapshot;
 use super::*;
 use crate::error::Error;
 use crate::index::tests::TempIndex;
+use crate::search::facet::IndexFilter;
 use crate::update::ClearDocuments;
 use crate::{db_snap, Criterion, Filter, SearchResult};
 
@@ -14,27 +15,20 @@ fn set_and_reset_searchable_fields() {
     let index = TempIndex::new();
 
     // First we send 3 documents with ids from 1 to 3.
-    let mut wtxn = index.write_txn().unwrap();
-
     index
-        .add_documents_using_wtxn(
-            &mut wtxn,
-            documents!([
-                { "id": 1, "name": "kevin", "age": 23 },
-                { "id": 2, "name": "kevina", "age": 21},
-                { "id": 3, "name": "benoit", "age": 34 }
-            ]),
-        )
+        .add_documents(documents!([
+            { "id": 1, "name": "kevin", "age": 23 },
+            { "id": 2, "name": "kevina", "age": 21},
+            { "id": 3, "name": "benoit", "age": 34 }
+        ]))
         .unwrap();
 
     // We change the searchable fields to be the "name" field only.
     index
-        .update_settings_using_wtxn(&mut wtxn, |settings| {
+        .update_settings(|settings| {
             settings.set_searchable_fields(vec!["name".into()]);
         })
         .unwrap();
-
-    wtxn.commit().unwrap();
 
     db_snap!(index, fields_ids_map, @r###"
     0   id               |
@@ -672,7 +666,7 @@ fn setting_not_filterable_cant_filter() {
 
     let rtxn = index.read_txn().unwrap();
     let filter = Filter::from_str("toto = 32").unwrap().unwrap();
-    let _ = filter.evaluate(&rtxn, &index).unwrap_err();
+    let _ = IndexFilter::from(filter).evaluate(&rtxn, &index).unwrap_err();
 }
 
 #[test]
@@ -874,6 +868,7 @@ fn test_correct_settings_init() {
                 displayed_fields,
                 filterable_fields,
                 sortable_fields,
+                foreign_keys,
                 criteria,
                 stop_words,
                 non_separator_tokens,
@@ -898,11 +893,13 @@ fn test_correct_settings_init() {
                 facet_search,
                 disable_on_numbers,
                 chat,
+                vector_store,
             } = settings;
             assert!(matches!(searchable_fields, Setting::NotSet));
             assert!(matches!(displayed_fields, Setting::NotSet));
             assert!(matches!(filterable_fields, Setting::NotSet));
             assert!(matches!(sortable_fields, Setting::NotSet));
+            assert!(matches!(foreign_keys, Setting::NotSet));
             assert!(matches!(criteria, Setting::NotSet));
             assert!(matches!(stop_words, Setting::NotSet));
             assert!(matches!(non_separator_tokens, Setting::NotSet));
@@ -927,6 +924,7 @@ fn test_correct_settings_init() {
             assert!(matches!(facet_search, Setting::NotSet));
             assert!(matches!(disable_on_numbers, Setting::NotSet));
             assert!(matches!(chat, Setting::NotSet));
+            assert!(matches!(vector_store, Setting::NotSet));
         })
         .unwrap();
 }

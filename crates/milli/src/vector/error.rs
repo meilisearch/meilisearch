@@ -6,11 +6,11 @@ use hf_hub::api::sync::ApiError;
 use itertools::Itertools as _;
 
 use super::parsed_vectors::ParsedVectorsDiff;
-use super::rest::ConfigurationSource;
-use super::MAX_COMPOSITE_DISTANCE;
 use crate::error::FaultSource;
 use crate::update::new::vector_document::VectorDocument;
-use crate::{FieldDistribution, PanicCatched};
+use crate::vector::embedder::composite::MAX_COMPOSITE_DISTANCE;
+use crate::vector::embedder::rest::ConfigurationSource;
+use crate::{CaughtPanic, FieldDistribution};
 
 #[derive(Debug, thiserror::Error)]
 #[error("Error while generating embeddings: {inner}")]
@@ -63,7 +63,7 @@ pub enum EmbedErrorKind {
     #[error("model not found. Meilisearch will not automatically download models from the Ollama library, please pull the model manually{}", option_info(.0.as_deref(), "server replied with "))]
     OllamaModelNotFoundError(Option<String>),
     #[error("error deserializing the response body as JSON:\n  - {0}")]
-    RestResponseDeserialization(std::io::Error),
+    RestResponseDeserialization(http_client::ureq::Error),
     #[error("expected a response containing {0} embeddings, got only {1}")]
     RestResponseEmbeddingCount(usize, usize),
     #[error("could not authenticate against {embedding} server{server_reply}{hint}", embedding=match *.1 {
@@ -93,7 +93,7 @@ pub enum EmbedErrorKind {
     #[error("received unexpected HTTP {} from embedding server{}", .0, option_info(.1.as_deref(), "server replied with "))]
     RestOtherStatusCode(u16, Option<String>),
     #[error("could not reach embedding server:\n  - {0}")]
-    RestNetwork(ureq::Transport),
+    RestNetwork(http_client::ureq::Error),
     #[error("error extracting embeddings from the response:\n  - {0}")]
     RestExtractionError(String),
     #[error("was expecting embeddings of dimension `{0}`, got embeddings of dimensions `{1}`")]
@@ -101,7 +101,7 @@ pub enum EmbedErrorKind {
     #[error("no embedding was produced")]
     MissingEmbedding,
     #[error(transparent)]
-    PanicInThreadPool(#[from] PanicCatched),
+    PanicInThreadPool(#[from] CaughtPanic),
     #[error("`media` requested but the configuration doesn't have source `rest`")]
     RestMediaNotARest,
     #[error("`media` requested, and the configuration has source `rest`, but the configuration doesn't have `searchFragments`.")]
@@ -162,7 +162,7 @@ impl EmbedError {
         Self { kind: EmbedErrorKind::OllamaModelNotFoundError(inner), fault: FaultSource::User }
     }
 
-    pub(crate) fn rest_response_deserialization(error: std::io::Error) -> EmbedError {
+    pub(crate) fn rest_response_deserialization(error: http_client::ureq::Error) -> EmbedError {
         Self {
             kind: EmbedErrorKind::RestResponseDeserialization(error),
             fault: FaultSource::Runtime,
@@ -220,7 +220,7 @@ impl EmbedError {
         }
     }
 
-    pub(crate) fn rest_network(transport: ureq::Transport) -> EmbedError {
+    pub(crate) fn rest_network(transport: http_client::ureq::Error) -> EmbedError {
         Self { kind: EmbedErrorKind::RestNetwork(transport), fault: FaultSource::Runtime }
     }
 
@@ -550,9 +550,9 @@ pub struct DeserializePoolingConfig {
 #[derive(Debug, thiserror::Error)]
 #[error("model `{model_name}` appears to be unsupported{}\n  - inner error: {inner}",
 if architectures.is_empty() {
-    "\n  - Note: only models with architecture \"BertModel\" are supported.".to_string()
+    "\n  - Note: only models with architecture \"BertModel\" or \"ModernBert\" are supported.".to_string()
 } else {
-    format!("\n  - Note: model has declared architectures `{architectures:?}`, only models with architecture `\"BertModel\"` are supported.")
+    format!("\n  - Note: model has declared architectures `{architectures:?}`, only models with architecture `\"BertModel\"` or `\"ModernBert\"` are supported.")
 })]
 pub struct UnsupportedModel {
     pub model_name: String,

@@ -20,10 +20,15 @@ members = [
     "crates/xtask",
     "crates/build-info",
     "crates/openapi-generator",
+    "crates/http-client",
+    "crates/routes-macros",
+    "crates/routes",
+    "external-crates/async-openai",
+    "external-crates/async-openai-macros",
 ]
 
 [workspace.package]
-version = "1.17.1"
+version = "1.42.1"
 authors = [
     "Quentin de Quelen <quentin@dequelen.me>",
     "Clément Renault <clement@meilisearch.com>",
@@ -34,8 +39,15 @@ readme = "README.md"
 edition = "2021"
 license = "MIT"
 
+[workspace.dependencies]
+mimalloc = { version = "0.1.48", default-features = false, features = ["v3", "override"] }
+
 [profile.release]
 codegen-units = 1
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
 
 # We now compile heed without the NDEBUG define for better performance.
 # However, we still enable debug assertions for a better detection of
@@ -49,4 +61,6 @@ opt-level = 3
 [profile.dev.package.grenad]
 opt-level = 3
 [profile.dev.package.roaring]
+opt-level = 3
+[profile.dev.package.gemm-f16]
 opt-level = 3

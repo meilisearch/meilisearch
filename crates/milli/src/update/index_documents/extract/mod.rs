@@ -31,6 +31,7 @@ use self::extract_word_position_docids::extract_word_position_docids;
 use super::helpers::{as_cloneable_grenad, CursorClonableMmap, GrenadParameters};
 use super::{helpers, TypedChunk};
 use crate::progress::EmbedderStats;
+use crate::update::index_documents::extract::extract_geo_points::extract_geojson;
 use crate::update::index_documents::extract::extract_vector_points::extract_embeddings_from_fragments;
 use crate::update::settings::InnerIndexSettingsDiff;
 use crate::vector::db::EmbedderInfo;
@@ -62,6 +63,7 @@ pub(crate) fn data_from_obkv_documents(
                         original_documents_chunk,
                         indexer,
                         lmdb_writer_sx.clone(),
+                        primary_key_id,
                         settings_diff.clone(),
                         embedder_info.clone(),
                         possible_embedding_mistakes.clone(),
@@ -228,10 +230,12 @@ pub fn request_threads() -> &'static ThreadPoolNoAbort {
 
 /// Extract chunked data and send it into lmdb_writer_sx sender:
 /// - documents
+#[allow(clippy::too_many_arguments)]
 fn send_original_documents_data(
     original_documents_chunk: Result<grenad::Reader<BufReader<File>>>,
     indexer: GrenadParameters,
     lmdb_writer_sx: Sender<Result<TypedChunk>>,
+    primary_key_id: FieldId,
     settings_diff: Arc<InnerIndexSettingsDiff>,
     embedder_info: Arc<Vec<(String, EmbedderInfo)>>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
@@ -239,6 +243,20 @@ fn send_original_documents_data(
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
+
+    if settings_diff.reindex_geojson() {
+        let documents_chunk_cloned = original_documents_chunk.clone();
+        let lmdb_writer_sx_cloned = lmdb_writer_sx.clone();
+        let settings_diff = settings_diff.clone();
+        rayon::spawn(move || {
+            let result =
+                extract_geojson(documents_chunk_cloned, indexer, primary_key_id, &settings_diff);
+            let _ = match result {
+                Ok(geojson) => lmdb_writer_sx_cloned.send(Ok(TypedChunk::GeoJson(geojson))),
+                Err(error) => lmdb_writer_sx_cloned.send(Err(error)),
+            };
+        });
+    }
 
     let index_vectors = (settings_diff.reindex_vectors() || !settings_diff.settings_update_only())
         // no point in indexing vectors without embedders

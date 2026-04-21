@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use bumpalo::Bump;
@@ -13,12 +13,17 @@ use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use super::settings_changes::settings_change_extract;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::{FieldIdMapper, PrimaryKey};
 use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
+use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
-use crate::update::new::merger::merge_and_send_rtree;
+use crate::update::new::indexer::WordDelta;
+use crate::update::new::merger::{
+    merge_and_send_rtree, merge_scan_and_send_docids, EntryStatus, Operation,
+};
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
 use crate::vector::db::{EmbedderInfo, IndexEmbeddingConfig};
@@ -39,7 +44,7 @@ pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
     document_ids: &mut RoaringBitmap,
     modified_docids: &mut RoaringBitmap,
     embedder_stats: &EmbedderStats,
-) -> Result<(FacetFieldIdsDelta, Vec<IndexEmbeddingConfig>)>
+) -> Result<(FacetFieldIdsDelta, WordDelta, Vec<IndexEmbeddingConfig>)>
 where
     DC: DocumentChanges<'pl>,
     MSP: Fn() -> bool + Sync,
@@ -84,6 +89,7 @@ where
     }
 
     let facet_field_ids_delta;
+    let word_delta;
 
     {
         let caches = {
@@ -139,11 +145,23 @@ where
             let _entered = span.enter();
             indexing_context.progress.update_progress(MergingWordCache::WordDocids);
 
-            merge_and_send_docids(
+            word_delta = merge_scan_and_send_docids(
                 word_docids,
                 index.word_docids.remap_types(),
                 index,
                 extractor_sender.docids::<WordDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let word = std::str::from_utf8(key)?.to_string();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word),
+                            EntryStatus::Updated => output.insert_modified(word),
+                        },
+                        Operation::Delete => output.insert_deleted(word),
+                        Operation::Ignore => (),
+                    }
+                    Ok(())
+                },
                 &indexing_context.must_stop_processing,
             )?;
         }
@@ -317,10 +335,31 @@ where
             &indexing_context.must_stop_processing,
         )?;
     }
-    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
-    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
 
-    Result::Ok((facet_field_ids_delta, index_embeddings))
+    'cellulite: {
+        let Some(extractor) = GeoJsonExtractor::new(&rtxn, index, extractor_sender.geojson())?
+        else {
+            break 'cellulite;
+        };
+        let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
+
+        let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
+        let _entered = span.enter();
+
+        extract(
+            document_changes,
+            &extractor,
+            indexing_context,
+            extractor_allocs,
+            &datastore,
+            IndexingStep::WritingGeoJson,
+        )?;
+    }
+
+    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
+    finished_extraction.store(true, Ordering::Relaxed);
+
+    Result::Ok((facet_field_ids_delta, word_delta, index_embeddings))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -334,22 +373,24 @@ pub(super) fn extract_all_settings_changes<MSP, SD>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     embedder_stats: &EmbedderStats,
-) -> Result<Vec<IndexEmbeddingConfig>>
+) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta, FacetFieldIdsDelta)>
 where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
 {
     // Create the list of document ids to extract
-    let rtxn = indexing_context.index.read_txn()?;
-    let all_document_ids =
-        indexing_context.index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
-    let primary_key =
-        primary_key_from_db(indexing_context.index, &rtxn, &indexing_context.db_fields_ids_map)?;
+    let index = indexing_context.index;
+    let rtxn = index.read_txn()?;
+    let all_document_ids = index.documents_ids(&rtxn)?.into_iter().collect::<Vec<_>>();
+    let primary_key = primary_key_from_db(index, &rtxn, &indexing_context.db_fields_ids_map)?;
     let documents = DocumentsIndentifiers::new(&all_document_ids, primary_key);
 
     let span =
         tracing::trace_span!(target: "indexing::documents", parent: &indexer_span, "extract");
     let _entered = span.enter();
+
+    let word_delta;
+    let facet_field_ids_delta;
 
     update_database_documents(
         &documents,
@@ -358,6 +399,175 @@ where
         settings_delta,
         extractor_allocs,
     )?;
+
+    {
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", parent: &indexer_span, "faceted");
+            let _entered = span.enter();
+
+            FacetedDocidsExtractor::run_extraction_from_settings(
+                settings_delta,
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                &extractor_sender.field_id_docid_facet_sender(),
+                IndexingStep::ExtractingFacets,
+            )?
+        };
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", parent: &indexer_span, "faceted");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(IndexingStep::MergingFacetCaches);
+
+            facet_field_ids_delta = merge_and_send_facet_docids(
+                caches,
+                FacetDatabases::new(index),
+                index,
+                &rtxn,
+                extractor_sender.facet_docids(),
+            )?;
+        }
+    }
+
+    {
+        let WordDocidsCaches {
+            word_docids,
+            word_fid_docids,
+            exact_word_docids,
+            word_position_docids,
+            fid_word_count_docids,
+        } = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
+            let _entered = span.enter();
+            WordDocidsExtractors::run_extraction_from_settings(
+                settings_delta,
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::ExtractingWords,
+            )?
+        };
+
+        indexing_context.progress.update_progress(IndexingStep::MergingWordCaches);
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", "word_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::WordDocids);
+
+            word_delta = merge_scan_and_send_docids(
+                word_docids,
+                index.word_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordDocids>(),
+                |output: &mut WordDelta, key, operation| {
+                    let word = std::str::from_utf8(key)?.to_string();
+                    match operation {
+                        Operation::Write { bitmap: _, status } => match status {
+                            EntryStatus::Created => output.insert_added(word),
+                            EntryStatus::Updated => output.insert_modified(word),
+                        },
+                        Operation::Delete => output.insert_deleted(word),
+                        Operation::Ignore => (),
+                    }
+                    Ok(())
+                },
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "word_fid_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::WordFieldIdDocids);
+
+            merge_and_send_docids(
+                word_fid_docids,
+                index.word_fid_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordFidDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "exact_word_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::ExactWordDocids);
+
+            merge_and_send_docids(
+                exact_word_docids,
+                index.exact_word_docids.remap_types(),
+                index,
+                extractor_sender.docids::<ExactWordDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "word_position_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::WordPositionDocids);
+
+            merge_and_send_docids(
+                word_position_docids,
+                index.word_position_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordPositionDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+
+        {
+            let span =
+                tracing::trace_span!(target: "indexing::documents::merge", "fid_word_count_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(MergingWordCache::FieldIdWordCountDocids);
+
+            merge_and_send_docids(
+                fid_word_count_docids,
+                index.field_id_word_count_docids.remap_types(),
+                index,
+                extractor_sender.docids::<FidWordCountDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+    }
+
+    // Run the proximity extraction only if the precision is ByWord.
+    let new_proximity_precision = settings_delta.new_proximity_precision();
+    if *new_proximity_precision == ProximityPrecision::ByWord {
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
+            let _entered = span.enter();
+
+            WordPairProximityDocidsExtractor::run_extraction_from_settings(
+                settings_delta,
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::ExtractingWordProximity,
+            )?
+        };
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", "word_pair_proximity_docids");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(IndexingStep::MergingWordProximity);
+
+            merge_and_send_docids(
+                caches,
+                index.word_pair_proximity_docids.remap_types(),
+                index,
+                extractor_sender.docids::<WordPairProximityDocids>(),
+                &indexing_context.must_stop_processing,
+            )?;
+        }
+    }
 
     'vectors: {
         if settings_delta.embedder_actions().is_empty() {
@@ -415,10 +625,66 @@ where
         }
     }
 
-    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
-    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+    'geo: {
+        let enabled_filterable_geo =
+            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geo())
+                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geo());
+        let enabled_sortable_geo = settings_delta
+            .new_fields_ids_map()
+            .id_with_metadata(RESERVED_GEO_FIELD_NAME)
+            .is_some_and(|(_id, meta)| meta.is_sortable());
 
-    Result::Ok(index_embeddings)
+        if !enabled_filterable_geo && !enabled_sortable_geo {
+            break 'geo;
+        }
+
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
+            let _entered = span.enter();
+
+            GeoExtractor::run_extraction_from_settings(
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::WritingGeoPoints,
+            )?
+        };
+
+        merge_and_send_rtree(
+            caches,
+            &rtxn,
+            index,
+            extractor_sender.geo(),
+            &indexing_context.must_stop_processing,
+        )?;
+    }
+
+    'cellulite: {
+        let enabled_filterable_geojson =
+            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geojson())
+                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geojson());
+
+        if !enabled_filterable_geojson {
+            break 'cellulite;
+        }
+
+        let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
+        let _entered = span.enter();
+
+        GeoJsonExtractor::run_extraction_from_settings(
+            settings_delta,
+            &documents,
+            indexing_context,
+            extractor_allocs,
+            extractor_sender.geojson(),
+            IndexingStep::WritingGeoPoints,
+        )?;
+    }
+
+    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
+    finished_extraction.store(true, Ordering::Relaxed);
+
+    Result::Ok((index_embeddings, word_delta, facet_field_ids_delta))
 }
 
 fn primary_key_from_db<'indexer>(

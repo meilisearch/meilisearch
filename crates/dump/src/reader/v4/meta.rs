@@ -1,9 +1,7 @@
 use std::fmt::{self, Display, Formatter};
-use std::marker::PhantomData;
 use std::str::FromStr;
 
-use serde::de::Visitor;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use uuid::Uuid;
 
 use super::settings::{Settings, Unchecked};
@@ -82,59 +80,3 @@ impl Display for IndexUidFormatError {
 }
 
 impl std::error::Error for IndexUidFormatError {}
-
-/// A type that tries to match either a star (*) or
-/// any other thing that implements `FromStr`.
-#[derive(Debug)]
-#[cfg_attr(test, derive(serde::Serialize))]
-pub enum StarOr<T> {
-    Star,
-    Other(T),
-}
-
-impl<'de, T, E> Deserialize<'de> for StarOr<T>
-where
-    T: FromStr<Err = E>,
-    E: Display,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        /// Serde can't differentiate between `StarOr::Star` and `StarOr::Other` without a tag.
-        /// Simply using `#[serde(untagged)]` + `#[serde(rename="*")]` will lead to attempting to
-        /// deserialize everything as a `StarOr::Other`, including "*".
-        /// [`#[serde(other)]`](https://serde.rs/variant-attrs.html#other) might have helped but is
-        /// not supported on untagged enums.
-        struct StarOrVisitor<T>(PhantomData<T>);
-
-        impl<T, FE> Visitor<'_> for StarOrVisitor<T>
-        where
-            T: FromStr<Err = FE>,
-            FE: Display,
-        {
-            type Value = StarOr<T>;
-
-            fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-                formatter.write_str("a string")
-            }
-
-            fn visit_str<SE>(self, v: &str) -> Result<Self::Value, SE>
-            where
-                SE: serde::de::Error,
-            {
-                match v {
-                    "*" => Ok(StarOr::Star),
-                    v => {
-                        let other = FromStr::from_str(v).map_err(|e: T::Err| {
-                            SE::custom(format!("Invalid `other` value: {}", e))
-                        })?;
-                        Ok(StarOr::Other(other))
-                    }
-                }
-            }
-        }
-
-        deserializer.deserialize_str(StarOrVisitor(PhantomData))
-    }
-}

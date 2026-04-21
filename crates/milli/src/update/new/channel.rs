@@ -52,10 +52,10 @@ const MAX_FRAME_HEADER_SIZE: usize = 9;
 /// a message in this queue only if it is empty to avoid filling
 /// the channel *and* the BBQueue.
 pub fn extractor_writer_bbqueue(
-    bbbuffers: &mut Vec<BBBuffer>,
+    bbbuffers: &'_ mut Vec<BBBuffer>,
     total_bbbuffer_capacity: usize,
     channel_capacity: usize,
-) -> (ExtractorBbqueueSender, WriterBbqueueReceiver) {
+) -> (ExtractorBbqueueSender<'_>, WriterBbqueueReceiver<'_>) {
     let current_num_threads = rayon::current_num_threads();
     let bbbuffer_capacity = total_bbbuffer_capacity.checked_div(current_num_threads).unwrap();
     bbbuffers.resize_with(current_num_threads, || BBBuffer::new(bbbuffer_capacity));
@@ -139,6 +139,7 @@ pub enum ReceiverAction {
     LargeEntry(LargeEntry),
     LargeVectors(LargeVectors),
     LargeVector(LargeVector),
+    LargeGeoJson(LargeGeoJson),
 }
 
 /// An entry that cannot fit in the BBQueue buffers has been
@@ -191,6 +192,14 @@ impl LargeVector {
     pub fn read_embedding(&self, dimensions: usize) -> &[f32] {
         self.embedding.chunks_exact(dimensions).map(bytemuck::cast_slice).next().unwrap()
     }
+}
+
+#[derive(Debug)]
+pub struct LargeGeoJson {
+    /// The document id associated to the large geojson.
+    pub docid: DocumentId,
+    /// The large geojson that must be written.
+    pub geojson: Mmap,
 }
 
 impl<'a> WriterBbqueueReceiver<'a> {
@@ -255,22 +264,26 @@ impl<'a> From<FrameGrantR<'a>> for FrameWithHeader<'a> {
 #[repr(u8)]
 pub enum EntryHeader {
     DbOperation(DbOperation),
-    ArroyDeleteVector(ArroyDeleteVector),
-    ArroySetVectors(ArroySetVectors),
-    ArroySetVector(ArroySetVector),
+    DeleteVector(DeleteVector),
+    SetVectors(SetVectors),
+    SetVector(SetVector),
+    CelluliteItem(DocumentId),
+    CelluliteRemove(DocumentId),
 }
 
 impl EntryHeader {
-    const fn variant_size() -> usize {
+    pub const fn variant_size() -> usize {
         mem::size_of::<u8>()
     }
 
     const fn variant_id(&self) -> u8 {
         match self {
             EntryHeader::DbOperation(_) => 0,
-            EntryHeader::ArroyDeleteVector(_) => 1,
-            EntryHeader::ArroySetVectors(_) => 2,
-            EntryHeader::ArroySetVector(_) => 3,
+            EntryHeader::DeleteVector(_) => 1,
+            EntryHeader::SetVectors(_) => 2,
+            EntryHeader::SetVector(_) => 3,
+            EntryHeader::CelluliteItem(_) => 4,
+            EntryHeader::CelluliteRemove(_) => 5,
         }
     }
 
@@ -286,26 +299,36 @@ impl EntryHeader {
     }
 
     const fn total_delete_vector_size() -> usize {
-        Self::variant_size() + mem::size_of::<ArroyDeleteVector>()
+        Self::variant_size() + mem::size_of::<DeleteVector>()
+    }
+
+    const fn total_cellulite_item_size(value_length: usize) -> usize {
+        Self::variant_size() + mem::size_of::<DocumentId>() + value_length
+    }
+
+    const fn total_cellulite_remove_size() -> usize {
+        Self::variant_size() + mem::size_of::<DocumentId>()
     }
 
     /// The `dimensions` corresponds to the number of `f32` in the embedding.
     fn total_set_vectors_size(count: usize, dimensions: usize) -> usize {
         let embedding_size = dimensions * mem::size_of::<f32>();
-        Self::variant_size() + mem::size_of::<ArroySetVectors>() + embedding_size * count
+        Self::variant_size() + mem::size_of::<SetVectors>() + embedding_size * count
     }
 
     fn total_set_vector_size(dimensions: usize) -> usize {
         let embedding_size = dimensions * mem::size_of::<f32>();
-        Self::variant_size() + mem::size_of::<ArroySetVector>() + embedding_size
+        Self::variant_size() + mem::size_of::<SetVector>() + embedding_size
     }
 
     fn header_size(&self) -> usize {
         let payload_size = match self {
             EntryHeader::DbOperation(op) => mem::size_of_val(op),
-            EntryHeader::ArroyDeleteVector(adv) => mem::size_of_val(adv),
-            EntryHeader::ArroySetVectors(asvs) => mem::size_of_val(asvs),
-            EntryHeader::ArroySetVector(asv) => mem::size_of_val(asv),
+            EntryHeader::DeleteVector(adv) => mem::size_of_val(adv),
+            EntryHeader::SetVectors(asvs) => mem::size_of_val(asvs),
+            EntryHeader::SetVector(asv) => mem::size_of_val(asv),
+            EntryHeader::CelluliteItem(docid) => mem::size_of_val(docid),
+            EntryHeader::CelluliteRemove(docid) => mem::size_of_val(docid),
         };
         Self::variant_size() + payload_size
     }
@@ -319,19 +342,29 @@ impl EntryHeader {
                 EntryHeader::DbOperation(header)
             }
             1 => {
-                let header_bytes = &remaining[..mem::size_of::<ArroyDeleteVector>()];
+                let header_bytes = &remaining[..mem::size_of::<DeleteVector>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::ArroyDeleteVector(header)
+                EntryHeader::DeleteVector(header)
             }
             2 => {
-                let header_bytes = &remaining[..mem::size_of::<ArroySetVectors>()];
+                let header_bytes = &remaining[..mem::size_of::<SetVectors>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::ArroySetVectors(header)
+                EntryHeader::SetVectors(header)
             }
             3 => {
-                let header_bytes = &remaining[..mem::size_of::<ArroySetVector>()];
+                let header_bytes = &remaining[..mem::size_of::<SetVector>()];
                 let header = checked::pod_read_unaligned(header_bytes);
-                EntryHeader::ArroySetVector(header)
+                EntryHeader::SetVector(header)
+            }
+            4 => {
+                let header_bytes = &remaining[..mem::size_of::<DocumentId>()];
+                let header = checked::pod_read_unaligned(header_bytes);
+                EntryHeader::CelluliteItem(header)
+            }
+            5 => {
+                let header_bytes = &remaining[..mem::size_of::<DocumentId>()];
+                let header = checked::pod_read_unaligned(header_bytes);
+                EntryHeader::CelluliteRemove(header)
             }
             id => panic!("invalid variant id: {id}"),
         }
@@ -341,9 +374,11 @@ impl EntryHeader {
         let (first, remaining) = header_bytes.split_first_mut().unwrap();
         let payload_bytes = match self {
             EntryHeader::DbOperation(op) => bytemuck::bytes_of(op),
-            EntryHeader::ArroyDeleteVector(adv) => bytemuck::bytes_of(adv),
-            EntryHeader::ArroySetVectors(asvs) => bytemuck::bytes_of(asvs),
-            EntryHeader::ArroySetVector(asv) => bytemuck::bytes_of(asv),
+            EntryHeader::DeleteVector(adv) => bytemuck::bytes_of(adv),
+            EntryHeader::SetVectors(asvs) => bytemuck::bytes_of(asvs),
+            EntryHeader::SetVector(asv) => bytemuck::bytes_of(asv),
+            EntryHeader::CelluliteItem(docid) => bytemuck::bytes_of(docid),
+            EntryHeader::CelluliteRemove(docid) => bytemuck::bytes_of(docid),
         };
         *first = self.variant_id();
         remaining.copy_from_slice(payload_bytes);
@@ -378,7 +413,7 @@ impl DbOperation {
 
 #[derive(Debug, Clone, Copy, NoUninit, CheckedBitPattern)]
 #[repr(transparent)]
-pub struct ArroyDeleteVector {
+pub struct DeleteVector {
     pub docid: DocumentId,
 }
 
@@ -386,13 +421,13 @@ pub struct ArroyDeleteVector {
 #[repr(C)]
 /// The embeddings are in the remaining space and represents
 /// non-aligned [f32] each with dimensions f32s.
-pub struct ArroySetVectors {
+pub struct SetVectors {
     pub docid: DocumentId,
     pub embedder_id: u8,
     _padding: [u8; 3],
 }
 
-impl ArroySetVectors {
+impl SetVectors {
     fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         &frame[skip..]
@@ -416,14 +451,14 @@ impl ArroySetVectors {
 #[repr(C)]
 /// The embeddings are in the remaining space and represents
 /// non-aligned [f32] each with dimensions f32s.
-pub struct ArroySetVector {
+pub struct SetVector {
     pub docid: DocumentId,
     pub embedder_id: u8,
     pub extractor_id: u8,
     _padding: [u8; 2],
 }
 
-impl ArroySetVector {
+impl SetVector {
     fn embeddings_bytes<'a>(frame: &'a FrameGrantR<'_>) -> &'a [u8] {
         let skip = EntryHeader::variant_size() + mem::size_of::<Self>();
         &frame[skip..]
@@ -548,12 +583,16 @@ impl<'b> ExtractorBbqueueSender<'b> {
         GeoSender(self)
     }
 
+    pub fn geojson<'a>(&'a self) -> GeoJsonSender<'a, 'b> {
+        GeoJsonSender(self)
+    }
+
     fn delete_vector(&self, docid: DocumentId) -> crate::Result<()> {
         let max_grant = self.max_grant;
         let refcell = self.producers.get().unwrap();
         let mut producer = refcell.0.borrow_mut_or_yield();
 
-        let payload_header = EntryHeader::ArroyDeleteVector(ArroyDeleteVector { docid });
+        let payload_header = EntryHeader::DeleteVector(DeleteVector { docid });
         let total_length = EntryHeader::total_delete_vector_size();
         if total_length > max_grant {
             panic!("The entry is larger ({total_length} bytes) than the BBQueue max grant ({max_grant} bytes)");
@@ -589,8 +628,8 @@ impl<'b> ExtractorBbqueueSender<'b> {
         // to zero to allocate no extra space at all
         let dimensions = embeddings.first().map_or(0, |emb| emb.len());
 
-        let arroy_set_vector = ArroySetVectors { docid, embedder_id, _padding: [0; 3] };
-        let payload_header = EntryHeader::ArroySetVectors(arroy_set_vector);
+        let set_vectors = SetVectors { docid, embedder_id, _padding: [0; 3] };
+        let payload_header = EntryHeader::SetVectors(set_vectors);
         let total_length = EntryHeader::total_set_vectors_size(embeddings.len(), dimensions);
         if total_length > max_grant {
             let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
@@ -650,9 +689,8 @@ impl<'b> ExtractorBbqueueSender<'b> {
         // to zero to allocate no extra space at all
         let dimensions = embedding.as_ref().map_or(0, |emb| emb.len());
 
-        let arroy_set_vector =
-            ArroySetVector { docid, embedder_id, extractor_id, _padding: [0; 2] };
-        let payload_header = EntryHeader::ArroySetVector(arroy_set_vector);
+        let set_vector = SetVector { docid, embedder_id, extractor_id, _padding: [0; 2] };
+        let payload_header = EntryHeader::SetVector(set_vector);
         let total_length = EntryHeader::total_set_vector_size(dimensions);
         if total_length > max_grant {
             let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
@@ -1138,5 +1176,72 @@ impl GeoSender<'_, '_> {
                 Ok(())
             },
         )
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct GeoJsonSender<'a, 'b>(&'a ExtractorBbqueueSender<'b>);
+
+impl GeoJsonSender<'_, '_> {
+    pub fn insert_geojson(&self, docid: DocumentId, mut value: &[u8]) -> crate::Result<()> {
+        let max_grant = self.0.max_grant;
+        let refcell = self.0.producers.get().unwrap();
+        let mut producer = refcell.0.borrow_mut_or_yield();
+
+        let payload_header = EntryHeader::CelluliteItem(docid);
+        let value_length = value.len();
+        let total_length = EntryHeader::total_cellulite_item_size(value_length);
+        if total_length > max_grant {
+            let mut value_file = tempfile::tempfile().map(BufWriter::new)?;
+            io::copy(&mut value, &mut value_file)?;
+
+            let value_file = value_file.into_inner().map_err(|ie| ie.into_error())?;
+            let geojson = unsafe { Mmap::map(&value_file)? }; // Safe because the file is never modified
+
+            let large_geojson = LargeGeoJson { docid, geojson };
+            self.0.sender.send(ReceiverAction::LargeGeoJson(large_geojson)).unwrap();
+
+            return Ok(());
+        }
+
+        // Spin loop to have a frame the size we requested.
+        reserve_and_write_grant(
+            &mut producer,
+            total_length,
+            &self.0.sender,
+            &self.0.sent_messages_attempts,
+            &self.0.blocking_sent_messages_attempts,
+            |grant| {
+                let header_size = payload_header.header_size();
+                let (header_bytes, remaining) = grant.split_at_mut(header_size);
+                payload_header.serialize_into(header_bytes);
+                remaining.copy_from_slice(value);
+                Ok(())
+            },
+        )?;
+
+        Ok(())
+    }
+
+    pub fn delete_geojson(&self, docid: DocumentId) -> crate::Result<()> {
+        let refcell = self.0.producers.get().unwrap();
+        let mut producer = refcell.0.borrow_mut_or_yield();
+
+        let payload_header = EntryHeader::CelluliteRemove(docid);
+        let total_length = EntryHeader::total_cellulite_remove_size();
+
+        reserve_and_write_grant(
+            &mut producer,
+            total_length,
+            &self.0.sender,
+            &self.0.sent_messages_attempts,
+            &self.0.blocking_sent_messages_attempts,
+            |grant| {
+                payload_header.serialize_into(grant);
+                Ok(())
+            },
+        )?;
+
+        Ok(())
     }
 }

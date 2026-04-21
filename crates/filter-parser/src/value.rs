@@ -31,13 +31,17 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
     while let Some((idx, c)) = i.next() {
         if c == quote {
             let (rem, output) = input.take_split(idx);
-            return Ok((rem, Token::new(output, escaped.then(|| unescape(output, quote)))));
+            let mut token = Token::from(output);
+            if let Some(value) = escaped.then(|| unescape(output, quote)) {
+                token.modify_fragment(value);
+            }
+            return Ok((rem, token));
         } else if c == '\\' {
             if let Some((_, c)) = i.next() {
                 escaped |= c == quote;
             } else {
                 return Err(nom::Err::Error(Error::new_from_kind(
-                    input,
+                    input.into(),
                     ErrorKind::MalformedValue,
                 )));
             }
@@ -45,20 +49,22 @@ fn quoted_by(quote: char, input: Span) -> IResult<Token> {
         // if it was preceded by a `\` or if it was anything else we can continue to advance
     }
 
-    Ok((
-        input.slice(input.input_len()..),
-        Token::new(input, escaped.then(|| unescape(input, quote))),
-    ))
+    let mut token = Token::from(input);
+    if let Some(value) = escaped.then(|| unescape(input, quote)) {
+        token.modify_fragment(value);
+    }
+
+    Ok((input.slice(input.input_len()..), token))
 }
 
 // word           = (alphanumeric | _ | - | .)+    except for reserved keywords
 pub fn word_not_keyword<'a>(input: Span<'a>) -> IResult<'a, Token<'a>> {
     let (input, word): (_, Token<'a>) =
         take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
-    if is_keyword(word.value()) {
+    if is_keyword(word.fragment()) {
         return Err(nom::Err::Error(Error::new_from_kind(
-            input,
-            ErrorKind::ReservedKeyword(word.value().to_owned()),
+            input.into(),
+            ErrorKind::ReservedKeyword(word.fragment().to_owned()),
         )));
     }
     Ok((input, word))
@@ -69,11 +75,11 @@ pub fn word_exact<'a, 'b: 'a>(tag: &'b str) -> impl Fn(Span<'a>) -> IResult<'a, 
     move |input| {
         let (input, word): (_, Token<'a>) =
             take_while1(is_value_component)(input).map(|(s, t)| (s, t.into()))?;
-        if word.value() == tag {
+        if word.fragment() == tag {
             Ok((input, word))
         } else {
             Err(nom::Err::Error(Error::new_from_kind(
-                input,
+                input.into(),
                 ErrorKind::InternalError(nom::error::ErrorKind::Tag),
             )))
         }
@@ -93,23 +99,21 @@ pub fn parse_dotted_value_part(input: Span) -> IResult<Token> {
         non_dot_word,
     ))(input)?;
 
-    match unescaper::unescape(value.value()) {
+    match unescaper::unescape(value.fragment()) {
         Ok(content) => {
-            if content.len() != value.value().len() {
-                Ok((input, Token::new(value.original_span(), Some(content))))
+            if content.len() != value.fragment().len() {
+                Ok((input, value.with_modified_fragment(Some(content))))
             } else {
                 Ok((input, value))
             }
         }
         Err(unescaper::Error::IncompleteStr(_)) => Err(nom::Err::Incomplete(nom::Needed::Unknown)),
-        Err(unescaper::Error::ParseIntError { .. }) => Err(nom::Err::Error(Error::new_from_kind(
-            value.original_span(),
-            ErrorKind::InvalidEscapedNumber,
-        ))),
-        Err(unescaper::Error::InvalidChar { .. }) => Err(nom::Err::Error(Error::new_from_kind(
-            value.original_span(),
-            ErrorKind::MalformedValue,
-        ))),
+        Err(unescaper::Error::ParseIntError { .. }) => {
+            Err(nom::Err::Error(Error::new_from_kind(value.span, ErrorKind::InvalidEscapedNumber)))
+        }
+        Err(unescaper::Error::InvalidChar { .. }) => {
+            Err(nom::Err::Error(Error::new_from_kind(value.span, ErrorKind::MalformedValue)))
+        }
     }
 }
 
@@ -117,11 +121,11 @@ pub fn parse_dotted_value_cut<'a>(input: Span<'a>, kind: ErrorKind<'a>) -> IResu
     parse_dotted_value_part(input).map_err(|e| match e {
         nom::Err::Failure(e) => match e.kind() {
             ErrorKind::Char(c) if *c == '"' || *c == '\'' => {
-                crate::Error::failure_from_kind(input, ErrorKind::VectorFilterInvalidQuotes)
+                crate::Error::failure_from_kind(input.into(), ErrorKind::VectorFilterInvalidQuotes)
             }
-            _ => crate::Error::failure_from_kind(input, kind),
+            _ => crate::Error::failure_from_kind(input.into(), kind),
         },
-        _ => crate::Error::failure_from_kind(input, kind),
+        _ => crate::Error::failure_from_kind(input.into(), kind),
     })
 }
 
@@ -144,21 +148,23 @@ pub fn parse_value(input: Span) -> IResult<Token> {
     }
 
     match parse_geo_radius(input) {
-        Ok(_) => return Err(Error::failure_from_kind(input, ErrorKind::MisusedGeoRadius)),
+        Ok(_) => return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoRadius)),
         // if we encountered a failure it means the user badly wrote a _geoRadius filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(Error::failure_from_kind(input, ErrorKind::MisusedGeoRadius))
+            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoRadius))
         }
         _ => (),
     }
 
     match parse_geo_bounding_box(input) {
-        Ok(_) => return Err(Error::failure_from_kind(input, ErrorKind::MisusedGeoBoundingBox)),
+        Ok(_) => {
+            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoBoundingBox))
+        }
         // if we encountered a failure it means the user badly wrote a _geoBoundingBox filter.
         // But instead of showing them how to fix his syntax we are going to tell them they should not use this filter as a value.
         Err(e) if e.is_failure() => {
-            return Err(Error::failure_from_kind(input, ErrorKind::MisusedGeoBoundingBox))
+            return Err(Error::failure_from_kind(input.into(), ErrorKind::MisusedGeoBoundingBox))
         }
         _ => (),
     }
@@ -189,7 +195,7 @@ pub fn parse_value(input: Span) -> IResult<Token> {
                 ExpectedValueKind::Other
             };
             Error::new_from_kind(
-                error_word(input).unwrap().1,
+                error_word(input).unwrap().1.into(),
                 ErrorKind::ExpectedValue(expected_value_kind),
             )
         })
@@ -198,7 +204,10 @@ pub fn parse_value(input: Span) -> IResult<Token> {
         e.map_fail(|failure| {
             // if we found encountered a char failure it means the user had an unmatched quote
             if matches!(failure.kind(), ErrorKind::Char(_)) {
-                Error::new_from_kind(input, ErrorKind::MissingClosingDelimiter(failure.char()))
+                Error::new_from_kind(
+                    input.into(),
+                    ErrorKind::MissingClosingDelimiter(failure.char()),
+                )
             } else {
                 // else we let the failure untouched
                 failure
@@ -206,23 +215,21 @@ pub fn parse_value(input: Span) -> IResult<Token> {
         })
     })?;
 
-    match unescaper::unescape(value.value()) {
+    match unescaper::unescape(value.fragment()) {
         Ok(content) => {
-            if content.len() != value.value().len() {
-                Ok((input, Token::new(value.original_span(), Some(content))))
+            if content.len() != value.fragment().len() {
+                Ok((input, value.with_modified_fragment(Some(content))))
             } else {
                 Ok((input, value))
             }
         }
         Err(unescaper::Error::IncompleteStr(_)) => Err(nom::Err::Incomplete(nom::Needed::Unknown)),
-        Err(unescaper::Error::ParseIntError { .. }) => Err(nom::Err::Error(Error::new_from_kind(
-            value.original_span(),
-            ErrorKind::InvalidEscapedNumber,
-        ))),
-        Err(unescaper::Error::InvalidChar { .. }) => Err(nom::Err::Error(Error::new_from_kind(
-            value.original_span(),
-            ErrorKind::MalformedValue,
-        ))),
+        Err(unescaper::Error::ParseIntError { .. }) => {
+            Err(nom::Err::Error(Error::new_from_kind(value.span, ErrorKind::InvalidEscapedNumber)))
+        }
+        Err(unescaper::Error::InvalidChar { .. }) => {
+            Err(nom::Err::Error(Error::new_from_kind(value.span, ErrorKind::MalformedValue)))
+        }
     }
 }
 
@@ -322,7 +329,7 @@ pub mod test {
             let (rem, output) = result.unwrap();
             assert_eq!(rem.to_string(), remaining);
             assert_eq!(output, expected_tok);
-            assert_eq!(output.value(), expected_val.to_string());
+            assert_eq!(output.fragment(), expected_val.to_string());
         }
     }
 
@@ -400,17 +407,17 @@ pub mod test {
             );
             let token = result.unwrap().1;
             assert_eq!(
-                token.value.is_some(),
+                token.modified_fragment().is_some(),
                 escaped,
                 "Filter `{}` was not supposed to be escaped",
                 input
             );
             assert_eq!(
-                token.value(),
+                token.fragment(),
                 expected,
                 "Filter `{}` failed by giving `{}` instead of `{}`.",
                 input,
-                token.value(),
+                token.fragment(),
                 expected
             );
         }
@@ -437,7 +444,8 @@ pub mod test {
                 result.unwrap()
             );
             // get the inner string referenced in the error
-            let value = *result.finish().unwrap_err().context().fragment();
+            let value = result.finish().unwrap_err();
+            let value = value.context().fragment();
             assert_eq!(value, expected, "Filter `{}` was supposed to fail with the following value: `{}`, but it failed with: `{}`.", input, expected, value);
         }
     }

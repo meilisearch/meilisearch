@@ -1,11 +1,15 @@
 use std::fmt::Display;
 
+use http_client::reqwest::StatusCode;
 use meilisearch_types::batches::BatchId;
 use meilisearch_types::error::{Code, ErrorCode};
 use meilisearch_types::milli::index::RollbackOutcome;
+use meilisearch_types::milli::DocumentId;
+use meilisearch_types::tasks::network::{ReceiveImportFinishedError, ReceiveTaskError};
 use meilisearch_types::tasks::{Kind, Status};
 use meilisearch_types::{heed, milli};
 use thiserror::Error;
+use uuid::Uuid;
 
 use crate::TaskId;
 
@@ -127,6 +131,14 @@ pub enum Error {
     #[error("Aborted task")]
     AbortedTask,
 
+    #[error("S3 error: status: {status}, body: {body}")]
+    S3Error { status: StatusCode, body: String },
+    #[error("S3 HTTP error: {0}")]
+    S3HttpError(http_client::reqwest::Error),
+    #[error("S3 XML error: {0}")]
+    S3XmlError(Box<dyn std::error::Error + Send + Sync>),
+    #[error("S3 bucket error: {0}")]
+    S3BucketError(rusty_s3::BucketError),
     #[error(transparent)]
     Dump(#[from] dump::Error),
     #[error(transparent)]
@@ -182,6 +194,21 @@ pub enum Error {
     #[error(transparent)]
     HeedTransaction(heed::Error),
 
+    #[error("No network topology change task is currently enqueued or processing")]
+    ImportTaskWithoutNetworkTask,
+    #[error("The network task version (`{network_task}`) does not match the import task version (`{import_task}`)")]
+    NetworkVersionMismatch { network_task: Uuid, import_task: Uuid },
+    #[error("The import task emanates from an unknown remote `{0}`")]
+    ImportTaskUnknownRemote(String),
+    #[error("The finished import notification emanates from an unknown remote `{0}`")]
+    ReceiveImportFinishedUnknownRemote(String),
+    #[error("The import task with key `{0}` was already received")]
+    ImportTaskAlreadyReceived(DocumentId),
+    #[error("Invalid remote url `{url}`: {cause}")]
+    InvalidRemoteUrl { url: String, cause: String },
+    #[error("{action} requires the Enterprise Edition")]
+    RequiresEnterpriseEdition { action: &'static str },
+
     #[cfg(test)]
     #[error("Planned failure for tests.")]
     PlannedFailure,
@@ -226,6 +253,10 @@ impl Error {
             | Error::TaskCancelationWithEmptyQuery
             | Error::FromRemoteWhenExporting { .. }
             | Error::AbortedTask
+            | Error::S3Error { .. }
+            | Error::S3HttpError(_)
+            | Error::S3XmlError(_)
+            | Error::S3BucketError(_)
             | Error::Dump(_)
             | Error::Heed(_)
             | Error::Milli { .. }
@@ -235,6 +266,11 @@ impl Error {
             | Error::Persist(_)
             | Error::FeatureNotEnabled(_)
             | Error::Export(_)
+            | Error::ImportTaskWithoutNetworkTask
+            | Error::NetworkVersionMismatch { .. }
+            | Error::ImportTaskAlreadyReceived(_)
+            | Error::ImportTaskUnknownRemote(_)
+            | Error::RequiresEnterpriseEdition { .. }
             | Error::Anyhow(_) => true,
             Error::CreateBatch(_)
             | Error::CorruptedTaskQueue
@@ -243,6 +279,8 @@ impl Error {
             | Error::IndexSchedulerVersionMismatch { .. }
             | Error::IndexVersionMismatch { .. }
             | Error::RollbackFailed { .. }
+            | Error::ReceiveImportFinishedUnknownRemote(_)
+            | Error::InvalidRemoteUrl { .. }
             | Error::HeedTransaction(_) => false,
             #[cfg(test)]
             Error::PlannedFailure => false,
@@ -293,8 +331,23 @@ impl ErrorCode for Error {
             Error::BatchNotFound(_) => Code::BatchNotFound,
             Error::TaskDeletionWithEmptyQuery => Code::MissingTaskFilters,
             Error::TaskCancelationWithEmptyQuery => Code::MissingTaskFilters,
-            // TODO: not sure of the Code to use
             Error::NoSpaceLeftInTaskQueue => Code::NoSpaceLeftOnDevice,
+            Error::ImportTaskWithoutNetworkTask => Code::ImportTaskWithoutNetworkTask,
+            Error::NetworkVersionMismatch { .. } => Code::NetworkVersionMismatch,
+            Error::ImportTaskAlreadyReceived(_) => Code::ImportTaskAlreadyReceived,
+            Error::ImportTaskUnknownRemote(_) => Code::ImportTaskUnknownRemote,
+            Error::InvalidRemoteUrl { .. } => Code::InvalidNetworkRemotes,
+            Error::ReceiveImportFinishedUnknownRemote(_) => {
+                Code::ReceiveImportFinishedUnknownRemote
+            }
+            Error::RequiresEnterpriseEdition { .. } => Code::RequiresEnterpriseEdition,
+            Error::S3Error { status, .. } if status.is_client_error() => {
+                Code::InvalidS3SnapshotRequest
+            }
+            Error::S3Error { .. } => Code::S3SnapshotServerError,
+            Error::S3HttpError(_) => Code::S3SnapshotServerError,
+            Error::S3XmlError(_) => Code::S3SnapshotServerError,
+            Error::S3BucketError(_) => Code::InvalidS3SnapshotParameters,
             Error::Dump(e) => e.error_code(),
             Error::Milli { error, .. } => error.error_code(),
             Error::ProcessBatchPanicked(_) => Code::Internal,
@@ -323,6 +376,25 @@ impl ErrorCode for Error {
 
             #[cfg(test)]
             Error::PlannedFailure => Code::Internal,
+        }
+    }
+}
+
+impl From<ReceiveTaskError> for Error {
+    fn from(value: ReceiveTaskError) -> Self {
+        match value {
+            ReceiveTaskError::UnknownRemote(unknown) => Error::ImportTaskUnknownRemote(unknown),
+            ReceiveTaskError::DuplicateTask(dup) => Error::ImportTaskAlreadyReceived(dup),
+        }
+    }
+}
+
+impl From<ReceiveImportFinishedError> for Error {
+    fn from(value: ReceiveImportFinishedError) -> Self {
+        match value {
+            ReceiveImportFinishedError::UnknownRemote(unknown) => {
+                Error::ReceiveImportFinishedUnknownRemote(unknown)
+            }
         }
     }
 }

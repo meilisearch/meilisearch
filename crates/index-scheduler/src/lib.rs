@@ -1,3 +1,6 @@
+// The main Error type is large and boxing the large variant make the pattern matching fails
+#![allow(clippy::result_large_err)]
+
 /*!
 This crate defines the index scheduler, which is responsible for:
 1. Keeping references to meilisearch's indexes and mapping them to their
@@ -19,8 +22,10 @@ content of the scheduler or enqueue new tasks.
 */
 
 mod dump;
+mod dynamic_search_rules;
 pub mod error;
 mod features;
+pub mod filter;
 mod index_mapper;
 #[cfg(test)]
 mod insta_snapshot;
@@ -45,39 +50,48 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
+use byte_unit::Byte;
 use dump::Dump;
 pub use error::Error;
 pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
 use flate2::Compression;
 use meilisearch_types::batches::Batch;
+use meilisearch_types::dynamic_search_rules::{DynamicSearchRule, DynamicSearchRules, RuleUid};
 use meilisearch_types::features::{
-    ChatCompletionSettings, InstanceTogglableFeatures, Network, RuntimeTogglableFeatures,
+    ChatCompletionSettings, InstanceTogglableFeatures, RuntimeTogglableFeatures,
 };
 use meilisearch_types::heed::byteorder::BE;
 use meilisearch_types::heed::types::{DecodeIgnore, SerdeJson, Str, I128};
-use meilisearch_types::heed::{self, Database, Env, RoTxn, WithoutTls};
+use meilisearch_types::heed::{self, Database, Env, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::milli::sharding::Shards;
 use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::vector::json_template::JsonTemplate;
 use meilisearch_types::milli::vector::{
     Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
 use meilisearch_types::milli::{self, Index};
+use meilisearch_types::network::route::Status;
+use meilisearch_types::network::{Network, RemoteAvailability};
 use meilisearch_types::task_view::TaskView;
+use meilisearch_types::tasks::network::{
+    DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
+};
 use meilisearch_types::tasks::{KindWithContent, Task};
 use meilisearch_types::webhooks::{Webhook, WebhooksDumpView, WebhooksView};
 use milli::vector::db::IndexEmbeddingConfig;
-use processing::ProcessingTasks;
 pub use queue::Query;
 use queue::Queue;
 use roaring::RoaringBitmap;
 use scheduler::Scheduler;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+pub use utils::{ReqwestRequestWrapper, UreqRequestWrapper};
 use uuid::Uuid;
 use versioning::Versioning;
 
 use crate::index_mapper::IndexMapper;
+use crate::processing::ProcessingTasks;
 use crate::utils::clamp_to_page_size;
 
 pub(crate) type BEI128 = I128<BE>;
@@ -140,14 +154,18 @@ pub struct IndexSchedulerOptions {
     /// If the autobatcher is allowed to automatically batch tasks
     /// it will only batch this defined maximum size (in bytes) of tasks at once.
     pub batched_tasks_size_limit: u64,
+    /// The maximum size of the default payload for exporting documents, in bytes
+    pub export_default_payload_size_bytes: Byte,
     /// The experimental features enabled for this instance.
     pub instance_features: InstanceTogglableFeatures,
-    /// The experimental features enabled for this instance.
+    /// Whether the index scheduler is able to auto upgrade or not.
     pub auto_upgrade: bool,
     /// The maximal number of entries in the search query cache of an embedder.
     ///
     /// 0 disables the cache.
     pub embedding_cache_cap: usize,
+    /// IP policy for requests performed by the index scheduler.
+    pub ip_policy: http_client::policy::IpPolicy,
     /// Snapshot compaction status.
     pub experimental_no_snapshot_compaction: bool,
 }
@@ -156,7 +174,7 @@ pub struct IndexSchedulerOptions {
 /// to be performed on them.
 pub struct IndexScheduler {
     /// The LMDB environment which the DBs are associated with.
-    pub(crate) env: Env<WithoutTls>,
+    pub env: Env<WithoutTls>,
 
     /// The list of tasks currently processing
     pub(crate) processing_tasks: Arc<RwLock<ProcessingTasks>>,
@@ -169,6 +187,8 @@ pub struct IndexScheduler {
     pub(crate) index_mapper: IndexMapper,
     /// In charge of fetching and setting the status of experimental features.
     features: features::FeatureData,
+    /// In charge of storing and retrieving search dynamic rules.
+    dynamic_search_rules: dynamic_search_rules::DynamicSearchRulesStore,
 
     /// Stores the custom chat prompts and other settings of the indexes.
     pub(crate) chat_settings: Database<Str, SerdeJson<ChatCompletionSettings>>,
@@ -195,6 +215,9 @@ pub struct IndexScheduler {
     /// to the same embeddings for the same input text.
     embedders: Arc<RwLock<HashMap<EmbedderOptions, Arc<Embedder>>>>,
 
+    /// The maximum size of the default payload for exporting documents, in bytes
+    pub export_default_payload_size_bytes: Byte,
+
     // ================= test
     // The next entry is dedicated to the tests.
     /// Provide a way to set a breakpoint in multiple part of the scheduler.
@@ -212,6 +235,11 @@ pub struct IndexScheduler {
     /// A counter that is incremented before every call to [`tick`](IndexScheduler::tick)
     #[cfg(test)]
     run_loop_iteration: Arc<RwLock<usize>>,
+
+    /// The tokio runtime used for asynchronous tasks.
+    runtime: Option<tokio::runtime::Handle>,
+
+    web_client: http_client::reqwest::Client,
 }
 
 impl IndexScheduler {
@@ -227,6 +255,7 @@ impl IndexScheduler {
             cleanup_enabled: self.cleanup_enabled,
             experimental_no_edition_2024_for_dumps: self.experimental_no_edition_2024_for_dumps,
             persisted: self.persisted,
+            export_default_payload_size_bytes: self.export_default_payload_size_bytes,
 
             webhooks: self.webhooks.clone(),
             embedders: self.embedders.clone(),
@@ -237,7 +266,10 @@ impl IndexScheduler {
             #[cfg(test)]
             run_loop_iteration: self.run_loop_iteration.clone(),
             features: self.features.clone(),
+            dynamic_search_rules: self.dynamic_search_rules.clone(),
             chat_settings: self.chat_settings,
+            runtime: self.runtime.clone(),
+            web_client: self.web_client.clone(),
         }
     }
 
@@ -246,18 +278,29 @@ impl IndexScheduler {
             + Queue::nb_db()
             + IndexMapper::nb_db()
             + features::FeatureData::nb_db()
+            + dynamic_search_rules::DynamicSearchRulesStore::nb_db()
             + 1 // chat-prompts
             + 1 // persisted
     }
 
     /// Create an index scheduler and start its run loop.
-    #[allow(private_interfaces)] // because test_utils is private
     pub fn new(
         options: IndexSchedulerOptions,
         auth_env: Env<WithoutTls>,
         from_db_version: (u32, u32, u32),
-        #[cfg(test)] test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
-        #[cfg(test)] planned_failures: Vec<(usize, test_utils::FailureLocation)>,
+        runtime: Option<tokio::runtime::Handle>,
+    ) -> Result<Self> {
+        let this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
+
+        this.run();
+        Ok(this)
+    }
+
+    fn new_without_run(
+        options: IndexSchedulerOptions,
+        auth_env: Env<WithoutTls>,
+        from_db_version: (u32, u32, u32),
+        runtime: Option<tokio::runtime::Handle>,
     ) -> Result<Self> {
         std::fs::create_dir_all(&options.tasks_path)?;
         std::fs::create_dir_all(&options.update_file_path)?;
@@ -300,6 +343,8 @@ impl IndexScheduler {
         let mut wtxn = env.write_txn()?;
 
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
+        let dynamic_search_rules =
+            dynamic_search_rules::DynamicSearchRulesStore::new(&env, &mut wtxn)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
@@ -312,13 +357,17 @@ impl IndexScheduler {
 
         wtxn.commit()?;
 
-        // allow unreachable_code to get rids of the warning in the case of a test build.
-        let this = Self {
+        let scheduler = Scheduler::new(&options, auth_env);
+
+        let web_client = http_client::reqwest::ClientBuilder::new()
+            .build_with_policies(scheduler.ip_policy.clone(), Default::default())
+            .unwrap();
+
+        Ok(Self {
             processing_tasks: Arc::new(RwLock::new(ProcessingTasks::new())),
             version,
             queue,
-            scheduler: Scheduler::new(&options, auth_env),
-
+            scheduler,
             index_mapper,
             env,
             cleanup_enabled: options.cleanup_enabled,
@@ -328,22 +377,42 @@ impl IndexScheduler {
             persisted,
             webhooks: Arc::new(webhooks),
             embedders: Default::default(),
+            export_default_payload_size_bytes: options.export_default_payload_size_bytes,
 
-            #[cfg(test)]
-            test_breakpoint_sdr,
-            #[cfg(test)]
-            planned_failures,
+            #[cfg(test)] // Will be replaced in `new_tests` in test environments
+            test_breakpoint_sdr: crossbeam_channel::bounded(0).0,
+            #[cfg(test)] // Will be replaced in `new_tests` in test environments
+            planned_failures: Default::default(),
             #[cfg(test)]
             run_loop_iteration: Arc::new(RwLock::new(0)),
             features,
+            dynamic_search_rules,
             chat_settings,
-        };
+            runtime,
+            web_client
+        })
+    }
+
+    /// Create an index scheduler and start its run loop.
+    #[cfg(test)]
+    fn new_test(
+        options: IndexSchedulerOptions,
+        auth_env: Env<WithoutTls>,
+        from_db_version: (u32, u32, u32),
+        runtime: Option<tokio::runtime::Handle>,
+        test_breakpoint_sdr: crossbeam_channel::Sender<(test_utils::Breakpoint, bool)>,
+        planned_failures: Vec<(usize, test_utils::FailureLocation)>,
+    ) -> Result<Self> {
+        let mut this = Self::new_without_run(options, auth_env, from_db_version, runtime)?;
+
+        this.test_breakpoint_sdr = test_breakpoint_sdr;
+        this.planned_failures = planned_failures;
 
         this.run();
         Ok(this)
     }
 
-    fn read_txn(&self) -> Result<RoTxn<WithoutTls>> {
+    fn read_txn(&self) -> Result<RoTxn<'_, WithoutTls>> {
         self.env.read_txn().map_err(|e| e.into())
     }
 
@@ -666,6 +735,16 @@ impl IndexScheduler {
         self.queue.get_task_ids_from_authorized_indexes(&rtxn, query, filters, &processing)
     }
 
+    pub fn set_task_network(&self, task_id: TaskId, network: DbTaskNetwork) -> Result<Task> {
+        let mut wtxn = self.env.write_txn()?;
+        let mut task =
+            self.queue.tasks.get_task(&wtxn, task_id)?.ok_or(Error::TaskNotFound(task_id))?;
+        task.network = Some(network);
+        self.queue.tasks.all_tasks.put(&mut wtxn, &task_id, &task)?;
+        wtxn.commit()?;
+        Ok(task)
+    }
+
     /// Return the batches matching the query from the user's point of view along
     /// with the total number of batches matching the query, ignoring from and limit.
     ///
@@ -713,6 +792,50 @@ impl IndexScheduler {
         task_id: Option<TaskId>,
         dry_run: bool,
     ) -> Result<Task> {
+        self.register_with_custom_metadata_and_network(kind, task_id, None, dry_run, None, None)
+    }
+
+    pub fn register_with_custom_metadata(
+        &self,
+        kind: KindWithContent,
+        task_id: Option<TaskId>,
+        custom_metadata: Option<String>,
+        dry_run: bool,
+        task_network: Option<TaskNetwork>,
+    ) -> Result<Task> {
+        self.register_with_custom_metadata_and_network(
+            kind,
+            task_id,
+            custom_metadata,
+            dry_run,
+            task_network,
+            None,
+        )
+    }
+
+    /// Register a new task in the scheduler, with metadata.
+    ///
+    /// If it fails and data was associated with the task, it tries to delete the associated data.
+    ///
+    /// # Parameters
+    ///
+    /// - task_network: network of the task to check.
+    ///
+    /// If the task is an import task, only accept it if:
+    ///
+    /// 1. There is an ongoing network topology change task
+    /// 2. The task to register matches the network version of the network topology change task
+    ///
+    /// Always accept the task if it is not an import task.
+    pub fn register_with_custom_metadata_and_network(
+        &self,
+        kind: KindWithContent,
+        task_id: Option<TaskId>,
+        custom_metadata: Option<String>,
+        dry_run: bool,
+        task_network: Option<TaskNetwork>,
+        new_network: Option<Network>,
+    ) -> Result<Task> {
         // if the task doesn't delete or cancel anything and 40% of the task queue is full, we must refuse to enqueue the incoming task
         if !matches!(&kind, KindWithContent::TaskDeletion { tasks, .. } | KindWithContent::TaskCancelation { tasks, .. } if !tasks.is_empty())
             && (self.env.non_free_pages_size()? * 100) / self.env.info().map_size as u64
@@ -722,21 +845,45 @@ impl IndexScheduler {
         }
 
         let mut wtxn = self.env.write_txn()?;
-        let task = self.queue.register(&mut wtxn, &kind, task_id, dry_run)?;
+
+        if let Some(TaskNetwork::Import { import_from, network_change, metadata }) = &task_network {
+            self.update_network_task(&mut wtxn, network_change, |network_topology_change| {
+                Ok(network_topology_change.receive_remote_task(
+                    &import_from.remote_name,
+                    import_from.index_name.as_deref(),
+                    metadata.task_key,
+                    import_from.document_count,
+                    metadata.index_count,
+                    metadata.total_index_documents,
+                )?)
+            })?;
+        }
+
+        let task = self.queue.register(
+            &mut wtxn,
+            &kind,
+            task_id,
+            custom_metadata,
+            dry_run,
+            task_network.map(DbTaskNetwork::from),
+        )?;
 
         // If the registered task is a task cancelation
         // we inform the processing tasks to stop (if necessary).
         if let KindWithContent::TaskCancelation { tasks, .. } = kind {
-            let tasks_to_cancel = RoaringBitmap::from_iter(tasks);
-            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks_to_cancel)
-            {
+            if self.processing_tasks.read().unwrap().must_cancel_processing_tasks(&tasks) {
                 self.scheduler.must_stop_processing.must_stop();
             }
         }
 
-        if let Err(e) = wtxn.commit() {
+        let result = match new_network {
+            Some(new_network) => self.put_network(wtxn, new_network),
+            None => wtxn.commit().map_err(Into::into),
+        };
+
+        if let Err(e) = result {
             self.queue.delete_persisted_task_data(&task)?;
-            return Err(e.into());
+            return Err(e);
         }
 
         // notify the scheduler loop to execute a new tick
@@ -744,9 +891,119 @@ impl IndexScheduler {
         Ok(task)
     }
 
+    pub fn network_no_index_for_remote(
+        &self,
+        remote_name: String,
+        origin: Origin,
+    ) -> Result<(), Error> {
+        let mut wtxn = self.env.write_txn()?;
+
+        self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
+            Ok(network_topology_change.receive_remote_task(&remote_name, None, None, 0, 0, 0)?)
+        })?;
+
+        wtxn.commit()?;
+
+        // wake up the scheduler as the task state has changed
+        self.scheduler.wake_up.signal();
+
+        Ok(())
+    }
+
+    pub fn network_import_finished_for_remote(
+        &self,
+        remote_name: String,
+        successful: bool,
+        origin: Origin,
+    ) -> Result<(), Error> {
+        let mut wtxn = self.env.write_txn()?;
+        let has_changed =
+            self.update_network_task(&mut wtxn, &origin, |network_topology_change| {
+                Ok(network_topology_change.receive_import_finished(&remote_name, successful)?)
+            })?;
+
+        wtxn.commit()?;
+
+        if has_changed {
+            self.scheduler.wake_up.signal();
+        }
+        Ok(())
+    }
+
+    pub fn network_status_change_for_remote(
+        &self,
+        remote_name: String,
+        status: Status,
+    ) -> Result<(), Error> {
+        match status {
+            Status::Available => self.mark_remote_available(&remote_name),
+            Status::Unavailable => self.mark_remote_unavailable_indefinitely(remote_name),
+        }
+    }
+
+    fn update_network_task<F, O>(
+        &self,
+        wtxn: &mut heed::RwTxn<'_>,
+        network_change: &Origin,
+        update_fn: F,
+    ) -> Result<O, Error>
+    where
+        F: FnOnce(&mut NetworkTopologyChange) -> Result<O, Error>,
+    {
+        let mut network_tasks = self
+            .queue
+            .tasks
+            .get_kind(&*wtxn, meilisearch_types::tasks::Kind::NetworkTopologyChange)?;
+        if network_tasks.is_empty() {
+            return Err(Error::ImportTaskWithoutNetworkTask);
+        }
+        let network_task = {
+            let processing = self.processing_tasks.read().unwrap().processing.clone();
+            if processing.is_disjoint(&network_tasks) {
+                let enqueued = self
+                    .queue
+                    .tasks
+                    .get_status(&*wtxn, meilisearch_types::tasks::Status::Enqueued)?;
+
+                network_tasks &= enqueued;
+                if let Some(network_task) = network_tasks.into_iter().next() {
+                    network_task
+                } else {
+                    return Err(Error::ImportTaskWithoutNetworkTask);
+                }
+            } else {
+                network_tasks &= &*processing;
+                network_tasks.into_iter().next().unwrap()
+            }
+        };
+        let mut network_task = self.queue.tasks.get_task(&*wtxn, network_task)?.unwrap();
+        let network_task_version = network_task
+            .network
+            .as_ref()
+            .map(|network| network.network_version())
+            .unwrap_or_default();
+        if network_task_version != network_change.network_version {
+            return Err(Error::NetworkVersionMismatch {
+                network_task: network_task_version,
+                import_task: network_change.network_version,
+            });
+        }
+        let KindWithContent::NetworkTopologyChange(network_topology_change) =
+            &mut network_task.kind
+        else {
+            tracing::error!("unexpected network kind for network task while registering task");
+            return Err(Error::CorruptedTaskQueue);
+        };
+
+        let o = update_fn(network_topology_change)?;
+
+        self.queue.tasks.update_task(wtxn, &mut network_task)?;
+        Ok(o)
+    }
+
     /// Register a new task coming from a dump in the scheduler.
     /// By taking a mutable ref we're pretty sure no one will ever import a dump while actix is running.
-    pub fn register_dumped_task(&mut self) -> Result<Dump> {
+    pub fn register_dumped_task(&mut self) -> Result<Dump<'_>> {
         Dump::new(self)
     }
 
@@ -755,9 +1012,10 @@ impl IndexScheduler {
         &self,
         name: &str,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
+        shards: Option<Shards>,
     ) -> Result<Index> {
         let wtxn = self.env.write_txn()?;
-        let index = self.index_mapper.create_index(wtxn, name, date)?;
+        let index = self.index_mapper.create_index(wtxn, name, date, shards)?;
         Ok(index)
     }
 
@@ -795,10 +1053,8 @@ impl IndexScheduler {
                                 .queue
                                 .tasks
                                 .get_task(self.rtxn, task_id)
-                                .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?
-                                .ok_or_else(|| {
-                                    io::Error::new(io::ErrorKind::Other, Error::CorruptedTaskQueue)
-                                })?;
+                                .map_err(io::Error::other)?
+                                .ok_or_else(|| io::Error::other(Error::CorruptedTaskQueue))?;
 
                             serde_json::to_writer(&mut self.buffer, &TaskView::from_task(&task))?;
                             self.buffer.push(b'\n');
@@ -834,6 +1090,11 @@ impl IndexScheduler {
                 return;
             }
         };
+        let config = http_client::ureq::config::Config::builder()
+            .prepare(|config| config.timeout_global(Some(Duration::from_secs(30))))
+            .build();
+        let client =
+            http_client::ureq::Agent::new_with_config(config, self.scheduler.ip_policy.clone());
 
         std::thread::spawn(move || {
             for (uuid, Webhook { url, headers }) in webhooks.iter() {
@@ -845,17 +1106,18 @@ impl IndexScheduler {
                     written: 0,
                 };
 
-                let reader = GzEncoder::new(BufReader::new(task_reader), Compression::default());
+                let mut reader =
+                    GzEncoder::new(BufReader::new(task_reader), Compression::default());
 
-                let mut request = ureq::post(url)
-                    .timeout(Duration::from_secs(30))
-                    .set("Content-Encoding", "gzip")
-                    .set("Content-Type", "application/x-ndjson");
+                let mut request = client
+                    .post(url)
+                    .header("Content-Encoding", "gzip")
+                    .header("Content-Type", "application/x-ndjson");
                 for (header_name, header_value) in headers.iter() {
-                    request = request.set(header_name, header_value);
+                    request = request.header(header_name, header_value);
                 }
-
-                if let Err(e) = request.send(reader) {
+                if let Err(e) = request.send(http_client::ureq::SendBody::from_reader(&mut reader))
+                {
                     tracing::error!("While sending data to the webhook {uuid}: {e}");
                 }
             }
@@ -870,8 +1132,20 @@ impl IndexScheduler {
         Ok(IndexStats { is_indexing, inner_stats: index_stats })
     }
 
+    pub fn ip_policy(&self) -> &http_client::policy::IpPolicy {
+        &self.scheduler.ip_policy
+    }
+
+    pub fn web_client(&self) -> &http_client::reqwest::Client {
+        &self.web_client
+    }
+
     pub fn features(&self) -> RoFeatures {
         self.features.features()
+    }
+
+    pub fn remote_availability(&self) -> &RemoteAvailability {
+        self.features.remote_availability()
     }
 
     pub fn put_runtime_features(&self, features: RuntimeTogglableFeatures) -> Result<()> {
@@ -880,14 +1154,36 @@ impl IndexScheduler {
         Ok(())
     }
 
-    pub fn put_network(&self, network: Network) -> Result<()> {
-        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.features.put_network(wtxn, network)?;
-        Ok(())
+    pub fn put_network(&self, wtxn: RwTxn, network: Network) -> Result<()> {
+        self.features.put_network(wtxn, network)
     }
 
     pub fn network(&self) -> Network {
         self.features.network()
+    }
+
+    pub fn put_dynamic_search_rules(&self, rules: DynamicSearchRules) -> Result<()> {
+        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
+        self.dynamic_search_rules.put(wtxn, rules)?;
+        Ok(())
+    }
+
+    pub fn dynamic_search_rules(&self) -> Arc<DynamicSearchRules> {
+        self.dynamic_search_rules.get()
+    }
+
+    pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {
+        let mut wtxn = self.env.write_txn()?;
+        self.dynamic_search_rules.put_one(&mut wtxn, rule)?;
+        wtxn.commit()?;
+        Ok(())
+    }
+
+    pub fn delete_dynamic_search_rule(&self, uid: &RuleUid) -> Result<bool> {
+        let mut wtxn = self.env.write_txn()?;
+        let deleted = self.dynamic_search_rules.delete_one(&mut wtxn, uid)?;
+        wtxn.commit()?;
+        Ok(deleted)
     }
 
     pub fn update_runtime_webhooks(&self, runtime: RuntimeWebhooks) -> Result<()> {
@@ -958,11 +1254,13 @@ impl IndexScheduler {
 
                     // add missing embedder
                     let embedder = Arc::new(
-                        Embedder::new(embedder_options.clone(), self.scheduler.embedding_cache_cap)
-                            .map_err(meilisearch_types::milli::vector::Error::from)
-                            .map_err(|err| {
-                                Error::from_milli(err.into(), Some(index_uid.clone()))
-                            })?,
+                        Embedder::new(
+                            embedder_options.clone(),
+                            self.scheduler.embedding_cache_cap,
+                            self.ip_policy().clone(),
+                        )
+                        .map_err(meilisearch_types::milli::vector::Error::from)
+                        .map_err(|err| Error::from_milli(err.into(), Some(index_uid.clone())))?,
                     );
                     {
                         let mut embedders = self.embedders.write().unwrap();

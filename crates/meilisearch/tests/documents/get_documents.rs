@@ -5,8 +5,8 @@ use urlencoding::encode as urlencode;
 
 use crate::common::encoder::Encoder;
 use crate::common::{
-    shared_does_not_exists_index, shared_empty_index, shared_index_with_geo_documents,
-    shared_index_with_test_set, GetAllDocumentsOptions, Server, Value,
+    shared_does_not_exists_index, shared_empty_index, shared_index_with_test_set,
+    GetAllDocumentsOptions, Server, Value,
 };
 use crate::json;
 
@@ -315,52 +315,6 @@ async fn get_document_sorted() {
         "id": 42,
         "name": "Graciela Russell",
         "gender": "female"
-      }
-    ]
-    "#);
-}
-
-#[actix_rt::test]
-async fn get_document_geosorted() {
-    let index = shared_index_with_geo_documents().await;
-
-    let (response, _code) = index
-        .get_all_documents(GetAllDocumentsOptions {
-            sort: Some(vec!["_geoPoint(45.4777599, 9.1967508):asc"]),
-            ..Default::default()
-        })
-        .await;
-    let results = response["results"].as_array().unwrap();
-    snapshot!(json_string!(results), @r#"
-    [
-      {
-        "id": 2,
-        "name": "La Bella Italia",
-        "address": "456 Elm Street, Townsville",
-        "type": "Italian",
-        "rating": 9,
-        "_geo": {
-          "lat": "45.4777599",
-          "lng": "9.1967508"
-        }
-      },
-      {
-        "id": 1,
-        "name": "Taco Truck",
-        "address": "444 Salsa Street, Burritoville",
-        "type": "Mexican",
-        "rating": 9,
-        "_geo": {
-          "lat": 34.0522,
-          "lng": -118.2437
-        }
-      },
-      {
-        "id": 3,
-        "name": "Crêpe Truck",
-        "address": "2 Billig Avenue, Rouenville",
-        "type": "French",
-        "rating": 10
       }
     ]
     "#);
@@ -1336,6 +1290,269 @@ async fn get_document_with_vectors() {
           "regenerate": false
         }
       }
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn test_fetch_documents_pagination_with_sorting() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Set name as sortable attribute
+    let (task, code) = index.update_settings_sortable_attributes(json!(["name"])).await;
+    assert_eq!(code, 202);
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!((0..50)
+        .map(|i| json!({"id": i, "name": format!("doc_{:05}", std::cmp::min(i, 5))}))
+        .collect::<Vec<_>>());
+
+    // Add documents as described in the bug report
+    let (task, code) = index.add_documents(documents, None).await;
+    assert_eq!(code, 202);
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Request 1 (first page): offset 0, limit 2
+    let (response, code) = index
+        .fetch_documents(json!({
+            "offset": 0,
+            "limit": 2,
+            "sort": ["name:asc"]
+        }))
+        .await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r###"
+    [
+      {
+        "id": 0,
+        "name": "doc_00000"
+      },
+      {
+        "id": 1,
+        "name": "doc_00001"
+      }
+    ]
+    "###);
+
+    // Request 2 (second page): offset 2, limit 2
+    let (response, code) = index
+        .fetch_documents(json!({
+            "offset": 2,
+            "limit": 2,
+            "sort": ["name:asc"]
+        }))
+        .await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r###"
+    [
+      {
+        "id": 2,
+        "name": "doc_00002"
+      },
+      {
+        "id": 3,
+        "name": "doc_00003"
+      }
+    ]
+    "###);
+
+    // Request 3 (third page): offset 4, limit 2
+    let (response, code) = index
+        .fetch_documents(json!({
+            "offset": 4,
+            "limit": 2,
+            "sort": ["name:asc"]
+        }))
+        .await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r###"
+    [
+      {
+        "id": 4,
+        "name": "doc_00004"
+      },
+      {
+        "id": 5,
+        "name": "doc_00005"
+      }
+    ]
+    "###);
+
+    // Request 4 (fourth page): offset 6, limit 2
+    let (response, code) = index
+        .fetch_documents(json!({
+            "offset": 6,
+            "limit": 2,
+            "sort": ["name:asc"]
+        }))
+        .await;
+    assert_eq!(code, 200);
+    let results = response["results"].as_array().unwrap();
+    snapshot!(json_string!(results), @r###"
+    [
+      {
+        "id": 6,
+        "name": "doc_00005"
+      },
+      {
+        "id": 7,
+        "name": "doc_00005"
+      }
+    ]
+    "###);
+}
+
+// <https://github.com/meilisearch/meilisearch/issues/5998>
+#[actix_rt::test]
+async fn get_document_sort_field_not_in_any_document() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_sortable_attributes(json!(["created_at"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!([
+        { "id": 1, "name": "Document 1" },
+        { "id": 2, "name": "Document 2" }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["created_at:asc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 1,
+          "name": "Document 1"
+        },
+        {
+          "id": 2,
+          "name": "Document 2"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 2
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn get_document_sort_includes_docs_without_field() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_sortable_attributes(json!(["created_at"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!([
+        { "id": 1, "name": "Doc without created_at" },
+        { "id": 2, "name": "Doc with created_at", "created_at": "2025-01-15" },
+        { "id": 3, "name": "Another doc without created_at" },
+        { "id": 4, "name": "Another doc with created_at", "created_at": "2025-01-10" }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["created_at:asc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 4,
+          "name": "Another doc with created_at",
+          "created_at": "2025-01-10"
+        },
+        {
+          "id": 2,
+          "name": "Doc with created_at",
+          "created_at": "2025-01-15"
+        },
+        {
+          "id": 1,
+          "name": "Doc without created_at"
+        },
+        {
+          "id": 3,
+          "name": "Another doc without created_at"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 4
+    }
+    "###);
+}
+
+#[actix_rt::test]
+async fn get_document_sort_desc_includes_docs_without_field() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, _code) = index.update_settings_sortable_attributes(json!(["priority"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let documents = json!([
+        { "id": 1, "name": "Low priority", "priority": 1 },
+        { "id": 2, "name": "No priority" },
+        { "id": 3, "name": "High priority", "priority": 10 }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (response, code) = index
+        .fetch_documents(json!({
+            "sort": ["priority:desc"]
+        }))
+        .await;
+
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response), @r###"
+    {
+      "results": [
+        {
+          "id": 3,
+          "name": "High priority",
+          "priority": 10
+        },
+        {
+          "id": 1,
+          "name": "Low priority",
+          "priority": 1
+        },
+        {
+          "id": 2,
+          "name": "No priority"
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 3
     }
     "###);
 }

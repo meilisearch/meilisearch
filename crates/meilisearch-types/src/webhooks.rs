@@ -11,6 +11,24 @@ pub struct Webhook {
     pub headers: BTreeMap<String, String>,
 }
 
+impl Webhook {
+    pub fn redact_authorization_header(&mut self) {
+        // headers are case insensitive, so to make the redaction robust we iterate over qualifying headers
+        // rather than getting one canonical `Authorization` header.
+        for value in self
+            .headers
+            .iter_mut()
+            .filter_map(|(name, value)| name.eq_ignore_ascii_case("authorization").then_some(value))
+        {
+            if value.starts_with("Bearer ") {
+                crate::settings::hide_secret(value, "Bearer ".len());
+            } else {
+                crate::settings::hide_secret(value, 0);
+            }
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Default, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct WebhooksView {

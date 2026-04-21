@@ -102,16 +102,27 @@ impl FormatOptions {
     }
 }
 
+/// Represents the position of a matching term in a document field. Used to
+/// indicate where query terms were found within attribute values, enabling
+/// features like highlighting and match position display.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 pub struct MatchBounds {
+    /// The byte offset where the match begins within the attribute value.
+    /// This is a zero-indexed position from the start of the string.
     pub start: usize,
+    /// The length in bytes of the matched text. Combined with `start`, this
+    /// defines the exact substring that matched the query term.
     pub length: usize,
+    /// Byte indices of individual matched characters when the match spans
+    /// multiple positions (e.g., for prefix matches). This is `null` for
+    /// simple contiguous matches.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub indices: Option<Vec<usize>>,
 }
 
 /// Structure used to analyze a string, compute words that match,
-/// and format the source string, returning a highlighted and cropped sub-string.
+/// and format the source string, returning a highlighted and cropped
+/// sub-string.
 pub struct Matcher<'t, 'tokenizer, 'b, 'lang> {
     text: &'t str,
     matching_words: &'b MatchingWords,
@@ -126,8 +137,9 @@ pub struct Matcher<'t, 'tokenizer, 'b, 'lang> {
 impl<'t> Matcher<'t, '_, '_, '_> {
     /// Iterates over tokens and save any of them that matches the query.
     fn compute_matches(&mut self) -> &mut Self {
-        /// some words are counted as matches only if they are close together and in the good order,
-        /// compute_partial_match peek into next words to validate if the match is complete.
+        /// some words are counted as matches only if they are close together
+        /// and in the good order, compute_partial_match peek into next words
+        /// to validate if the match is complete.
         fn compute_partial_match<'a>(
             mut partial: PartialMatch<'a>,
             first_token_position: usize,
@@ -498,12 +510,14 @@ mod tests {
 
     use super::*;
     use crate::index::tests::TempIndex;
-    use crate::{execute_search, filtered_universe, SearchContext, TimeBudget};
+    use crate::progress::Progress;
+    use crate::{execute_search, filtered_universe, Deadline, SearchContext};
 
     impl<'a> MatcherBuilder<'a> {
         fn new_test(rtxn: &'a heed::RoTxn<'a>, index: &'a TempIndex, query: &str) -> Self {
+            let progress = Progress::default();
             let mut ctx = SearchContext::new(index, rtxn).unwrap();
-            let universe = filtered_universe(ctx.index, ctx.txn, &None).unwrap();
+            let universe = filtered_universe(ctx.index, ctx.txn, &None, &progress).unwrap();
             let crate::search::PartialSearchResult { located_query_terms, .. } = execute_search(
                 &mut ctx,
                 Some(query),
@@ -520,9 +534,11 @@ mod tests {
                 Some(10),
                 &mut crate::DefaultSearchLogger,
                 &mut crate::DefaultSearchLogger,
-                TimeBudget::max(),
+                Deadline::never(),
                 None,
                 None,
+                &progress,
+                vec![],
             )
             .unwrap();
 

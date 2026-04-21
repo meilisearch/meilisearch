@@ -1,0 +1,87 @@
+---
+source: crates/index-scheduler/src/queue/batches_test.rs
+---
+### Autobatching Enabled = true
+### Processing batch None:
+[]
+----------------------------------------------------------------------
+### All Tasks:
+0 {uid: 0, batch_uid: 0, status: succeeded, details: { primary_key: None, old_new_uid: None, new_index_uid: None }, kind: IndexCreation { index_uid: "docs", primary_key: None }}
+1 {uid: 1, batch_uid: 1, status: succeeded, details: { received_document_ids: 1, deleted_documents: Some(0) }, kind: DocumentDeletion { index_uid: "docs", documents_ids: ["1"] }}
+2 {uid: 2, batch_uid: 1, status: failed, error: ResponseError { code: 200, message: "The primary key inference failed as the engine found 2 fields ending with `id` in their names: 'id' and 'noid'. Please specify the primary key manually using the `primaryKey` query parameter.", error_code: "index_primary_key_multiple_candidates_found", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_primary_key_multiple_candidates_found" }, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "docs", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000001, documents_count: 1, allow_index_creation: true, on_missing_document: Create }}
+3 {uid: 3, batch_uid: 1, status: failed, error: ResponseError { code: 200, message: "The primary key inference failed as the engine did not find any field ending with `id` in its name. Please specify the primary key manually using the `primaryKey` query parameter.", error_code: "index_primary_key_no_candidate_found", error_type: "invalid_request", error_link: "https://docs.meilisearch.com/errors#index_primary_key_no_candidate_found" }, details: { received_documents: 1, indexed_documents: Some(0) }, kind: DocumentAdditionOrUpdate { index_uid: "docs", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000002, documents_count: 1, allow_index_creation: true, on_missing_document: Create }}
+4 {uid: 4, batch_uid: 1, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "docs", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000003, documents_count: 1, allow_index_creation: true, on_missing_document: Create }}
+5 {uid: 5, batch_uid: 1, status: succeeded, details: { received_documents: 1, indexed_documents: Some(1) }, kind: DocumentAdditionOrUpdate { index_uid: "docs", primary_key: None, method: ReplaceDocuments, content_file: 00000000-0000-0000-0000-000000000004, documents_count: 1, allow_index_creation: true, on_missing_document: Create }}
+----------------------------------------------------------------------
+### Status:
+enqueued []
+succeeded [0,1,4,5,]
+failed [2,3,]
+----------------------------------------------------------------------
+### Kind:
+"documentAdditionOrUpdate" [2,3,4,5,]
+"documentDeletion" [1,]
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Index Tasks:
+docs [0,1,2,3,4,5,]
+----------------------------------------------------------------------
+### Index Mapper:
+docs: { number_of_documents: 2, field_distribution: {"content": 1, "id": 2, "noid": 1} }
+
+----------------------------------------------------------------------
+### Canceled By:
+
+----------------------------------------------------------------------
+### Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [2,]
+[timestamp] [3,]
+[timestamp] [4,]
+[timestamp] [5,]
+----------------------------------------------------------------------
+### Started At:
+[timestamp] [0,]
+[timestamp] [1,2,3,4,5,]
+----------------------------------------------------------------------
+### Finished At:
+[timestamp] [0,]
+[timestamp] [1,2,3,4,5,]
+----------------------------------------------------------------------
+### All Batches:
+0 {uid: 0, details: {}, stats: {"totalNbTasks":1,"status":{"succeeded":1},"types":{"indexCreation":1},"indexUids":{"docs":1}}, stop reason: "created batch containing only task with id 0 of type `indexCreation` that cannot be batched with any other task.", }
+1 {uid: 1, details: {"receivedDocuments":4,"indexedDocuments":2,"providedIds":1,"deletedDocuments":0}, stats: {"totalNbTasks":5,"status":{"succeeded":3,"failed":2},"types":{"documentAdditionOrUpdate":4,"documentDeletion":1},"indexUids":{"docs":5}}, stop reason: "batched all enqueued tasks", }
+----------------------------------------------------------------------
+### Batch to tasks mapping:
+0 [0,]
+1 [1,2,3,4,5,]
+----------------------------------------------------------------------
+### Batches Status:
+succeeded [0,1,]
+failed [1,]
+----------------------------------------------------------------------
+### Batches Kind:
+"documentAdditionOrUpdate" [1,]
+"documentDeletion" [1,]
+"indexCreation" [0,]
+----------------------------------------------------------------------
+### Batches Index Tasks:
+docs [0,1,]
+----------------------------------------------------------------------
+### Batches Enqueued At:
+[timestamp] [0,]
+[timestamp] [1,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Started At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### Batches Finished At:
+[timestamp] [0,]
+[timestamp] [1,]
+----------------------------------------------------------------------
+### File Store:
+
+----------------------------------------------------------------------

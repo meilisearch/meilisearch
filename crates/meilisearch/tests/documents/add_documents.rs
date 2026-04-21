@@ -1,12 +1,13 @@
-use crate::common::encoder::Encoder;
-use crate::common::{default_settings, GetAllDocumentsOptions, Server, Value};
-use crate::json;
 use actix_web::test;
 use meili_snap::{json_string, snapshot};
 use meilisearch::Opt;
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+use crate::common::encoder::Encoder;
+use crate::common::{default_settings, GetAllDocumentsOptions, Server, Value};
+use crate::json;
 
 /// This is the basic usage of our API and every other tests uses the content-type application/json
 #[actix_rt::test]
@@ -1627,7 +1628,7 @@ async fn error_document_field_limit_reached_over_multiple_documents() {
         "indexedDocuments": 0
       },
       "error": {
-        "message": "A document cannot contain more than 65,535 fields.",
+        "message": "Index `[uuid]`: A document cannot contain more than 65,535 fields.",
         "code": "max_fields_limit_exceeded",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#max_fields_limit_exceeded"
@@ -1852,7 +1853,7 @@ async fn add_documents_with_geo_field() {
         .await;
     snapshot!(code, @"200 OK");
     // we are expecting docs 4 and 3 first as they have geo
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }),
     @r###"
     {
       "hits": [
@@ -1884,7 +1885,8 @@ async fn add_documents_with_geo_field() {
       "processingTimeMs": "[time]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -1939,7 +1941,7 @@ async fn update_documents_with_geo_field() {
     let (response, code) = index.search_post(json!({"sort": ["_geoPoint(10,0):asc"]})).await;
     snapshot!(code, @"200 OK");
     // we are expecting docs 4 and 3 first as they have geo
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }),
     @r###"
     {
       "hits": [
@@ -1971,7 +1973,8 @@ async fn update_documents_with_geo_field() {
       "processingTimeMs": "[time]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 
@@ -2043,7 +2046,7 @@ async fn update_documents_with_geo_field() {
     let (response, code) = index.search_post(json!({"sort": ["_geoPoint(10,0):asc"]})).await;
     snapshot!(code, @"200 OK");
     // the search response should not have changed: we are expecting docs 4 and 3 first as they have geo
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }),
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }),
     @r###"
     {
       "hits": [
@@ -2076,7 +2079,8 @@ async fn update_documents_with_geo_field() {
       "processingTimeMs": "[time]",
       "limit": 20,
       "offset": 0,
-      "estimatedTotalHits": 4
+      "estimatedTotalHits": 4,
+      "requestUid": "[uuid]"
     }
     "###);
 }
@@ -2712,7 +2716,7 @@ async fn add_invalid_geo_and_then_settings() {
         ]
       },
       "error": {
-        "message": "Index `[uuid]`: Could not parse latitude in the document with the id: `\"11\"`. Was expecting a finite number but instead got `null`.",
+        "message": "Index `[uuid]`: Could not parse latitude nor longitude in the document with the id: `\"11\"`. Was expecting finite numbers but instead got `null` and `null`.",
         "code": "invalid_document_geo_field",
         "type": "invalid_request",
         "link": "https://docs.meilisearch.com/errors#invalid_document_geo_field"

@@ -13,7 +13,7 @@ use meilisearch_types::milli::documents::DocumentsBatchReader;
 use meilisearch_types::milli::heed::types::{SerdeJson, Str};
 use meilisearch_types::milli::heed::{Database, EnvOpenOptions, RoTxn, RwTxn};
 use meilisearch_types::milli::progress::Step;
-use meilisearch_types::milli::{FieldDistribution, Index};
+use meilisearch_types::milli::{CreateOrOpen, FieldDistribution, Index};
 use serde::Serialize;
 use serde_json::value::RawValue;
 use tempfile::NamedTempFile;
@@ -68,7 +68,7 @@ fn convert_update_files(db_path: &Path) -> anyhow::Result<()> {
 
     for uuid in file_store.all_uuids().context("while retrieving uuids from file store")? {
         let uuid = uuid.context("while retrieving uuid from file store")?;
-        let update_file_path = file_store.get_update_path(uuid);
+        let update_file_path = file_store.update_path(uuid);
         let update_file = file_store
             .get_update(uuid)
             .with_context(|| format!("while getting update file for uuid {uuid:?}"))?;
@@ -178,7 +178,7 @@ fn rebuild_field_distribution(db_path: &Path) -> anyhow::Result<()> {
             let index = meilisearch_types::milli::Index::new(
                 EnvOpenOptions::new().read_txn_without_tls(),
                 &index_path,
-                false,
+                CreateOrOpen::Open,
             )
             .with_context(|| format!("while opening index {uid} at '{}'", index_path.display()))?;
 

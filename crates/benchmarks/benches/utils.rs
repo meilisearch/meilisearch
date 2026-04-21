@@ -8,14 +8,18 @@ use std::str::FromStr as _;
 use anyhow::Context;
 use bumpalo::Bump;
 use criterion::BenchmarkId;
+use http_client::policy::IpPolicy;
 use memmap2::Mmap;
 use milli::documents::sort::recursive_sort;
 use milli::heed::EnvOpenOptions;
 use milli::progress::Progress;
 use milli::update::new::indexer;
-use milli::update::{IndexerConfig, Settings};
+use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{Criterion, Filter, Index, Object, TermsMatchingStrategy};
+use milli::{
+    CreateOrOpen, Criterion, Filter, FilterCondition, Index, IndexFilter, IndexFilterCondition,
+    Object, TermsMatchingStrategy,
+};
 use serde_json::Value;
 
 pub struct Conf<'a> {
@@ -79,7 +83,8 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut options = options.read_txn_without_tls();
     options.map_size(100 * 1024 * 1024 * 1024); // 100 GB
     options.max_readers(100);
-    let index = Index::new(options, conf.database_name, true).unwrap();
+    let index =
+        Index::new(options, conf.database_name, CreateOrOpen::create_without_shards()).unwrap();
 
     let config = IndexerConfig::default();
     let mut wtxn = index.write_txn().unwrap();
@@ -100,7 +105,14 @@ pub fn base_setup(conf: &Conf) -> Index {
 
     (conf.configure)(&mut builder);
 
-    builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+    builder
+        .execute(
+            &|| false,
+            &Progress::default(),
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )
+        .unwrap();
     wtxn.commit().unwrap();
 
     let config = IndexerConfig::default();
@@ -110,8 +122,8 @@ pub fn base_setup(conf: &Conf) -> Index {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let documents = documents_from(conf.dataset, conf.dataset_format);
-    let mut indexer = indexer::DocumentOperation::new();
-    indexer.replace_documents(&documents).unwrap();
+    let mut indexer = indexer::IndexOperations::new();
+    indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer
@@ -123,6 +135,7 @@ pub fn base_setup(conf: &Conf) -> Index {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )
         .unwrap();
 
@@ -138,6 +151,7 @@ pub fn base_setup(conf: &Conf) -> Index {
         RuntimeEmbedders::default(),
         &|| false,
         &Progress::default(),
+        &IpPolicy::danger_always_allow(),
         &Default::default(),
     )
     .unwrap();
@@ -171,13 +185,14 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                     |b, &query| {
                         b.iter(|| {
                             let rtxn = index.read_txn().unwrap();
-                            let mut search = index.search(&rtxn);
+                            let progress = Progress::default();
+                            let mut search = index.search(&rtxn, &progress);
                             search
                                 .query(query)
                                 .terms_matching_strategy(TermsMatchingStrategy::default());
                             if let Some(filter) = conf.filter {
                                 let filter = Filter::from_str(filter).unwrap().unwrap();
-                                search.filter(filter);
+                                search.filter(filter_to_index_filter(filter));
                             }
                             if let Some(sort) = &conf.sort {
                                 let sort = sort.iter().map(|sort| sort.parse().unwrap()).collect();
@@ -396,6 +411,39 @@ impl<R: Read> Iterator for CSVDocumentDeserializer<R> {
                 Some(Ok(document))
             }
             Err(e) => Some(Err(anyhow::anyhow!("Error parsing csv document: {}", e))),
+        }
+    }
+}
+
+fn filter_to_index_filter(filter: Filter) -> IndexFilter {
+    IndexFilter { condition: condition_to_index_condition(filter.condition) }
+}
+
+fn condition_to_index_condition(filter: FilterCondition) -> IndexFilterCondition {
+    match filter {
+        FilterCondition::Not(filter) => {
+            IndexFilterCondition::Not(Box::new(condition_to_index_condition(*filter)))
+        }
+        FilterCondition::Condition { fid, op } => IndexFilterCondition::Condition { fid, op },
+        FilterCondition::In { fid, els } => IndexFilterCondition::In { fid, els },
+        FilterCondition::Or(filters) => IndexFilterCondition::Or(
+            filters.into_iter().map(condition_to_index_condition).collect(),
+        ),
+        FilterCondition::And(filters) => IndexFilterCondition::And(
+            filters.into_iter().map(condition_to_index_condition).collect(),
+        ),
+        FilterCondition::VectorExists { fid, embedder, filter } => {
+            IndexFilterCondition::VectorExists { fid, embedder, filter }
+        }
+        FilterCondition::GeoLowerThan { point, radius, resolution } => {
+            IndexFilterCondition::GeoLowerThan { point, radius, resolution }
+        }
+        FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
+            IndexFilterCondition::GeoBoundingBox { top_right_point, bottom_left_point }
+        }
+        FilterCondition::GeoPolygon { points } => IndexFilterCondition::GeoPolygon { points },
+        FilterCondition::Foreign { .. } => {
+            unreachable!("Foreign filters are not supported in index conditions")
         }
     }
 }

@@ -1,19 +1,26 @@
 use std::iter::FromIterator;
+use std::task::Poll;
 use std::time::Instant;
 
+use itertools::Itertools;
 use roaring::RoaringBitmap;
 
 use super::ranking_rules::{RankingRule, RankingRuleOutput, RankingRuleQueryTrait};
 use super::VectorStoreStats;
 use crate::score_details::{self, ScoreDetails};
-use crate::vector::{ArroyWrapper, DistributionShift, Embedder};
-use crate::{DocumentId, Result, SearchContext, SearchLogger};
+use crate::search::new::ranking_rules::RankingRuleId;
+use crate::vector::{DistributionShift, Embedder, VectorStore};
+use crate::{Deadline, DocumentId, Result, SearchContext, SearchLogger};
 
 pub struct VectorSort<Q: RankingRuleQueryTrait> {
     query: Option<Q>,
     target: Vec<f32>,
     vector_candidates: RoaringBitmap,
-    cached_sorted_docids: std::vec::IntoIter<(DocumentId, f32)>,
+    cached_sorted_docids: itertools::ChunkBy<
+        f32,
+        std::vec::IntoIter<(DocumentId, f32)>,
+        for<'a> fn(&'a (DocumentId, f32)) -> f32,
+    >,
     limit: usize,
     distribution_shift: Option<DistributionShift>,
     embedder_index: u8,
@@ -40,7 +47,7 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
             query: None,
             target,
             vector_candidates,
-            cached_sorted_docids: Default::default(),
+            cached_sorted_docids: vec![].into_iter().chunk_by(by_distance),
             limit,
             distribution_shift: embedder.distribution(),
             embedder_index,
@@ -52,26 +59,49 @@ impl<Q: RankingRuleQueryTrait> VectorSort<Q> {
         &mut self,
         ctx: &mut SearchContext<'_>,
         vector_candidates: &RoaringBitmap,
-    ) -> Result<()> {
+        deadline: &Deadline,
+    ) -> Result<usize> {
         let target = &self.target;
+        let backend = ctx.index.get_vector_store(ctx.txn)?.unwrap_or_default();
 
         let before = Instant::now();
-        let reader = ArroyWrapper::new(ctx.index.vector_arroy, self.embedder_index, self.quantized);
-        let results = reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates))?;
-        self.cached_sorted_docids = results.into_iter();
-        *ctx.vector_store_stats.get_or_insert_default() += VectorStoreStats {
-            total_time: before.elapsed(),
-            total_queries: 1,
-            total_results: self.cached_sorted_docids.len(),
-        };
+        let reader =
+            VectorStore::new(backend, ctx.index.vector_store, self.embedder_index, self.quantized);
+        let results =
+            reader.nns_by_vector(ctx.txn, target, self.limit, Some(vector_candidates), deadline)?;
+        let total_results = results.len();
+        self.cached_sorted_docids = results.into_iter().chunk_by(by_distance);
+        *ctx.vector_store_stats.get_or_insert_default() +=
+            VectorStoreStats { total_time: before.elapsed(), total_queries: 1, total_results };
 
-        Ok(())
+        Ok(total_results)
+    }
+
+    fn next_results(&mut self, vector_candidates: &RoaringBitmap) -> Option<(RoaringBitmap, f32)> {
+        for (distance, group) in &self.cached_sorted_docids {
+            let mut candidates = RoaringBitmap::from_iter(group.map(|(docid, _)| docid));
+            candidates &= vector_candidates;
+
+            if !candidates.is_empty() {
+                let score = 1.0 - distance;
+                let score = self
+                    .distribution_shift
+                    .map(|distribution| distribution.shift(score))
+                    .unwrap_or(score);
+                return Some((candidates, score));
+            }
+        }
+        None
     }
 }
 
+fn by_distance((_docid, distance): &(DocumentId, f32)) -> f32 {
+    *distance
+}
+
 impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
-    fn id(&self) -> String {
-        "vector_sort".to_owned()
+    fn id(&self) -> RankingRuleId {
+        RankingRuleId::VectorSort
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
@@ -81,12 +111,13 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
         query: &Q,
+        deadline: &Deadline,
     ) -> Result<()> {
         assert!(self.query.is_none());
 
         self.query = Some(query.clone());
         let vector_candidates = &self.vector_candidates & universe;
-        self.fill_buffer(ctx, &vector_candidates)?;
+        self.fill_buffer(ctx, &vector_candidates, deadline)?;
         Ok(())
     }
 
@@ -97,6 +128,7 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
         ctx: &mut SearchContext<'ctx>,
         _logger: &mut dyn SearchLogger<Q>,
         universe: &RoaringBitmap,
+        deadline: &Deadline,
     ) -> Result<Option<RankingRuleOutput<Q>>> {
         let query = self.query.as_ref().unwrap().clone();
         let vector_candidates = &self.vector_candidates & universe;
@@ -109,29 +141,22 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             }));
         }
 
-        for (docid, distance) in self.cached_sorted_docids.by_ref() {
-            if vector_candidates.contains(docid) {
-                let score = 1.0 - distance;
-                let score = self
-                    .distribution_shift
-                    .map(|distribution| distribution.shift(score))
-                    .unwrap_or(score);
-                return Ok(Some(RankingRuleOutput {
-                    query,
-                    candidates: RoaringBitmap::from_iter([docid]),
-                    score: ScoreDetails::Vector(score_details::Vector { similarity: Some(score) }),
-                }));
-            }
+        if let Some((candidates, score)) = self.next_results(&vector_candidates) {
+            return Ok(Some(RankingRuleOutput {
+                query,
+                candidates,
+                score: ScoreDetails::Vector(score_details::Vector { similarity: Some(score) }),
+            }));
         }
 
         // if we got out of this loop it means we've exhausted our cache.
         // we need to refill it and run the function again.
-        self.fill_buffer(ctx, &vector_candidates)?;
+        let total_results = self.fill_buffer(ctx, &vector_candidates, deadline)?;
 
         // we tried filling the buffer, but it remained empty 😢
         // it means we don't actually have any document remaining in the universe with a vector.
         // => exit
-        if self.cached_sorted_docids.len() == 0 {
+        if total_results == 0 {
             return Ok(Some(RankingRuleOutput {
                 query,
                 candidates: universe.clone(),
@@ -139,11 +164,39 @@ impl<'ctx, Q: RankingRuleQueryTrait> RankingRule<'ctx, Q> for VectorSort<Q> {
             }));
         }
 
-        self.next_bucket(ctx, _logger, universe)
+        self.next_bucket(ctx, _logger, universe, deadline)
     }
 
     #[tracing::instrument(level = "trace", skip_all, target = "search::vector_sort")]
     fn end_iteration(&mut self, _ctx: &mut SearchContext<'ctx>, _logger: &mut dyn SearchLogger<Q>) {
         self.query = None;
+    }
+
+    fn non_blocking_next_bucket(
+        &mut self,
+        _ctx: &mut SearchContext<'ctx>,
+        _logger: &mut dyn SearchLogger<Q>,
+        universe: &RoaringBitmap,
+    ) -> Result<Poll<RankingRuleOutput<Q>>> {
+        let query = self.query.as_ref().unwrap().clone();
+        let vector_candidates = &self.vector_candidates & universe;
+
+        if vector_candidates.is_empty() {
+            return Ok(Poll::Ready(RankingRuleOutput {
+                query,
+                candidates: universe.clone(),
+                score: ScoreDetails::Vector(score_details::Vector { similarity: None }),
+            }));
+        }
+
+        if let Some((candidates, score)) = self.next_results(&vector_candidates) {
+            Ok(Poll::Ready(RankingRuleOutput {
+                query,
+                candidates,
+                score: ScoreDetails::Vector(score_details::Vector { similarity: Some(score) }),
+            }))
+        } else {
+            Ok(Poll::Pending)
+        }
     }
 }

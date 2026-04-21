@@ -143,6 +143,8 @@ impl Display for Value {
                 ".processingTimeMs" => "[duration]",
                 ".details.embedders.*.url" => "[url]",
                 ".details.dumpUid" => "[dump_uid]",
+                ".network.network_version" => "[version]",
+                ".network.origin.networkVersion" => "[version]",
             })
         )
     }
@@ -151,6 +153,24 @@ impl Display for Value {
 impl From<Vec<Value>> for Value {
     fn from(value: Vec<Value>) -> Self {
         Self(value.into_iter().map(|value| value.0).collect::<serde_json::Value>())
+    }
+}
+
+pub trait IntoTaskUid {
+    fn uid(&self) -> u64;
+}
+
+impl IntoTaskUid for Value {
+    fn uid(&self) -> u64 {
+        self["taskUid"].as_u64().unwrap_or_else(|| {
+            panic!("Called `uid` on a Value that doesn't contain a taskUid: {self}")
+        })
+    }
+}
+
+impl IntoTaskUid for u64 {
+    fn uid(&self) -> u64 {
+        *self
     }
 }
 
@@ -241,7 +261,7 @@ pub async fn shared_index_with_documents() -> &'static Index<'static, Shared> {
         let server = Server::new_shared();
         let index = server._index("SHARED_DOCUMENTS").to_shared();
         let documents = DOCUMENTS.clone();
-        let (response, _code) = index._add_documents(documents, None).await;
+        let (response, _code) = index._add_documents(documents, None, None, false).await;
         server.wait_task(response.uid()).await.succeeded();
         let (response, _code) = index
             ._update_settings(
@@ -284,7 +304,7 @@ pub async fn shared_index_with_score_documents() -> &'static Index<'static, Shar
         let server = Server::new_shared();
         let index = server._index("SHARED_SCORE_DOCUMENTS").to_shared();
         let documents = SCORE_DOCUMENTS.clone();
-        let (response, _code) = index._add_documents(documents, None).await;
+        let (response, _code) = index._add_documents(documents, None, None, false).await;
         server.wait_task(response.uid()).await.succeeded();
         let (response, _code) = index
             ._update_settings(
@@ -361,7 +381,7 @@ pub async fn shared_index_with_nested_documents() -> &'static Index<'static, Sha
         let server = Server::new_shared();
         let index = server._index("SHARED_NESTED_DOCUMENTS").to_shared();
         let documents = NESTED_DOCUMENTS.clone();
-        let (response, _code) = index._add_documents(documents, None).await;
+        let (response, _code) = index._add_documents(documents, None, None, false).await;
         server.wait_task(response.uid()).await.succeeded();
         let (response, _code) = index
             ._update_settings(
@@ -508,7 +528,8 @@ pub async fn shared_index_with_geo_documents() -> &'static Index<'static, Shared
         .get_or_init(|| async {
             let server = Server::new_shared();
             let index = server._index("SHARED_GEO_DOCUMENTS").to_shared();
-            let (response, _code) = index._add_documents(GEO_DOCUMENTS.clone(), None).await;
+            let (response, _code) =
+                index._add_documents(GEO_DOCUMENTS.clone(), None, None, false).await;
             server.wait_task(response.uid()).await.succeeded();
 
             let (response, _code) = index
@@ -516,6 +537,27 @@ pub async fn shared_index_with_geo_documents() -> &'static Index<'static, Shared
                     json!({"filterableAttributes": ["_geo"], "sortableAttributes": ["_geo"]}),
                 )
                 .await;
+            server.wait_task(response.uid()).await.succeeded();
+            index
+        })
+        .await
+}
+
+pub async fn shared_index_geojson_documents() -> &'static Index<'static, Shared> {
+    static INDEX: OnceCell<Index<'static, Shared>> = OnceCell::const_new();
+    INDEX
+        .get_or_init(|| async {
+            // Retrieved from https://gitlab-forge.din.developpement-durable.gouv.fr/pub/geomatique/descartes/d-map/-/blob/main/demo/examples/commons/countries.geojson?ref_type=heads
+            let server = Server::new_shared();
+            let index = server._index("SHARED_GEOJSON_DOCUMENTS").to_shared();
+            let countries = include_str!("../documents/geojson/assets/countries.json");
+            let lille = serde_json::from_str::<serde_json::Value>(countries).unwrap();
+            let (response, _code) =
+                index._add_documents(Value(lille), Some("name"), None, false).await;
+            server.wait_task(response.uid()).await.succeeded();
+
+            let (response, _code) =
+                index._update_settings(json!({"filterableAttributes": ["_geojson"]})).await;
             server.wait_task(response.uid()).await.succeeded();
             index
         })

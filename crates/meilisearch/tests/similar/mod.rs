@@ -702,3 +702,68 @@ async fn limit_and_offset() {
         )
         .await;
 }
+
+#[actix_rt::test]
+async fn performance_details() {
+    let server = Server::new_shared();
+    let index = server.unique_index_with_prefix("test");
+
+    let (response, code) = index
+        .update_settings(json!({
+        "embedders": {
+            "manual": {
+                "source": "userProvided",
+                "dimensions": 3,
+            }
+        },
+        "filterableAttributes": ["title"]}))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    let documents = DOCUMENTS.clone();
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(value.uid()).await.succeeded();
+
+    index
+        .similar(
+            json!({"id": 143, "embedder": "manual", "showPerformanceDetails": true}),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(json_string!(response, { ".performanceDetails" => "[details]", ".processingTimeMs" => "[duration]" }), @r###"
+                {
+                  "hits": [
+                    {
+                      "title": "Escape Room",
+                      "release_year": 2019,
+                      "id": "522681"
+                    },
+                    {
+                      "title": "Captain Marvel",
+                      "release_year": 2019,
+                      "id": "299537"
+                    },
+                    {
+                      "title": "How to Train Your Dragon: The Hidden World",
+                      "release_year": 2019,
+                      "id": "166428"
+                    },
+                    {
+                      "title": "Shazam!",
+                      "release_year": 2019,
+                      "id": "287947"
+                    }
+                  ],
+                  "id": "143",
+                  "processingTimeMs": "[duration]",
+                  "limit": 20,
+                  "offset": 0,
+                  "estimatedTotalHits": 4,
+                  "performanceDetails": "[details]"
+                }
+                "###);
+            },
+        )
+        .await;
+}

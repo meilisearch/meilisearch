@@ -9,6 +9,7 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::Key;
 use meilisearch_types::milli::update::IndexDocumentsMethod;
 use meilisearch_types::settings::Unchecked;
+use meilisearch_types::tasks::network::{DbTaskNetwork, NetworkTopologyChange};
 use meilisearch_types::tasks::{
     Details, ExportIndexSettings, IndexSwap, KindWithContent, Status, Task, TaskId,
 };
@@ -22,6 +23,7 @@ mod reader;
 mod writer;
 
 pub use error::Error;
+use meilisearch_types::ArchiveExt;
 pub use reader::{DumpReader, UpdateFile};
 pub use writer::DumpWriter;
 
@@ -94,6 +96,10 @@ pub struct TaskDump {
         default
     )]
     pub finished_at: Option<OffsetDateTime>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub network: Option<DbTaskNetwork>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_metadata: Option<String>,
 }
 
 // A `Kind` specific version made for the dump. If modified you may break the dump.
@@ -156,6 +162,10 @@ pub enum KindDump {
     UpgradeDatabase {
         from: (u32, u32, u32),
     },
+    IndexCompaction {
+        index_uid: String,
+    },
+    NetworkTopologyChange(NetworkTopologyChange),
 }
 
 impl From<Task> for TaskDump {
@@ -172,6 +182,8 @@ impl From<Task> for TaskDump {
             enqueued_at: task.enqueued_at,
             started_at: task.started_at,
             finished_at: task.finished_at,
+            network: task.network,
+            custom_metadata: task.custom_metadata,
         }
     }
 }
@@ -237,6 +249,12 @@ impl From<KindWithContent> for KindDump {
             KindWithContent::UpgradeDatabase { from: version } => {
                 KindDump::UpgradeDatabase { from: version }
             }
+            KindWithContent::IndexCompaction { index_uid } => {
+                KindDump::IndexCompaction { index_uid }
+            }
+            KindWithContent::NetworkTopologyChange(network_topology_change) => {
+                KindDump::NetworkTopologyChange(network_topology_change)
+            }
         }
     }
 }
@@ -250,12 +268,17 @@ pub(crate) mod test {
     use big_s::S;
     use maplit::{btreemap, btreeset};
     use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchStats};
+    use meilisearch_types::dynamic_search_rules::{
+        Condition, DynamicSearchRule, DynamicSearchRuleAction as RuleActionKind,
+        DynamicSearchRules, RuleAction, Selector,
+    };
     use meilisearch_types::facet_values_sort::FacetValuesSort;
-    use meilisearch_types::features::{Network, Remote, RuntimeTogglableFeatures};
+    use meilisearch_types::features::RuntimeTogglableFeatures;
     use meilisearch_types::index_uid_pattern::IndexUidPattern;
     use meilisearch_types::keys::{Action, Key};
     use meilisearch_types::milli::update::Setting;
     use meilisearch_types::milli::{self, FilterableAttributesRule};
+    use meilisearch_types::network::{Network, Remote, Shard};
     use meilisearch_types::settings::{Checked, FacetingSettings, Settings};
     use meilisearch_types::task_view::DetailsView;
     use meilisearch_types::tasks::{BatchStopReason, Details, Kind, Status};
@@ -264,6 +287,7 @@ pub(crate) mod test {
     use uuid::Uuid;
 
     use crate::reader::Document;
+    use crate::writer::BatchWriter;
     use crate::{DumpReader, DumpWriter, IndexMetadata, KindDump, TaskDump, Version};
 
     pub fn create_test_instance_uid() -> Uuid {
@@ -304,6 +328,7 @@ pub(crate) mod test {
                 FilterableAttributesRule::Field(S("race")),
                 FilterableAttributesRule::Field(S("age")),
             ]),
+            foreign_keys: Setting::NotSet,
             sortable_attributes: Setting::Set(btreeset! { S("age") }),
             ranking_rules: Setting::NotSet,
             stop_words: Setting::NotSet,
@@ -384,6 +409,8 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
                     started_at: Some(datetime!(2022-11-20 0:00 UTC)),
                     finished_at: Some(datetime!(2022-11-21 0:00 UTC)),
+                    network: None,
+                    custom_metadata: None,
                 },
                 None,
             ),
@@ -408,6 +435,8 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-11 0:00 UTC),
                     started_at: None,
                     finished_at: None,
+                    network: None,
+                    custom_metadata: None,
                 },
                 Some(vec![
                     json!({ "id": 4, "race": "leonberg" }).as_object().unwrap().clone(),
@@ -427,6 +456,8 @@ pub(crate) mod test {
                     enqueued_at: datetime!(2022-11-15 0:00 UTC),
                     started_at: None,
                     finished_at: None,
+                    network: None,
+                    custom_metadata: None,
                 },
                 None,
             ),
@@ -468,7 +499,7 @@ pub(crate) mod test {
         ]
     }
 
-    pub fn create_test_dump() -> File {
+    pub fn create_test_dump_writer() -> (DumpWriter, BatchWriter) {
         let instance_uid = create_test_instance_uid();
         let dump = DumpWriter::new(Some(instance_uid)).unwrap();
 
@@ -490,7 +521,6 @@ pub(crate) mod test {
         for batch in &batches {
             batch_queue.push_batch(batch).unwrap();
         }
-        batch_queue.flush().unwrap();
 
         // ========== pushing the task queue
         let tasks = create_test_tasks();
@@ -524,6 +554,19 @@ pub(crate) mod test {
         let network = create_test_network();
         dump.create_network(network).unwrap();
 
+        // ========== dynamic search rules
+        let mut dump_dynamic_search_rules = dump.create_dynamic_search_rules().unwrap();
+        for (_, rule) in create_test_dynamic_search_rules() {
+            dump_dynamic_search_rules.push_rule(&rule).unwrap();
+        }
+
+        (dump, batch_queue)
+    }
+
+    pub fn create_test_dump() -> File {
+        let (dump, batch_writer) = create_test_dump_writer();
+        batch_writer.flush().unwrap();
+
         // create the dump
         let mut file = tempfile::tempfile().unwrap();
         dump.persist_to(&mut file).unwrap();
@@ -536,10 +579,50 @@ pub(crate) mod test {
         RuntimeTogglableFeatures::default()
     }
 
+    fn create_test_dynamic_search_rules() -> DynamicSearchRules {
+        let mut rules = DynamicSearchRules::new();
+        rules.insert(
+            "black-friday".parse().unwrap(),
+            DynamicSearchRule {
+                uid: "black-friday".parse().unwrap(),
+                description: Some("Black Friday promo".to_string()),
+                priority: Some(1),
+                active: true,
+                conditions: vec![
+                    Condition::Query { is_empty: Some(false), contains: None },
+                    Condition::Time {
+                        start: Some(datetime!(2025-11-28 00:00:00 UTC)),
+                        end: Some(datetime!(2025-11-28 23:59:59 UTC)),
+                    },
+                ],
+                actions: vec![
+                    RuleAction {
+                        selector: Selector {
+                            index_uid: Some("products".parse().unwrap()),
+                            id: Some("42".to_string()),
+                        },
+                        action: RuleActionKind::Pin { position: 1 },
+                    },
+                    RuleAction {
+                        selector: Selector {
+                            index_uid: Some("products".parse().unwrap()),
+                            id: Some("84".to_string()),
+                        },
+                        action: RuleActionKind::Pin { position: 3 },
+                    },
+                ],
+            },
+        );
+        rules
+    }
+
     fn create_test_network() -> Network {
         Network {
             local: Some("myself".to_string()),
-            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()) }},
+            remotes: maplit::btreemap! {"other".to_string() => Remote { url: "http://test".to_string(), search_api_key: Some("apiKey".to_string()), write_api_key: Some("docApiKey".to_string()), status: Default::default() }},
+            leader: None,
+            version: Default::default(),
+            shards: maplit::btreemap! {"shard".to_string() => Shard { remotes: maplit::btreeset!["other".to_string()]} },
         }
     }
 
@@ -593,7 +676,16 @@ pub(crate) mod test {
         assert_eq!(dump.features().unwrap().unwrap(), expected);
 
         // ==== checking the network
-        let expected = create_test_network();
+        let mut expected = create_test_network();
+        // from v1.29, we drop `leader` and `local` on import
+        expected.leader = None;
+        expected.local = None;
         assert_eq!(&expected, dump.network().unwrap().unwrap());
+
+        // ==== checking the dynamic search rules
+        let expected = create_test_dynamic_search_rules();
+        let actual: DynamicSearchRules =
+            dump.dynamic_search_rules().unwrap().map(|r| r.unwrap()).collect();
+        assert_eq!(expected, actual);
     }
 }

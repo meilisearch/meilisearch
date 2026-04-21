@@ -1,4 +1,6 @@
+#![allow(clippy::result_large_err)]
 #![allow(rustdoc::private_intra_doc_links)]
+
 #[macro_use]
 pub mod error;
 pub mod analytics;
@@ -9,6 +11,8 @@ pub mod middleware;
 pub mod option;
 #[cfg(test)]
 mod option_test;
+pub mod personalization;
+pub mod proxy;
 pub mod routes;
 pub mod search;
 pub mod search_queue;
@@ -33,15 +37,18 @@ use anyhow::bail;
 use bumpalo::Bump;
 use error::PayloadError;
 use extractors::payload::PayloadConfig;
+use http_client::policy::IpPolicy;
 use index_scheduler::versioning::Versioning;
 use index_scheduler::{IndexScheduler, IndexSchedulerOptions};
 use meilisearch_auth::{open_auth_store_env, AuthController};
+use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::milli::constants::VERSION_MAJOR;
 use meilisearch_types::milli::documents::{DocumentsBatchBuilder, DocumentsBatchReader};
 use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer;
 use meilisearch_types::milli::update::{
     default_thread_pool_and_threads, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig,
+    MissingDocumentPolicy,
 };
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::KindWithContent;
@@ -56,6 +63,8 @@ use tracing::{error, info_span};
 use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
+use crate::personalization::PersonalizationService;
+use ::routes::Routes;
 
 /// Default number of simultaneously opened indexes.
 ///
@@ -126,12 +135,8 @@ pub type LogStderrType = tracing_subscriber::filter::Filtered<
 >;
 
 pub fn create_app(
-    index_scheduler: Data<IndexScheduler>,
-    auth_controller: Data<AuthController>,
-    search_queue: Data<SearchQueue>,
+    services: ServicesData,
     opt: Opt,
-    logs: (LogRouteHandle, LogStderrHandle),
-    analytics: Data<Analytics>,
     enable_dashboard: bool,
 ) -> actix_web::App<
     impl ServiceFactory<
@@ -143,19 +148,17 @@ pub fn create_app(
     >,
 > {
     let app = actix_web::App::new()
-        .configure(|s| {
-            configure_data(
-                s,
-                index_scheduler.clone(),
-                auth_controller.clone(),
-                search_queue.clone(),
-                &opt,
-                logs,
-                analytics.clone(),
-            )
-        })
-        .configure(routes::configure)
+        .configure(|s| configure_data(s, services, &opt))
+        .configure(<routes::MeilisearchApi as Routes>::configure)
         .configure(|s| dashboard(s, enable_dashboard));
+
+    #[cfg(feature = "swagger")]
+    let app = app.configure(|cfg| {
+        use utoipa::OpenApi;
+        use utoipa_scalar::{Scalar, Servable as ScalarServable};
+        let openapi = routes::MeilisearchApi::openapi();
+        cfg.service(Scalar::with_url("/scalar", openapi.clone()));
+    });
 
     let app = app.wrap(middleware::RouteMetrics);
     app.wrap(
@@ -214,7 +217,30 @@ enum OnFailure {
     KeepDb,
 }
 
-pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
+pub fn setup_meilisearch(
+    opt: &Opt,
+    handle: tokio::runtime::Handle,
+) -> anyhow::Result<(Arc<IndexScheduler>, Arc<AuthController>)> {
+    let exceptions = opt.experimental_allowed_ip_networks.as_slice();
+    let ip_policy = match exceptions {
+        [] => IpPolicy::deny_all_local_ips(),
+        exceptions => {
+            let exceptions: Option<Vec<cidr::IpCidr>> = exceptions
+                .iter()
+                .map(|cidr_or_any|
+                    // some unless `any`
+                    Option::<cidr::IpCidr>::from(*cidr_or_any))
+                .collect();
+            // some unless there was an `any`
+            if let Some(exceptions) = exceptions {
+                IpPolicy::deny_local_ips(exceptions)
+            } else {
+                // DANGER: explicitly requested
+                IpPolicy::danger_always_allow()
+            }
+        }
+    };
+
     let index_scheduler_opt = IndexSchedulerOptions {
         version_file_path: opt.db_path.join(VERSION_FILE_NAME),
         auth_path: opt.db_path.join("auth"),
@@ -228,18 +254,34 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         task_db_size: opt.max_task_db_size.as_u64() as usize,
         index_base_map_size: opt.max_index_size.as_u64() as usize,
         enable_mdb_writemap: opt.experimental_reduce_indexing_memory_usage,
-        indexer_config: Arc::new((&opt.indexer_options).try_into()?),
+        indexer_config: Arc::new({
+            let s3_snapshot_options =
+                opt.s3_snapshot_options.clone().map(|opt| opt.try_into()).transpose()?;
+            IndexerConfig { s3_snapshot_options, ..(&opt.indexer_options).try_into()? }
+        }),
         autobatching_enabled: true,
         cleanup_enabled: !opt.experimental_replication_parameters,
         max_number_of_tasks: 1_000_000,
+        export_default_payload_size_bytes: almost_as_big_as(opt.http_payload_size_limit),
         max_number_of_batched_tasks: opt.experimental_max_number_of_batched_tasks,
-        batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size.into(),
+        batched_tasks_size_limit: opt.experimental_limit_batched_tasks_total_size.map_or_else(
+            || {
+                opt.indexer_options
+                    .max_indexing_memory
+                    // By default, we use half of the available memory to determine the size of batched tasks
+                    .map_or(u64::MAX, |mem| mem.as_u64() / 2)
+                    // And never exceed 10 GiB when we infer the limit
+                    .min(10 * 1024 * 1024 * 1024)
+            },
+            |size| size.as_u64(),
+        ),
         index_growth_amount: byte_unit::Byte::from_str("10GiB").unwrap().as_u64() as usize,
         index_count: DEFAULT_INDEX_COUNT,
         instance_features: opt.to_instance_features(),
         auto_upgrade: opt.experimental_dumpless_upgrade,
         embedding_cache_cap: opt.experimental_embedding_cache_entries,
         experimental_no_snapshot_compaction: opt.experimental_no_snapshot_compaction,
+        ip_policy,
     };
     let binary_version = (VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
 
@@ -254,6 +296,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
                     index_scheduler_opt,
                     OnFailure::RemoveDb,
                     binary_version, // the db is empty
+                    handle,
                 )?,
                 Err(e) => {
                     std::fs::remove_dir_all(&opt.db_path)?;
@@ -271,7 +314,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
             bail!("snapshot doesn't exist at {}", snapshot_path.display())
         // the snapshot and the db exist, and we can ignore the snapshot because of the ignore_snapshot_if_db_exists flag
         } else {
-            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version, handle)?
         }
     } else if let Some(ref path) = opt.import_dump {
         let src_path_exists = path.exists();
@@ -282,6 +325,7 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
                 index_scheduler_opt,
                 OnFailure::RemoveDb,
                 binary_version, // the db is empty
+                handle,
             )?;
             match import_dump(&opt.db_path, path, &mut index_scheduler, &mut auth_controller) {
                 Ok(()) => (index_scheduler, auth_controller),
@@ -302,10 +346,10 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
         // the dump and the db exist and we can ignore the dump because of the ignore_dump_if_db_exists flag
         // or, the dump is missing but we can ignore that because of the ignore_missing_dump flag
         } else {
-            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
+            open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version, handle)?
         }
     } else {
-        open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version)?
+        open_or_create_database(opt, index_scheduler_opt, empty_db, binary_version, handle)?
     };
 
     // We create a loop in a thread that registers snapshotCreation tasks
@@ -330,20 +374,28 @@ pub fn setup_meilisearch(opt: &Opt) -> anyhow::Result<(Arc<IndexScheduler>, Arc<
     Ok((index_scheduler, auth_controller))
 }
 
+/// Returns the input - 1MiB, or at least 20MiB
+fn almost_as_big_as(input: byte_unit::Byte) -> byte_unit::Byte {
+    let with_margin = input.subtract(byte_unit::Byte::MEBIBYTE);
+    let at_least = byte_unit::Byte::MEBIBYTE.multiply(20).unwrap();
+    with_margin.unwrap_or(at_least).max(at_least)
+}
+
 /// Try to start the IndexScheduler and AuthController without checking the VERSION file or anything.
 fn open_or_create_database_unchecked(
     opt: &Opt,
     index_scheduler_opt: IndexSchedulerOptions,
     on_failure: OnFailure,
     version: (u32, u32, u32),
+    handle: tokio::runtime::Handle,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     // we don't want to create anything in the data.ms yet, thus we
     // wrap our two builders in a closure that'll be executed later.
     std::fs::create_dir_all(&index_scheduler_opt.auth_path)?;
-    let auth_env = open_auth_store_env(&index_scheduler_opt.auth_path).unwrap();
+    let auth_env = open_auth_store_env(&index_scheduler_opt.auth_path)?;
     let auth_controller = AuthController::new(auth_env.clone(), &opt.master_key);
     let index_scheduler_builder = || -> anyhow::Result<_> {
-        Ok(IndexScheduler::new(index_scheduler_opt, auth_env, version)?)
+        Ok(IndexScheduler::new(index_scheduler_opt, auth_env, version, Some(handle))?)
     };
 
     match (
@@ -450,6 +502,7 @@ fn open_or_create_database(
     index_scheduler_opt: IndexSchedulerOptions,
     empty_db: bool,
     binary_version: (u32, u32, u32),
+    handle: tokio::runtime::Handle,
 ) -> anyhow::Result<(IndexScheduler, AuthController)> {
     let version = if !empty_db {
         check_version(opt, &index_scheduler_opt, binary_version)?
@@ -457,7 +510,7 @@ fn open_or_create_database(
         binary_version
     };
 
-    open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb, version)
+    open_or_create_database_unchecked(opt, index_scheduler_opt, OnFailure::KeepDb, version, handle)
 }
 
 fn import_dump(
@@ -516,7 +569,17 @@ fn import_dump(
     index_scheduler.put_runtime_features(features)?;
 
     let network = dump_reader.network()?.cloned().unwrap_or_default();
-    index_scheduler.put_network(network)?;
+    let wtxn = index_scheduler.env.write_txn()?;
+    index_scheduler.put_network(wtxn, network)?;
+
+    let mut dynamic_search_rules = DynamicSearchRules::new();
+    for result in dump_reader.dynamic_search_rules()? {
+        let (uid, rule) = result?;
+        dynamic_search_rules.insert(uid, rule);
+    }
+    if !dynamic_search_rules.is_empty() {
+        index_scheduler.put_dynamic_search_rules(dynamic_search_rules)?;
+    }
 
     // 5.1 Use all cpus to process dump if `max_indexing_threads` not configured
     let backup_config;
@@ -525,7 +588,11 @@ fn import_dump(
     let indexer_config = if base_config.max_threads.is_none() {
         let (thread_pool, _) = default_thread_pool_and_threads();
 
-        let _config = IndexerConfig { thread_pool, ..*base_config };
+        let _config = IndexerConfig {
+            thread_pool,
+            s3_snapshot_options: base_config.s3_snapshot_options.clone(),
+            ..*base_config
+        };
         backup_config = _config;
         &backup_config
     } else {
@@ -543,7 +610,8 @@ fn import_dump(
         tracing::info!("Importing index `{uid}`.");
 
         let date = Some((metadata.created_at, metadata.updated_at));
-        let index = index_scheduler.create_raw_index(&metadata.uid, date)?;
+        // no shards at import time
+        let index = index_scheduler.create_raw_index(&metadata.uid, date, None)?;
 
         let mut wtxn = index.write_txn()?;
 
@@ -558,7 +626,12 @@ fn import_dump(
         let settings = index_reader.settings()?;
         apply_settings_to_builder(&settings, &mut builder);
         let embedder_stats: Arc<EmbedderStats> = Default::default();
-        builder.execute(&|| false, &progress, embedder_stats.clone())?;
+        builder.execute(
+            &|| false,
+            &progress,
+            index_scheduler.ip_policy(),
+            embedder_stats.clone(),
+        )?;
         wtxn.commit()?;
 
         let mut wtxn = index.write_txn()?;
@@ -595,6 +668,7 @@ fn import_dump(
                 |indexing_step| tracing::trace!("update: {:?}", indexing_step),
                 || false,
                 &embedder_stats,
+                index_scheduler.ip_policy(),
             )?;
 
             let builder = builder.with_embedders(embedders);
@@ -608,13 +682,13 @@ fn import_dump(
             let primary_key = index.primary_key(&rtxn)?;
             let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-            let mut indexer = indexer::DocumentOperation::new();
+            let mut indexer = indexer::IndexOperations::new();
             let embedders = index.embedding_configs().embedding_configs(&rtxn)?;
             let embedders = index_scheduler.embedders(uid.clone(), embedders)?;
 
             let mmap = unsafe { memmap2::Mmap::map(index_reader.documents_file())? };
 
-            indexer.replace_documents(&mmap)?;
+            indexer.replace_documents(&mmap, MissingDocumentPolicy::default())?;
 
             let indexer_config = index_scheduler.indexer_config();
             let pool = &indexer_config.thread_pool;
@@ -628,6 +702,7 @@ fn import_dump(
                 &mut new_fields_ids_map,
                 &|| false, // never stop processing a dump
                 progress.clone(),
+                None,
             )?;
 
             let operation_stats = operation_stats.pop().unwrap();
@@ -647,6 +722,7 @@ fn import_dump(
                 embedders,
                 &|| false, // never stop processing a dump
                 &progress,
+                index_scheduler.ip_policy(),
                 &embedder_stats,
             )?;
         }
@@ -672,23 +748,26 @@ fn import_dump(
     Ok(index_scheduler_dump.finish()?)
 }
 
-pub fn configure_data(
-    config: &mut web::ServiceConfig,
-    index_scheduler: Data<IndexScheduler>,
-    auth: Data<AuthController>,
-    search_queue: Data<SearchQueue>,
-    opt: &Opt,
-    (logs_route, logs_stderr): (LogRouteHandle, LogStderrHandle),
-    analytics: Data<Analytics>,
-) {
+pub fn configure_data(config: &mut web::ServiceConfig, services: ServicesData, opt: &Opt) {
+    let ServicesData {
+        index_scheduler,
+        auth,
+        search_queue,
+        personalization_service,
+        logs_route_handle,
+        logs_stderr_handle,
+        analytics,
+    } = services;
+
     let http_payload_size_limit = opt.http_payload_size_limit.as_u64() as usize;
     config
         .app_data(index_scheduler)
         .app_data(auth)
         .app_data(search_queue)
         .app_data(analytics)
-        .app_data(web::Data::new(logs_route))
-        .app_data(web::Data::new(logs_stderr))
+        .app_data(personalization_service)
+        .app_data(logs_route_handle)
+        .app_data(logs_stderr_handle)
         .app_data(web::Data::new(opt.clone()))
         .app_data(
             web::JsonConfig::default()
@@ -748,4 +827,15 @@ pub fn dashboard(config: &mut web::ServiceConfig, enable_frontend: bool) {
 #[cfg(not(feature = "mini-dashboard"))]
 pub fn dashboard(config: &mut web::ServiceConfig, _enable_frontend: bool) {
     config.service(web::resource("/").route(web::get().to(routes::running)));
+}
+
+#[derive(Clone)]
+pub struct ServicesData {
+    pub index_scheduler: Data<IndexScheduler>,
+    pub auth: Data<AuthController>,
+    pub search_queue: Data<SearchQueue>,
+    pub personalization_service: Data<PersonalizationService>,
+    pub logs_route_handle: Data<LogRouteHandle>,
+    pub logs_stderr_handle: Data<LogStderrHandle>,
+    pub analytics: Data<Analytics>,
 }

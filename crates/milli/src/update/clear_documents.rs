@@ -2,7 +2,8 @@ use heed::RwTxn;
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
-use crate::{database_stats::DatabaseStats, FieldDistribution, Index, Result};
+use crate::database_stats::DatabaseStats;
+use crate::{FieldDistribution, Index, Result};
 
 pub struct ClearDocuments<'t, 'i> {
     wtxn: &'t mut RwTxn<'i>,
@@ -45,9 +46,11 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
             facet_id_is_empty_docids,
             field_id_docid_facet_f64s,
             field_id_docid_facet_strings,
-            vector_arroy,
+            vector_store,
             embedder_category_id: _,
+            cellulite,
             documents,
+            shard_docids: _,
         } = self.index;
 
         let empty_roaring = RoaringBitmap::default();
@@ -65,6 +68,9 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
 
         // Remove all user-provided bits from the configs
         self.index.embedding_configs().clear_embedder_info_docids(self.wtxn)?;
+
+        let shard_docids = self.index.shard_docids();
+        shard_docids.clear_documents(self.wtxn)?;
 
         // Clear the other databases.
         external_documents_ids.clear(self.wtxn)?;
@@ -88,7 +94,8 @@ impl<'t, 'i> ClearDocuments<'t, 'i> {
         field_id_docid_facet_f64s.clear(self.wtxn)?;
         field_id_docid_facet_strings.clear(self.wtxn)?;
         // vector
-        vector_arroy.clear(self.wtxn)?;
+        vector_store.clear(self.wtxn)?;
+        cellulite.clear(self.wtxn)?;
 
         documents.clear(self.wtxn)?;
 

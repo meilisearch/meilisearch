@@ -1,0 +1,13 @@
+---
+source: crates/meilisearch/tests/index/fields.rs
+expression: "(code.as_u16(), response)"
+---
+[
+  200,
+  {
+    "limit": 20,
+    "offset": 0,
+    "results": [],
+    "total": 0
+  }
+]

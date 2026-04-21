@@ -6,10 +6,17 @@ use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::index_uid::{IndexUid, IndexUidFormatError};
 use meilisearch_types::milli;
 use meilisearch_types::milli::OrderBy;
+use meilisearch_types::tasks::network::headers::{
+    PROXY_IMPORT_DOCS_HEADER, PROXY_IMPORT_INDEX_COUNT_HEADER, PROXY_IMPORT_INDEX_HEADER,
+    PROXY_IMPORT_REMOTE_HEADER, PROXY_IMPORT_TASK_KEY_HEADER, PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+    PROXY_ORIGIN_REMOTE_HEADER, PROXY_ORIGIN_TASK_UID_HEADER,
+};
 use serde_json::Value;
 use tokio::task::JoinError;
+use uuid::Uuid;
 
 #[derive(Debug, thiserror::Error)]
+#[allow(clippy::large_enum_variant)]
 pub enum MeilisearchHttpError {
     #[error("A Content-Type header is missing. Accepted values for the Content-Type header are: {}",
             .0.iter().map(|s| format!("`{}`", s)).collect::<Vec<_>>().join(", "))]
@@ -35,6 +42,12 @@ pub enum MeilisearchHttpError {
     PaginationInFederatedQuery(usize, &'static str),
     #[error("Inside `.queries[{0}]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #{0} or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.{1}: {2:?}` for facets in federated search")]
     FacetsInFederatedQuery(usize, String, Vec<String>),
+    #[error("Inside `.queries[{0}]`: Using `.personalize` is not allowed in federated queries.\n - Hint: remove `personalize` from query #{0} or remove `federation` from the request")]
+    PersonalizationInFederatedQuery(usize),
+    #[error("Inside `.queries[{0}]`: Using `.showPerformanceDetails` is not allowed in federated queries.\n - Hint: remove `showPerformanceDetails` from query #{0} or remove `federation` from the request")]
+    ShowPerformanceDetailsInFederatedQuery(usize),
+    #[error("Inside `.queries[{0}]`: Using `.useNetwork` is not allowed as the same time as `.federationOptions.remote`.\n  - Hint: to perform an explicit query against a remote, remove `.useNetwork`.\n  - Hint: to automatically perform queries against the entire network, remove `.federationOptions.remote`.")]
+    RemoteAndUseNetwork(usize),
     #[error("Inconsistent order for values in facet `{facet}`: index `{previous_uid}` orders {previous_facet_order}, but index `{current_uid}` orders {index_facet_order}.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.")]
     InconsistentFacetOrder {
         facet: String,
@@ -80,6 +93,68 @@ pub enum MeilisearchHttpError {
     MissingSearchHybrid,
     #[error("Invalid request: both `media` and `vector` parameters are present.")]
     MediaAndVector,
+    #[error("Inconsistent `Origin` headers: {} was provided but {} is missing.\n  - Hint: Either both headers should be provided, or none of them", if *is_remote_missing {
+        PROXY_ORIGIN_TASK_UID_HEADER
+    } else { PROXY_ORIGIN_REMOTE_HEADER },
+    if *is_remote_missing {
+        PROXY_ORIGIN_REMOTE_HEADER
+    } else { PROXY_ORIGIN_TASK_UID_HEADER }
+)]
+    InconsistentOriginHeaders { is_remote_missing: bool },
+    #[error("Inconsistent `Import` headers: {remote}: {remote_status}, {index}: {index_status}, {docs}: {docs_status}.\n - Hint: either all three headers should be provided, or none of them",
+        remote = PROXY_IMPORT_REMOTE_HEADER,
+        remote_status = if *is_remote_missing { "missing" } else{ "provided" },
+        index = PROXY_IMPORT_INDEX_HEADER,
+        index_status = if *is_index_missing { "missing" } else { "provided" },
+        docs = PROXY_IMPORT_DOCS_HEADER,
+        docs_status = if *is_docs_missing { "missing" } else { "provided" }
+    )]
+    InconsistentImportHeaders {
+        is_remote_missing: bool,
+        is_index_missing: bool,
+        is_docs_missing: bool,
+    },
+    #[error("Inconsistent `Import-Metadata` headers: {index_count}: {index_count_status}, {task_key}: {task_key_status}, {total_index_documents}: {total_index_documents_status}.\n - Hint: either all three headers should be provided, or none of them",
+        index_count = PROXY_IMPORT_INDEX_COUNT_HEADER,
+        index_count_status = if *is_index_count_missing { "missing" } else { "provided"},
+        task_key = PROXY_IMPORT_TASK_KEY_HEADER,
+        task_key_status = if *is_task_key_missing { "missing" } else { "provided"},
+        total_index_documents = PROXY_IMPORT_TOTAL_INDEX_DOCS_HEADER,
+        total_index_documents_status = if *is_total_index_documents_missing { "missing" } else { "provided"},
+    )]
+    InconsistentImportMetadataHeaders {
+        is_index_count_missing: bool,
+        is_task_key_missing: bool,
+        is_total_index_documents_missing: bool,
+    },
+
+    #[error(
+        "Inconsistent task network headers: origin headers: {origin_status}, import headers: {import_status}, import metadata: {import_metadata_status}",
+        origin_status =  if *is_missing_origin { "missing"} else { "present" },
+        import_status =  if *is_missing_import { "missing"} else { "present" },
+        import_metadata_status =  if *is_missing_import_metadata { "missing"} else { "present" })]
+    InconsistentTaskNetworkHeaders {
+        is_missing_origin: bool,
+        is_missing_import: bool,
+        is_missing_import_metadata: bool,
+    },
+    #[error("Invalid value for header `{header_name}`: {msg}")]
+    InvalidHeaderValue { header_name: &'static str, msg: String },
+    #[error("This remote is not the leader of the network.\n  - Note: only the leader `{leader}` can receive new tasks.")]
+    NotLeader { leader: String },
+    #[error("Unexpected `previousRemotes` in network call.\n  - Note: `previousRemote` is reserved for internal use.")]
+    UnexpectedNetworkPreviousRemotes,
+    #[error("The network version in request is too old.\n  - Received: {received}\n  - Expected at least: {expected_at_least}")]
+    NetworkVersionTooOld { received: Uuid, expected_at_least: Uuid },
+    #[error("Remote `{remote}` encountered an error: {error}")]
+    RemoteIndexScheduler { remote: String, error: index_scheduler::Error },
+    #[error("{if_remote}Already has a pending network task with uid {task_uid}.\n  - Note: No network task can be registered while any previous network task is not done processing.\n  - Hint: Wait for task {task_uid} to complete or cancel it.",
+if_remote=if let Some(remote) = remote {
+    format!("Remote `{remote}` encountered an error: ")
+} else {"".into()} )]
+    UnprocessedNetworkTask { remote: Option<String>, task_uid: meilisearch_types::tasks::TaskId },
+    #[error("Inside `.queries[{0}]`: Using `distinct` options is not allowed in federated queries when it also appears in `.federation.distinct`.\n - Hint: remove `distinct` from query #{0} or remove `federation` from the request\n  - Note: `distinct` at the query level is discouraged in federated search.")]
+    DistinctInFederatedQueryAndFederation(usize),
 }
 
 impl MeilisearchHttpError {
@@ -107,6 +182,7 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::SerdeJson(_) => Code::Internal,
             MeilisearchHttpError::HeedError(_) => Code::Internal,
             MeilisearchHttpError::IndexScheduler(e) => e.error_code(),
+            MeilisearchHttpError::RemoteIndexScheduler { error, .. } => error.error_code(),
             MeilisearchHttpError::Milli { error, .. } => error.error_code(),
             MeilisearchHttpError::Payload(e) => e.error_code(),
             MeilisearchHttpError::FileStore(_) => Code::Internal,
@@ -114,16 +190,39 @@ impl ErrorCode for MeilisearchHttpError {
             MeilisearchHttpError::Join(_) => Code::Internal,
             MeilisearchHttpError::MissingSearchHybrid => Code::MissingSearchHybrid,
             MeilisearchHttpError::MediaAndVector => Code::InvalidSearchMediaAndVector,
-            MeilisearchHttpError::FederationOptionsInNonFederatedRequest(_) => {
+            MeilisearchHttpError::FederationOptionsInNonFederatedRequest(_)
+            | MeilisearchHttpError::RemoteAndUseNetwork(_) => {
                 Code::InvalidMultiSearchFederationOptions
             }
             MeilisearchHttpError::PaginationInFederatedQuery(_, _) => {
                 Code::InvalidMultiSearchQueryPagination
             }
+            MeilisearchHttpError::DistinctInFederatedQueryAndFederation(..) => {
+                Code::InvalidMultiSearchDistinct
+            }
             MeilisearchHttpError::FacetsInFederatedQuery(..) => Code::InvalidMultiSearchQueryFacets,
             MeilisearchHttpError::InconsistentFacetOrder { .. } => {
                 Code::InvalidMultiSearchFacetOrder
             }
+            MeilisearchHttpError::PersonalizationInFederatedQuery(_) => {
+                Code::InvalidMultiSearchQueryPersonalization
+            }
+            MeilisearchHttpError::ShowPerformanceDetailsInFederatedQuery(_) => {
+                Code::InvalidMultiSearchQueryShowPerformanceDetails
+            }
+            MeilisearchHttpError::InconsistentOriginHeaders { .. }
+            | MeilisearchHttpError::InconsistentImportHeaders { .. }
+            | MeilisearchHttpError::InconsistentImportMetadataHeaders { .. }
+            | MeilisearchHttpError::InconsistentTaskNetworkHeaders { .. } => {
+                Code::InconsistentDocumentChangeHeaders
+            }
+            MeilisearchHttpError::InvalidHeaderValue { .. } => Code::InvalidHeaderValue,
+            MeilisearchHttpError::NotLeader { .. } => Code::NotLeader,
+            MeilisearchHttpError::UnexpectedNetworkPreviousRemotes => {
+                Code::UnexpectedNetworkPreviousRemotes
+            }
+            MeilisearchHttpError::NetworkVersionTooOld { .. } => Code::NetworkVersionTooOld,
+            MeilisearchHttpError::UnprocessedNetworkTask { .. } => Code::UnprocessedNetworkTask,
         }
     }
 }
@@ -144,6 +243,14 @@ impl From<aweb::error::PayloadError> for MeilisearchHttpError {
                 ActixPayloadError::OtherError(error),
             )),
         }
+    }
+}
+
+impl<T: meilisearch_types::tasks::network::headers::GetHeader>
+    From<meilisearch_types::tasks::network::headers::DecodeError<T>> for MeilisearchHttpError
+{
+    fn from(value: meilisearch_types::tasks::network::headers::DecodeError<T>) -> Self {
+        Self::InvalidHeaderValue { header_name: value.header(), msg: value.to_string() }
     }
 }
 
@@ -177,12 +284,13 @@ impl ErrorCode for PayloadError {
             PayloadError::Payload(e) => match e {
                 ActixPayloadError::IncompleteError => Code::BadRequest,
                 ActixPayloadError::OtherError(error) => match error {
-                    aweb::error::PayloadError::EncodingCorrupted => Code::Internal,
+                    aweb::error::PayloadError::EncodingCorrupted => Code::BadRequest,
                     aweb::error::PayloadError::Overflow => Code::PayloadTooLarge,
-                    aweb::error::PayloadError::UnknownLength => Code::Internal,
-                    aweb::error::PayloadError::Http2Payload(_) => Code::Internal,
+                    aweb::error::PayloadError::UnknownLength => Code::BadRequest,
+                    aweb::error::PayloadError::Http2Payload(_) => Code::BadRequest,
                     aweb::error::PayloadError::Io(_) => Code::Internal,
-                    _ => todo!(),
+                    aweb::error::PayloadError::Incomplete(_) => Code::BadRequest,
+                    _ => Code::Internal,
                 },
             },
             PayloadError::Json(err) => match err {

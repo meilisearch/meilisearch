@@ -12,6 +12,8 @@ use crate::processing::{AtomicUpdateFileStep, SnapshotCreationProgress};
 use crate::queue::TaskQueue;
 use crate::{Error, IndexScheduler, Result};
 
+pub(crate) const UPDATE_FILES_DIR_NAME: &str = "update_files";
+
 /// # Safety
 ///
 /// See [`EnvOpenOptions::open`].
@@ -78,10 +80,32 @@ impl IndexScheduler {
     pub(super) fn process_snapshot(
         &self,
         progress: Progress,
-        mut tasks: Vec<Task>,
+        tasks: Vec<Task>,
     ) -> Result<Vec<Task>> {
         progress.update_progress(SnapshotCreationProgress::StartTheSnapshotCreation);
 
+        match self.scheduler.s3_snapshot_options.clone() {
+            Some(options) => {
+                #[cfg(not(unix))]
+                {
+                    let _ = options;
+                    panic!("Non-unix platform does not support S3 snapshotting");
+                }
+                #[cfg(unix)]
+                self.runtime
+                    .as_ref()
+                    .expect("Runtime not initialized")
+                    .block_on(self.process_snapshot_to_s3(progress, options, tasks))
+            }
+            None => self.process_snapshots_to_disk(progress, tasks),
+        }
+    }
+
+    fn process_snapshots_to_disk(
+        &self,
+        progress: Progress,
+        mut tasks: Vec<Task>,
+    ) -> Result<Vec<Task>, Error> {
         fs::create_dir_all(&self.scheduler.snapshots_path)?;
         let temp_snapshot_dir = tempfile::tempdir()?;
 
@@ -128,7 +152,7 @@ impl IndexScheduler {
         let rtxn = self.env.read_txn()?;
 
         // 2.4 Create the update files directory
-        let update_files_dir = temp_snapshot_dir.path().join("update_files");
+        let update_files_dir = temp_snapshot_dir.path().join(UPDATE_FILES_DIR_NAME);
         fs::create_dir_all(&update_files_dir)?;
 
         // 2.5 Only copy the update files of the enqueued tasks
@@ -140,7 +164,7 @@ impl IndexScheduler {
             let task =
                 self.queue.tasks.get_task(&rtxn, task_id)?.ok_or(Error::CorruptedTaskQueue)?;
             if let Some(content_uuid) = task.content_uuid() {
-                let src = self.queue.file_store.get_update_path(content_uuid);
+                let src = self.queue.file_store.update_path(content_uuid);
                 let dst = update_files_dir.join(content_uuid.to_string());
                 fs::copy(src, dst)?;
             }

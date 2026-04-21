@@ -1,4 +1,5 @@
 #![allow(clippy::type_complexity)]
+#![allow(clippy::result_large_err)]
 
 #[cfg(not(windows))]
 #[cfg(test)]
@@ -18,14 +19,17 @@ mod external_documents_ids;
 pub mod facet;
 mod fields_ids_map;
 mod filterable_attributes_rules;
+mod foreign_key;
 pub mod heed_codec;
 pub mod index;
 mod localized_attributes_rules;
+pub mod must_stop_processing;
 pub mod order_by_map;
 pub mod prompt;
 pub mod proximity;
 pub mod score_details;
 mod search;
+pub mod sharding;
 mod thread_pool_no_abort;
 pub mod update;
 pub mod vector;
@@ -45,49 +49,56 @@ use std::hash::BuildHasherDefault;
 use charabia::normalizer::{CharNormalizer, CompatibilityDecompositionNormalizer};
 pub use documents::GeoSortStrategy;
 pub use filter_parser;
-pub use filter_parser::{Condition, FilterCondition, Span, Token};
+pub use filter_parser::{Condition, FilterCondition, IndexFilterCondition, Span, Token};
 use fxhash::{FxHasher32, FxHasher64};
 pub use grenad::CompressionType;
+pub use must_stop_processing::MustStopProcessing;
 pub use search::new::{
     execute_search, filtered_universe, DefaultSearchLogger, SearchContext, SearchLogger,
     VisualSearchLogger,
 };
 use serde_json::Value;
-pub use thread_pool_no_abort::{PanicCatched, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
-pub use {arroy, charabia as tokenizer, heed, rhai};
+pub use thread_pool_no_abort::{CaughtPanic, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
+pub use {arroy, cellulite, charabia as tokenizer, hannoy, heed, rhai};
 
 pub use self::asc_desc::{AscDesc, AscDescError, Member, SortError};
 pub use self::attribute_patterns::{AttributePatterns, PatternMatch};
-pub use self::criterion::{default_criteria, Criterion, CriterionError};
+pub use self::criterion::{default_criteria, AttributeState, Criterion, CriterionError};
 pub use self::error::{
     Error, FieldIdMapMissingEntry, InternalError, SerializationError, UserError,
 };
 pub use self::external_documents_ids::ExternalDocumentsIds;
 pub use self::fieldids_weights_map::FieldidsWeightsMap;
 pub use self::fields_ids_map::{
-    FieldIdMapWithMetadata, FieldsIdsMap, GlobalFieldsIdsMap, MetadataBuilder,
+    metadata::Metadata, FieldIdMapWithMetadata, FieldSortOrder, FieldsIdsMap, GlobalFieldsIdsMap,
+    MetadataBuilder,
 };
 pub use self::filterable_attributes_rules::{
     FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
     FilterableAttributesRule,
 };
+pub use self::foreign_key::ForeignKey;
 pub use self::heed_codec::{
     BEU16StrCodec, BEU32StrCodec, BoRoaringBitmapCodec, BoRoaringBitmapLenCodec,
     CboRoaringBitmapCodec, CboRoaringBitmapLenCodec, FieldIdWordCountCodec, ObkvCodec,
     RoaringBitmapCodec, RoaringBitmapLenCodec, StrBEU32Codec, U8StrStrCodec,
     UncheckedU8StrStrCodec,
 };
-pub use self::index::Index;
+pub use self::index::{CreateOrOpen, Index};
 pub use self::localized_attributes_rules::LocalizedAttributesRule;
-pub use self::search::facet::{FacetValueHit, SearchForFacetValues};
+pub use self::search::facet::{FacetValueHit, SearchForFacetValues, SHARD_FIELD};
 pub use self::search::similar::Similar;
+pub use self::search::steps::{FederatingResultsStep, SearchStep, TotalProcessingTimeStep};
 pub use self::search::{
-    FacetDistribution, Filter, FormatOptions, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
-    Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, FacetDistribution,
+    Filter, FormatOptions, IndexFilter, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
+    PinDoc, Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
-pub use self::update::ChannelCongestion;
+pub use self::update::{
+    ChannelCongestion, FragmentDiff, InnerIndexSettings, InnerIndexSettingsDiff, SettingsDelta,
+};
 
-pub type Result<T> = std::result::Result<T, error::Error>;
+pub type Result<T, E = error::Error> = std::result::Result<T, E>;
 
 pub type Attribute = u32;
 pub type BEU16 = heed::types::U16<heed::byteorder::BE>;
@@ -131,9 +142,8 @@ pub const MAX_WORD_LENGTH: usize = MAX_LMDB_KEY_LENGTH / 2;
 pub const MAX_POSITION_PER_ATTRIBUTE: u32 = u16::MAX as u32 + 1;
 
 #[derive(Clone)]
-pub struct TimeBudget {
-    started_at: std::time::Instant,
-    budget: std::time::Duration,
+pub struct Deadline {
+    deadline: Option<std::time::Instant>,
 
     /// When testing the time budget, ensuring we did more than iteration of the bucket sort can be useful.
     /// But to avoid being flaky, the only option is to add the ability to stop after a specific number of calls instead of a `Duration`.
@@ -141,35 +151,43 @@ pub struct TimeBudget {
     stop_after: Option<(std::sync::Arc<std::sync::atomic::AtomicUsize>, usize)>,
 }
 
-impl fmt::Debug for TimeBudget {
+impl fmt::Debug for Deadline {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TimeBudget")
-            .field("started_at", &self.started_at)
-            .field("budget", &self.budget)
-            .field("left", &(self.budget - self.started_at.elapsed()))
-            .finish()
+        f.debug_struct("TimeBudget").field("deadline", &self.deadline).finish()
     }
 }
 
-impl Default for TimeBudget {
+impl Default for Deadline {
     fn default() -> Self {
-        Self::new(std::time::Duration::from_millis(1500))
+        Self::from_budget(std::time::Duration::from_millis(1500))
     }
 }
 
-impl TimeBudget {
-    pub fn new(budget: std::time::Duration) -> Self {
+impl Deadline {
+    pub fn from_budget(budget: std::time::Duration) -> Self {
+        let deadline = std::time::Instant::now().checked_add(budget);
         Self {
-            started_at: std::time::Instant::now(),
-            budget,
+            deadline,
 
             #[cfg(test)]
             stop_after: None,
         }
     }
 
-    pub fn max() -> Self {
-        Self::new(std::time::Duration::from_secs(u64::MAX))
+    pub fn never() -> Self {
+        Self {
+            deadline: None,
+            #[cfg(test)]
+            stop_after: None,
+        }
+    }
+
+    pub fn earliest(left: Self, right: Self) -> Self {
+        Self {
+            deadline: left.deadline.min(right.deadline),
+            #[cfg(test)]
+            stop_after: left.stop_after,
+        }
     }
 
     #[cfg(test)]
@@ -192,8 +210,10 @@ impl TimeBudget {
                 return false;
             }
         }
-
-        self.started_at.elapsed() > self.budget
+        let Some(deadline) = self.deadline else {
+            return false;
+        };
+        std::time::Instant::now() > deadline
     }
 }
 

@@ -1,7 +1,12 @@
+use std::num::NonZeroUsize;
+use std::path::PathBuf;
+use std::time::Duration;
+
 use grenad::CompressionType;
 
 use super::GrenadParameters;
-use crate::{thread_pool_no_abort::ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
+use crate::thread_pool_no_abort::ThreadPoolNoAbort;
+use crate::ThreadPoolNoAbortBuilder;
 
 #[derive(Debug)]
 pub struct IndexerConfig {
@@ -17,6 +22,7 @@ pub struct IndexerConfig {
     pub skip_index_budget: bool,
     pub experimental_no_edition_2024_for_settings: bool,
     pub experimental_no_edition_2024_for_dumps: bool,
+    pub s3_snapshot_options: Option<S3SnapshotOptions>,
 }
 
 impl IndexerConfig {
@@ -28,6 +34,22 @@ impl IndexerConfig {
             max_nb_chunks: self.max_nb_chunks,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct S3SnapshotOptions {
+    pub s3_bucket_url: String,
+    pub s3_bucket_region: String,
+    pub s3_bucket_name: String,
+    pub s3_snapshot_prefix: String,
+    pub s3_access_key: Option<String>,
+    pub s3_secret_key: Option<String>,
+    pub s3_role_arn: Option<String>,
+    pub s3_web_identity_token_file: Option<PathBuf>,
+    pub s3_max_in_flight_parts: NonZeroUsize,
+    pub s3_compression_level: u32,
+    pub s3_signature_duration: Duration,
+    pub s3_multipart_part_size: u64,
 }
 
 /// By default use only 1 thread for indexing in tests
@@ -67,6 +89,7 @@ impl Default for IndexerConfig {
             skip_index_budget: false,
             experimental_no_edition_2024_for_settings: false,
             experimental_no_edition_2024_for_dumps: false,
+            s3_snapshot_options: None,
         }
     }
 }

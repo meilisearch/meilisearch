@@ -1,0 +1,85 @@
+{
+  "type": "test",
+  "name": "task_queue_compaction",
+  "binary": {
+    "source": "build"
+  },
+  "commands": [
+    {
+      "route": "indexes/foobar/documents",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "id": 123,
+          "foo": "bar"
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "foobar",
+        "status": "enqueued",
+        "taskUid": "[taskUid]",
+        "type": "documentAdditionOrUpdate"
+      },
+      "synchronous": "WaitForTask"
+    },
+    {
+      "route": "tasks/compact",
+      "method": "POST",
+      "expectedStatus": 400,
+      "expectedResponse": {
+        "message": "Using the /tasks/compact route requires enabling the `task queue compaction route` experimental feature. See https://github.com/orgs/meilisearch/discussions/883",
+        "code": "feature_not_enabled",
+        "type": "invalid_request",
+        "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
+      }
+    },
+    {
+      "route": "experimental-features",
+      "method": "PATCH",
+      "body": {
+        "inline": {
+          "taskQueueCompactionRoute": true
+        }
+      },
+      "expectedStatus": 200,
+      "synchronous": "WaitForResponse"
+    },
+    {
+      "route": "tasks/compact",
+      "method": "POST",
+      "expectedStatus": 200,
+      "expectedResponse": {
+        "preSize": "[preSize]",
+        "postSize": "[postSize]",
+        "status": "succeeded",
+        "actionRequired": "you must restart your instance"
+      }
+    },
+    {
+      "binary": {
+        "source": "build"
+      }
+    },
+    {
+      "route": "indexes/foobar/documents",
+      "method": "POST",
+      "body": {
+        "inline": {
+          "id": 456,
+          "foo": "baz"
+        }
+      },
+      "expectedStatus": 202,
+      "expectedResponse": {
+        "enqueuedAt": "[timestamp]",
+        "indexUid": "foobar",
+        "status": "enqueued",
+        "taskUid": "[taskUid]",
+        "type": "documentAdditionOrUpdate"
+      },
+      "synchronous": "WaitForTask"
+    }
+  ]
+}

@@ -13,7 +13,7 @@ license.workspace = true
 [dependencies]
 # fixed version due to format breakages in v1.40
 insta = { version = "=1.39.0", features = ["json", "redactions"] }
-md5 = "0.7.0"
+md5 = "0.8.0"
 once_cell = "1.21"
-regex-lite = "0.1.6"
-uuid = { version = "1.17.0", features = ["v4"] }
+regex-lite = "0.1.8"
+uuid = { version = "1.18.1", features = ["v4"] }

@@ -13,53 +13,37 @@ use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::keys::{CreateApiKey, Key, PatchApiKey};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use utoipa::{IntoParams, OpenApi, ToSchema};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use super::{PaginationView, PAGINATION_DEFAULT_LIMIT, PAGINATION_DEFAULT_LIMIT_FN};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 use crate::routes::Pagination;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(create_api_key, list_api_keys, get_api_key, patch_api_key, delete_api_key),
+#[routes::routes(
+    routes(
+        "" => [post(create_api_key), get(list_api_keys)],
+        "/{key}" => [get(get_api_key), patch(patch_api_key), delete(delete_api_key)],
+    ),
+    tag = "Keys",
     tags((
         name = "Keys",
         description = "Manage API `keys` for a Meilisearch instance. Each key has a given set of permissions.
 You must have the master key or the default admin key to access the keys route. More information about the keys and their rights.
 Accessing any route under `/keys` without having set a master key will result in an error.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/keys"),
     )),
 )]
 pub struct ApiKeyApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::post().to(SeqHandler(create_api_key)))
-            .route(web::get().to(SeqHandler(list_api_keys))),
-    )
-    .service(
-        web::resource("/{key}")
-            .route(web::get().to(SeqHandler(get_api_key)))
-            .route(web::patch().to(SeqHandler(patch_api_key)))
-            .route(web::delete().to(SeqHandler(delete_api_key))),
-    );
-}
-
-/// Create an API Key
+/// Create API key
 ///
-/// Create an API Key.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Keys",
+/// Create a new API key with the specified name, description, actions, and index scopes. The key value is returned only once at creation time; store it securely.
+#[routes::path(
     security(("Bearer" = ["keys.create", "keys.*", "*"])),
     request_body = CreateApiKey,
     responses(
-        (status = 202, description = "Key has been created", body = KeyView, content_type = "application/json", example = json!(
+        (status = 201, description = "Key has been created.", body = KeyView, content_type = "application/json", example = json!(
             {
                 "uid": "01b4bc42-eb33-4041-b481-254d00cce834",
                 "key": "d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4",
@@ -76,7 +60,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "updatedAt": "2021-11-12T10:00:00Z"
             }
         )),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -84,7 +68,7 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -114,11 +98,13 @@ pub async fn create_api_key(
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct ListApiKeys {
+    /// Number of keys to skip. Use with `limit` for pagination. Defaults to 0.
     #[deserr(default, error = DeserrQueryParamError<InvalidApiKeyOffset>)]
-    #[param(value_type = usize, default = 0)]
+    #[param(required = false, value_type = usize, default = 0)]
     pub offset: Param<usize>,
+    /// Maximum number of keys to return. Use with `offset` for pagination. Defaults to 20.
     #[deserr(default = Param(PAGINATION_DEFAULT_LIMIT), error = DeserrQueryParamError<InvalidApiKeyLimit>)]
-    #[param(value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
+    #[param(required = false, value_type = usize, default = PAGINATION_DEFAULT_LIMIT_FN)]
     pub limit: Param<usize>,
 }
 
@@ -128,17 +114,14 @@ impl ListApiKeys {
     }
 }
 
-/// Get API Keys
+/// List API keys
 ///
-/// List all API Keys
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Keys",
+/// Return all API keys configured on the instance. Results are paginated and can be filtered by offset and limit. The key value itself is never returned after creation.
+#[routes::path(
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
     params(ListApiKeys),
     responses(
-        (status = 202, description = "List of keys", body = PaginationView<KeyView>, content_type = "application/json", example = json!(
+        (status = 200, description = "List of keys.", body = PaginationView<KeyView>, content_type = "application/json", example = json!(
             {
                 "results": [
                     {
@@ -162,7 +145,7 @@ impl ListApiKeys {
                 "total": 1
             }
         )),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -170,7 +153,7 @@ impl ListApiKeys {
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -198,17 +181,14 @@ pub async fn list_api_keys(
     Ok(HttpResponse::Ok().json(page_view))
 }
 
-/// Get an API Key
+/// Get API key
 ///
-/// Get an API key from its `uid` or its `key` field.
-#[utoipa::path(
-    get,
-    path = "/{uidOrKey}",
-    tag = "Keys",
+/// Retrieve a single API key by its `uid` or by its `key` value.
+#[routes::path(
     security(("Bearer" = ["keys.get", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
+    params(("key" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     responses(
-        (status = 200, description = "The key is returned", body = KeyView, content_type = "application/json", example = json!(
+        (status = 200, description = "The key is returned.", body = KeyView, content_type = "application/json", example = json!(
             {
                 "uid": "01b4bc42-eb33-4041-b481-254d00cce834",
                 "key": "d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4",
@@ -225,7 +205,7 @@ pub async fn list_api_keys(
                 "updatedAt": "2021-11-12T10:00:00Z"
             }
         )),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -233,12 +213,20 @@ pub async fn list_api_keys(
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "API key not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
             }
         )),
     )
@@ -262,19 +250,17 @@ pub async fn get_api_key(
     Ok(HttpResponse::Ok().json(res))
 }
 
-/// Update a Key
+/// Update API key
 ///
 /// Update the name and description of an API key.
-/// Updates to keys are partial. This means you should provide only the fields you intend to update, as any fields not present in the payload will remain unchanged.
-#[utoipa::path(
-    patch,
-    path = "/{uidOrKey}",
-    tag = "Keys",
+///
+/// Updates are partial: only the fields you send are changed, and any fields not present in the payload remain unchanged.
+#[routes::path(
     security(("Bearer" = ["keys.update", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
+    params(("key" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     request_body = PatchApiKey,
     responses(
-        (status = 200, description = "The key have been updated", body = KeyView, content_type = "application/json", example = json!(
+        (status = 200, description = "The key has been updated.", body = KeyView, content_type = "application/json", example = json!(
             {
                 "uid": "01b4bc42-eb33-4041-b481-254d00cce834",
                 "key": "d0552b41536279a0ad88bd595327b96f01176a60c2243e906c52ac02375f9bc4",
@@ -291,7 +277,7 @@ pub async fn get_api_key(
                 "updatedAt": "2021-11-12T10:00:00Z"
             }
         )),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -299,12 +285,20 @@ pub async fn get_api_key(
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
                 "type": "auth",
                 "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 404, description = "API key not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
             }
         )),
     )
@@ -329,18 +323,23 @@ pub async fn patch_api_key(
     Ok(HttpResponse::Ok().json(res))
 }
 
-/// Delete a key
+/// Delete API key
 ///
-/// Delete the specified API key.
-#[utoipa::path(
-    delete,
-    path = "/{uidOrKey}",
-    tag = "Keys",
+/// Permanently delete the specified API key. The key will no longer be valid for authentication.
+#[routes::path(
     security(("Bearer" = ["keys.delete", "keys.*", "*"])),
-    params(("uidOrKey" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key", nullable = false)),
+    params(("key" = String, Path, format = Password, example = "7b198a7f-52a0-4188-8762-9ad93cd608b2", description = "The `uid` or `key` field of an existing API key.", nullable = false)),
     responses(
-        (status = NO_CONTENT, description = "The key have been removed"),
-        (status = 401, description = "The route has been hit on an unprotected instance", body = ResponseError, content_type = "application/json", example = json!(
+        (status = NO_CONTENT, description = "The key has been removed."),
+        (status = 404, description = "API key not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The API key was not found.",
+                "code": "api_key_not_found",
+                "type": "invalid_request",
+                "link": "https://docs.meilisearch.com/errors#api_key_not_found"
+            }
+        )),
+        (status = 401, description = "The route has been hit on an unprotected instance.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "Meilisearch is running without a master key. To access this API endpoint, you must have set a master key at launch.",
                 "code": "missing_master_key",
@@ -348,7 +347,7 @@ pub async fn patch_api_key(
                 "link": "https://docs.meilisearch.com/errors#missing_master_key"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -379,29 +378,51 @@ pub struct AuthParam {
     key: String,
 }
 
+/// Represents an API key used for authenticating requests to Meilisearch.
+/// Each key has specific permissions defined by its actions and can be scoped
+/// to particular indexes. Keys provide fine-grained access control for your
+/// Meilisearch instance.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct KeyView {
-    /// The name of the API Key if any
+    /// A human-readable name for the API key. Use this to identify the purpose
+    /// of each key, such as "Frontend Search Key" or "Admin Key for CI/CD".
+    /// This is optional and can be `null`.
     name: Option<String>,
-    /// The description of the API Key if any
+    /// A longer description explaining the purpose or usage of this API key.
+    /// Useful for documenting why the key was created and how it should be
+    /// used. This is optional and can be `null`.
     description: Option<String>,
-    /// The actual API Key you can send to Meilisearch
+    /// The actual API key string to use in the `Authorization: Bearer <key>`
+    /// header when making requests to Meilisearch. Keep this value secret and
+    /// never expose it in client-side code.
     key: String,
-    /// The `Uuid` specified while creating the key or autogenerated by Meilisearch.
+    /// The unique identifier (UUID) for this API key. Use this to update or
+    /// delete the key. The UID remains constant even if the key's name or
+    /// description changes.
     uid: Uuid,
-    /// The actions accessible with this key.
+    /// The list of actions (permissions) this key is allowed to perform.
+    /// Examples include `documents.add`, `search`, `indexes.create`,
+    /// `settings.update`, etc. Use `*` to grant all permissions.
     actions: Vec<Action>,
-    /// The indexes accessible with this key.
+    /// The list of index UIDs this key can access. Use `*` to grant access to
+    /// all indexes, including future ones. Patterns are also supported, e.g.,
+    /// `movies_*` matches any index starting with "movies_".
     indexes: Vec<String>,
-    /// The expiration date of the key. Once this timestamp is exceeded the key is not deleted but cannot be used anymore.
+    /// The expiration date and time of the key in RFC 3339 format. After this
+    /// time, the key will no longer be valid for authentication. Set to `null`
+    /// for keys that never expire.
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
     expires_at: Option<OffsetDateTime>,
-    /// The date of creation of this API Key.
+    /// The date and time when this API key was created, formatted as an
+    /// RFC 3339 date-time string. This is automatically set by Meilisearch
+    /// and cannot be modified.
     #[schema(read_only)]
     #[serde(serialize_with = "time::serde::rfc3339::serialize")]
     created_at: OffsetDateTime,
-    /// The date of the last update made on this key.
+    /// The date and time when this API key was last modified, formatted as an
+    /// RFC 3339 date-time string. This is automatically updated by Meilisearch
+    /// when the key's name or description changes.
     #[schema(read_only)]
     #[serde(serialize_with = "time::serde::rfc3339::serialize")]
     updated_at: OffsetDateTime,

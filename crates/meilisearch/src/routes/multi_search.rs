@@ -6,55 +6,54 @@ use index_scheduler::IndexScheduler;
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::keys::actions;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::TotalProcessingTimeStep;
 use serde::Serialize;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
+use uuid::Uuid;
 
 use super::multi_search_analytics::MultiSearchAggregator;
 use crate::analytics::Analytics;
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
-use crate::routes::indexes::search::search_kind;
+use crate::routes::parse_include_metadata_header;
 use crate::search::{
-    add_search_rules, perform_federated_search, perform_search, FederatedSearch,
-    FederatedSearchResult, RetrieveVectors, SearchQueryWithIndex, SearchResultWithIndex,
-    PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
+    SearchQueryWithIndex, SearchResultWithIndex, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
 };
 use crate::search_queue::SearchQueue;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(multi_search_with_post),
+#[routes::routes(
+    routes(
+        "" => post(multi_search_with_post),
+    ),
+    tag = "Multi-search",
     tags((
         name = "Multi-search",
         description = "The `/multi-search` route allows you to perform multiple search queries on one or more indexes by bundling them into a single HTTP request. Multi-search is also known as federated search.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/multi_search"),
     )),
 )]
 pub struct MultiSearchApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(multi_search_with_post))));
-}
-
+/// Response containing results from multiple search queries
 #[derive(Serialize, ToSchema)]
 pub struct SearchResults {
+    /// Array of search results for each query
     results: Vec<SearchResultWithIndex>,
 }
 
 /// Perform a multi-search
 ///
-/// Bundle multiple search queries in a single API request. Use this endpoint to search through multiple indexes at once.
-#[utoipa::path(
-    post,
-    request_body = FederatedSearch,
-    path = "",
-    tag = "Multi-search",
+/// Run multiple search queries in a single API request.
+///
+/// Each query can target a different index, so you can search across several indexes at once and get one combined response.
+#[routes::path(
+    request_body(content = FederatedSearch),
     security(("Bearer" = ["search", "*"])),
     responses(
-        (status = OK, description = "Non federated multi-search", body = SearchResults, content_type = "application/json", example = json!(
+        (status = OK, description = "Non federated multi-search.", body = SearchResults, content_type = "application/json", example = json!(
             {
                 "results":[
                     {
@@ -102,7 +101,7 @@ pub struct SearchResults {
                 ]
             }
         )),
-        (status = OK, description = "Federated multi-search", body = FederatedSearchResult, content_type = "application/json", example = json!(
+        (status = OK, description = "Federated multi-search.", body = FederatedSearchResult, content_type = "application/json", example = json!(
             {
                 "hits": [
                     {
@@ -131,7 +130,7 @@ pub struct SearchResults {
                 "semanticHitCount": 0
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -144,13 +143,18 @@ pub struct SearchResults {
 pub async fn multi_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: Data<SearchQueue>,
+    personalization_service: web::Data<crate::personalization::PersonalizationService>,
     params: AwebJson<FederatedSearch, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
+    let progress = Progress::default();
+    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;
+    progress.update_progress(TotalProcessingTimeStep::Search);
+    let request_uid = Uuid::now_v7();
 
     let federated_search = params.into_inner();
 
@@ -186,16 +190,32 @@ pub async fn multi_search_with_post(
         err
     })?;
 
+    let include_metadata = parse_include_metadata_header(&req);
     let response = match federation {
         Some(federation) => {
+            debug!(
+                request_uid = ?request_uid,
+                federation = ?federation,
+                parameters = ?queries,
+                "Federated-search"
+            );
+
             // check remote header
             let is_proxy = req
                 .headers()
                 .get(PROXY_SEARCH_HEADER)
                 .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
-            let search_result =
-                perform_federated_search(&index_scheduler, queries, federation, features, is_proxy)
-                    .await;
+            let search_result = perform_federated_search(
+                index_scheduler.clone(),
+                queries,
+                federation,
+                features,
+                is_proxy,
+                request_uid,
+                include_metadata,
+                &progress,
+            )
+            .await;
             permit.drop().await;
 
             if search_result.is_ok() {
@@ -203,7 +223,16 @@ pub async fn multi_search_with_post(
             }
 
             analytics.publish(multi_aggregate, &req);
-            HttpResponse::Ok().json(search_result?)
+
+            debug!(
+                request_uid = ?request_uid,
+                returns = ?search_result,
+                progress = ?progress.accumulated_durations(),
+                "Federated-search"
+            );
+
+            let (search_result, _) = search_result?;
+            HttpResponse::Ok().json(search_result)
         }
         None => {
             // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
@@ -216,7 +245,12 @@ pub async fn multi_search_with_post(
                     .map(SearchQueryWithIndex::into_index_query_federation)
                     .enumerate()
                 {
-                    debug!(on_index = query_index, parameters = ?query, "Multi-search");
+                    debug!(
+                        request_uid = ?request_uid,
+                        on_index = query_index,
+                        parameters = ?query,
+                        "Multi-search"
+                    );
 
                     if federation_options.is_some() {
                         return Err((
@@ -228,44 +262,22 @@ pub async fn multi_search_with_post(
                         ));
                     }
 
-                    let index = index_scheduler
-                        .index(&index_uid)
-                        .map_err(|err| {
-                            let mut err = ResponseError::from(err);
-                            // Patch the HTTP status code to 400 as it defaults to 404 for `index_not_found`, but
-                            // here the resource not found is not part of the URL.
-                            err.code = StatusCode::BAD_REQUEST;
-                            err
-                        })
-                        .with_index(query_index)?;
-
-                    let index_uid_str = index_uid.to_string();
-
-                    let search_kind = search_kind(
-                        &query,
-                        index_scheduler.get_ref(),
-                        index_uid_str.clone(),
-                        &index,
+                    let search_result = crate::routes::indexes::search::search(
+                        query,
+                        index_scheduler.clone(),
+                        index_uid.clone(),
+                        request_uid,
+                        include_metadata,
+                        &progress,
+                        &personalization_service,
+                        StatusCode::BAD_REQUEST,
                     )
-                    .with_index(query_index)?;
-                    let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
-
-                    let search_result = tokio::task::spawn_blocking(move || {
-                        perform_search(
-                            index_uid_str.clone(),
-                            &index,
-                            query,
-                            search_kind,
-                            retrieve_vector,
-                            features,
-                        )
-                    })
                     .await
                     .with_index(query_index)?;
 
                     search_results.push(SearchResultWithIndex {
                         index_uid: index_uid.into_inner(),
-                        result: search_result.with_index(query_index)?,
+                        result: search_result,
                     });
                 }
                 Ok(search_results)
@@ -286,7 +298,12 @@ pub async fn multi_search_with_post(
                 err
             })?;
 
-            debug!(returns = ?search_results, "Multi-search");
+            debug!(
+                request_uid = ?request_uid,
+                returns = ?search_results,
+                progress = ?progress.accumulated_durations(),
+                "Multi-search"
+            );
 
             HttpResponse::Ok().json(SearchResults { results: search_results })
         }
@@ -298,7 +315,8 @@ pub async fn multi_search_with_post(
 /// Local `Result` extension trait to avoid `map_err` boilerplate.
 trait WithIndex {
     type T;
-    /// convert the error type inside of the `Result` to a `ResponseError`, and return a couple of it + the usize.
+    /// convert the error type inside of the `Result` to a `ResponseError`, and
+    /// return a couple of it + the usize.
     fn with_index(self, index: usize) -> Result<Self::T, (ResponseError, usize)>;
 }
 

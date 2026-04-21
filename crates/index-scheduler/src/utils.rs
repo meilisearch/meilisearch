@@ -1,13 +1,14 @@
 //! Utility functions on the DBs. Mainly getter and setters.
 
-use crate::milli::progress::EmbedderStats;
 use std::collections::{BTreeSet, HashSet};
-use std::ops::Bound;
+use std::ops::{Bound, RangeInclusive};
 use std::sync::Arc;
 
+use convert_case::{Case, Casing as _};
 use meilisearch_types::batches::{Batch, BatchEnqueuedAt, BatchId, BatchStats};
 use meilisearch_types::heed::{Database, RoTxn, RwTxn};
-use meilisearch_types::milli::CboRoaringBitmapCodec;
+use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{CboRoaringBitmapCodec, ChannelCongestion};
 use meilisearch_types::task_view::DetailsView;
 use meilisearch_types::tasks::{
     BatchStopReason, Details, IndexSwap, Kind, KindWithContent, Status,
@@ -15,6 +16,7 @@ use meilisearch_types::tasks::{
 use roaring::RoaringBitmap;
 use time::OffsetDateTime;
 
+use crate::milli::progress::EmbedderStats;
 use crate::{Error, Result, Task, TaskId, BEI128};
 
 /// This structure contains all the information required to write a batch in the database without reading the tasks.
@@ -119,17 +121,8 @@ impl ProcessingBatch {
         self.stats.total_nb_tasks = 0;
     }
 
-    /// Update the timestamp of the tasks and the inner structure of this structure.
-    pub fn update(&mut self, task: &mut Task) {
-        // We must re-set this value in case we're dealing with a task that has been added between
-        // the `processing` and `finished` state
-        // We must re-set this value in case we're dealing with a task that has been added between
-        // the `processing` and `finished` state or that failed.
-        task.batch_uid = Some(self.uid);
-        // Same
-        task.started_at = Some(self.started_at);
-        task.finished_at = self.finished_at;
-
+    /// Update batch task from a processed task
+    pub fn update_from_task(&mut self, task: &Task) {
         self.statuses.insert(task.status);
 
         // Craft an aggregation of the details of all the tasks encountered in this batch.
@@ -142,6 +135,63 @@ impl ProcessingBatch {
         if let Some(index_uid) = task.index_uid() {
             *self.stats.index_uids.entry(index_uid.to_string()).or_default() += 1;
         }
+    }
+
+    /// Update the timestamp of the tasks after they're done
+    pub fn finish_task(&self, task: &mut Task) {
+        // We must re-set this value in case we're dealing with a task that has been added between
+        // the `processing` and `finished` state or that failed.
+        task.batch_uid = Some(self.uid);
+        // Same
+        task.started_at = Some(self.started_at);
+        task.finished_at = self.finished_at;
+    }
+
+    pub fn write_stats(
+        &mut self,
+        progress: &Progress,
+        congestion: Option<ChannelCongestion>,
+        pre_commit_dabases_sizes: indexmap::IndexMap<&'static str, usize>,
+        post_commit_dabases_sizes: indexmap::IndexMap<&'static str, usize>,
+    ) {
+        self.stats.progress_trace =
+            progress.accumulated_durations().into_iter().map(|(k, v)| (k, v.into())).collect();
+        self.stats.write_channel_congestion = congestion.map(|congestion| {
+            let mut congestion_info = serde_json::Map::new();
+            congestion_info.insert("attempts".into(), congestion.attempts.into());
+            congestion_info.insert("blocking_attempts".into(), congestion.blocking_attempts.into());
+            congestion_info.insert("blocking_ratio".into(), congestion.congestion_ratio().into());
+            congestion_info
+        });
+        self.stats.internal_database_sizes = pre_commit_dabases_sizes
+            .iter()
+            .flat_map(|(dbname, pre_size)| {
+                post_commit_dabases_sizes
+                    .get(dbname)
+                    .map(|post_size| {
+                        use std::cmp::Ordering::{Equal, Greater, Less};
+
+                        use byte_unit::Byte;
+                        use byte_unit::UnitType::Binary;
+
+                        let post = Byte::from_u64(*post_size as u64).get_appropriate_unit(Binary);
+                        let diff_size = post_size.abs_diff(*pre_size) as u64;
+                        let diff = Byte::from_u64(diff_size).get_appropriate_unit(Binary);
+                        let sign = match post_size.cmp(pre_size) {
+                            Equal => return None,
+                            Greater => "+",
+                            Less => "-",
+                        };
+
+                        Some((
+                            dbname.to_case(Case::Camel),
+                            format!("{post:#.2} ({sign}{diff:#.2})").into(),
+                        ))
+                    })
+                    .into_iter()
+                    .flatten()
+            })
+            .collect();
     }
 
     pub fn to_batch(&self) -> Batch {
@@ -159,6 +209,30 @@ impl ProcessingBatch {
     }
 }
 
+/// Given a **sorted** iterator of `u32`, return an iterator of the ranges of consecutive values it contains.
+pub fn consecutive_ranges<'a>(
+    it: impl IntoIterator<Item = u32> + 'a,
+) -> impl Iterator<Item = RangeInclusive<u32>> + 'a {
+    let mut it = it.into_iter();
+    let mut current_range = it.next().map(|s| (s, s));
+    std::iter::from_fn(move || {
+        for current in it.by_ref() {
+            match current_range {
+                Some((start, end)) => {
+                    if current == end + 1 {
+                        current_range = Some((start, end + 1));
+                    } else {
+                        current_range = Some((current, current));
+                        return Some(start..=end);
+                    }
+                }
+                None => return None,
+            }
+        }
+        current_range.take().map(|(s, e)| s..=e)
+    })
+}
+
 pub(crate) fn insert_task_datetime(
     wtxn: &mut RwTxn,
     database: Database<BEI128, CboRoaringBitmapCodec>,
@@ -168,7 +242,7 @@ pub(crate) fn insert_task_datetime(
     let timestamp = time.unix_timestamp_nanos();
     let mut task_ids = database.get(wtxn, &timestamp)?.unwrap_or_default();
     task_ids.insert(task_id);
-    database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(task_ids))?;
+    database.put(wtxn, &timestamp, &task_ids)?;
     Ok(())
 }
 
@@ -184,7 +258,7 @@ pub(crate) fn remove_task_datetime(
         if existing.is_empty() {
             database.delete(wtxn, &timestamp)?;
         } else {
-            database.put(wtxn, &timestamp, &RoaringBitmap::from_iter(existing))?;
+            database.put(wtxn, &timestamp, &existing)?;
         }
     }
 
@@ -256,14 +330,15 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
     use KindWithContent as K;
     let mut index_uids = vec![];
     match &mut task.kind {
-        K::DocumentAdditionOrUpdate { index_uid, .. } => index_uids.push(index_uid),
-        K::DocumentEdition { index_uid, .. } => index_uids.push(index_uid),
-        K::DocumentDeletion { index_uid, .. } => index_uids.push(index_uid),
-        K::DocumentDeletionByFilter { index_uid, .. } => index_uids.push(index_uid),
-        K::DocumentClear { index_uid } => index_uids.push(index_uid),
-        K::SettingsUpdate { index_uid, .. } => index_uids.push(index_uid),
-        K::IndexDeletion { index_uid } => index_uids.push(index_uid),
-        K::IndexCreation { index_uid, .. } => index_uids.push(index_uid),
+        K::DocumentAdditionOrUpdate { index_uid, .. }
+        | K::DocumentEdition { index_uid, .. }
+        | K::DocumentDeletion { index_uid, .. }
+        | K::DocumentDeletionByFilter { index_uid, .. }
+        | K::DocumentClear { index_uid }
+        | K::SettingsUpdate { index_uid, .. }
+        | K::IndexDeletion { index_uid }
+        | K::IndexCreation { index_uid, .. }
+        | K::IndexCompaction { index_uid, .. } => index_uids.push(index_uid),
         K::IndexUpdate { index_uid, new_index_uid, .. } => {
             index_uids.push(index_uid);
             if let Some(new_uid) = new_index_uid {
@@ -285,6 +360,7 @@ pub fn swap_index_uid_in_task(task: &mut Task, swap: (&str, &str)) {
         | K::DumpCreation { .. }
         | K::Export { .. }
         | K::UpgradeDatabase { .. }
+        | K::NetworkTopologyChange(_)
         | K::SnapshotCreation => (),
     };
     if let Some(Details::IndexSwap { swaps }) = &mut task.details {
@@ -377,6 +453,8 @@ impl crate::IndexScheduler {
                 details,
                 status,
                 kind,
+                network: _,
+                custom_metadata: _,
             } = task;
             assert_eq!(uid, task.uid);
             if task.status != Status::Enqueued {
@@ -617,6 +695,16 @@ impl crate::IndexScheduler {
                     Details::UpgradeDatabase { from: _, to: _ } => {
                         assert_eq!(kind.as_kind(), Kind::UpgradeDatabase);
                     }
+                    Details::IndexCompaction {
+                        index_uid: _,
+                        pre_compaction_size: _,
+                        post_compaction_size: _,
+                    } => {
+                        assert_eq!(kind.as_kind(), Kind::IndexCompaction);
+                    }
+                    Details::NetworkTopologyChange { moved_documents: _, message: _ } => {
+                        assert_eq!(kind.as_kind(), Kind::NetworkTopologyChange);
+                    }
                 }
             }
 
@@ -680,5 +768,19 @@ pub fn dichotomic_search(start_point: usize, mut is_good: impl FnMut(usize) -> b
         if smallest_bad.is_some() && biggest_good.is_some() && biggest_good >= Some(current) {
             return current;
         }
+    }
+}
+
+pub struct ReqwestRequestWrapper(pub http_client::reqwest::RequestBuilder);
+impl meilisearch_types::tasks::network::headers::SetHeader for ReqwestRequestWrapper {
+    fn set_header(self, name: &str, value: &str) -> Self {
+        Self(self.0.prepare(|request| request.header(name, value)))
+    }
+}
+
+pub struct UreqRequestWrapper<P>(pub http_client::ureq::RequestBuilder<P>);
+impl<P> meilisearch_types::tasks::network::headers::SetHeader for UreqRequestWrapper<P> {
+    fn set_header(self, name: &str, value: &str) -> Self {
+        Self(self.0.header(name, value))
     }
 }

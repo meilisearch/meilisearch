@@ -1,5 +1,4 @@
 use meili_snap::snapshot;
-
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 

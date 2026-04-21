@@ -4,6 +4,7 @@ use std::ops::Deref;
 use big_s::S;
 use bumpalo::Bump;
 use heed::{EnvOpenOptions, RwTxn};
+use http_client::policy::IpPolicy;
 use maplit::btreemap;
 use memmap2::Mmap;
 use tempfile::TempDir;
@@ -12,19 +13,25 @@ use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::error::{Error, InternalError};
 use crate::index::{DEFAULT_MIN_WORD_LEN_ONE_TYPO, DEFAULT_MIN_WORD_LEN_TWO_TYPOS};
 use crate::progress::Progress;
+use crate::search::facet::IndexFilter;
 use crate::update::new::indexer;
 use crate::update::settings::InnerIndexSettings;
 use crate::update::{
-    self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, Setting, Settings,
+    self, IndexDocumentsConfig, IndexDocumentsMethod, IndexerConfig, MissingDocumentPolicy,
+    Setting, Settings,
 };
 use crate::vector::settings::{EmbedderSource, EmbeddingSettings};
 use crate::vector::RuntimeEmbedders;
-use crate::{db_snap, obkv_to_json, Filter, FilterableAttributesRule, Index, Search, SearchResult};
+use crate::{
+    db_snap, obkv_to_json, CreateOrOpen, Filter, FilterableAttributesRule, Index, Search,
+    SearchResult,
+};
 
 pub(crate) struct TempIndex {
     pub inner: Index,
     pub indexer_config: IndexerConfig,
     pub index_documents_config: IndexDocumentsConfig,
+    pub progress: Progress,
     _tempdir: TempDir,
 }
 
@@ -43,10 +50,13 @@ impl TempIndex {
         let mut options = options.read_txn_without_tls();
         options.map_size(size);
         let _tempdir = TempDir::new_in(".").unwrap();
-        let inner = Index::new(options, _tempdir.path(), true).unwrap();
+        let inner =
+            Index::new(options, _tempdir.path(), CreateOrOpen::create_without_shards()).unwrap();
         let indexer_config = IndexerConfig::default();
         let index_documents_config = IndexDocumentsConfig::default();
-        Self { inner, indexer_config, index_documents_config, _tempdir }
+        let progress = Progress::default();
+
+        Self { inner, indexer_config, index_documents_config, progress, _tempdir }
     }
     /// Creates a temporary index, with a default `4096 * 2000` size. This should be enough for
     /// most tests.
@@ -66,13 +76,22 @@ impl TempIndex {
         let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
-        let mut indexer = indexer::DocumentOperation::new();
+        let embedders = InnerIndexSettings::from_index(
+            &self.inner,
+            &rtxn,
+            // NO DANGER: test code
+            &IpPolicy::danger_always_allow(),
+            None,
+        )?
+        .runtime_embedders;
+        let mut indexer = indexer::IndexOperations::new();
         match self.index_documents_config.update_method {
             IndexDocumentsMethod::ReplaceDocuments => {
-                indexer.replace_documents(&documents).unwrap()
+                indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap()
             }
-            IndexDocumentsMethod::UpdateDocuments => indexer.update_documents(&documents).unwrap(),
+            IndexDocumentsMethod::UpdateDocuments => {
+                indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap()
+            }
         }
 
         let indexer_alloc = Bump::new();
@@ -84,6 +103,7 @@ impl TempIndex {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )?;
 
         if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -103,6 +123,8 @@ impl TempIndex {
                 embedders,
                 &|| false,
                 &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
                 &Default::default(),
             )
         })
@@ -135,7 +157,13 @@ impl TempIndex {
     ) -> Result<(), crate::error::Error> {
         let mut builder = update::Settings::new(wtxn, &self.inner, &self.indexer_config);
         update(&mut builder);
-        builder.execute(&|| false, &Progress::default(), Default::default())?;
+        builder.execute(
+            &|| false,
+            &Progress::default(),
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            Default::default(),
+        )?;
         Ok(())
     }
 
@@ -151,9 +179,16 @@ impl TempIndex {
         let db_fields_ids_map = self.inner.fields_ids_map(&rtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
 
-        let embedders = InnerIndexSettings::from_index(&self.inner, &rtxn, None)?.runtime_embedders;
+        let embedders = InnerIndexSettings::from_index(
+            &self.inner,
+            &rtxn,
+            // NO DANGER: test
+            &IpPolicy::danger_always_allow(),
+            None,
+        )?
+        .runtime_embedders;
 
-        let mut indexer = indexer::DocumentOperation::new();
+        let mut indexer = indexer::IndexOperations::new();
         let external_document_ids: Vec<_> =
             external_document_ids.iter().map(AsRef::as_ref).collect();
         indexer.delete_documents(external_document_ids.as_slice());
@@ -167,6 +202,7 @@ impl TempIndex {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )?;
 
         if let Some(error) = operation_stats.into_iter().find_map(|stat| stat.error) {
@@ -186,6 +222,8 @@ impl TempIndex {
                 embedders,
                 &|| false,
                 &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
                 &Default::default(),
             )
         })
@@ -204,6 +242,10 @@ impl TempIndex {
 
     pub fn delete_document(&self, external_document_id: &str) {
         self.delete_documents(vec![external_document_id.to_string()])
+    }
+
+    pub fn search<'a>(&'a self, rtxn: &'a heed::RoTxn<'a>) -> Search<'a> {
+        self.inner.search(rtxn, &self.progress)
     }
 }
 
@@ -224,13 +266,13 @@ fn aborting_indexation() {
     let mut new_fields_ids_map = db_fields_ids_map.clone();
 
     let embedders = RuntimeEmbedders::default();
-    let mut indexer = indexer::DocumentOperation::new();
+    let mut indexer = indexer::IndexOperations::new();
     let payload = documents!([
         { "id": 1, "name": "kevin" },
         { "id": 2, "name": "bob", "age": 20 },
         { "id": 2, "name": "bob", "age": 20 },
     ]);
-    indexer.replace_documents(&payload).unwrap();
+    indexer.replace_documents(&payload, MissingDocumentPolicy::default()).unwrap();
 
     let indexer_alloc = Bump::new();
     let (document_changes, _operation_stats, primary_key) = indexer
@@ -242,6 +284,7 @@ fn aborting_indexation() {
             &mut new_fields_ids_map,
             &|| false,
             Progress::default(),
+            None,
         )
         .unwrap();
 
@@ -261,6 +304,8 @@ fn aborting_indexation() {
                 embedders,
                 &|| should_abort.load(Relaxed),
                 &Progress::default(),
+                // NO DANGER: test
+                &IpPolicy::danger_always_allow(),
                 &Default::default(),
             )
         })
@@ -453,56 +498,72 @@ fn test_basic_geo_bounding_box() {
 
     // exact match a document
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([0, 0], [0, 0])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
     // match a document in the middle of the rectangle
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([10, 10], [-10, -10])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([10, 10], [-10, -10])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0]>");
 
     // select everything
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([90, 180], [-90, -180])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([90, 180], [-90, -180])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2, 3, 4]>");
 
     // go on the edge of the longitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([0, -170], [0, 180])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([0, -170], [0, 180])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1]>");
 
     // go on the other edge of the longitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([0, -180], [0, 170])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([0, -180], [0, 170])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2]>");
 
     // wrap around the longitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([0, -170], [0, 170])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([0, -170], [0, 170])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[1, 2]>");
 
     // go on the edge of the latitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([90, 0], [80, 0])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[3]>");
 
     // go on the edge of the latitude
     let search_result = search
-        .filter(Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([-80, 0], [-90, 0])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[4]>");
@@ -511,7 +572,9 @@ fn test_basic_geo_bounding_box() {
 
     // try to wrap around the latitude
     let error = search
-        .filter(Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([-80, 0], [80, 0])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap_err();
     insta::assert_snapshot!(
@@ -524,7 +587,9 @@ fn test_basic_geo_bounding_box() {
 
     // send a top latitude lower than the bottow latitude
     let error = search
-        .filter(Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap())
+        .filter(IndexFilter::from(
+            Filter::from_str("_geoBoundingBox([-10, 0], [10, 0])").unwrap().unwrap(),
+        ))
         .execute()
         .unwrap_err();
     insta::assert_snapshot!(
@@ -560,17 +625,19 @@ fn test_contains() {
     let rtxn = index.read_txn().unwrap();
     let mut search = index.search(&rtxn);
     let search_result = search
-        .filter(Filter::from_str("doggo CONTAINS kefir").unwrap().unwrap())
+        .filter(IndexFilter::from(Filter::from_str("doggo CONTAINS kefir").unwrap().unwrap()))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1]>");
     let mut search = index.search(&rtxn);
-    let search_result =
-        search.filter(Filter::from_str("doggo CONTAINS KEF").unwrap().unwrap()).execute().unwrap();
+    let search_result = search
+        .filter(IndexFilter::from(Filter::from_str("doggo CONTAINS KEF").unwrap().unwrap()))
+        .execute()
+        .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[0, 1, 2]>");
     let mut search = index.search(&rtxn);
     let search_result = search
-        .filter(Filter::from_str("doggo NOT CONTAINS fir").unwrap().unwrap())
+        .filter(IndexFilter::from(Filter::from_str("doggo NOT CONTAINS fir").unwrap().unwrap()))
         .execute()
         .unwrap();
     insta::assert_debug_snapshot!(search_result.candidates, @"RoaringBitmap<[2, 4, 5]>");
@@ -1089,7 +1156,7 @@ fn bug_3021_fourth() {
         "###);
 
     let rtxn = index.read_txn().unwrap();
-    let search = Search::new(&rtxn, &index);
+    let search = index.search(&rtxn);
     let SearchResult {
         matching_words: _,
         candidates: _,
@@ -1339,9 +1406,10 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
     assert!(results.candidates.is_empty());
 
     let mut search = index.search(&rtxn);
-    let results =
-        dbg!(search.filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()).execute())
-            .unwrap();
+    let results = dbg!(search
+        .filter(IndexFilter::from(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()))
+        .execute())
+    .unwrap();
     assert!(results.candidates.is_empty());
 
     index
@@ -1371,7 +1439,7 @@ fn vectors_are_never_indexed_as_searchable_or_filterable() {
 
     let mut search = index.search(&rtxn);
     let results = search
-        .filter(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap())
+        .filter(IndexFilter::from(Filter::from_str("_vectors.doggo = 6789").unwrap().unwrap()))
         .execute()
         .unwrap();
     assert!(results.candidates.is_empty());

@@ -10,11 +10,26 @@ If Meilisearch does not offer optimized support for your language, please consid
 
 ## Table of Contents
 
+- [Use of generative AI tools](#use-of-generative-ai-tools)
 - [Assumptions](#assumptions)
 - [How to Contribute](#how-to-contribute)
 - [Development Workflow](#development-workflow)
 - [Git Guidelines](#git-guidelines)
 - [Release Process (for internal team only)](#release-process-for-internal-team-only)
+
+## Use of generative AI tools
+
+We require that you transparently disclose any usage of generative AI tooling (GitHub Copilot, ChatGPT, Claude Code, Cursor, etc.) in contributions, if it was used to generate code (including test code) or documentation.
+
+We stress that you need to own any contribution you make to Meilisearch even if it was generated.
+
+In particular, in generated contributions:
+
+- Please check that any generated claim is true.
+- Please limit the scope of the change in your contribution.
+  - Avoid drive-by contribution not related to the core of your contribution (adding a Changelog.md to Meilisearch, upgrading all dependencies when it is not necessary, introducing a new testing convention alongside your feature).
+  - If your contribution contains architectural changes to the engine, it might not be the best-suited to an external contribution. Please check the implementation strategy beforehand with a maintainer.
+- Please ensure the quality and consistency with the existing codebase of the generated portions of your contribution. For example, we do not check code assertions with `print` statements and favor using `insta` snapshots.
 
 ## Assumptions
 
@@ -31,7 +46,7 @@ If Meilisearch does not offer optimized support for your language, please consid
 2. Once approved, [fork the Meilisearch repository](https://help.github.com/en/github/getting-started-with-github/fork-a-repo) in your own GitHub account.
 3. [Create a new Git branch](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-and-deleting-branches-within-your-repository)
 4. Review the [Development Workflow](#development-workflow) section that describes the steps to maintain the repository.
-5. Make your changes on your branch.
+5. Make your changes on your branch. If you use AI tools during your work, remember to disclose it in your PR description (see [Use of generative AI tools](#use-of-generative-ai-tools)).
 6. [Submit the branch as a Pull Request](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/creating-a-pull-request-from-a-fork) pointing to the `main` branch of the Meilisearch repository. A maintainer should comment and/or review your Pull Request within a few days. Although depending on the circumstances, it may take longer.
 
 ## Development Workflow
@@ -89,6 +104,35 @@ To effectively debug snapshot-based hashes, we recommend you export the `MEILI_T
 export MEILI_TEST_FULL_SNAPS=true # add this to your .bashrc, .zshrc, ...
 ```
 
+#### Testing the documentation locally
+
+You can run the [documentation](https://github.com/meilisearch/documentation) site locally to preview how the API reference renders.
+
+**Requirements**
+
+- [Node.js](https://nodejs.org/) and npm
+
+**1. Generate the OpenAPI file**
+
+```bash
+cargo run -p openapi-generator -- --pretty
+```
+
+This generates `meilisearch-openapi.json` in the current directory.
+
+**2. Run the documentation site with the generated file:**
+
+- Clone the [documentation repository](https://github.com/meilisearch/documentation)
+- Copy the generated OpenAPI file into the docs repo at `assets/openapi/meilisearch-openapi-mintlify.json`
+- From the documentation repository root, run:
+
+```bash
+npm install
+npx mint dev
+```
+
+The local docs site will be available (the URL is shown in the terminal).
+
 #### Test troubleshooting
 
 If you get a "Too many open files" error you might want to increase the open file limit using this command:
@@ -97,13 +141,13 @@ If you get a "Too many open files" error you might want to increase the open fil
 ulimit -Sn 3000
 ```
 
-#### Build tools
+### Build tools
 
 Meilisearch follows the [cargo xtask](https://github.com/matklad/cargo-xtask) workflow to provide some build tools.
 
 Run `cargo xtask --help` from the root of the repository to find out what is available.
 
-#### Update the openAPI file if the API changed
+### Update the openAPI file if the API changed
 
 To update the openAPI file in the code, see [sprint_issue.md](https://github.com/meilisearch/meilisearch/blob/main/.github/ISSUE_TEMPLATE/sprint_issue.md#reminders-when-modifying-the-api).
 
@@ -117,8 +161,23 @@ With swagger:
 With the internal crate:
 ```bash
 cd crates/openapi-generator
-cargo run --release -- --pretty --output meilisearch.json
+cargo run --release -- --pretty
 ```
+
+### Update the mini-dashboard (local interface)
+
+To update the [mini-dashboard](https://github.com/meilisearch/mini-dashboard) (the local web interface served by Meilisearch):
+
+1. Download the `build.zip` of the mini-dashboard attached to the [release](https://github.com/meilisearch/mini-dashboard/releases) you want to use.
+
+2. Compute the SHA-1 checksum of the downloaded file:
+```bash
+shasum -a 1 ~/Downloads/build.zip
+```
+
+3. In `crates/meilisearch/Cargo.toml`, update the `[package.metadata.mini-dashboard]` section with the new `assets-url` (pointing to the mini-dashboard release URL) and the `sha1` checksum.
+
+See [this example PR](https://github.com/meilisearch/meilisearch/pull/6091/changes) for a concrete example of the changes to apply.
 
 ### Logging
 

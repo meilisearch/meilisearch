@@ -4,7 +4,7 @@ use big_s::S;
 use insta::assert_json_snapshot;
 use meili_snap::{json_string, snapshot};
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::update::Setting;
+use meilisearch_types::milli::update::{MissingDocumentPolicy, Setting};
 use meilisearch_types::milli::vector::settings::EmbeddingSettings;
 use meilisearch_types::milli::vector::SearchQuery;
 use meilisearch_types::milli::{self, obkv_to_json};
@@ -173,6 +173,7 @@ fn import_vectors() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -263,6 +264,7 @@ fn import_vectors() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -399,6 +401,7 @@ fn import_vectors_first_and_embedder_later() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -539,6 +542,7 @@ fn import_vectors_first_and_embedder_later() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: true,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -640,6 +644,7 @@ fn delete_document_containing_vector() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: false,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,
@@ -818,6 +823,7 @@ fn delete_embedder_with_user_provided_vectors() {
                 content_file: uuid,
                 documents_count,
                 allow_index_creation: false,
+                on_missing_document: MissingDocumentPolicy::default(),
             },
             None,
             false,

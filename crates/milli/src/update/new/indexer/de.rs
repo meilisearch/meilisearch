@@ -6,9 +6,7 @@ use rustc_hash::FxBuildHasher;
 use serde::de::{DeserializeSeed, Deserializer as _, Visitor};
 use serde_json::value::RawValue;
 
-use crate::documents::{
-    validate_document_id_str, DocumentIdExtractionError, FieldIdMapper, PrimaryKey,
-};
+use crate::documents::{validate_document_id_str, DocumentIdExtractionError, PrimaryKey};
 use crate::fields_ids_map::MutFieldIdMapper;
 use crate::{FieldId, UserError};
 
@@ -235,28 +233,6 @@ impl<'de, 'a, Mapper: MutFieldIdMapper> Visitor<'de> for MutFieldIdMapVisitor<'a
     }
 }
 
-pub struct FieldIdMapVisitor<'a, Mapper: FieldIdMapper>(pub &'a Mapper);
-
-impl<'de, Mapper: FieldIdMapper> Visitor<'de> for FieldIdMapVisitor<'_, Mapper> {
-    type Value = Option<FieldId>;
-
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(formatter, "expecting a string")
-    }
-    fn visit_borrowed_str<E>(self, v: &'de str) -> std::result::Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Ok(self.0.id(v))
-    }
-
-    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Ok(self.0.id(v))
-    }
-}
 pub struct DocumentIdVisitor<'indexer>(pub &'indexer Bump);
 
 impl<'de, 'indexer: 'de> Visitor<'de> for DocumentIdVisitor<'indexer> {

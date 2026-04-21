@@ -1,6 +1,7 @@
+use meili_snap::{json_string, snapshot};
+
 use crate::common::Server;
 use crate::json;
-use meili_snap::{json_string, snapshot};
 
 #[actix_rt::test]
 async fn set_reset_chat_issue_5772() {

@@ -1,0 +1,37 @@
+[package]
+name = "reqwest-eventsource"
+version = "0.6.0"
+authors = ["Julian Popescu <jpopesculian@gmail.com>"]
+edition = "2018"
+resolver = "2"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+homepage = "https://github.com/jpopesculian/reqwest-eventsource"
+documentation = "https://docs.rs/reqwest-eventsource/"
+repository = "https://github.com/jpopesculian/reqwest-eventsource"
+description = "Helper to build an Eventsource using reqwest"
+keywords = ["sse", "eventsource", "reqwest", "stream", "event"]
+categories = [
+    "web-programming::http-client",
+    "no-std",
+    "parsing",
+    "asynchronous",
+]
+
+[dependencies]
+eventsource-stream = "0.2.3"
+http-client = { path = "../../crates/http-client" }
+futures-core = "0.3.5"
+futures-util = "0.3.31"
+pin-project-lite = "0.2.8"
+nom = "7.1.0"
+mime = "0.3.16"
+futures-timer = "3.0.2"
+thiserror = "1.0.30"
+
+[dev-dependencies]
+futures = "0.3.5"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+futures-retry = "0.6"
+pin-utils = "0.1"
+rocket = "0.5.0"

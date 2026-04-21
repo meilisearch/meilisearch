@@ -5,6 +5,7 @@ use actix_web::{self as aweb, HttpResponseBuilder};
 use aweb::http::header;
 use aweb::rt::task::JoinError;
 use convert_case::Casing;
+use milli::cellulite;
 use milli::heed::{Error as HeedError, MdbError};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -155,7 +156,7 @@ macro_rules! make_error_codes {
             }
 
             /// return error name, used as error code
-            fn name(&self) -> String {
+            pub fn name(&self) -> String {
                 match self {
                     $(
                         Code::$code_ident => stringify!($code_ident).to_case(convert_case::Case::Snake)
@@ -213,6 +214,10 @@ ImmutableApiKeyUid                             , InvalidRequest       , BAD_REQU
 ImmutableApiKeyUpdatedAt                       , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexCreatedAt                        , InvalidRequest       , BAD_REQUEST;
 ImmutableIndexUpdatedAt                        , InvalidRequest       , BAD_REQUEST;
+ImportTaskAlreadyReceived                      , InvalidRequest       , PRECONDITION_FAILED;
+ImportTaskUnknownRemote                        , InvalidRequest       , PRECONDITION_FAILED;
+ReceiveImportFinishedUnknownRemote             , InvalidRequest       , PRECONDITION_FAILED;
+ImportTaskWithoutNetworkTask                   , InvalidRequest       , SERVICE_UNAVAILABLE;
 IndexAlreadyExists                             , InvalidRequest       , CONFLICT ;
 IndexCreationFailed                            , Internal             , INTERNAL_SERVER_ERROR;
 IndexNotFound                                  , InvalidRequest       , NOT_FOUND;
@@ -235,9 +240,12 @@ InvalidDocumentFields                          , InvalidRequest       , BAD_REQU
 InvalidDocumentRetrieveVectors                 , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 MissingDocumentEditionFunction                 , InvalidRequest       , BAD_REQUEST ;
+InconsistentDocumentChangeHeaders              , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentFilter                          , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentSort                            , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentGeoField                        , InvalidRequest       , BAD_REQUEST ;
+InvalidDocumentGeojsonField                    , InvalidRequest       , BAD_REQUEST ;
+InvalidHeaderValue                             , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorDimensions                        , InvalidRequest       , BAD_REQUEST ;
 InvalidVectorsType                             , InvalidRequest       , BAD_REQUEST ;
 InvalidDocumentId                              , InvalidRequest       , BAD_REQUEST ;
@@ -250,23 +258,31 @@ InvalidSearchHybridQuery                       , InvalidRequest       , BAD_REQU
 InvalidIndexLimit                              , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexOffset                             , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexPrimaryKey                         , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexCustomMetadata                     , InvalidRequest       , BAD_REQUEST ;
+InvalidSkipCreation                            , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexUid                                , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacets                       , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacetsByIndex                , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFacetOrder                   , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchQueryPersonalization         , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchQueryShowPerformanceDetails  , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederated                    , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchFederationOptions            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchMaxValuesPerFacet            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchMergeFacets                  , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryFacets                  , InvalidRequest       , BAD_REQUEST ;
+InvalidMultiSearchDistinct                     , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPagination              , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryRankingRules            , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchQueryPosition                , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchRemote                       , InvalidRequest       , BAD_REQUEST ;
 InvalidMultiSearchWeight                       , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkLeader                           , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkRemotes                          , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkShards                           , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSelf                             , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkSearchApiKey                     , InvalidRequest       , BAD_REQUEST ;
+InvalidNetworkWriteApiKey                      , InvalidRequest       , BAD_REQUEST ;
 InvalidNetworkUrl                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToSearchOn              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchAttributesToCrop                  , InvalidRequest       , BAD_REQUEST ;
@@ -306,9 +322,14 @@ InvalidSearchShowMatchesPosition               , InvalidRequest       , BAD_REQU
 InvalidSearchShowRankingScore                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScore                 , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchShowRankingScoreDetails           , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchShowPerformanceDetails            , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchUseNetwork                        , InvalidRequest       , BAD_REQUEST ;
 InvalidSimilarShowRankingScoreDetails          , InvalidRequest       , BAD_REQUEST ;
+InvalidSimilarShowPerformanceDetails           , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchSort                              , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchDistinct                          , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalize                       , InvalidRequest       , BAD_REQUEST ;
+InvalidSearchPersonalizeUserContext            , InvalidRequest       , BAD_REQUEST ;
 InvalidSearchMediaAndVector                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDisplayedAttributes             , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsDistinctAttribute               , InvalidRequest       , BAD_REQUEST ;
@@ -317,6 +338,7 @@ InvalidSettingsFacetSearch                     , InvalidRequest       , BAD_REQU
 InvalidSettingsPrefixSearch                    , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFaceting                        , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsFilterableAttributes            , InvalidRequest       , BAD_REQUEST ;
+InvalidSettingsForeignKeys                     , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsPagination                      , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsSearchCutoffMs                  , InvalidRequest       , BAD_REQUEST ;
 InvalidSettingsEmbedders                       , InvalidRequest       , BAD_REQUEST ;
@@ -367,7 +389,9 @@ MissingPayload                                 , InvalidRequest       , BAD_REQU
 MissingSearchHybrid                            , InvalidRequest       , BAD_REQUEST ;
 MissingSwapIndexes                             , InvalidRequest       , BAD_REQUEST ;
 MissingTaskFilters                             , InvalidRequest       , BAD_REQUEST ;
+NetworkVersionMismatch                         , InvalidRequest       , PRECONDITION_FAILED ;
 NoSpaceLeftOnDevice                            , System               , UNPROCESSABLE_ENTITY;
+NotLeader                                      , InvalidRequest       , BAD_REQUEST ;
 PayloadTooLarge                                , InvalidRequest       , PAYLOAD_TOO_LARGE ;
 RemoteBadResponse                              , System               , BAD_GATEWAY ;
 RemoteBadRequest                               , InvalidRequest       , BAD_REQUEST ;
@@ -381,9 +405,15 @@ TaskFileNotFound                               , InvalidRequest       , NOT_FOUN
 BatchNotFound                                  , InvalidRequest       , NOT_FOUND ;
 TooManyOpenFiles                               , System               , UNPROCESSABLE_ENTITY ;
 TooManyVectors                                 , InvalidRequest       , BAD_REQUEST ;
+UnexpectedNetworkPreviousRemotes               , InvalidRequest       , BAD_REQUEST ;
+NetworkVersionTooOld                           , InvalidRequest       , BAD_REQUEST ;
+UnprocessedNetworkTask                         , InvalidRequest       , BAD_REQUEST ;
 UnretrievableDocument                          , Internal             , BAD_REQUEST ;
 UnretrievableErrorCode                         , InvalidRequest       , BAD_REQUEST ;
 UnsupportedMediaType                           , InvalidRequest       , UNSUPPORTED_MEDIA_TYPE ;
+InvalidS3SnapshotRequest                       , Internal             , BAD_REQUEST ;
+InvalidS3SnapshotParameters                    , Internal             , BAD_REQUEST ;
+S3SnapshotServerError                          , Internal             , BAD_GATEWAY ;
 
 // Experimental features
 VectorEmbeddingError                           , InvalidRequest       , BAD_REQUEST ;
@@ -419,6 +449,15 @@ InvalidChatCompletionSearchQueryParamPrompt    , InvalidRequest       , BAD_REQU
 InvalidChatCompletionSearchFilterParamPrompt   , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionSearchIndexUidParamPrompt , InvalidRequest       , BAD_REQUEST ;
 InvalidChatCompletionPreQueryPrompt            , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilter                       , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterAttributePatterns      , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterDisplayed              , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterSearchable             , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterSortable               , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterDistinct               , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterRankingRule            , InvalidRequest       , BAD_REQUEST ;
+InvalidIndexFieldsFilterFilterable             , InvalidRequest       , BAD_REQUEST ;
+RequiresEnterpriseEdition                      , InvalidRequest       , UNAVAILABLE_FOR_LEGAL_REASONS ;
 // Render
 InvalidRenderTemplate                          , InvalidRequest       , BAD_REQUEST ;
 InvalidRenderTemplateId                        , InvalidRequest       , BAD_REQUEST ;
@@ -437,7 +476,18 @@ ImmutableWebhook                               , InvalidRequest       , BAD_REQU
 InvalidWebhookUuid                             , InvalidRequest       , BAD_REQUEST ;
 WebhookNotFound                                , InvalidRequest       , NOT_FOUND ;
 ImmutableWebhookUuid                           , InvalidRequest       , BAD_REQUEST ;
-ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST
+ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleOffset                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleLimit                  , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilter                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleDescription            , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRulePriority               , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleActive                 , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleConditions             , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleActions                , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilterAttributePatterns, InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleFilterActive           , InvalidRequest       , BAD_REQUEST ;
+DynamicSearchRuleNotFound                      , InvalidRequest       , NOT_FOUND
 }
 
 impl ErrorCode for JoinError {
@@ -453,85 +503,98 @@ impl ErrorCode for milli::Error {
         match self {
             Error::InternalError(_) => Code::Internal,
             Error::IoError(e) => e.error_code(),
-            Error::UserError(ref error) => {
-                match error {
-                    // TODO: wait for spec for new error codes.
-                    UserError::SerdeJson(_)
-                    | UserError::EnvAlreadyOpened
-                    | UserError::DocumentLimitReached
-                    | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
-                    UserError::InvalidStoreFile => Code::InvalidStoreFile,
-                    UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
-                    UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
-                    UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
-                    UserError::InvalidFilter(_) => Code::InvalidSearchFilter,
-                    UserError::InvalidFilterExpression(..) => Code::InvalidSearchFilter,
-                    UserError::FilterOperatorNotAllowed { .. } => Code::InvalidSearchFilter,
-                    UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
-                    UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
-                        Code::InvalidDocumentId
-                    }
-                    UserError::MissingDocumentField(_) => Code::InvalidDocumentFields,
-                    UserError::InvalidFieldForSource { .. }
-                    | UserError::MissingFieldForSource { .. }
-                    | UserError::InvalidOpenAiModel { .. }
-                    | UserError::InvalidOpenAiModelDimensions { .. }
-                    | UserError::InvalidOpenAiModelDimensionsMax { .. }
-                    | UserError::InvalidSettingsDimensions { .. }
-                    | UserError::InvalidUrl { .. }
-                    | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
-                    | UserError::InvalidChatSettingsDocumentTemplateMaxBytes
-                    | UserError::InvalidPrompt(_)
-                    | UserError::InvalidDisableBinaryQuantization { .. }
-                    | UserError::InvalidSourceForNested { .. }
-                    | UserError::MissingSourceForNested { .. }
-                    | UserError::InvalidSettingsEmbedder { .. } => Code::InvalidSettingsEmbedders,
-                    UserError::TooManyEmbedders(_) => Code::InvalidSettingsEmbedders,
-                    UserError::TooManyFragments(_) => Code::InvalidSettingsEmbedders,
-                    UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
-                    UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
-                    UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
-                        Code::IndexPrimaryKeyMultipleCandidatesFound
-                    }
-                    UserError::PrimaryKeyCannotBeChanged(_) => Code::IndexPrimaryKeyAlreadyExists,
-                    UserError::InvalidDistinctAttribute { .. } => Code::InvalidSearchDistinct,
-                    UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
-                    UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
-                    UserError::InvalidSearchSortableAttribute { .. } => Code::InvalidSearchSort,
-                    UserError::InvalidDocumentSortableAttribute { .. } => Code::InvalidDocumentSort,
-                    UserError::InvalidSearchableAttribute { .. } => {
-                        Code::InvalidSearchAttributesToSearchOn
-                    }
-                    UserError::InvalidFacetSearchFacetName { .. } => {
-                        Code::InvalidFacetSearchFacetName
-                    }
-                    UserError::CriterionError(_) => Code::InvalidSettingsRankingRules,
-                    UserError::InvalidGeoField { .. } => Code::InvalidDocumentGeoField,
-                    UserError::InvalidVectorDimensions { .. }
-                    | UserError::InvalidIndexingVectorDimensions { .. } => {
-                        Code::InvalidVectorDimensions
-                    }
-                    UserError::InvalidVectorsMapType { .. }
-                    | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
-                    UserError::TooManyVectors(_, _) => Code::TooManyVectors,
-                    UserError::SortError { search: true, .. } => Code::InvalidSearchSort,
-                    UserError::SortError { search: false, .. } => Code::InvalidDocumentSort,
-                    UserError::InvalidMinTypoWordLenSetting(_, _) => {
-                        Code::InvalidSettingsTypoTolerance
-                    }
-                    UserError::InvalidSearchEmbedder(_) => Code::InvalidSearchEmbedder,
-                    UserError::InvalidSimilarEmbedder(_) => Code::InvalidSimilarEmbedder,
-                    UserError::VectorEmbeddingError(_) | UserError::DocumentEmbeddingError(_) => {
-                        Code::VectorEmbeddingError
-                    }
-                    UserError::DocumentEditionCannotModifyPrimaryKey
-                    | UserError::DocumentEditionDocumentMustBeObject
-                    | UserError::DocumentEditionRuntimeError(_)
-                    | UserError::DocumentEditionCompilationError(_) => {
-                        Code::EditDocumentsByFunctionError
-                    }
+            Error::UserError(ref error) => match error {
+                UserError::SerdeJson(_)
+                | UserError::EnvAlreadyOpened
+                | UserError::DocumentLimitReached
+                | UserError::UnknownInternalDocumentId { .. } => Code::Internal,
+                UserError::InvalidStoreFile => Code::InvalidStoreFile,
+                UserError::NoSpaceLeftOnDevice => Code::NoSpaceLeftOnDevice,
+                UserError::MaxDatabaseSizeReached => Code::DatabaseSizeLimitReached,
+                UserError::AttributeLimitReached => Code::MaxFieldsLimitExceeded,
+                UserError::InvalidFilter(_)
+                | UserError::InvalidFilterExpression(..)
+                | UserError::FilterOperatorNotAllowed { .. }
+                | UserError::FilterShardNotExist { .. }
+                | UserError::FilterShardOperatorNotAllowed { .. } => Code::InvalidSearchFilter,
+                UserError::MissingDocumentId { .. } => Code::MissingDocumentId,
+                UserError::InvalidDocumentId { .. } | UserError::TooManyDocumentIds { .. } => {
+                    Code::InvalidDocumentId
                 }
-            }
+                UserError::MissingDocumentField(_) => Code::InvalidDocumentFields,
+                UserError::InvalidFieldForSource { .. }
+                | UserError::MissingFieldForSource { .. }
+                | UserError::InvalidOpenAiModel { .. }
+                | UserError::InvalidOpenAiModelDimensions { .. }
+                | UserError::InvalidOpenAiModelDimensionsMax { .. }
+                | UserError::InvalidSettingsDimensions { .. }
+                | UserError::InvalidUrl { .. }
+                | UserError::InvalidSettingsDocumentTemplateMaxBytes { .. }
+                | UserError::InvalidChatSettingsDocumentTemplateMaxBytes
+                | UserError::InvalidPrompt(_)
+                | UserError::InvalidDisableBinaryQuantization { .. }
+                | UserError::InvalidSourceForNested { .. }
+                | UserError::MissingSourceForNested { .. }
+                | UserError::InvalidSettingsEmbedder { .. }
+                | UserError::TooManyEmbedders(_)
+                | UserError::TooManyFragments(_)
+                | UserError::InvalidPromptForEmbeddings(..) => Code::InvalidSettingsEmbedders,
+                UserError::InvalidChatSettingsDocumentTemplate(_) => {
+                    Code::InvalidChatSettingDocumentTemplate
+                }
+                UserError::NoPrimaryKeyCandidateFound => Code::IndexPrimaryKeyNoCandidateFound,
+                UserError::MultiplePrimaryKeyCandidatesFound { .. } => {
+                    Code::IndexPrimaryKeyMultipleCandidatesFound
+                }
+                UserError::PrimaryKeyCannotBeChanged(_) => Code::IndexPrimaryKeyAlreadyExists,
+                UserError::InvalidDistinctAttribute { .. } => Code::InvalidSearchDistinct,
+                UserError::SortRankingRuleMissing => Code::InvalidSearchSort,
+                UserError::InvalidFacetsDistribution { .. } => Code::InvalidSearchFacets,
+                UserError::InvalidSearchSortableAttribute { .. } => Code::InvalidSearchSort,
+                UserError::InvalidDocumentSortableAttribute { .. } => Code::InvalidDocumentSort,
+                UserError::InvalidSearchableAttribute { .. } => {
+                    Code::InvalidSearchAttributesToSearchOn
+                }
+                UserError::InvalidFacetSearchFacetName { .. } => Code::InvalidFacetSearchFacetName,
+                UserError::CriterionError(_) | UserError::MixedAttributeRankingRulesUsage => {
+                    Code::InvalidSettingsRankingRules
+                }
+                UserError::InvalidGeoField { .. } | UserError::GeoJsonError(_) => {
+                    Code::InvalidDocumentGeoField
+                }
+                UserError::InvalidVectorDimensions { .. }
+                | UserError::InvalidIndexingVectorDimensions { .. } => {
+                    Code::InvalidVectorDimensions
+                }
+                UserError::InvalidVectorsMapType { .. }
+                | UserError::InvalidVectorsEmbedderConf { .. } => Code::InvalidVectorsType,
+                UserError::TooManyVectors(_, _) => Code::TooManyVectors,
+                UserError::SortError { search: true, .. } => Code::InvalidSearchSort,
+                UserError::SortError { search: false, .. } => Code::InvalidDocumentSort,
+                UserError::InvalidMinTypoWordLenSetting(_, _) => Code::InvalidSettingsTypoTolerance,
+                UserError::InvalidSearchEmbedder(_) => Code::InvalidSearchEmbedder,
+                UserError::InvalidSimilarEmbedder(_) => Code::InvalidSimilarEmbedder,
+                UserError::VectorEmbeddingError(_) | UserError::DocumentEmbeddingError(_) => {
+                    Code::VectorEmbeddingError
+                }
+                UserError::DocumentEditionCannotModifyPrimaryKey
+                | UserError::DocumentEditionDocumentMustBeObject
+                | UserError::DocumentEditionRuntimeError(_)
+                | UserError::DocumentEditionCompilationError(_) => {
+                    Code::EditDocumentsByFunctionError
+                }
+                UserError::CelluliteError(err) => match err {
+                    cellulite::Error::BuildCanceled
+                    | cellulite::Error::VersionMismatchOnBuild(_)
+                    | cellulite::Error::DatabaseDoesntExists
+                    | cellulite::Error::Heed(_)
+                    | cellulite::Error::InvalidGeometry(_)
+                    | cellulite::Error::InternalDocIdMissing(_, _)
+                    | cellulite::Error::CannotConvertLineToCell(_, _, _) => Code::Internal,
+                    cellulite::Error::InvalidGeoJson(_) => Code::InvalidDocumentGeojsonField,
+                },
+                UserError::MalformedGeojson(_) => Code::InvalidDocumentGeojsonField,
+            },
         }
     }
 }
@@ -666,6 +729,18 @@ impl fmt::Display for deserr_codes::InvalidNetworkUrl {
 impl fmt::Display for deserr_codes::InvalidNetworkSearchApiKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "the value of `searchApiKey` is invalid, expected a string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchPersonalize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `personalize` is invalid, expected a JSON object with `userContext` string.")
+    }
+}
+
+impl fmt::Display for deserr_codes::InvalidSearchPersonalizeUserContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "the value of `userContext` is invalid, expected a string.")
     }
 }
 

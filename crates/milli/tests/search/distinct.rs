@@ -20,12 +20,21 @@ macro_rules! test_distinct {
             let config = milli::update::IndexerConfig::default();
             let mut builder = Settings::new(&mut wtxn, &index, &config);
             builder.set_distinct_field(S(stringify!($distinct)));
-            builder.execute(&|| false, &Progress::default(), Default::default()).unwrap();
+            builder
+                .execute(
+                    &|| false,
+                    &Progress::default(),
+                    // NO DANGER: test
+                    &http_client::policy::IpPolicy::danger_always_allow(),
+                    Default::default(),
+                )
+                .unwrap();
             wtxn.commit().unwrap();
 
             let rtxn = index.read_txn().unwrap();
 
-            let mut search = Search::new(&rtxn, &index);
+            let progress = Progress::default();
+            let mut search = Search::new(&rtxn, &index, &progress);
             search.query(search::TEST_QUERY);
             search.limit($limit);
             search.offset($offset);

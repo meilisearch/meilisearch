@@ -32,7 +32,7 @@ use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
 use crate::update::{AvailableIds, UpdateIndexingStep};
 use crate::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use crate::vector::settings::{RemoveFragments, WriteBackToDocuments};
-use crate::vector::ArroyWrapper;
+use crate::vector::VectorStore;
 use crate::{FieldDistribution, FieldId, FieldIdMapMissingEntry, Index, Result};
 
 pub struct TransformOutput {
@@ -55,6 +55,7 @@ pub struct Transform<'a, 'i> {
     fields_ids_map: FieldIdMapWithMetadata,
 
     indexer_settings: &'a IndexerConfig,
+    embedder_ip_policy: &'a http_client::policy::IpPolicy,
     pub index_documents_method: IndexDocumentsMethod,
     available_documents_ids: AvailableIds,
 
@@ -108,6 +109,7 @@ impl<'a, 'i> Transform<'a, 'i> {
         index: &'i Index,
         indexer_settings: &'a IndexerConfig,
         index_documents_method: IndexDocumentsMethod,
+        embedder_ip_policy: &'a http_client::policy::IpPolicy,
         _autogenerate_docids: bool,
     ) -> Result<Self> {
         use IndexDocumentsMethod::{ReplaceDocuments, UpdateDocuments};
@@ -157,6 +159,7 @@ impl<'a, 'i> Transform<'a, 'i> {
             new_documents_ids: RoaringBitmap::new(),
             new_external_documents_ids_builder: FxHashMap::default(),
             documents_count: 0,
+            embedder_ip_policy,
         })
     }
 
@@ -623,7 +626,8 @@ impl<'a, 'i> Transform<'a, 'i> {
             fst_new_external_documents_ids_builder.insert(key, value)
         })?;
 
-        let old_inner_settings = InnerIndexSettings::from_index(self.index, wtxn, None)?;
+        let old_inner_settings =
+            InnerIndexSettings::from_index(self.index, wtxn, self.embedder_ip_policy, None)?;
         let fields_ids_map = self.fields_ids_map;
         let primary_key_id = self.index.primary_key(wtxn)?.and_then(|name| fields_ids_map.id(name));
         let mut new_inner_settings = old_inner_settings.clone();
@@ -820,29 +824,32 @@ impl<'a, 'i> Transform<'a, 'i> {
         let documents_count = documents_ids.len() as usize;
 
         // We initialize the sorter with the user indexing settings.
-        let mut original_sorter = if settings_diff.reindex_vectors() {
-            Some(create_sorter(
-                grenad::SortAlgorithm::Stable,
-                KeepFirst,
-                self.indexer_settings.chunk_compression_type,
-                self.indexer_settings.chunk_compression_level,
-                self.indexer_settings.max_nb_chunks,
-                self.indexer_settings.max_memory.map(|mem| mem / 2),
-                true,
-            ))
-        } else {
-            None
-        };
+        let mut original_sorter =
+            if settings_diff.reindex_vectors() || settings_diff.reindex_geojson() {
+                Some(create_sorter(
+                    grenad::SortAlgorithm::Stable,
+                    KeepFirst,
+                    self.indexer_settings.chunk_compression_type,
+                    self.indexer_settings.chunk_compression_level,
+                    self.indexer_settings.max_nb_chunks,
+                    self.indexer_settings.max_memory.map(|mem| mem / 2),
+                    true,
+                ))
+            } else {
+                None
+            };
 
-        let readers: BTreeMap<&str, (ArroyWrapper, &RoaringBitmap)> = settings_diff
+        let backend = self.index.get_vector_store(wtxn)?.unwrap_or_default();
+        let readers: BTreeMap<&str, (VectorStore, &RoaringBitmap)> = settings_diff
             .embedding_config_updates
             .iter()
             .filter_map(|(name, action)| {
                 if let Some(WriteBackToDocuments { embedder_id, user_provided }) =
                     action.write_back()
                 {
-                    let reader = ArroyWrapper::new(
-                        self.index.vector_arroy,
+                    let reader = VectorStore::new(
+                        backend,
+                        self.index.vector_store,
                         *embedder_id,
                         action.was_quantized,
                     );
@@ -882,10 +889,7 @@ impl<'a, 'i> Transform<'a, 'i> {
                     InternalError::DatabaseMissingEntry { db_name: db_name::DOCUMENTS, key: None },
                 )?;
 
-                let injected_vectors: std::result::Result<
-                    serde_json::Map<String, serde_json::Value>,
-                    arroy::Error,
-                > = readers
+                let injected_vectors: crate::Result<_> = readers
                     .iter()
                     .filter_map(|(name, (reader, user_provided))| {
                         if !user_provided.contains(docid) {
@@ -949,9 +953,13 @@ impl<'a, 'i> Transform<'a, 'i> {
             else {
                 continue;
             };
-            let arroy =
-                ArroyWrapper::new(self.index.vector_arroy, infos.embedder_id, was_quantized);
-            let Some(dimensions) = arroy.dimensions(wtxn)? else {
+            let vector_store = VectorStore::new(
+                backend,
+                self.index.vector_store,
+                infos.embedder_id,
+                was_quantized,
+            );
+            let Some(dimensions) = vector_store.dimensions(wtxn)? else {
                 continue;
             };
             for fragment_id in fragment_ids {
@@ -959,17 +967,17 @@ impl<'a, 'i> Transform<'a, 'i> {
 
                 if infos.embedding_status.user_provided_docids().is_empty() {
                     // no user provided: clear store
-                    arroy.clear_store(wtxn, *fragment_id, dimensions)?;
+                    vector_store.clear_store(wtxn, *fragment_id, dimensions)?;
                     continue;
                 }
 
                 // some user provided, remove only the ids that are not user provided
-                let to_delete = arroy.items_in_store(wtxn, *fragment_id, |items| {
+                let to_delete = vector_store.items_in_store(wtxn, *fragment_id, |items| {
                     items - infos.embedding_status.user_provided_docids()
                 })?;
 
                 for to_delete in to_delete {
-                    arroy.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
+                    vector_store.del_item_in_store(wtxn, to_delete, *fragment_id, dimensions)?;
                 }
             }
         }

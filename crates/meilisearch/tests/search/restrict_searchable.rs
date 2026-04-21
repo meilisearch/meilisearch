@@ -794,3 +794,66 @@ async fn nested_attributes_ranking_rule_order_with_suffix_wildcard() {
         )
         .await;
 }
+
+#[actix_rt::test]
+async fn search_on_empty_index_with_searchable_attributes() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // creating index with no documents
+    let (task, _code) = index.create(Some("id")).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // setting attributes before adding any documents
+    let (task, _status_code) =
+        index.update_settings_searchable_attributes(json!(["name", "title"])).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    // empty index search
+    index
+        .search(
+            json!({
+                "q": "test",
+                "attributesToSearchOn": ["title"]
+            }),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"0");
+            },
+        )
+        .await;
+
+    index
+        .search(
+            json!({
+                "q": "test",
+                "attributesToSearchOn": ["name", "title"]
+            }),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"0");
+            },
+        )
+        .await;
+
+    // search should still be working after adding documents
+    let documents = json!([
+        { "id": "1", "name": "Iron Man", "title": "Marvel Jesus" },
+        { "id": "2", "name": "WonderMan", "title": "Newcomer" }
+    ]);
+    let (task, _code) = index.add_documents(documents, None).await;
+    server.wait_task(task.uid()).await.succeeded();
+
+    index
+        .search(
+            json!({
+                "q": "Man",
+                "attributesToSearchOn": ["name", "title"]
+            }),
+            |response, code| {
+                snapshot!(code, @"200 OK");
+                snapshot!(response["hits"].as_array().unwrap().len(), @"1");
+            },
+        )
+        .await;
+}

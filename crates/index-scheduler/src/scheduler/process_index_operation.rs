@@ -8,12 +8,14 @@ use meilisearch_types::milli::progress::{EmbedderStats, Progress};
 use meilisearch_types::milli::update::new::indexer::{self, UpdateByFunction};
 use meilisearch_types::milli::update::DocumentAdditionResult;
 use meilisearch_types::milli::{self, ChannelCongestion, Filter};
+use meilisearch_types::network::Network;
 use meilisearch_types::settings::apply_settings_to_builder;
 use meilisearch_types::tasks::{Details, KindWithContent, Status, Task};
 use meilisearch_types::Index;
 use roaring::RoaringBitmap;
 
 use super::create_batch::{DocumentOperation, IndexOperation};
+use crate::filter::filter_into_index_filter;
 use crate::processing::{
     DocumentDeletionProgress, DocumentEditionProgress, DocumentOperationProgress, SettingsProgress,
 };
@@ -36,6 +38,7 @@ impl IndexScheduler {
         operation: IndexOperation,
         progress: &Progress,
         embedder_stats: Arc<EmbedderStats>,
+        network: &Network,
     ) -> Result<(Vec<Task>, Option<ChannelCongestion>)> {
         let indexer_alloc = Bump::new();
         let started_processing_at = std::time::Instant::now();
@@ -66,14 +69,17 @@ impl IndexScheduler {
             }
             IndexOperation::DocumentOperation { index_uid, primary_key, operations, mut tasks } => {
                 progress.update_progress(DocumentOperationProgress::RetrievingConfig);
+
+                let shards = network.shards();
+
                 // TODO: at some point, for better efficiency we might want to reuse the bumpalo for successive batches.
                 // this is made difficult by the fact we're doing private clones of the index scheduler and sending it
                 // to a fresh thread.
                 let mut content_files = Vec::new();
                 for operation in &operations {
                     match operation {
-                        DocumentOperation::Replace(content_uuid)
-                        | DocumentOperation::Update(content_uuid) => {
+                        DocumentOperation::Replace { content_file: content_uuid, .. }
+                        | DocumentOperation::Update { content_file: content_uuid, .. } => {
                             let content_file = self.queue.file_store.get_update(*content_uuid)?;
                             let mmap = unsafe { memmap2::Mmap::map(&content_file)? };
                             content_files.push(mmap);
@@ -87,7 +93,7 @@ impl IndexScheduler {
                 let mut new_fields_ids_map = db_fields_ids_map.clone();
 
                 let mut content_files_iter = content_files.iter();
-                let mut indexer = indexer::DocumentOperation::new();
+                let mut indexer = indexer::IndexOperations::new();
                 let embedders = index
                     .embedding_configs()
                     .embedding_configs(index_wtxn)
@@ -95,16 +101,16 @@ impl IndexScheduler {
                 let embedders = self.embedders(index_uid.clone(), embedders)?;
                 for operation in operations {
                     match operation {
-                        DocumentOperation::Replace(_content_uuid) => {
+                        DocumentOperation::Replace { content_file: _, on_missing_document } => {
                             let mmap = content_files_iter.next().unwrap();
                             indexer
-                                .replace_documents(mmap)
+                                .replace_documents(mmap, on_missing_document)
                                 .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
                         }
-                        DocumentOperation::Update(_content_uuid) => {
+                        DocumentOperation::Update { content_file: _, on_missing_document } => {
                             let mmap = content_files_iter.next().unwrap();
                             indexer
-                                .update_documents(mmap)
+                                .update_documents(mmap, on_missing_document)
                                 .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
                         }
                         DocumentOperation::Delete(document_ids) => {
@@ -130,9 +136,11 @@ impl IndexScheduler {
                         &mut new_fields_ids_map,
                         &|| must_stop_processing.get(),
                         progress.clone(),
+                        shards.as_ref(),
                     )
                     .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
 
+                progress.update_progress(DocumentOperationProgress::ReadingPayloadStats);
                 let mut candidates_count = 0;
                 for (stats, task) in operation_stats.into_iter().zip(&mut tasks) {
                     candidates_count += stats.document_count;
@@ -181,6 +189,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            self.ip_policy(),
                             &embedder_stats,
                         )
                         .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?,
@@ -214,9 +223,15 @@ impl IndexScheduler {
                 };
 
                 let candidates = match filter.as_ref().map(Filter::from_json) {
-                    Some(Ok(Some(filter))) => filter
-                        .evaluate(index_wtxn, index)
-                        .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
+                    Some(Ok(Some(filter))) => {
+                        let filter = filter_into_index_filter(
+                            filter, index, index_wtxn, self, progress, &index_uid,
+                        )?;
+
+                        filter
+                            .evaluate(index_wtxn, index)
+                            .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?
+                    }
                     None | Some(Ok(None)) => index.documents_ids(index_wtxn)?,
                     Some(Err(e)) => return Err(Error::from_milli(e, Some(index_uid.clone()))),
                 };
@@ -294,6 +309,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            self.ip_policy(),
                             &embedder_stats,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
@@ -363,7 +379,7 @@ impl IndexScheduler {
                             let filter = match Filter::from_json(filter_expr) {
                                 Ok(filter) => filter,
                                 Err(err) => {
-                                    // theorically, this should be catched by deserr before reaching the index-scheduler and cannot happens
+                                    // theorically, this should be caught by deserr before reaching the index-scheduler and cannot happens
                                     task.status = Status::Failed;
                                     task.error = Some(
                                         Error::from_milli(err, Some(index_uid.clone())).into(),
@@ -372,6 +388,9 @@ impl IndexScheduler {
                                 }
                             };
                             if let Some(filter) = filter {
+                                let filter = filter_into_index_filter(
+                                    filter, index, index_wtxn, self, progress, index_uid,
+                                )?;
                                 let candidates = filter
                                     .evaluate(index_wtxn, index)
                                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())));
@@ -444,6 +463,7 @@ impl IndexScheduler {
                             embedders,
                             &|| must_stop_processing.get(),
                             progress,
+                            self.ip_policy(),
                             &embedder_stats,
                         )
                         .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?,
@@ -478,7 +498,12 @@ impl IndexScheduler {
 
                 progress.update_progress(SettingsProgress::ApplyTheSettings);
                 let congestion = builder
-                    .execute(&|| must_stop_processing.get(), progress, embedder_stats)
+                    .execute(
+                        &|| must_stop_processing.get(),
+                        progress,
+                        self.ip_policy(),
+                        embedder_stats,
+                    )
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
                 Ok((tasks, congestion))
@@ -498,6 +523,7 @@ impl IndexScheduler {
                     },
                     progress,
                     embedder_stats.clone(),
+                    network,
                 )?;
 
                 let (settings_tasks, _congestion) = self.apply_index_operation(
@@ -506,6 +532,7 @@ impl IndexScheduler {
                     IndexOperation::Settings { index_uid, settings, tasks: settings_tasks },
                     progress,
                     embedder_stats,
+                    network,
                 )?;
 
                 let mut tasks = settings_tasks;

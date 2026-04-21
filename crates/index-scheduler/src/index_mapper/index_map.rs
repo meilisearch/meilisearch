@@ -5,7 +5,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
-use meilisearch_types::milli::{Index, Result};
+use meilisearch_types::milli::{CreateOrOpen, Index, Result};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -104,7 +104,14 @@ impl ReopenableIndex {
                 return Ok(());
             }
             map.unavailable.remove(&self.uuid);
-            map.create(&self.uuid, path, None, self.enable_mdb_writemap, self.map_size, false)?;
+            map.create(
+                &self.uuid,
+                path,
+                None,
+                self.enable_mdb_writemap,
+                self.map_size,
+                CreateOrOpen::Open,
+            )?;
         }
         Ok(())
     }
@@ -173,12 +180,13 @@ impl IndexMap {
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         enable_mdb_writemap: bool,
         map_size: usize,
-        creation: bool,
+        create_or_open: CreateOrOpen,
     ) -> Result<Index> {
         if !matches!(self.get_unavailable(uuid), Missing) {
             panic!("Attempt to open an index that was unavailable");
         }
-        let index = create_or_open_index(path, date, enable_mdb_writemap, map_size, creation)?;
+        let index =
+            create_or_open_index(path, date, enable_mdb_writemap, map_size, create_or_open)?;
         match self.available.insert(*uuid, index.clone()) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
@@ -302,7 +310,7 @@ fn create_or_open_index(
     date: Option<(OffsetDateTime, OffsetDateTime)>,
     enable_mdb_writemap: bool,
     map_size: usize,
-    creation: bool,
+    create_or_open: CreateOrOpen,
 ) -> Result<Index> {
     let options = EnvOpenOptions::new();
     let mut options = options.read_txn_without_tls();
@@ -324,9 +332,9 @@ fn create_or_open_index(
     }
 
     if let Some((created, updated)) = date {
-        Ok(Index::new_with_creation_dates(options, path, created, updated, creation)?)
+        Ok(Index::new_with_creation_dates(options, path, created, updated, create_or_open)?)
     } else {
-        Ok(Index::new(options, path, creation)?)
+        Ok(Index::new(options, path, create_or_open)?)
     }
 }
 
@@ -365,7 +373,7 @@ mod tests {
         for i in 0..(5 + 1) {
             let index_name = format!("index-{i}");
             let wtxn = env.write_txn().unwrap();
-            mapper.create_index(wtxn, &index_name, None).unwrap();
+            mapper.create_index(wtxn, &index_name, None, None).unwrap();
             let txn = env.read_txn().unwrap();
             uuids.push(mapper.index_mapping.get(&txn, &index_name).unwrap().unwrap());
         }
@@ -374,7 +382,7 @@ mod tests {
 
         // get back the evicted index
         let wtxn = env.write_txn().unwrap();
-        mapper.create_index(wtxn, "index-0", None).unwrap();
+        mapper.create_index(wtxn, "index-0", None, None).unwrap();
 
         // Least recently used is now index-1
         check_first_unavailable(&mapper, uuids[1], true);
@@ -383,17 +391,17 @@ mod tests {
     #[test]
     fn resize_index() {
         let (mapper, env, _handle) = IndexMapper::test();
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
         assert_index_size(index, mapper.index_base_map_size);
 
         mapper.resize_index(&env.read_txn().unwrap(), "index").unwrap();
 
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
         assert_index_size(index, mapper.index_base_map_size + mapper.index_growth_amount);
 
         mapper.resize_index(&env.read_txn().unwrap(), "index").unwrap();
 
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None).unwrap();
+        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
         assert_index_size(index, mapper.index_base_map_size + mapper.index_growth_amount * 2);
     }
 

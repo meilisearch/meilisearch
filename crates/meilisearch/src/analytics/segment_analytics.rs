@@ -1,7 +1,7 @@
 use std::any::TypeId;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -125,7 +125,10 @@ impl SegmentAnalytics {
         let instance_uid = instance_uid.unwrap_or_else(Uuid::new_v4);
         write_user_id(&opt.db_path, &instance_uid);
 
-        let client = reqwest::Client::builder().connect_timeout(Duration::from_secs(10)).build();
+        let client = http_client::reqwest::Client::builder()
+            .prepare(|inner| inner.connect_timeout(Duration::from_secs(10)))
+            // NO DANGER: we send requests to an owned and fixed domain
+            .danger_build_no_ip_policy();
 
         // if reqwest throws an error we won't be able to send analytics
         if client.is_err() {
@@ -193,18 +196,23 @@ struct Infos {
     experimental_dumpless_upgrade: bool,
     experimental_replication_parameters: bool,
     experimental_enable_logs_route: bool,
+    experimental_dynamic_search_rules: bool,
     experimental_reduce_indexing_memory_usage: bool,
     experimental_max_number_of_batched_tasks: usize,
-    experimental_limit_batched_tasks_total_size: u64,
+    experimental_limit_batched_tasks_total_size: Option<u64>,
     experimental_network: bool,
     experimental_multimodal: bool,
     experimental_chat_completions: bool,
     experimental_get_task_documents_route: bool,
+    experimental_task_queue_compaction_route: bool,
     experimental_composite_embedders: bool,
     experimental_embedding_cache_entries: usize,
     experimental_no_snapshot_compaction: bool,
     experimental_no_edition_2024_for_dumps: bool,
     experimental_no_edition_2024_for_settings: bool,
+    experimental_foreign_keys: bool,
+    experimental_personalization: bool,
+    experimental_allowed_ip_networks: bool,
     gpu_enabled: bool,
     db_path: bool,
     import_dump: bool,
@@ -214,6 +222,7 @@ struct Infos {
     import_snapshot: bool,
     schedule_snapshot: Option<u64>,
     snapshot_dir: bool,
+    uses_s3_snapshots: bool,
     ignore_missing_snapshot: bool,
     ignore_snapshot_if_db_exists: bool,
     http_addr: bool,
@@ -254,6 +263,7 @@ impl Infos {
             experimental_limit_batched_tasks_total_size,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
+            experimental_allowed_ip_networks,
             http_addr,
             master_key: _,
             env,
@@ -282,6 +292,8 @@ impl Infos {
             indexer_options,
             config_file_path,
             no_analytics: _,
+            experimental_personalization_api_key,
+            s3_snapshot_options,
         } = options;
 
         let schedule_snapshot = match schedule_snapshot {
@@ -302,11 +314,14 @@ impl Infos {
             logs_route,
             edit_documents_by_function,
             contains_filter,
+            dynamic_search_rules,
             network,
             get_task_documents_route,
+            task_queue_compaction_route,
             composite_embedders,
             chat_completions,
             multimodal,
+            foreign_keys,
         } = features;
 
         // We're going to override every sensible information.
@@ -323,31 +338,36 @@ impl Infos {
             experimental_dumpless_upgrade,
             experimental_replication_parameters,
             experimental_enable_logs_route: experimental_enable_logs_route | logs_route,
+            experimental_dynamic_search_rules: dynamic_search_rules,
             experimental_reduce_indexing_memory_usage,
             experimental_network: network,
             experimental_chat_completions: chat_completions,
             experimental_multimodal: multimodal,
             experimental_get_task_documents_route: get_task_documents_route,
+            experimental_task_queue_compaction_route: task_queue_compaction_route,
             experimental_composite_embedders: composite_embedders,
             experimental_embedding_cache_entries,
             experimental_no_snapshot_compaction,
             experimental_no_edition_2024_for_dumps,
+            experimental_allowed_ip_networks: !experimental_allowed_ip_networks.is_empty(),
+            experimental_foreign_keys: foreign_keys,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
-            db_path: db_path != PathBuf::from("./data.ms"),
+            db_path: db_path != Path::new("./data.ms"),
             import_dump: import_dump.is_some(),
-            dump_dir: dump_dir != PathBuf::from("dumps/"),
+            dump_dir: dump_dir != Path::new("dumps/"),
             ignore_missing_dump,
             ignore_dump_if_db_exists,
             import_snapshot: import_snapshot.is_some(),
             schedule_snapshot,
-            snapshot_dir: snapshot_dir != PathBuf::from("snapshots/"),
+            snapshot_dir: snapshot_dir != Path::new("snapshots/"),
+            uses_s3_snapshots: s3_snapshot_options.is_some(),
             ignore_missing_snapshot,
             ignore_snapshot_if_db_exists,
             http_addr: http_addr != default_http_addr(),
             http_payload_size_limit,
             experimental_max_number_of_batched_tasks,
             experimental_limit_batched_tasks_total_size:
-                experimental_limit_batched_tasks_total_size.into(),
+                experimental_limit_batched_tasks_total_size.map(|size| size.as_u64()),
             task_queue_webhook: task_webhook_url.is_some(),
             task_webhook_authorization_header: task_webhook_authorization_header.is_some(),
             log_level: log_level.to_string(),
@@ -362,6 +382,7 @@ impl Infos {
             ssl_resumption,
             ssl_tickets,
             experimental_no_edition_2024_for_settings,
+            experimental_personalization: experimental_personalization_api_key.is_some(),
         }
     }
 }

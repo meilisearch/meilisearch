@@ -9,7 +9,7 @@ jobs:
     name: Check the version validity
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - name: Check release validity
         run: bash .github/scripts/check-release.sh
 
@@ -25,10 +25,16 @@ jobs:
         run: |
           apt-get update && apt-get install -y curl
           apt-get install build-essential -y
-      - uses: dtolnay/rust-toolchain@1.85
+      - name: Clean space as per https://github.com/actions/virtual-environments/issues/709
+        run: |
+          sudo rm -rf "/opt/ghc" || true
+          sudo rm -rf "/usr/share/dotnet" || true
+          sudo rm -rf "/usr/local/lib/android" || true
+          sudo rm -rf "/usr/local/share/boost" || true
+      - uses: dtolnay/rust-toolchain@1.91.1
       - name: Install cargo-deb
         run: cargo install cargo-deb
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
       - name: Build deb package
         run: cargo deb -p meilisearch -o target/debian/meilisearch.deb
       - name: Upload debian pkg to release

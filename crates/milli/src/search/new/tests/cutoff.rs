@@ -3,13 +3,20 @@
 //! 2. A test that ensure the filters are affectively applied even with a cutoff of 0
 //! 3. A test that ensure the cutoff works well with the ranking scores
 
+use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::Duration;
 
+use http_client::policy::IpPolicy;
 use meili_snap::snapshot;
 
 use crate::index::tests::TempIndex;
 use crate::score_details::{ScoreDetails, ScoringStrategy};
-use crate::{Criterion, Filter, FilterableAttributesRule, Search, TimeBudget};
+use crate::search::facet::IndexFilter;
+use crate::update::Setting;
+use crate::vector::settings::EmbeddingSettings;
+use crate::vector::{Embedder, EmbedderOptions};
+use crate::{Criterion, Deadline, Filter, FilterableAttributesRule};
 
 fn create_index() -> TempIndex {
     let index = TempIndex::new();
@@ -56,10 +63,10 @@ fn basic_degraded_search() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&rtxn, &index);
+    let mut search = index.search(&rtxn);
     search.query("hello puppy kefir");
     search.limit(3);
-    search.time_budget(TimeBudget::new(Duration::from_millis(0)));
+    search.deadline(Deadline::from_budget(Duration::from_millis(0)));
 
     let result = search.execute().unwrap();
     assert!(result.degraded);
@@ -70,12 +77,12 @@ fn degraded_search_cannot_skip_filter() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&rtxn, &index);
+    let mut search = index.search(&rtxn);
     search.query("hello puppy kefir");
     search.limit(100);
-    search.time_budget(TimeBudget::new(Duration::from_millis(0)));
+    search.deadline(Deadline::from_budget(Duration::from_millis(0)));
     let filter_condition = Filter::from_str("id > 2").unwrap().unwrap();
-    search.filter(filter_condition);
+    search.filter(IndexFilter::from(filter_condition));
 
     let result = search.execute().unwrap();
     assert!(result.degraded);
@@ -91,11 +98,11 @@ fn degraded_search_and_score_details() {
     let index = create_index();
     let rtxn = index.read_txn().unwrap();
 
-    let mut search = Search::new(&rtxn, &index);
+    let mut search = index.search(&rtxn);
     search.query("hello puppy kefir");
     search.limit(4);
     search.scoring_strategy(ScoringStrategy::Detailed);
-    search.time_budget(TimeBudget::max());
+    search.deadline(Deadline::never());
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -163,7 +170,7 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do ONE loop iteration. Not much can be deduced, almost everyone matched the words first bucket.
-    search.time_budget(TimeBudget::max().with_stop_after(1));
+    search.deadline(Deadline::never().with_stop_after(1));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -205,7 +212,7 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do TWO loop iterations. The first document should be entirely sorted
-    search.time_budget(TimeBudget::max().with_stop_after(2));
+    search.deadline(Deadline::never().with_stop_after(2));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -252,7 +259,7 @@ fn degraded_search_and_score_details() {
     "###);
 
     // Do THREE loop iterations. The second document should be entirely sorted as well
-    search.time_budget(TimeBudget::max().with_stop_after(3));
+    search.deadline(Deadline::never().with_stop_after(3));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -305,7 +312,7 @@ fn degraded_search_and_score_details() {
 
     // Do FOUR loop iterations. The third document should be entirely sorted as well
     // The words bucket have still not progressed thus the last document doesn't have any info yet.
-    search.time_budget(TimeBudget::max().with_stop_after(4));
+    search.deadline(Deadline::never().with_stop_after(4));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -361,9 +368,8 @@ fn degraded_search_and_score_details() {
     ]
     "###);
 
-    // After SIX loop iteration. The words ranking rule gave us a new bucket.
-    // Since we reached the limit we were able to early exit without checking the typo ranking rule.
-    search.time_budget(TimeBudget::max().with_stop_after(6));
+    // After FIVE loop iterations. The words ranking rule gave us a new bucket.
+    search.deadline(Deadline::never().with_stop_after(5));
 
     let result = search.execute().unwrap();
     snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
@@ -421,6 +427,404 @@ fn degraded_search_and_score_details() {
                 },
             ),
             Skipped,
+        ],
+    ]
+    "###);
+
+    // After SIX loop iterations.
+    // we finished
+    search.deadline(Deadline::never().with_stop_after(6));
+
+    let result = search.execute().unwrap();
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [4, 1, 0, 3]
+    Scores: 1.0000 0.9167 0.8333 0.6667 
+    Score Details:
+    [
+        [
+            Words(
+                Words {
+                    matching_words: 3,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 3,
+                },
+            ),
+        ],
+        [
+            Words(
+                Words {
+                    matching_words: 3,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 1,
+                    max_typo_count: 3,
+                },
+            ),
+        ],
+        [
+            Words(
+                Words {
+                    matching_words: 3,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 2,
+                    max_typo_count: 3,
+                },
+            ),
+        ],
+        [
+            Words(
+                Words {
+                    matching_words: 2,
+                    max_matching_words: 3,
+                },
+            ),
+            Typo(
+                Typo {
+                    typo_count: 0,
+                    max_typo_count: 2,
+                },
+            ),
+        ],
+    ]
+    "###);
+}
+
+#[test]
+#[ignore] // See <https://github.com/meilisearch/meilisearch/pull/6116> for explanations
+fn degraded_search_and_score_details_vector() {
+    let index = create_index();
+
+    index
+        .add_documents(documents!([
+            {
+                "id": 4,
+                "text": "hella puppo kefir",
+                "_vectors": {
+                    "default": [0.1, 0.1]
+                }
+            },
+            {
+                "id": 3,
+                "text": "hella puppy kefir",
+                "_vectors": {
+                    "default": [-0.1, 0.1]
+                }
+            },
+            {
+                "id": 2,
+                "text": "hello",
+                "_vectors": {
+                    "default": [0.1, -0.1]
+                }
+            },
+            {
+                "id": 1,
+                "text": "hello puppy",
+                "_vectors": {
+                    "default": [-0.1, -0.1]
+                }
+            },
+            {
+                "id": 0,
+                "text": "hello puppy kefir",
+                "_vectors": {
+                    "default": null
+                }
+            },
+        ]))
+        .unwrap();
+
+    index
+        .update_settings(|settings| {
+            let mut embedders = BTreeMap::new();
+            embedders.insert(
+                "default".into(),
+                Setting::Set(EmbeddingSettings {
+                    source: Setting::Set(crate::vector::settings::EmbedderSource::UserProvided),
+                    dimensions: Setting::Set(2),
+                    ..Default::default()
+                }),
+            );
+            settings.set_embedder_settings(embedders);
+            settings.set_vector_store(crate::vector::VectorStoreBackend::Hannoy);
+        })
+        .unwrap();
+
+    let rtxn = index.read_txn().unwrap();
+    let mut search = index.search(&rtxn);
+
+    let embedder = Arc::new(
+        Embedder::new(
+            EmbedderOptions::UserProvided(crate::vector::embedder::manual::EmbedderOptions {
+                dimensions: 2,
+                distribution: None,
+            }),
+            0,
+            // NO DANGER: test code
+            IpPolicy::danger_always_allow(),
+        )
+        .unwrap(),
+    );
+
+    search.semantic("default".into(), embedder, false, Some(vec![1., -1.]), None);
+
+    search.limit(4);
+    search.scoring_strategy(ScoringStrategy::Detailed);
+    search.deadline(Deadline::never());
+
+    let result = search.execute().unwrap();
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [2, 0, 3, 1]
+    Scores: 1.0000 0.5000 0.5000 0.0000 
+    Score Details:
+    [
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        1.0,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.0,
+                    ),
+                },
+            ),
+        ],
+    ]
+    "###);
+
+    // Do ONE loop iteration. Not much can be deduced, almost everyone matched the words first bucket.
+    search.deadline(Deadline::never().with_stop_after(1));
+
+    let result = search.execute().unwrap();
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [0, 1, 2, 3]
+    Scores: 0.5000 0.0000 0.0000 0.0000 
+    Score Details:
+    [
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Skipped,
+        ],
+        [
+            Skipped,
+        ],
+        [
+            Skipped,
+        ],
+    ]
+    "###);
+
+    search.deadline(Deadline::never().with_stop_after(2));
+
+    let result = search.execute().unwrap();
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [0, 1, 2, 3]
+    Scores: 0.5000 0.0000 0.0000 0.0000 
+    Score Details:
+    [
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.0,
+                    ),
+                },
+            ),
+        ],
+        [
+            Skipped,
+        ],
+        [
+            Skipped,
+        ],
+    ]
+    "###);
+
+    search.deadline(Deadline::never().with_stop_after(3));
+
+    let result = search.execute().unwrap();
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [2, 0, 1, 3]
+    Scores: 1.0000 0.5000 0.0000 0.0000 
+    Score Details:
+    [
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        1.0,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.0,
+                    ),
+                },
+            ),
+        ],
+        [
+            Skipped,
+        ],
+    ]
+    "###);
+
+    search.deadline(Deadline::never().with_stop_after(4));
+
+    let result = search.execute().unwrap();
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [2, 0, 3, 1]
+    Scores: 1.0000 0.5000 0.5000 0.0000 
+    Score Details:
+    [
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        1.0,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.0,
+                    ),
+                },
+            ),
+        ],
+    ]
+    "###);
+
+    search.deadline(Deadline::never().with_stop_after(5));
+
+    let result = search.execute().unwrap();
+    snapshot!(format!("IDs: {:?}\nScores: {}\nScore Details:\n{:#?}", result.documents_ids, result.document_scores.iter().map(|scores| format!("{:.4} ", ScoreDetails::global_score(scores.iter()))).collect::<String>(), result.document_scores), @r###"
+    IDs: [2, 0, 3, 1]
+    Scores: 1.0000 0.5000 0.5000 0.0000 
+    Score Details:
+    [
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        1.0,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.5,
+                    ),
+                },
+            ),
+        ],
+        [
+            Vector(
+                Vector {
+                    similarity: Some(
+                        0.0,
+                    ),
+                },
+            ),
         ],
     ]
     "###);

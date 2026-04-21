@@ -52,6 +52,7 @@ pub static AUTHORIZATIONS: Lazy<
         ("DELETE",  "/tasks") =>                                           hashset!{"tasks.delete", "tasks.*", "*"},
         ("GET",     "/tasks?indexUid=products") =>                         hashset!{"tasks.get", "tasks.*", "*"},
         ("GET",     "/tasks/0") =>                                         hashset!{"tasks.get", "tasks.*", "*"},
+            ("POST",    "/tasks/compact") =>                                   hashset!{"tasks.compact", "tasks.*", "*"},
         ("PATCH",   "/indexes/products/") =>                               hashset!{"indexes.update", "indexes.*", "*"},
         ("GET",     "/indexes/products/") =>                               hashset!{"indexes.get", "indexes.*", "*"},
         ("DELETE",  "/indexes/products/") =>                               hashset!{"indexes.delete", "indexes.*", "*"},

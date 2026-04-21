@@ -213,10 +213,7 @@ pub mod policies {
 
     /// Extracts the key id used to sign the payload, without performing any validation.
     fn extract_key_id(token: &str) -> Result<Uuid, AuthError> {
-        let mut validation = tenant_token_validation();
-        validation.insecure_disable_signature_validation();
-        let dummy_key = DecodingKey::from_secret(b"secret");
-        let token_data = decode::<Claims>(token, &dummy_key, &validation)?;
+        let token_data = jsonwebtoken::dangerous::insecure_decode(token)?;
 
         // get token fields without validating it.
         let Claims { api_key_uid, .. } = token_data.claims;

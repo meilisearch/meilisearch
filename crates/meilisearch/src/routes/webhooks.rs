@@ -1,3 +1,4 @@
+use core::convert::Infallible;
 use std::collections::BTreeMap;
 use std::str::FromStr;
 
@@ -7,7 +8,6 @@ use actix_http::header::{
 };
 use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
-use core::convert::Infallible;
 use deserr::actix_web::AwebJson;
 use deserr::{DeserializeError, Deserr, ValuePointerRef};
 use index_scheduler::IndexScheduler;
@@ -22,49 +22,39 @@ use meilisearch_types::webhooks::Webhook;
 use serde::Serialize;
 use tracing::debug;
 use url::Url;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 use uuid::Uuid;
+use WebhooksError::*;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
-use WebhooksError::*;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(get_webhooks, get_webhook, post_webhook, patch_webhook, delete_webhook),
+#[routes::routes(
+    routes(
+        "" => [get(get_webhooks), post(post_webhook)],
+        "/{uuid}" => [get(get_webhook), patch(patch_webhook), delete(delete_webhook)],
+    ),
+    tag = "Webhooks",
     tags((
         name = "Webhooks",
         description = "The `/webhooks` route allows you to register endpoints to be called once tasks are processed.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/webhooks"),
     )),
 )]
 pub struct WebhooksApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(get_webhooks))
-            .route(web::post().to(SeqHandler(post_webhook))),
-    )
-    .service(
-        web::resource("/{uuid}")
-            .route(web::get().to(get_webhook))
-            .route(web::patch().to(SeqHandler(patch_webhook)))
-            .route(web::delete().to(SeqHandler(delete_webhook))),
-    );
-}
-
+/// Configuration for a webhook endpoint
 #[derive(Debug, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_webhook)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub(super) struct WebhookSettings {
+    /// URL endpoint to call when tasks complete.
     #[schema(value_type = Option<String>, example = "https://your.site/on-tasks-completed")]
     #[deserr(default, error = DeserrJsonError<InvalidWebhookUrl>)]
     #[serde(default)]
     url: Setting<String>,
+    /// HTTP headers to include in webhook requests.
     #[schema(value_type = Option<BTreeMap<String, String>>, example = json!({"Authorization":"Bearer a-secret-token"}))]
     #[deserr(default, error = DeserrJsonError<InvalidWebhookHeaders>)]
     #[serde(default)]
@@ -87,36 +77,43 @@ fn deny_immutable_fields_webhook(
     }
 }
 
+/// Webhook object with metadata and redacted authorization headers.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
-pub(super) struct WebhookWithMetadata {
+pub(super) struct WebhookWithMetadataRedactedAuthorization {
+    /// Unique identifier of the webhook.
     uuid: Uuid,
+    /// Whether the webhook can be edited.
     is_editable: bool,
+    /// URL and headers. Authorization header values are redacted in the response.
     #[schema(value_type = WebhookSettings)]
     #[serde(flatten)]
     webhook: Webhook,
 }
 
-impl WebhookWithMetadata {
-    pub fn from(uuid: Uuid, webhook: Webhook) -> Self {
+impl WebhookWithMetadataRedactedAuthorization {
+    pub fn from(uuid: Uuid, mut webhook: Webhook) -> Self {
+        webhook.redact_authorization_header();
         Self { uuid, is_editable: uuid != Uuid::nil(), webhook }
     }
 }
 
+/// Response containing a list of all registered webhooks.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct WebhookResults {
-    results: Vec<WebhookWithMetadata>,
+    /// All webhooks configured on the instance. Each entry includes UUID, URL, headers (authorization redacted), and editability.
+    results: Vec<WebhookWithMetadataRedactedAuthorization>,
 }
 
-#[utoipa::path(
-    get,
-    path = "",
-    tag = "Webhooks",
+/// List webhooks
+///
+/// Return all webhooks registered on the instance. Each webhook is returned with its URL, optional headers, and UUID (the key value is never returned).
+#[routes::path(
     security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
-        (status = OK, description = "Webhooks are returned", body = WebhookResults, content_type = "application/json", example = json!({
+        (status = OK, description = "Webhooks are returned.", body = WebhookResults, content_type = "application/json", example = json!({
             "results": [
                 {
                     "uuid": "550e8400-e29b-41d4-a716-446655440000",
@@ -133,7 +130,7 @@ pub(super) struct WebhookResults {
                 }
             ]
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -150,7 +147,7 @@ async fn get_webhooks(
     let results = webhooks
         .webhooks
         .into_iter()
-        .map(|(uuid, webhook)| WebhookWithMetadata::from(uuid, webhook))
+        .map(|(uuid, webhook)| WebhookWithMetadataRedactedAuthorization::from(uuid, webhook))
         .collect::<Vec<_>>();
     let results = WebhookResults { results };
 
@@ -295,13 +292,13 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
     Ok(())
 }
 
-#[utoipa::path(
-    get,
-    path = "/{uuid}",
-    tag = "Webhooks",
+/// Get webhook
+///
+/// Retrieve a single webhook by its UUID.
+#[routes::path(
     security(("Bearer" = ["webhooks.get", "webhooks.*", "*.get", "*"])),
     responses(
-        (status = 200, description = "Webhook found", body = WebhookWithMetadata, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook found.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -309,11 +306,21 @@ fn check_changed(uuid: Uuid, webhook: &Webhook) -> Result<(), WebhooksError> {
             },
             "isEditable": true
         })),
-        (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json"),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
+        (status = 404, description = "Webhook not found.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The webhook was not found.",
+            "code": "webhook_not_found",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#webhook_not_found"
+        })),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The Authorization header is missing. It must use the bearer authorization method.",
+            "code": "missing_authorization_header",
+            "type": "auth",
+            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+        })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
+        ("uuid" = Uuid, Path, description = "Universally unique identifier of the webhook.")
     )
 )]
 async fn get_webhook(
@@ -324,20 +331,20 @@ async fn get_webhook(
     let mut webhooks = index_scheduler.webhooks_view();
 
     let webhook = webhooks.webhooks.remove(&uuid).ok_or(WebhookNotFound(uuid))?;
-    let webhook = WebhookWithMetadata::from(uuid, webhook);
+    let webhook = WebhookWithMetadataRedactedAuthorization::from(uuid, webhook);
 
     debug!(returns = ?webhook, "Get webhook");
     Ok(HttpResponse::Ok().json(webhook))
 }
 
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Webhooks",
+/// Create webhook
+///
+/// Register a new webhook to receive task completion notifications. You can optionally set custom headers (e.g. for authentication) and configure the callback URL.
+#[routes::path(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.create", "webhooks.*", "*"])),
     responses(
-        (status = 201, description = "Webhook created successfully", body = WebhookWithMetadata, content_type = "application/json", example = json!({
+        (status = 201, description = "Webhook created successfully.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -345,8 +352,18 @@ async fn get_webhook(
             },
             "isEditable": true
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
-        (status = 400, description = "Bad request", body = ResponseError, content_type = "application/json"),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The Authorization header is missing. It must use the bearer authorization method.",
+            "code": "missing_authorization_header",
+            "type": "auth",
+            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+        })),
+        (status = 400, description = "Bad request.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The webhook URL is invalid. Expected a valid URL.",
+            "code": "invalid_webhook_url",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#invalid_webhook_url"
+        })),
     )
 )]
 async fn post_webhook(
@@ -383,19 +400,19 @@ async fn post_webhook(
 
     analytics.publish(PostWebhooksAnalytics, &req);
 
-    let response = WebhookWithMetadata::from(uuid, webhook);
+    let response = WebhookWithMetadataRedactedAuthorization::from(uuid, webhook);
     debug!(returns = ?response, "Post webhook");
     Ok(HttpResponse::Created().json(response))
 }
 
-#[utoipa::path(
-    patch,
-    path = "/{uuid}",
-    tag = "Webhooks",
+/// Update webhook
+///
+/// Update the URL or headers of an existing webhook identified by its UUID.
+#[routes::path(
     request_body = WebhookSettings,
     security(("Bearer" = ["webhooks.update", "webhooks.*", "*"])),
     responses(
-        (status = 200, description = "Webhook updated successfully", body = WebhookWithMetadata, content_type = "application/json", example = json!({
+        (status = 200, description = "Webhook updated successfully. Returns the webhook with metadata and redacted authorization headers.", body = WebhookWithMetadataRedactedAuthorization, content_type = "application/json", example = json!({
             "uuid": "550e8400-e29b-41d4-a716-446655440000",
             "url": "https://your.site/on-tasks-completed",
             "headers": {
@@ -403,11 +420,27 @@ async fn post_webhook(
             },
             "isEditable": true
         })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
-        (status = 400, description = "Bad request", body = ResponseError, content_type = "application/json"),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The Authorization header is missing. It must use the bearer authorization method.",
+            "code": "missing_authorization_header",
+            "type": "auth",
+            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+        })),
+        (status = 400, description = "Bad request.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The webhook URL is invalid. Expected a valid URL.",
+            "code": "invalid_webhook_url",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#invalid_webhook_url"
+        })),
+        (status = 404, description = "Webhook not found.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The webhook was not found.",
+            "code": "webhook_not_found",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#webhook_not_found"
+        })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
+        ("uuid" = Uuid, Path, description = "Universally unique identifier of the webhook.")
     )
 )]
 async fn patch_webhook(
@@ -435,23 +468,33 @@ async fn patch_webhook(
 
     analytics.publish(PatchWebhooksAnalytics, &req);
 
-    let response = WebhookWithMetadata::from(uuid, webhook);
+    let response = WebhookWithMetadataRedactedAuthorization::from(uuid, webhook);
     debug!(returns = ?response, "Patch webhook");
     Ok(HttpResponse::Ok().json(response))
 }
 
-#[utoipa::path(
-    delete,
-    path = "/{uuid}",
-    tag = "Webhooks",
+/// Delete webhook
+///
+/// Permanently remove a webhook by its UUID. The webhook will no longer receive task notifications.
+#[routes::path(
     security(("Bearer" = ["webhooks.delete", "webhooks.*", "*"])),
     responses(
-        (status = 204, description = "Webhook deleted successfully"),
-        (status = 404, description = "Webhook not found", body = ResponseError, content_type = "application/json"),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json"),
+        (status = 204, description = "Webhook deleted successfully."),
+        (status = 404, description = "Webhook not found.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The webhook was not found.",
+            "code": "webhook_not_found",
+            "type": "invalid_request",
+            "link": "https://docs.meilisearch.com/errors#webhook_not_found"
+        })),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!({
+            "message": "The Authorization header is missing. It must use the bearer authorization method.",
+            "code": "missing_authorization_header",
+            "type": "auth",
+            "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+        })),
     ),
     params(
-        ("uuid" = Uuid, Path, description = "The universally unique identifier of the webhook")
+        ("uuid" = Uuid, Path, description = "Universally unique identifier of the webhook.")
     )
 )]
 async fn delete_webhook(

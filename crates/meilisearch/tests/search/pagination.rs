@@ -1,7 +1,8 @@
+use meili_snap::{json_string, snapshot};
+
 use super::shared_index_with_documents;
 use crate::common::Server;
 use crate::json;
-use meili_snap::{json_string, snapshot};
 
 #[actix_rt::test]
 async fn default_search_should_return_estimated_total_hit() {
@@ -174,7 +175,8 @@ async fn test_issue_5274() {
 
     snapshot!(json_string!(rep, {
         ".processingTimeMs" => "[ignored]",
-    }), @r#"
+        ".requestUid" => "[uuid]"
+    }), @r###"
     {
       "hits": [
         {
@@ -188,7 +190,8 @@ async fn test_issue_5274() {
       "hitsPerPage": 1,
       "page": 1,
       "totalPages": 1,
-      "totalHits": 1
+      "totalHits": 1,
+      "requestUid": "[uuid]"
     }
-    "#);
+    "###);
 }

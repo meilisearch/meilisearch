@@ -9,31 +9,34 @@ use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent};
 use serde::Serialize;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use super::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::analytics::{Aggregate, Analytics};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
-use crate::extractors::sequential_extractor::SeqHandler;
+use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::Opt;
 
-#[derive(OpenApi)]
-#[openapi(paths(swap_indexes))]
+#[routes::routes(
+    routes(
+        "" => post(swap_indexes),
+    ),
+    tag = "Indexes",
+)]
 pub struct SwapIndexesApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(SeqHandler(swap_indexes))));
-}
-
-#[derive(Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
+/// Request body for swapping two indexes
+#[derive(Deserr, Serialize, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct SwapIndexesPayload {
-    /// Array of the two indexUids to be swapped
+    /// Array of the two index names to be swapped
+    #[schema(required = true)]
     #[deserr(error = DeserrJsonError<InvalidSwapIndexes>, missing_field_error = DeserrJsonError::missing_swap_indexes)]
     indexes: Vec<IndexUid>,
-    /// If set to true, instead of swapping the left and right indexes it'll change the name of the first index to the second
+    /// If true, rename the first index to the second instead of swapping
+    #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSwapRename>)]
     rename: bool,
 }
@@ -63,17 +66,16 @@ impl Aggregate for IndexSwappedAnalytics {
 
 /// Swap indexes
 ///
-/// Swap the documents, settings, and task history of two or more indexes. You can only swap indexes in pairs. However, a single request can swap as many index pairs as you wish.
-/// Swapping indexes is an atomic transaction: either all indexes are successfully swapped, or none are.
-/// Swapping indexA and indexB will also replace every mention of indexA by indexB and vice-versa in the task history. enqueued tasks are left unmodified.
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Indexes",
-    security(("Bearer" = ["search", "*"])),
-    request_body = Vec<SwapIndexesPayload>,
+/// Swap the documents, settings, and task history of two or more indexes.
+///
+/// Indexes are swapped in pairs; a single request can include multiple pairs.
+/// The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa.
+/// Enqueued tasks are left unmodified.
+#[routes::path(
+    security(("Bearer" = ["indexes.swap", "*"])),
+    request_body(content = Vec<SwapIndexesPayload>),
     responses(
-        (status = OK, description = "Task successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Task successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 3,
                 "indexUid": null,
@@ -82,7 +84,7 @@ impl Aggregate for IndexSwappedAnalytics {
                 "enqueuedAt": "2021-08-12T10:00:00.000000Z"
             }
         )),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -100,6 +102,10 @@ pub async fn swap_indexes(
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let params = params.into_inner();
+
+    let network = index_scheduler.network();
+    let task_network = task_network_and_check_leader_and_version(&req, &network)?;
+
     analytics.publish(
         IndexSwappedAnalytics {
             swap_operation_number: params.len(),
@@ -110,26 +116,36 @@ pub async fn swap_indexes(
     let filters = index_scheduler.filters();
 
     let mut swaps = vec![];
-    for SwapIndexesPayload { indexes, rename } in params.into_iter() {
+    for SwapIndexesPayload { indexes, rename } in &params {
         // TODO: switch to deserr
         let (lhs, rhs) = match indexes.as_slice() {
             [lhs, rhs] => (lhs, rhs),
             _ => {
-                return Err(MeilisearchHttpError::SwapIndexPayloadWrongLength(indexes).into());
+                return Err(
+                    MeilisearchHttpError::SwapIndexPayloadWrongLength(indexes.clone()).into()
+                );
             }
         };
         if !filters.is_index_authorized(lhs) || !filters.is_index_authorized(rhs) {
             return Err(AuthenticationError::InvalidToken.into());
         }
-        swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()), rename });
+        swaps.push(IndexSwap { indexes: (lhs.to_string(), rhs.to_string()), rename: *rename });
     }
 
     let task = KindWithContent::IndexSwap { swaps };
     let uid = get_task_id(&req, &opt)?;
     let dry_run = is_dry_run(&req, &opt)?;
-    let task: SummarizedTaskView =
-        tokio::task::spawn_blocking(move || index_scheduler.register(task, uid, dry_run))
-            .await??
-            .into();
+    let scheduler = index_scheduler.clone();
+    let mut task = tokio::task::spawn_blocking(move || {
+        scheduler.register_with_custom_metadata(task, uid, None, dry_run, task_network)
+    })
+    .await??;
+
+    if let Some(task_network) = task.network.take() {
+        proxy(&index_scheduler, None, &req, task_network, network, Body::inline(params), &task)
+            .await?;
+    }
+
+    let task = SummarizedTaskView::from(task);
     Ok(HttpResponse::Accepted().json(task))
 }

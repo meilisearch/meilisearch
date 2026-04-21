@@ -1,3 +1,5 @@
+#![allow(clippy::result_large_err)]
+
 use std::collections::HashMap;
 use std::io;
 
@@ -6,6 +8,7 @@ use meilisearch_types::batches::{Batch, BatchId};
 use meilisearch_types::heed::RwTxn;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli;
+use meilisearch_types::milli::update::MissingDocumentPolicy;
 use meilisearch_types::tasks::{Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
 use uuid::Uuid;
@@ -147,6 +150,8 @@ impl<'a> Dump<'a> {
             canceled_by: task.canceled_by,
             details: task.details,
             status: task.status,
+            network: task.network,
+            custom_metadata: task.custom_metadata,
             kind: match task.kind {
                 KindDump::DocumentImport {
                     primary_key,
@@ -160,6 +165,7 @@ impl<'a> Dump<'a> {
                     content_file: content_uuid.ok_or(Error::CorruptedDump)?,
                     documents_count,
                     allow_index_creation,
+                    on_missing_document: MissingDocumentPolicy::default(),
                 },
                 KindDump::DocumentDeletion { documents_ids } => KindWithContent::DocumentDeletion {
                     documents_ids,
@@ -231,6 +237,12 @@ impl<'a> Dump<'a> {
                     }
                 }
                 KindDump::UpgradeDatabase { from } => KindWithContent::UpgradeDatabase { from },
+                KindDump::IndexCompaction { index_uid } => {
+                    KindWithContent::IndexCompaction { index_uid }
+                }
+                KindDump::NetworkTopologyChange(network_topology_change) => {
+                    KindWithContent::NetworkTopologyChange(network_topology_change)
+                }
             },
         };
 

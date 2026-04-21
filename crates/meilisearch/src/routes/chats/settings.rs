@@ -19,18 +19,46 @@ use utoipa::ToSchema;
 use super::ChatsParam;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::extractors::sequential_extractor::SeqHandler;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::resource("")
-            .route(web::get().to(SeqHandler(get_settings)))
-            .route(web::patch().to(SeqHandler(patch_settings)))
-            .route(web::delete().to(SeqHandler(reset_settings))),
-    );
-}
-
-async fn get_settings(
+/// Get settings of a chat workspace
+#[routes::path(
+    security(("Bearer" = ["chats.settings.get", "*"])),
+    params(
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "My super system prompt",
+                    "searchDescription": "My super search tool description",
+                    "searchQParam": "My awesome q search parameter description",
+                    "searchIndexUidParam": "My incredible index uid param description"
+                }
+            }
+        )),
+    ),
+)]
+pub async fn get_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_GET }>,
         Data<IndexScheduler>,
@@ -54,7 +82,45 @@ async fn get_settings(
     Ok(HttpResponse::Ok().json(settings))
 }
 
-async fn patch_settings(
+/// Update settings of a chat workspace
+#[routes::path(
+    security(("Bearer" = ["chats.settings.update", "*"])),
+    params(
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "My super system prompt",
+                    "searchDescription": "My super search tool description",
+                    "searchQParam": "My awesome q search parameter description",
+                    "searchIndexUidParam": "My incredible index uid param description"
+                }
+            }
+        )),
+    ),
+)]
+pub async fn patch_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_UPDATE }>,
         Data<IndexScheduler>,
@@ -155,7 +221,45 @@ async fn patch_settings(
     Ok(HttpResponse::Ok().json(settings))
 }
 
-async fn reset_settings(
+/// Reset the settings of a chat workspace
+#[routes::path(
+    security(("Bearer" = ["chats.settings.update", "*"])),
+    params(
+        ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
+    ),
+    responses(
+        (status = 404, description = "Chat not found.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+              "message": "Chat :workspaceUid not found.",
+              "code": "chat_not_found",
+              "type": "invalid_request",
+              "link": "https://docs.meilisearch.com/errors#chat_not_found"
+            }
+        )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        )),
+        (status = 200, description = "Chat settings retrieved.", content_type = "application/json", example = json!(
+            {
+                "source": "openAi",
+                "baseUrl": null,
+                "apiKey": "$LLM_API_KEY",
+                "prompts": {
+                    "system": "default system prompt",
+                    "searchDescription": "default search tool description",
+                    "searchQParam": "default q search parameter description",
+                    "searchIndexUidParam": "default index uid param description"
+                }
+            }
+        )),
+    ),
+)]
+pub async fn reset_settings(
     index_scheduler: GuardedData<
         ActionPolicy<{ actions::CHATS_SETTINGS_UPDATE }>,
         Data<IndexScheduler>,
@@ -177,53 +281,67 @@ async fn reset_settings(
     }
 }
 
+/// Settings for a chat workspace
 #[derive(Debug, Clone, Deserialize, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ChatWorkspaceSettings {
+    /// LLM provider to use for chat completions
     #[serde(default)]
     #[deserr(default)]
     #[schema(value_type = Option<ChatCompletionSource>)]
     pub source: Setting<ChatCompletionSource>,
+    /// Organization ID for the LLM provider
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionOrgId>)]
     #[schema(value_type = Option<String>, example = json!("dcba4321..."))]
     pub org_id: Setting<String>,
+    /// Project ID for the LLM provider
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionProjectId>)]
     #[schema(value_type = Option<String>, example = json!("4321dcba..."))]
     pub project_id: Setting<String>,
+    /// API version for the LLM provider
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiVersion>)]
     #[schema(value_type = Option<String>, example = json!("2024-02-01"))]
     pub api_version: Setting<String>,
+    /// Deployment ID for Azure OpenAI
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionDeploymentId>)]
     #[schema(value_type = Option<String>, example = json!("1234abcd..."))]
     pub deployment_id: Setting<String>,
+    /// Base URL for the LLM API
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionBaseApi>)]
     #[schema(value_type = Option<String>, example = json!("https://api.mistral.ai/v1"))]
     pub base_url: Setting<String>,
+    /// API key for authentication with the LLM provider
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionApiKey>)]
     #[schema(value_type = Option<String>, example = json!("abcd1234..."))]
     pub api_key: Setting<String>,
+    /// Custom prompts for chat completions
     #[serde(default)]
     #[deserr(default)]
     #[schema(inline, value_type = Option<ChatPrompts>)]
     pub prompts: Setting<ChatPrompts>,
 }
 
+/// LLM provider for chat completions
 #[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, Deserr, ToSchema)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub enum ChatCompletionSource {
+    /// OpenAI API
     #[default]
     OpenAi,
+    /// Mistral AI API
     Mistral,
+    /// Azure OpenAI Service
     AzureOpenAi,
+    /// vLLM compatible API
     VLlm,
 }
 
@@ -239,23 +357,28 @@ impl From<ChatCompletionSource> for DbChatCompletionSource {
     }
 }
 
+/// Custom prompts for chat completions
 #[derive(Debug, Clone, Deserialize, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ChatPrompts {
+    /// System prompt for the LLM
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSystemPrompt>)]
     #[schema(value_type = Option<String>, example = json!("You are a helpful assistant..."))]
     pub system: Setting<String>,
+    /// Description of the search function for the LLM
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchDescriptionPrompt>)]
     #[schema(value_type = Option<String>, example = json!("This is the search function..."))]
     pub search_description: Setting<String>,
+    /// Description of the query parameter for search
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchQueryParamPrompt>)]
     #[schema(value_type = Option<String>, example = json!("This is query parameter..."))]
     pub search_q_param: Setting<String>,
+    /// Description of the filter parameter for search
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidChatCompletionSearchFilterParamPrompt>)]
     #[schema(value_type = Option<String>, example = json!("This is filter parameter..."))]

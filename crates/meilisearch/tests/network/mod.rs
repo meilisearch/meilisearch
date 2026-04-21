@@ -46,7 +46,7 @@ async fn errors_on_param() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `selfie`: expected one of `remotes`, `self`",
+      "message": "Unknown field `selfie`: expected one of `remotes`, `shards`, `previousShards`, `self`, `leader`, `previousRemotes`",
       "code": "bad_request",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#bad_request"
@@ -149,7 +149,7 @@ async fn errors_on_param() {
     meili_snap::snapshot!(code, @"400 Bad Request");
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
-      "message": "Unknown field `doggo` inside `.remotes.new`: expected one of `url`, `searchApiKey`",
+      "message": "Unknown field `doggo` inside `.remotes.new`: expected one of `url`, `searchApiKey`, `writeApiKey`",
       "code": "invalid_network_remotes",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_network_remotes"
@@ -186,15 +186,20 @@ async fn errors_on_param() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": null,
       "remotes": {
         "kefir": {
           "url": "http://localhost:7700",
-          "searchApiKey": null
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
         }
-      }
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
     let (response, code) = server
@@ -263,34 +268,43 @@ async fn auth() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "master",
-      "remotes": {}
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
     let (response, code) = server.get_network().await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-{
-  "self": "master",
-  "remotes": {}
-}
-"###);
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "master",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
 
     // try get with get permission
     server.use_api_key(get_network_key.as_str().unwrap());
     let (response, code) = server.get_network().await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-{
-  "self": "master",
-  "remotes": {}
-}
-"###);
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "master",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
 
     // try update with update permission
     server.use_api_key(update_network_key.as_str().unwrap());
@@ -302,12 +316,15 @@ async fn auth() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-{
-  "self": "api_key",
-  "remotes": {}
-}
-"###);
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "api_key",
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
 
     // try with the other's permission
     let (response, code) = server.get_network().await;
@@ -383,17 +400,23 @@ async fn get_and_set_network() {
     meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
     {
       "self": null,
-      "remotes": {}
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "00000000-0000-0000-0000-000000000000"
     }
     "###);
 
     // adding self
     let (response, code) = server.set_network(json!({"self": "myself"})).await;
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
-      "remotes": {}
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -411,19 +434,26 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {
         "myself": {
           "url": "http://localhost:7700",
-          "searchApiKey": null
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
-          "searchApiKey": "foo"
+          "searchApiKey": "foo",
+          "writeApiKey": null,
+          "status": "available"
         }
-      }
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -437,19 +467,26 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {
         "myself": {
           "url": "http://localhost:7700",
-          "searchApiKey": null
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
-          "searchApiKey": "bar"
+          "searchApiKey": "bar",
+          "writeApiKey": null,
+          "status": "available"
         }
-      }
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -464,23 +501,32 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {
         "myself": {
           "url": "http://localhost:7700",
-          "searchApiKey": null
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
         },
         "them": {
           "url": "http://localhost:7702",
-          "searchApiKey": "baz"
+          "searchApiKey": "baz",
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
-          "searchApiKey": "bar"
+          "searchApiKey": "bar",
+          "writeApiKey": null,
+          "status": "available"
         }
-      }
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -492,19 +538,26 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "myself",
       "remotes": {
         "them": {
           "url": "http://localhost:7702",
-          "searchApiKey": "baz"
+          "searchApiKey": "baz",
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
-          "searchApiKey": "bar"
+          "searchApiKey": "bar",
+          "writeApiKey": null,
+          "status": "available"
         }
-      }
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -512,19 +565,26 @@ async fn get_and_set_network() {
     let (response, code) = server.set_network(json!({"self": Null})).await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": null,
       "remotes": {
         "them": {
           "url": "http://localhost:7702",
-          "searchApiKey": "baz"
+          "searchApiKey": "baz",
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
-          "searchApiKey": "bar"
+          "searchApiKey": "bar",
+          "writeApiKey": null,
+          "status": "available"
         }
-      }
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -532,19 +592,26 @@ async fn get_and_set_network() {
     let (response, code) = server.set_network(json!({"self": "thy"})).await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "thy",
       "remotes": {
         "them": {
           "url": "http://localhost:7702",
-          "searchApiKey": "baz"
+          "searchApiKey": "baz",
+          "writeApiKey": null,
+          "status": "available"
         },
         "thy": {
           "url": "http://localhost:7701",
-          "searchApiKey": "bar"
+          "searchApiKey": "bar",
+          "writeApiKey": null,
+          "status": "available"
         }
-      }
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 
@@ -552,61 +619,82 @@ async fn get_and_set_network() {
     let (response, code) = server.set_network(json!({})).await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-        {
-          "self": "thy",
-          "remotes": {
-            "them": {
-              "url": "http://localhost:7702",
-              "searchApiKey": "baz"
-            },
-            "thy": {
-              "url": "http://localhost:7701",
-              "searchApiKey": "bar"
-            }
-          }
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "thy",
+      "remotes": {
+        "them": {
+          "url": "http://localhost:7702",
+          "searchApiKey": "baz",
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "thy": {
+          "url": "http://localhost:7701",
+          "searchApiKey": "bar",
+          "writeApiKey": null,
+          "status": "available"
         }
-        "###);
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
 
     // still doing nothing
     let (response, code) = server.set_network(json!({"remotes": {}})).await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-        {
-          "self": "thy",
-          "remotes": {
-            "them": {
-              "url": "http://localhost:7702",
-              "searchApiKey": "baz"
-            },
-            "thy": {
-              "url": "http://localhost:7701",
-              "searchApiKey": "bar"
-            }
-          }
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "thy",
+      "remotes": {
+        "them": {
+          "url": "http://localhost:7702",
+          "searchApiKey": "baz",
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "thy": {
+          "url": "http://localhost:7701",
+          "searchApiKey": "bar",
+          "writeApiKey": null,
+          "status": "available"
         }
-        "###);
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
 
     // good time to check GET
     let (response, code) = server.get_network().await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
-        {
-          "self": "thy",
-          "remotes": {
-            "them": {
-              "url": "http://localhost:7702",
-              "searchApiKey": "baz"
-            },
-            "thy": {
-              "url": "http://localhost:7701",
-              "searchApiKey": "bar"
-            }
-          }
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "thy",
+      "remotes": {
+        "them": {
+          "url": "http://localhost:7702",
+          "searchApiKey": "baz",
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "thy": {
+          "url": "http://localhost:7701",
+          "searchApiKey": "bar",
+          "writeApiKey": null,
+          "status": "available"
         }
-        "###);
+      },
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
 
     // deleting everything
     let (response, code) = server
@@ -616,10 +704,13 @@ async fn get_and_set_network() {
         .await;
 
     meili_snap::snapshot!(code, @"200 OK");
-    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
     {
       "self": "thy",
-      "remotes": {}
+      "remotes": {},
+      "shards": {},
+      "leader": null,
+      "version": "[version]"
     }
     "###);
 }

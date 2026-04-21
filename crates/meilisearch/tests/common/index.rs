@@ -3,6 +3,7 @@ use std::marker::PhantomData;
 use std::panic::{catch_unwind, resume_unwind, UnwindSafe};
 
 use actix_web::http::StatusCode;
+use serde::Serialize;
 use urlencoding::encode as urlencode;
 
 use super::encoder::Encoder;
@@ -91,7 +92,26 @@ impl<'a> Index<'a, Owned> {
         documents: Value,
         primary_key: Option<&str>,
     ) -> (Value, StatusCode) {
-        self._add_documents(documents, primary_key).await
+        self._add_documents(documents, primary_key, None, false).await
+    }
+
+    pub async fn add_documents_with_custom_metadata(
+        &self,
+        documents: Value,
+        primary_key: Option<&str>,
+        custom_metadata: Option<&str>,
+    ) -> (Value, StatusCode) {
+        self._add_documents(documents, primary_key, custom_metadata, false).await
+    }
+
+    pub async fn add_documents_with_skip_creation(
+        &self,
+        documents: Value,
+        primary_key: Option<&str>,
+        custom_metadata: Option<&str>,
+        skip_creation: bool,
+    ) -> (Value, StatusCode) {
+        self._add_documents(documents, primary_key, custom_metadata, skip_creation).await
     }
 
     pub async fn raw_add_documents(
@@ -352,12 +372,32 @@ impl<State> Index<'_, State> {
         &self,
         documents: Value,
         primary_key: Option<&str>,
+        custom_metadata: Option<&str>,
+        skip_creation: bool,
     ) -> (Value, StatusCode) {
-        let url = match primary_key {
-            Some(key) => {
-                format!("/indexes/{}/documents?primaryKey={}", urlencode(self.uid.as_ref()), key)
+        let url = match (primary_key, custom_metadata) {
+            (Some(key), Some(meta)) => {
+                format!(
+                    "/indexes/{}/documents?primaryKey={key}&customMetadata={meta}&skipCreation={skip_creation}",
+                    urlencode(self.uid.as_ref()),
+                )
             }
-            None => format!("/indexes/{}/documents", urlencode(self.uid.as_ref())),
+            (None, Some(meta)) => {
+                format!(
+                    "/indexes/{}/documents?&customMetadata={meta}&skipCreation={skip_creation}",
+                    urlencode(self.uid.as_ref()),
+                )
+            }
+            (Some(key), None) => {
+                format!(
+                    "/indexes/{}/documents?&primaryKey={key}&skipCreation={skip_creation}",
+                    urlencode(self.uid.as_ref()),
+                )
+            }
+            (None, None) => format!(
+                "/indexes/{}/documents?skipCreation={skip_creation}",
+                urlencode(self.uid.as_ref())
+            ),
         };
         self.service.post_encoded(url, documents, self.encoder).await
     }
@@ -420,6 +460,15 @@ impl<State> Index<'_, State> {
             let _ = write!(url, "&canceledBy={}", canceled_by.join(","));
         }
         self.service.get(url).await
+    }
+
+    pub async fn fields(&self, params: &ListFieldsPayload<'_>) -> (Value, StatusCode) {
+        self.service
+            .post(
+                format!("/indexes/{}/fields", urlencode(self.uid.as_str())),
+                serde_json::to_value(params).unwrap().into(),
+            )
+            .await
     }
 
     pub async fn get_batch(&self, batch_id: u32) -> (Value, StatusCode) {
@@ -521,6 +570,18 @@ impl<State> Index<'_, State> {
         self.service.post_encoded(url, query, self.encoder).await
     }
 
+    pub async fn search_with_headers(
+        &self,
+        query: Value,
+        headers: Vec<(&str, &str)>,
+    ) -> (Value, StatusCode) {
+        let url = format!("/indexes/{}/search", urlencode(self.uid.as_ref()));
+        let body = serde_json::to_string(&query).unwrap();
+        let mut all_headers = vec![("content-type", "application/json")];
+        all_headers.extend(headers);
+        self.service.post_str(url, body, all_headers).await
+    }
+
     pub async fn search_get(&self, query: &str) -> (Value, StatusCode) {
         let url = format!("/indexes/{}/search{}", urlencode(self.uid.as_ref()), query);
         self.service.get(url).await
@@ -587,4 +648,36 @@ pub struct GetAllDocumentsOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort: Option<Vec<&'static str>>,
     pub retrieve_vectors: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListFieldsPayload<'a> {
+    pub offset: usize,
+    pub limit: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filter: Option<ListFieldsFilterPayload<'a>>,
+}
+
+impl Default for ListFieldsPayload<'_> {
+    fn default() -> Self {
+        Self { offset: 0, limit: 20, filter: None }
+    }
+}
+
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ListFieldsFilterPayload<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribute_patterns: Option<&'a [&'a str]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub displayed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sortable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub searchable: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ranking_rule: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filterable: Option<bool>,
 }

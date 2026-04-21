@@ -13,13 +13,15 @@ impl IndexScheduler {
         self.maybe_fail(crate::test_utils::FailureLocation::ProcessUpgrade)?;
 
         let indexes = self.index_names()?;
+        let must_stop_processing = &self.scheduler.must_stop_processing;
+
+        let shards = self.network().shards();
 
         for (i, uid) in indexes.iter().enumerate() {
-            let must_stop_processing = self.scheduler.must_stop_processing.clone();
-
             if must_stop_processing.get() {
                 return Err(Error::AbortedTask);
             }
+
             progress.update_progress(VariableNameStep::<UpgradeIndex>::new(
                 format!("Upgrading index `{uid}`"),
                 i as u32,
@@ -31,8 +33,11 @@ impl IndexScheduler {
                 &mut index_wtxn,
                 &index,
                 db_version,
-                || must_stop_processing.get(),
-                progress.clone(),
+                milli::update::upgrade::UpgradeParams {
+                    must_stop_processing,
+                    progress: &progress,
+                    shards: shards.as_ref(),
+                },
             )
             .map_err(|e| Error::from_milli(e, Some(uid.to_string())))?;
             if regen_stats {

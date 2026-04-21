@@ -17,7 +17,7 @@ use meilisearch_types::tasks::{ExportIndexSettings as DbExportIndexSettings, Kin
 use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
-use utoipa::{OpenApi, ToSchema};
+use utoipa::ToSchema;
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::ActionPolicy;
@@ -26,35 +26,29 @@ use crate::routes::export_analytics::ExportAnalytics;
 use crate::routes::{get_task_id, is_dry_run, SummarizedTaskView};
 use crate::Opt;
 
-#[derive(OpenApi)]
-#[openapi(
-    paths(export),
-    tags((
-        name = "Export",
-        description = "The `/export` route allows you to trigger an export process to a remote Meilisearch instance.",
-        external_docs(url = "https://www.meilisearch.com/docs/reference/api/export"),
-    )),
+#[routes::routes(
+    routes(
+        "" => post(export),
+    ),
+    tag = "Export",
 )]
 pub struct ExportApi;
 
-pub fn configure(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("").route(web::post().to(export)));
-}
-
-#[utoipa::path(
-    post,
-    path = "",
-    tag = "Export",
+/// Export to a remote Meilisearch
+///
+/// Trigger an export that sends documents and settings from this instance to a remote Meilisearch server. Configure the remote URL and optional API key in the request body.
+#[routes::path(
+    request_body = Export,
     security(("Bearer" = ["export", "*"])),
     responses(
-        (status = 202, description = "Export successfully enqueued", body = SummarizedTaskView, content_type = "application/json", example = json!(
+        (status = 202, description = "Export successfully enqueued.", body = SummarizedTaskView, content_type = "application/json", example = json!(
             {
                 "taskUid": 1,
                 "status": "enqueued",
                 "type": "export",
                 "enqueuedAt": "2021-08-11T09:25:53.000000Z"
             })),
-        (status = 401, description = "The authorization header is missing", body = ResponseError, content_type = "application/json", example = json!(
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
                 "message": "The Authorization header is missing. It must use the bearer authorization method.",
                 "code": "missing_authorization_header",
@@ -106,27 +100,33 @@ async fn export(
 
     analytics.publish(analytics_aggregate, &req);
 
+    // FIXME: This should be 202 Accepted, but changing would be breaking so we need to wait 2.0
     Ok(HttpResponse::Ok().json(task))
 }
 
+/// Request body for exporting data to a remote Meilisearch instance
 #[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct Export {
-    #[schema(value_type = Option<String>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
+    /// URL of the destination Meilisearch instance
+    #[schema(required = false, value_type = Option<String>, example = json!("https://ms-1234.heaven.meilisearch.com"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportUrl>)]
     pub url: String,
-    #[schema(value_type = Option<String>, example = json!("1234abcd"))]
+    /// API key for authenticating with the destination instance
+    #[schema(required = false, value_type = Option<String>, example = json!("1234abcd"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportApiKey>)]
     pub api_key: Option<String>,
-    #[schema(value_type = Option<String>, example = json!("24MiB"))]
+    /// Maximum payload size per request
+    #[schema(required = false, value_type = Option<String>, example = json!("24MiB"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportPayloadSize>)]
     pub payload_size: Option<ByteWithDeserr>,
-    #[schema(value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
+    /// Index patterns to export with their settings
+    #[schema(required = false, value_type = Option<BTreeMap<String, ExportIndexSettings>>, example = json!({ "*": { "filter": null } }))]
     #[deserr(default)]
     #[serde(default)]
     pub indexes: Option<BTreeMap<IndexUidPattern, ExportIndexSettings>>,
@@ -167,15 +167,18 @@ where
     }
 }
 
+/// Export settings for a specific index
 #[derive(Debug, Deserr, ToSchema, Serialize)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct ExportIndexSettings {
+    /// Filter expression to select which documents to export
     #[schema(value_type = Option<String>, example = json!("genres = action"))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportIndexFilter>)]
     pub filter: Option<Value>,
+    /// Whether to override settings on the destination index
     #[schema(value_type = Option<bool>, example = json!(true))]
     #[serde(default)]
     #[deserr(default, error = DeserrJsonError<InvalidExportIndexOverrideSettings>)]
