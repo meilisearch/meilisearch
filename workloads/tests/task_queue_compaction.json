@@ -58,6 +58,14 @@
       }
     },
     {
+      "route": "health",
+      "method": "GET",
+      "expectedStatus": 500,
+      "expectedResponse": {
+        "status": "mustRestart"
+      }
+    },
+    {
       "binary": {
         "source": "build"
       }
