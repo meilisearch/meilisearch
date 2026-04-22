@@ -19,6 +19,7 @@ make_enum_progress! {
         DeletingFromAllFilters,
         DeletingFromFacetsOnly,
         DeletingFromComparisonsOnly,
+        DeletingFromGeoDatabases,
         WaitingForDatabaseWrites,
         WaitingForExtractors,
         PostProcessingFacets,

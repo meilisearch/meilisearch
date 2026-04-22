@@ -1970,7 +1970,9 @@ impl InnerIndexSettingsDiff {
         settings
             .fields_ids_map
             .iter_id_metadata()
-            .filter(|(_, metadata)| metadata.is_faceted(&settings.filterable_attributes_rules))
+            .filter(|(_, metadata)| {
+                metadata.is_faceted(&settings.filterable_attributes_rules) == PatternMatch::Match
+            })
             .map(|(id, _)| id)
             .collect()
     }
@@ -1978,10 +1980,10 @@ impl InnerIndexSettingsDiff {
     pub fn facet_fids_changed(&self) -> bool {
         for eob in merge_join_by(
             self.old.fields_ids_map.iter().filter(|(_, _, metadata)| {
-                metadata.is_faceted(&self.old.filterable_attributes_rules)
+                metadata.is_faceted(&self.old.filterable_attributes_rules) == PatternMatch::Match
             }),
             self.new.fields_ids_map.iter().filter(|(_, _, metadata)| {
-                metadata.is_faceted(&self.new.filterable_attributes_rules)
+                metadata.is_faceted(&self.new.filterable_attributes_rules) == PatternMatch::Match
             }),
             |(old_fid, _, _), (new_fid, _, _)| old_fid.cmp(new_fid),
         ) {
@@ -2644,9 +2646,6 @@ pub trait SettingsDelta {
     fn old_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
     fn new_fields_ids_map(&self) -> &FieldIdMapWithMetadata;
 
-    fn old_searchable_attributes(&self) -> &Option<Vec<String>>;
-    fn new_searchable_attributes(&self) -> &Option<Vec<String>>;
-
     fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms;
     fn new_disabled_typos_terms(&self) -> &DisabledTyposTerms;
 
@@ -2655,9 +2654,6 @@ pub trait SettingsDelta {
 
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
-
-    fn old_match_faceted_field(&self, field_name: &str) -> PatternMatch;
-    fn new_match_faceted_field(&self, field_name: &str) -> PatternMatch;
 
     fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
     fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
@@ -2691,13 +2687,6 @@ impl SettingsDelta for InnerIndexSettingsDiff {
         &self.new.fields_ids_map
     }
 
-    fn old_searchable_attributes(&self) -> &Option<Vec<String>> {
-        &self.old.user_defined_searchable_attributes
-    }
-    fn new_searchable_attributes(&self) -> &Option<Vec<String>> {
-        &self.new.user_defined_searchable_attributes
-    }
-
     fn old_disabled_typos_terms(&self) -> &DisabledTyposTerms {
         &self.old.disabled_typos_terms
     }
@@ -2717,13 +2706,6 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule] {
         &self.new.filterable_attributes_rules
-    }
-
-    fn old_match_faceted_field(&self, field_name: &str) -> PatternMatch {
-        self.old.match_faceted_field(field_name)
-    }
-    fn new_match_faceted_field(&self, field_name: &str) -> PatternMatch {
-        self.new.match_faceted_field(field_name)
     }
 
     fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {

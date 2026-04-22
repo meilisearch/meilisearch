@@ -672,7 +672,7 @@ impl WordDocidsExtractors {
                     field_id,
                     pos,
                     word,
-                    old_exact || old_disabled_typos_terms.is_exact(word),
+                    old_exact == PatternMatch::Match || old_disabled_typos_terms.is_exact(word),
                     // We deleted the field globally
                     FieldDbExtraction::Skip,
                     document.docid(),
@@ -689,7 +689,7 @@ impl WordDocidsExtractors {
                     field_id,
                     pos,
                     word,
-                    new_exact || new_disabled_typos_terms.is_exact(word),
+                    new_exact == PatternMatch::Match || new_disabled_typos_terms.is_exact(word),
                     FieldDbExtraction::Extract,
                     document.docid(),
                     doc_alloc,
@@ -705,7 +705,7 @@ impl WordDocidsExtractors {
                         field_id,
                         pos,
                         word,
-                        old_exact || old_disabled_typos_terms.is_exact(word),
+                        old_exact == PatternMatch::Match || old_disabled_typos_terms.is_exact(word),
                         // The field has already been extracted
                         FieldDbExtraction::Skip,
                         document.docid(),
@@ -715,7 +715,7 @@ impl WordDocidsExtractors {
                         field_id,
                         pos,
                         word,
-                        new_exact || new_disabled_typos_terms.is_exact(word),
+                        new_exact == PatternMatch::Match || new_disabled_typos_terms.is_exact(word),
                         // The field has already been extracted
                         FieldDbExtraction::Skip,
                         document.docid(),

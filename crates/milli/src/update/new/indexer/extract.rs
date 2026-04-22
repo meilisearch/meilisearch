@@ -28,7 +28,9 @@ use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, Fac
 use crate::update::settings::SettingsDelta;
 use crate::vector::db::{EmbedderInfo, IndexEmbeddingConfig};
 use crate::vector::RuntimeEmbedders;
-use crate::{Index, InternalError, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
+use crate::{
+    Index, InternalError, PatternMatch, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder,
+};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
@@ -632,7 +634,7 @@ where
         let enabled_sortable_geo = settings_delta
             .new_fields_ids_map()
             .id_with_metadata(RESERVED_GEO_FIELD_NAME)
-            .is_some_and(|(_id, meta)| meta.is_sortable());
+            .is_some_and(|(_id, meta)| meta.is_sortable() == PatternMatch::Match);
 
         if !enabled_filterable_geo && !enabled_sortable_geo {
             break 'geo;

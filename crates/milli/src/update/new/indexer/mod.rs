@@ -266,17 +266,7 @@ where
         must_stop_processing,
         progress,
     )?;
-
-    // Clear the cellulite database when the geojson support is removed
-    if settings_delta.new_match_faceted_field(RESERVED_GEOJSON_FIELD_NAME) == PatternMatch::NoMatch
-    {
-        index.cellulite.clear(wtxn)?;
-    }
-
-    // Clear the geo rtree entry when the geo support is removed
-    if settings_delta.new_match_faceted_field(RESERVED_GEO_FIELD_NAME) == PatternMatch::NoMatch {
-        index.delete_geo_rtree(wtxn)?;
-    }
+    delete_old_geo_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
 
     // Clear word_pair_proximity if byWord to byAttribute
     let old_proximity_precision = settings_delta.old_proximity_precision();
@@ -526,6 +516,47 @@ where
     Ok(())
 }
 
+fn delete_old_geo_databases<SD, MSP>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    settings_delta: &SD,
+    must_stop_processing: &MSP,
+    progress: &Progress,
+) -> Result<()>
+where
+    SD: SettingsDelta + Sync,
+    MSP: Fn() -> bool + Sync,
+{
+    let _step = progress.update_progress_scoped(IndexingStep::DeletingFromGeoDatabases);
+
+    let new_fields_ids_map = settings_delta.new_fields_ids_map();
+    let new_filterable_rules = settings_delta.new_filterable_rules();
+
+    let new_geojson_is_faceted =
+        new_fields_ids_map.id_with_metadata(RESERVED_GEOJSON_FIELD_NAME).is_some_and(
+            |(_, metadata)| metadata.is_faceted(new_filterable_rules) == PatternMatch::Match,
+        );
+    // Clear the cellulite database when the geojson support is removed
+    if new_geojson_is_faceted {
+        index.cellulite.clear(wtxn)?;
+    }
+
+    if must_stop_processing() {
+        return Err(Error::InternalError(InternalError::AbortedIndexation));
+    }
+
+    let new_geo_is_faceted =
+        new_fields_ids_map.id_with_metadata(RESERVED_GEO_FIELD_NAME).is_some_and(
+            |(_, metadata)| metadata.is_faceted(new_filterable_rules) == PatternMatch::Match,
+        );
+    // Clear the geo rtree entry when the geo support is removed
+    if new_geo_is_faceted {
+        index.delete_geo_rtree(wtxn)?;
+    }
+
+    Ok(())
+}
+
 pub fn delete_old_fid_from_facet_databases<SD, MSP>(
     wtxn: &mut RwTxn<'_>,
     index: &Index,
@@ -547,70 +578,46 @@ where
     let new_fields_ids_map = settings_delta.new_fields_ids_map();
     let new_filterable_rules = settings_delta.new_filterable_rules();
 
-    for (id, metadata) in old_fields_ids_map.iter_id_metadata() {
-        let FilterableAttributesFeatures { facet_search: old_facet_search, filter } =
-            metadata.filterable_attributes_features(old_filterable_rules);
-        let FilterFeatures { equality: old_equality, comparison: old_comparison } = filter;
-        let old_asc_desc = metadata.asc_desc.is_some();
-        let old_sortable = metadata.sortable;
-        let old_distinct = metadata.distinct;
+    for (id, old_metadata) in old_fields_ids_map.iter_id_metadata() {
+        if old_metadata.is_faceted(old_filterable_rules) != PatternMatch::Match {
+            // This was not faceted, no need to delete it from the facet databases
+            continue;
+        }
 
-        let new_facet_search;
-        let new_equality;
-        let new_comparison;
-        let new_asc_desc;
-        let new_sortable;
-        let new_distinct;
-        match new_fields_ids_map.metadata(id) {
-            Some(metadata) => {
-                let FilterableAttributesFeatures { facet_search, filter } =
-                    metadata.filterable_attributes_features(new_filterable_rules);
-                let FilterFeatures { equality, comparison } = filter;
-                new_facet_search = facet_search;
-                new_equality = equality;
-                new_comparison = comparison;
-                new_asc_desc = metadata.asc_desc.is_some();
-                new_sortable = metadata.sortable;
-                new_distinct = metadata.distinct;
-            }
-            None => {
-                // This will trigger a clean deletion from everywhere
-                new_facet_search = false;
-                new_equality = false;
-                new_comparison = false;
-                new_asc_desc = false;
-                new_sortable = false;
-                new_distinct = false;
-            }
+        let Some(new_metadata) = new_fields_ids_map.metadata(id) else {
+            // This field is no longer in the new fields ids map, delete it from everywhere
+            remove_from_everywhere.insert(id);
+            continue;
         };
 
-        let is_old_faceted = old_equality
-            || old_comparison
-            || old_facet_search
-            || old_asc_desc
-            || old_sortable
-            || old_distinct;
-
-        let is_new_faceted = new_equality
-            || new_comparison
-            || new_facet_search
-            || new_asc_desc
-            || new_sortable
-            || new_distinct;
-
-        if is_old_faceted && !is_new_faceted {
-            // If we delete from everywhere we don't have to check the remaining conditions.
+        if new_metadata.is_faceted(new_filterable_rules) != PatternMatch::Match {
+            // This field is no longer faceted, delete it from everywhere
             remove_from_everywhere.insert(id);
             continue;
         }
 
+        // Check if the field still needs facet search databases
+        let FilterableAttributesFeatures { facet_search: old_facet_search, filter: old_filter } =
+            old_metadata.filterable_attributes_features(old_filterable_rules);
+        let FilterableAttributesFeatures { facet_search: new_facet_search, filter: new_filter } =
+            new_metadata.filterable_attributes_features(new_filterable_rules);
+
         if old_facet_search && !new_facet_search {
-            // Remove only from the facet search
+            // The field is no longer facet searchable, delete it from the facet search databases
             remove_from_facet_search.insert(id);
         }
 
+        // Check if the field still needs facet level databases
+        let FilterFeatures { equality: _, comparison: old_comparison } = old_filter;
+        let old_asc_desc = old_metadata.is_asc_desc() == PatternMatch::Match;
+        let old_sortable = old_metadata.is_sortable() == PatternMatch::Match;
         let is_old_comparison = old_sortable || old_asc_desc || old_comparison;
+
+        let FilterFeatures { equality: _, comparison: new_comparison } = new_filter;
+        let new_asc_desc = new_metadata.is_asc_desc() == PatternMatch::Match;
+        let new_sortable = new_metadata.is_sortable() == PatternMatch::Match;
         let is_new_comparison = new_sortable || new_asc_desc || new_comparison;
+
         if is_old_comparison && !is_new_comparison {
             // Remove the comparison levels from the facets.
             remove_comparison_levels_only.insert(id);
