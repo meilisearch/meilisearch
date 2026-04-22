@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::{Seek, SeekFrom};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use actix_web::web::{self, Data};
@@ -17,6 +18,10 @@ use utoipa::ToSchema;
 
 use super::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
+
+/// This boolean is used to indicate whether compaction
+/// has been successful and the server must be restarted.
+pub static COMPACTION_SUCCESSFUL: AtomicBool = AtomicBool::new(false);
 
 #[routes::routes(
     routes("/tasks/compact" => [post(compact_task_queue)]),
@@ -122,8 +127,10 @@ pub async fn compact_task_queue(
             Err(e) => {
                 HttpResponse::InternalServerError().json(report_task_queue_compaction_failure(e))
             }
-
-            Ok(summary) => HttpResponse::Ok().json(summary),
+            Ok(summary) => {
+                COMPACTION_SUCCESSFUL.store(true, Ordering::Relaxed);
+                HttpResponse::Ok().json(summary)
+            }
         }
     } else {
         HttpResponse::InternalServerError()
