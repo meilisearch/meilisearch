@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::iter::Zip;
 use std::rc::Rc;
 use std::str::FromStr as _;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::vec::{IntoIter, Vec};
 
@@ -15,7 +14,6 @@ use index_scheduler::filter::{
 };
 use index_scheduler::{IndexScheduler, RoFeatures};
 use itertools::Itertools;
-use meilisearch_types::dynamic_search_rules::DynamicSearchRules;
 use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::milli::order_by_map::OrderByMap;
 use meilisearch_types::milli::progress::Progress;
@@ -91,8 +89,6 @@ pub async fn perform_federated_search(
     let retrieve_vectors = queries.iter().any(|q| q.retrieve_vectors);
 
     let network = index_scheduler.network();
-    // TODO - we surely no longer need that Arc anymore
-    let dynamic_search_rules = Arc::new(index_scheduler.dynamic_search_rules()?);
 
     // Preconstruct metadata keeping the original queries order for later metadata building
     let precomputed_query_metadata: Option<Vec<_>> = include_metadata.then(|| {
@@ -200,7 +196,6 @@ pub async fn perform_federated_search(
         has_remote: partitioned_queries.has_remote,
         is_exhaustive: federation.is_exhaustive(),
         required_hit_count,
-        dynamic_search_rules,
     };
     let mut search_by_index = SearchByIndex::new(
         federation,
@@ -1283,7 +1278,6 @@ struct SearchByIndexParams {
     is_proxy: bool,
     has_remote: bool,
     network: Network,
-    dynamic_search_rules: Arc<DynamicSearchRules>,
 }
 
 struct SearchByIndex {
@@ -1471,7 +1465,10 @@ impl SearchByIndex {
                 search.limit(required_hit_count);
                 search.exhaustive_number_hits(params.is_exhaustive);
                 let pins = if params.features.runtime_features().dynamic_search_rules {
-                    resolve_pins(&params.dynamic_search_rules, &query, &index_uid, &index, &rtxn)?
+                    let dynamic_search_rules = params
+                        .index_scheduler
+                        .dynamic_search_rules_search_for_candidates(query.q.as_deref())?;
+                    resolve_pins(&dynamic_search_rules, &index_uid, &index, &rtxn)?
                 } else {
                     Vec::new()
                 };
