@@ -50,7 +50,12 @@ impl From<DbDynamicSearchRule> for DynamicSearchRule {
                 DbActivationCondition::QueryContains { contains } => {
                     Condition::Query { is_empty: None, contains: Some(contains) }
                 }
-                DbActivationCondition::TimeWindow { start, end } => Condition::Time { start, end },
+                DbActivationCondition::TimeWindow {
+                    start,
+                    end,
+                    start_timestamp: _,
+                    end_timestamp: _,
+                } => Condition::Time { start, end },
             })
             .collect();
 
@@ -82,9 +87,12 @@ impl From<DynamicSearchRule> for DbDynamicSearchRule {
                 Condition::Query { is_empty: None, contains: Some(contains) } => {
                     Some(DbActivationCondition::QueryContains { contains })
                 }
-                Condition::Time { start, end } => {
-                    Some(DbActivationCondition::TimeWindow { start, end })
-                }
+                Condition::Time { start, end } => Some(DbActivationCondition::TimeWindow {
+                    start,
+                    end,
+                    start_timestamp: start.map(OffsetDateTime::unix_timestamp),
+                    end_timestamp: end.map(OffsetDateTime::unix_timestamp),
+                }),
 
                 _ => None,
             })
@@ -126,6 +134,10 @@ pub enum DbActivationCondition {
             with = "time::serde::rfc3339::option"
         )]
         end: Option<OffsetDateTime>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        start_timestamp: Option<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        end_timestamp: Option<i64>,
     },
 }
 
@@ -194,8 +206,8 @@ impl DynamicSearchRulesStore {
             settings.set_filterable_fields(vec![
                 FilterableAttributesRule::Field("active".to_string()),
                 FilterableAttributesRule::Field("conditions.kind".to_string()),
-                FilterableAttributesRule::Field("conditions.start".to_string()),
-                FilterableAttributesRule::Field("conditions.end".to_string()),
+                FilterableAttributesRule::Field("conditions.startTimestamp".to_string()),
+                FilterableAttributesRule::Field("conditions.endTimestamp".to_string()),
                 FilterableAttributesRule::Field("actions.selector.indexUid".to_string()),
             ]);
 
@@ -289,12 +301,19 @@ impl DynamicSearchRulesStore {
 
     pub fn search_for_rule_candidates(&self, query: Option<&str>) -> Result<DynamicSearchRules> {
         let rtxn = self.index.read_txn()?;
+        let now = OffsetDateTime::now_utc().unix_timestamp();
         let progress = Progress::default();
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
         let docids_without_conditions =
             self.run_filter(&rtxn, r#"active = true AND conditions.kind NOT EXISTS"#)?;
         let docids_with_time_window =
-            self.run_filter(&rtxn, r#"active = true AND conditions.kind = "timeWindow""#)?;
+            self.run_filter(
+                &rtxn,
+                &format!(
+                    r#"active = true AND conditions.kind = "timeWindow" AND (conditions.startTimestamp <= {now} OR conditions.startTimestamp NOT EXISTS) AND (conditions.endTimestamp >= {now} OR conditions.endTimestamp NOT EXISTS)"#,
+                    now = now,
+                ),
+            )?;
         let docids_with_query_scope = if let Some(query) = query {
             let mut docids_with_contains =
                 self.run_filter(&rtxn, r#"active = true AND conditions.kind = "queryContains""#)?;
