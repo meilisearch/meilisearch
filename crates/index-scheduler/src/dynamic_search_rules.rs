@@ -1,19 +1,18 @@
 use std::collections::HashSet;
 use std::env::VarError;
 use std::sync::Arc;
-
+use roaring::RoaringBitmap;
 use http_client::policy::IpPolicy;
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRules, RuleAction, RuleUid,
 };
-use meilisearch_types::heed::{self, EnvFlags};
+use meilisearch_types::heed::{self, EnvFlags, RoTxn};
 use meilisearch_types::milli::documents::documents_batch_reader_from_objects;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexerConfig};
 use meilisearch_types::milli::{self, CreateOrOpen, FilterableAttributesRule};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-
 use crate::utils::clamp_to_page_size;
 use crate::{IndexBudget, IndexSchedulerOptions, Result};
 
@@ -127,6 +126,14 @@ pub enum DbActivationCondition {
         )]
         end: Option<OffsetDateTime>,
     },
+}
+
+struct ConditionFilters(Vec<&'static str>);
+
+impl ConditionFilters {
+    fn into_filter(self) -> String {
+        self.0.join(" AND ")
+    }
 }
 
 #[derive(Clone)]
@@ -297,6 +304,30 @@ impl DynamicSearchRulesStore {
         }
 
         Ok(rules)
+    }
+
+    pub fn candidate_rules(&self, query: &Option<&str>) -> Result<DynamicSearchRules> {
+        let rtxn = self.index.read_txn()?;
+
+        let mut filters = vec!["active = true"];
+
+        if let Some(query) = query {
+            filters.push(r#"condition.kind = "queryIsNotEmpty" OR condition.kind = "queryContains""#);
+        } else {
+            filters.push(r#"condition.kind = "queryIsEmpty""#);
+        }
+
+        let filter = filters.join(" AND ");
+        let filter = milli::Filter::from_str(&filter).map_err(dsr_milli_error)?.expect("rules conditions will never be empty");
+        let filter = crate::filter::filters_into_index_filters_unchecked(vec![Some(filter)])?.pop().expect("we always expect one filter");
+        let universe = milli::filtered_universe(&self.index, &rtxn, &filter, &Progress::default()).map_err(dsr_milli_error)?;
+        let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
+        let contains_fid = fields.id("conditions.contains").expect("a rule to always have a conditions.contains field");
+        let mut ctx = milli::SearchContext::new(&self.index, &rtxn).map_err(dsr_milli_error)?;
+
+        ctx.attributes_to_search_on(&["conditions.contains".to_string()]).map_err(dsr_milli_error)?;
+
+        // TODO - use the SearchContext properly
     }
 
     fn ingest_rules(&self, rules: impl IntoIterator<Item = DynamicSearchRule>) -> Result<()> {
