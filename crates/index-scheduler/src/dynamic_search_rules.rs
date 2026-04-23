@@ -333,7 +333,7 @@ impl DynamicSearchRulesStore {
     }
 
     fn run_filter(&self, rtxn: &RoTxn<'_>, filter: &str) -> Result<RoaringBitmap> {
-        let filter = milli::Filter::from_str(&filter)
+        let filter = milli::Filter::from_str(filter)
             .expect("filter is manually created and always valid")
             .unwrap();
 
@@ -341,7 +341,7 @@ impl DynamicSearchRulesStore {
             .pop()
             .expect("we always expect one filter");
 
-        let set = milli::filtered_universe(&self.index, &rtxn, &filter, &Progress::default())
+        let set = milli::filtered_universe(&self.index, rtxn, &filter, &Progress::default())
             .map_err(dsr_milli_error)?;
 
         Ok(set)
