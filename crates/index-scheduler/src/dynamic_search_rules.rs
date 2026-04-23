@@ -291,6 +291,8 @@ impl DynamicSearchRulesStore {
         let rtxn = self.index.read_txn()?;
         let progress = Progress::default();
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
+        let docids_without_conditions =
+            self.run_filter(&rtxn, r#"active = true AND conditions.kind NOT EXISTS"#)?;
         let docids_with_time_window =
             self.run_filter(&rtxn, r#"active = true AND conditions.kind = "timeWindow""#)?;
         let docids_with_query_scope = if let Some(query) = query {
@@ -324,11 +326,10 @@ impl DynamicSearchRulesStore {
             self.run_filter(&rtxn, r#"active = true AND conditions.kind = "queryIsEmpty""#)?
         };
 
-        self.load_rules_from_docids(
-            &rtxn,
-            fields,
-            docids_with_time_window | docids_with_query_scope,
-        )
+        let universe =
+            docids_without_conditions | docids_with_time_window | docids_with_query_scope;
+
+        self.load_rules_from_docids(&rtxn, fields, universe)
     }
 
     fn run_filter(&self, rtxn: &RoTxn<'_>, filter: &str) -> Result<RoaringBitmap> {
