@@ -299,26 +299,40 @@ impl DynamicSearchRulesStore {
         self.load_rules_from_docids(&rtxn, fields, docids)
     }
 
-    pub fn search_for_rule_candidates(&self, query: Option<&str>) -> Result<DynamicSearchRules> {
+    pub fn search_for_rule_candidates(
+        &self,
+        query: Option<&str>,
+        index_uid: &str,
+    ) -> Result<DynamicSearchRules> {
         let rtxn = self.index.read_txn()?;
         let now = OffsetDateTime::now_utc().unix_timestamp();
         let progress = Progress::default();
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
-        let docids_without_conditions =
-            self.run_filter(&rtxn, r#"active = true AND conditions.kind NOT EXISTS"#)?;
+        let base_filter = format!(
+            r#"active = true AND (actions.selector.indexUid = "{index_uid}" OR actions.selector.indexUid NOT EXISTS)"#,
+        );
+        let docids_without_conditions = self.run_filter(
+            &rtxn,
+            &format!(r#"{base_filter} AND conditions.kind NOT EXISTS"#),
+        )?;
         let docids_with_time_window =
             self.run_filter(
                 &rtxn,
                 &format!(
-                    r#"active = true AND conditions.kind = "timeWindow" AND (conditions.startTimestamp <= {now} OR conditions.startTimestamp NOT EXISTS) AND (conditions.endTimestamp >= {now} OR conditions.endTimestamp NOT EXISTS)"#,
+                    r#"{base_filter} AND conditions.kind = "timeWindow" AND (conditions.startTimestamp <= {now} OR conditions.startTimestamp NOT EXISTS) AND (conditions.endTimestamp >= {now} OR conditions.endTimestamp NOT EXISTS)"#,
+                    base_filter = base_filter,
                     now = now,
                 ),
             )?;
         let docids_with_query_scope = if let Some(query) = query {
-            let mut docids_with_contains =
-                self.run_filter(&rtxn, r#"active = true AND conditions.kind = "queryContains""#)?;
-            let docids_not_empty_query =
-                self.run_filter(&rtxn, r#"active = true AND conditions.kind = "queryIsNotEmpty""#)?;
+            let mut docids_with_contains = self.run_filter(
+                &rtxn,
+                &format!(r#"{base_filter} AND conditions.kind = "queryContains""#),
+            )?;
+            let docids_not_empty_query = self.run_filter(
+                &rtxn,
+                &format!(r#"{base_filter} AND conditions.kind = "queryIsNotEmpty""#),
+            )?;
 
             if !docids_with_contains.is_empty() {
                 if let Some(contains_fid) = fields.id("conditions.contains") {
@@ -342,7 +356,10 @@ impl DynamicSearchRulesStore {
 
             docids_not_empty_query | docids_with_contains
         } else {
-            self.run_filter(&rtxn, r#"active = true AND conditions.kind = "queryIsEmpty""#)?
+            self.run_filter(
+                &rtxn,
+                &format!(r#"{base_filter} AND conditions.kind = "queryIsEmpty""#),
+            )?
         };
 
         let universe =
@@ -425,5 +442,68 @@ impl DynamicSearchRulesStore {
         wtxn.commit()?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use meilisearch_types::dynamic_search_rules::{DynamicSearchRuleAction, Selector};
+
+    use super::*;
+    use crate::IndexScheduler;
+
+    fn pin_rule(uid: &str, selector_index_uid: Option<&str>) -> DynamicSearchRule {
+        DynamicSearchRule {
+            uid: RuleUid::from_str(uid).unwrap(),
+            description: None,
+            priority: None,
+            active: true,
+            conditions: vec![Condition::Query {
+                is_empty: None,
+                contains: Some("batman".to_string()),
+            }],
+            actions: vec![RuleAction {
+                selector: Selector {
+                    index_uid: selector_index_uid.map(|index_uid| index_uid.parse().unwrap()),
+                    id: Some(uid.to_string()),
+                },
+                action: DynamicSearchRuleAction::Pin { position: 0 },
+            }],
+        }
+    }
+
+    #[test]
+    fn search_for_rule_candidates_filters_rules_by_target_index_uid() {
+        let (scheduler, _handle) = IndexScheduler::test(true, vec![]);
+        let mut rules = DynamicSearchRules::new();
+        rules.insert(RuleUid::from_str("global-rule").unwrap(), pin_rule("global-rule", None));
+        rules.insert(
+            RuleUid::from_str("movies-rule").unwrap(),
+            pin_rule("movies-rule", Some("movies")),
+        );
+        rules.insert(
+            RuleUid::from_str("products-rule").unwrap(),
+            pin_rule("products-rule", Some("products")),
+        );
+
+        scheduler.put_dynamic_search_rules(rules).unwrap();
+
+        let movies_candidates = scheduler
+            .dynamic_search_rules_search_for_candidates(Some("batman"), "movies")
+            .unwrap();
+        assert_eq!(
+            movies_candidates.keys().map(|uid| uid.as_str()).collect::<Vec<_>>(),
+            vec!["global-rule", "movies-rule"]
+        );
+
+        let products_candidates = scheduler
+            .dynamic_search_rules_search_for_candidates(Some("batman"), "products")
+            .unwrap();
+        assert_eq!(
+            products_candidates.keys().map(|uid| uid.as_str()).collect::<Vec<_>>(),
+            vec!["global-rule", "products-rule"]
+        );
     }
 }

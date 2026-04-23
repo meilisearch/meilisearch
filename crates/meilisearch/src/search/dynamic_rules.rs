@@ -6,8 +6,6 @@ use meilisearch_types::dynamic_search_rules::{
 use meilisearch_types::heed::{self, RoTxn};
 use meilisearch_types::milli::PinDoc;
 use std::cmp::{Ordering, Reverse};
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Priority(u64);
@@ -38,11 +36,7 @@ pub struct Positioning<'a> {
     pub position: u32,
 }
 
-pub struct ActiveRules<'a> {
-    positioning_rules: Vec<Positioning<'a>>,
-}
-
-pub fn collect_active_rules(rules: &DynamicSearchRules) -> ActiveRules<'_> {
+pub fn collect_pinning_rules(rules: &DynamicSearchRules) -> Vec<Positioning<'_>> {
     let mut positioning_rules = Vec::new();
 
     for rule in rules.values() {
@@ -63,18 +57,18 @@ pub fn collect_active_rules(rules: &DynamicSearchRules) -> ActiveRules<'_> {
         }
     }
 
-    ActiveRules { positioning_rules }
+    positioning_rules.sort_by_key(|positioning| Reverse(positioning.priority));
+
+    positioning_rules
 }
 
 pub fn resolve_pins(
     rules: &DynamicSearchRules,
-    index_uid: &str,
     index: &Index,
     rtxn: &RoTxn<'_>,
 ) -> heed::Result<Vec<PinDoc>> {
     let external_ids = index.external_documents_ids();
-    let mut resolved_pins = collect_active_rules(rules)
-        .positioning_rules_for_index_uid(index_uid)
+    let mut resolved_pins = collect_pinning_rules(rules)
         .into_iter()
         .map(|act| {
             external_ids
@@ -87,48 +81,4 @@ pub fn resolve_pins(
     resolved_pins.sort_by_key(|pin| pin.pos);
 
     Ok(resolved_pins)
-}
-
-impl<'a> ActiveRules<'a> {
-    pub fn is_empty(&self) -> bool {
-        self.positioning_rules.is_empty()
-    }
-
-    pub fn positioning_rules(&self) -> &[Positioning<'_>] {
-        &self.positioning_rules
-    }
-
-    pub fn positioning_rules_for_index_uid(&self, index_uid: &str) -> Vec<Positioning<'_>> {
-        let candidates = self
-            .positioning_rules
-            .iter()
-            .filter(|rule| selector_matches_index_uid(rule.selector, index_uid))
-            .copied();
-
-        let mut positions = HashMap::<&str, Positioning<'_>>::new();
-
-        for candidate in candidates {
-            match positions.entry(candidate.doc_id) {
-                Entry::Occupied(mut entry) => {
-                    if candidate.priority > entry.get().priority {
-                        entry.insert(candidate);
-                    }
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert(candidate);
-                }
-            }
-        }
-
-        let mut result = positions.into_values().collect::<Vec<_>>();
-        result.sort_by_key(|positioning| Reverse(positioning.priority));
-        result
-    }
-}
-
-fn selector_matches_index_uid(selector: &Selector, index_uid: &str) -> bool {
-    selector
-        .index_uid
-        .as_ref()
-        .is_none_or(|selector_index_uid| selector_index_uid.as_str() == index_uid)
 }

@@ -1467,8 +1467,11 @@ impl SearchByIndex {
                 let pins = if params.features.runtime_features().dynamic_search_rules {
                     let dynamic_search_rules = params
                         .index_scheduler
-                        .dynamic_search_rules_search_for_candidates(query.q.as_deref())?;
-                    resolve_pins(&dynamic_search_rules, &index_uid, &index, &rtxn)?
+                        .dynamic_search_rules_search_for_candidates(
+                            query.q.as_deref(),
+                            &index_uid,
+                        )?;
+                    resolve_pins(&dynamic_search_rules, &index, &rtxn)?
                 } else {
                     Vec::new()
                 };
