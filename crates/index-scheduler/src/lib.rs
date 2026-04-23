@@ -1169,6 +1169,13 @@ impl IndexScheduler {
         self.dynamic_search_rules.get()
     }
 
+    pub fn dynamic_search_rules_search_for_candidates(
+        &self,
+        query: Option<&str>,
+    ) -> Result<DynamicSearchRules> {
+        self.dynamic_search_rules.search_for_rule_candidates(query)
+    }
+
     pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {
         self.dynamic_search_rules.put_one(rule)
     }

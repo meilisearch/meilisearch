@@ -1,11 +1,9 @@
-use super::SearchQuery;
 use crate::milli::Index;
 use itertools::Itertools;
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRuleAction, DynamicSearchRules, Selector,
 };
 use meilisearch_types::heed::{self, RoTxn};
-use meilisearch_types::milli;
 use meilisearch_types::milli::PinDoc;
 use std::cmp::{Ordering, Reverse};
 use std::collections::hash_map::Entry;
@@ -41,35 +39,16 @@ pub struct Positioning<'a> {
     pub position: u32,
 }
 
-#[derive(Default)]
-pub struct DynamicSearchContext<'a> {
-    pub query: Option<String>,
-    pub index_uid: &'a str,
-}
-
-impl DynamicSearchContext<'_> {
-    pub fn query_is_empty(&self) -> bool {
-        self.query.as_ref().is_none_or(|s| s.trim().is_empty())
-    }
-
-    pub fn query_contains(&self, value: &str) -> bool {
-        self.query.as_ref().is_some_and(|q| q.contains(&milli::normalize_facet(value)))
-    }
-}
-
 pub struct ActiveRules<'a> {
     positioning_rules: Vec<Positioning<'a>>,
 }
 
-pub fn collect_active_rules<'a>(
-    rules: &'a DynamicSearchRules,
-    ctx: &DynamicSearchContext<'_>,
-) -> ActiveRules<'a> {
+pub fn collect_active_rules(rules: &DynamicSearchRules) -> ActiveRules<'_> {
     let mut positioning_rules = Vec::new();
     let now = OffsetDateTime::now_utc();
 
     for rule in rules.values() {
-        if !is_rule_active(rule, ctx, now) {
+        if !rule_activation_conditions_triggered(rule, now) {
             continue;
         }
 
@@ -95,15 +74,12 @@ pub fn collect_active_rules<'a>(
 
 pub fn resolve_pins(
     rules: &DynamicSearchRules,
-    query: &SearchQuery,
     index_uid: &str,
     index: &Index,
     rtxn: &RoTxn<'_>,
 ) -> heed::Result<Vec<PinDoc>> {
-    let ctx = DynamicSearchContext { query: query.q.as_ref().map(|q| q.to_lowercase()), index_uid };
-
     let external_ids = index.external_documents_ids();
-    let mut resolved_pins = collect_active_rules(rules, &ctx)
+    let mut resolved_pins = collect_active_rules(rules)
         .positioning_rules_for_index_uid(index_uid)
         .into_iter()
         .map(|act| {
@@ -156,34 +132,14 @@ impl<'a> ActiveRules<'a> {
     }
 }
 
-fn is_rule_active(
-    rule: &DynamicSearchRule,
-    ctx: &DynamicSearchContext<'_>,
-    now: OffsetDateTime,
-) -> bool {
-    if !rule.active {
-        return false;
-    }
-    rule.conditions.iter().all(|c| evaluate_condition(c, ctx, now))
+fn rule_activation_conditions_triggered(rule: &DynamicSearchRule, now: OffsetDateTime) -> bool {
+    rule.conditions.iter().all(|c| evaluate_condition(c, now))
 }
 
-fn evaluate_condition(
-    condition: &Condition,
-    ctx: &DynamicSearchContext<'_>,
-    now: OffsetDateTime,
-) -> bool {
+fn evaluate_condition(condition: &Condition, now: OffsetDateTime) -> bool {
     match condition {
-        Condition::Query { is_empty, contains } => {
-            if let Some(is_empty) = is_empty {
-                return *is_empty == ctx.query_is_empty();
-            }
-
-            if let Some(value) = contains {
-                return ctx.query_contains(value);
-            }
-
-            true
-        }
+        // Query activation conditions have already been evaluated at this time.
+        Condition::Query { .. } => true,
         Condition::Time { start, end } => {
             if let Some(start) = start {
                 if now < *start {

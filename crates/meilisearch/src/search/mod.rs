@@ -55,7 +55,7 @@ pub use federated::{
 };
 
 mod dynamic_rules;
-pub use dynamic_rules::{collect_active_rules, resolve_pins, DynamicSearchContext};
+pub use dynamic_rules::{collect_active_rules, resolve_pins};
 
 mod hydration;
 mod value_paths_visitor;
@@ -1822,8 +1822,9 @@ pub fn perform_search(
     )?;
 
     let pins = if features.runtime_features().dynamic_search_rules {
-        let rules = index_scheduler.dynamic_search_rules()?;
-        resolve_pins(&rules, &query, &index_uid, index, &rtxn)?
+        let rules =
+            index_scheduler.dynamic_search_rules_search_for_candidates(query.q.as_deref())?;
+        resolve_pins(&rules, &index_uid, index, &rtxn)?
     } else {
         Vec::new()
     };
