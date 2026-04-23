@@ -6,6 +6,8 @@ use meilisearch_types::dynamic_search_rules::{
 use meilisearch_types::heed::{self, RoTxn};
 use meilisearch_types::milli::PinDoc;
 use std::cmp::{Ordering, Reverse};
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Priority(u64);
@@ -37,7 +39,7 @@ pub struct Positioning<'a> {
 }
 
 pub fn collect_pinning_rules(rules: &DynamicSearchRules) -> Vec<Positioning<'_>> {
-    let mut positioning_rules = Vec::new();
+    let mut dedup_pins = HashMap::<&String, Positioning<'_>>::new();
 
     for rule in rules.values() {
         let priority: Priority = rule.priority.unwrap_or(u64::MAX).into();
@@ -45,18 +47,31 @@ pub fn collect_pinning_rules(rules: &DynamicSearchRules) -> Vec<Positioning<'_>>
             match &action.action {
                 DynamicSearchRuleAction::Pin { position } => {
                     if let Some(doc_id) = &action.selector.id {
-                        positioning_rules.push(Positioning {
+                        let pin = Positioning {
                             selector: &action.selector,
                             priority,
                             position: *position,
                             doc_id: doc_id.as_str(),
-                        });
+                        };
+
+                        match dedup_pins.entry(doc_id) {
+                            Entry::Occupied(mut entry) => {
+                                if pin.priority > entry.get().priority {
+                                    entry.insert(pin);
+                                }
+                            }
+
+                            Entry::Vacant(entry) => {
+                                entry.insert(pin);
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
+    let mut positioning_rules = dedup_pins.into_values().collect_vec();
     positioning_rules.sort_by_key(|positioning| Reverse(positioning.priority));
 
     positioning_rules

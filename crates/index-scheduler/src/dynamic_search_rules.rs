@@ -1,9 +1,12 @@
+use crate::utils::clamp_to_page_size;
+use crate::{IndexBudget, IndexSchedulerOptions, Result};
 use http_client::policy::IpPolicy;
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRules, RuleAction, RuleUid,
 };
 use meilisearch_types::heed::{self, EnvFlags, RoTxn};
 use meilisearch_types::milli::documents::documents_batch_reader_from_objects;
+use meilisearch_types::milli::index::PrefixSearch;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexerConfig};
 use meilisearch_types::milli::{self, CreateOrOpen, FieldsIdsMap, FilterableAttributesRule};
@@ -13,9 +16,6 @@ use std::collections::HashSet;
 use std::env::VarError;
 use std::sync::Arc;
 use time::OffsetDateTime;
-use meilisearch_types::milli::index::PrefixSearch;
-use crate::utils::clamp_to_page_size;
-use crate::{IndexBudget, IndexSchedulerOptions, Result};
 
 const DSR_DIR_NAME: &str = "search_rules";
 
