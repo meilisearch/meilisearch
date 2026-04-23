@@ -1,4 +1,6 @@
 use meili_snap::{json_string, snapshot};
+use time::format_description::well_known::Rfc3339;
+use time::{Duration, OffsetDateTime, UtcOffset};
 
 use crate::common::Server;
 use crate::json;
@@ -830,6 +832,85 @@ async fn search_applies_pins_when_query_contains_value() {
       },
       {
         "id": "local",
+        "title": "Batman Returns"
+      }
+    ]
+    "#);
+}
+
+#[actix_web::test]
+async fn search_applies_only_rules_inside_the_current_time_window() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+    let now = OffsetDateTime::now_utc();
+    let offset = UtcOffset::from_hms(-4, 0, 0).unwrap();
+
+    let active_start = (now - Duration::days(1)).to_offset(offset).format(&Rfc3339).unwrap();
+    let active_end = (now + Duration::days(1)).to_offset(offset).format(&Rfc3339).unwrap();
+    let expired_start = (now - Duration::days(4)).to_offset(offset).format(&Rfc3339).unwrap();
+    let expired_end = (now - Duration::days(2)).to_offset(offset).format(&Rfc3339).unwrap();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "Batman Returns" },
+                { "id": "active-window-pin", "title": "The Matrix" },
+                { "id": "expired-window-pin", "title": "Pulp Fiction" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "pin-inside-window",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "time", "start": active_start, "end": active_end }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "active-window-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    assert_eq!(code, 201, "{value}");
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "pin-outside-window",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "time", "start": expired_start, "end": expired_end }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "expired-window-pin" },
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    assert_eq!(code, 201, "{value}");
+
+    let (value, code) = index.search_post(json!({ "q": "Batman Returns" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "active-window-pin",
+        "title": "The Matrix"
+      },
+      {
+        "id": "organic-match",
         "title": "Batman Returns"
       }
     ]

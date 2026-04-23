@@ -1,14 +1,13 @@
 use crate::milli::Index;
 use itertools::Itertools;
 use meilisearch_types::dynamic_search_rules::{
-    Condition, DynamicSearchRule, DynamicSearchRuleAction, DynamicSearchRules, Selector,
+    DynamicSearchRuleAction, DynamicSearchRules, Selector,
 };
 use meilisearch_types::heed::{self, RoTxn};
 use meilisearch_types::milli::PinDoc;
 use std::cmp::{Ordering, Reverse};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use time::OffsetDateTime;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct Priority(u64);
@@ -45,13 +44,8 @@ pub struct ActiveRules<'a> {
 
 pub fn collect_active_rules(rules: &DynamicSearchRules) -> ActiveRules<'_> {
     let mut positioning_rules = Vec::new();
-    let now = OffsetDateTime::now_utc();
 
     for rule in rules.values() {
-        if !rule_activation_conditions_triggered(rule, now) {
-            continue;
-        }
-
         let priority: Priority = rule.priority.unwrap_or(u64::MAX).into();
         for action in &rule.actions {
             match &action.action {
@@ -129,30 +123,6 @@ impl<'a> ActiveRules<'a> {
         let mut result = positions.into_values().collect::<Vec<_>>();
         result.sort_by_key(|positioning| Reverse(positioning.priority));
         result
-    }
-}
-
-fn rule_activation_conditions_triggered(rule: &DynamicSearchRule, now: OffsetDateTime) -> bool {
-    rule.conditions.iter().all(|c| evaluate_condition(c, now))
-}
-
-fn evaluate_condition(condition: &Condition, now: OffsetDateTime) -> bool {
-    match condition {
-        // Query activation conditions have already been evaluated at this time.
-        Condition::Query { .. } => true,
-        Condition::Time { start, end } => {
-            if let Some(start) = start {
-                if now < *start {
-                    return false;
-                }
-            }
-            if let Some(end) = end {
-                if now > *end {
-                    return false;
-                }
-            }
-            true
-        }
     }
 }
 
