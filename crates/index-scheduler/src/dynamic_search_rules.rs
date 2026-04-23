@@ -13,7 +13,7 @@ use std::collections::HashSet;
 use std::env::VarError;
 use std::sync::Arc;
 use time::OffsetDateTime;
-
+use meilisearch_types::milli::index::PrefixSearch;
 use crate::utils::clamp_to_page_size;
 use crate::{IndexBudget, IndexSchedulerOptions, Result};
 
@@ -213,7 +213,8 @@ impl DynamicSearchRulesStore {
 
             settings.set_sortable_fields(HashSet::from_iter(["precedence".to_string()]));
 
-            settings.set_authorize_typos(true);
+            settings.set_authorize_typos(false);
+            settings.set_prefix_search(PrefixSearch::Disabled);
             settings.set_facet_search(true);
 
             settings
