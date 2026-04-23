@@ -1822,11 +1822,8 @@ pub fn perform_search(
     )?;
 
     let pins = if features.runtime_features().dynamic_search_rules {
-        let rules =
-            index_scheduler.dynamic_search_rules_search_for_candidates(
-                query.q.as_deref(),
-                &index_uid,
-            )?;
+        let rules = index_scheduler
+            .dynamic_search_rules_search_for_candidates(query.q.as_deref(), &index_uid)?;
         resolve_pins(&rules, index, &rtxn)?
     } else {
         Vec::new()
