@@ -311,10 +311,8 @@ impl DynamicSearchRulesStore {
         let base_filter = format!(
             r#"active = true AND (actions.selector.indexUid = "{index_uid}" OR actions.selector.indexUid NOT EXISTS)"#,
         );
-        let docids_without_conditions = self.run_filter(
-            &rtxn,
-            &format!(r#"{base_filter} AND conditions.kind NOT EXISTS"#),
-        )?;
+        let docids_without_conditions =
+            self.run_filter(&rtxn, &format!(r#"{base_filter} AND conditions.kind NOT EXISTS"#))?;
         let docids_with_time_window =
             self.run_filter(
                 &rtxn,
@@ -490,9 +488,8 @@ mod tests {
 
         scheduler.put_dynamic_search_rules(rules).unwrap();
 
-        let movies_candidates = scheduler
-            .dynamic_search_rules_search_for_candidates(Some("batman"), "movies")
-            .unwrap();
+        let movies_candidates =
+            scheduler.dynamic_search_rules_search_for_candidates(Some("batman"), "movies").unwrap();
         assert_eq!(
             movies_candidates.keys().map(|uid| uid.as_str()).collect::<Vec<_>>(),
             vec!["global-rule", "movies-rule"]
