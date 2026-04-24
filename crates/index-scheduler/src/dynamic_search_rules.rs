@@ -297,7 +297,7 @@ impl DynamicSearchRulesStore {
         let docids = self.index.documents_ids(&rtxn).map_err(dsr_milli_error)?;
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
 
-        self.load_rules_from_docids(&rtxn, fields, docids)
+        self.load_rules_from_docids(&rtxn, fields, docids, None)
     }
 
     pub fn search_for_rule_candidates(
@@ -364,7 +364,7 @@ impl DynamicSearchRulesStore {
         let universe =
             docids_without_conditions | docids_with_time_window | docids_with_query_scope;
 
-        self.load_rules_from_docids(&rtxn, fields, universe)
+        self.load_rules_from_docids(&rtxn, fields, universe, Some(index_uid))
     }
 
     fn run_filter(&self, rtxn: &RoTxn<'_>, filter: &str) -> Result<RoaringBitmap> {
@@ -387,6 +387,7 @@ impl DynamicSearchRulesStore {
         rtxn: &RoTxn<'_>,
         fields: FieldsIdsMap,
         docids: RoaringBitmap,
+        target_index_uid: Option<&str>,
     ) -> Result<DynamicSearchRules> {
         let docs = self.index.iter_documents(rtxn, docids).map_err(dsr_milli_error)?;
         let mut rules = DynamicSearchRules::new();
@@ -398,7 +399,20 @@ impl DynamicSearchRulesStore {
                 dsr_milli_error(milli::Error::UserError(milli::UserError::SerdeJson(e)))
             })?;
 
-            rules.insert(db_rule.uid.clone(), db_rule.into());
+            let uid = db_rule.uid.clone();
+            let mut rule: DynamicSearchRule = db_rule.into();
+
+            if let Some(target_index_uid) = target_index_uid {
+                rule.actions.retain(|action| {
+                    action
+                        .selector
+                        .index_uid
+                        .as_ref()
+                        .is_none_or(|uid| uid.as_str() == target_index_uid)
+                });
+            }
+
+            rules.insert(uid, rule);
         }
 
         Ok(rules)
