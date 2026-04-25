@@ -24,7 +24,7 @@ impl WordDelta {
     }
 
     pub fn added_or_deleted_words(&self) -> impl Iterator<Item = Either<&str, &str>> + '_ {
-        itertools::merge_join_by(self.added.iter(), self.modified.iter(), |a, b| a.cmp(b))
+        itertools::merge_join_by(self.added.iter(), self.deleted.iter(), |a, b| a.cmp(b))
             .filter_map(|eob| match eob {
                 EitherOrBoth::Both(_, _) => None,
                 EitherOrBoth::Left(added) => Some(Either::Left(added.as_str())),
