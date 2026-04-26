@@ -600,6 +600,70 @@ async fn search_with_pattern_filter_settings_scenario_1() {
 }
 
 #[actix_rt::test]
+async fn remove_comparison_feature_keeps_equality() {
+    let server = Server::new_shared();
+    let index = server.unique_index();
+
+    // Step 1: Add a filterable attribute with BOTH comparison and equality features
+    let (task, code) = index
+        .update_settings(json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos"],
+            "features": {
+                "facetSearch": false,
+                "filter": { "equality": true, "comparison": true }
+            }
+        }]}))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 2: Add documents
+    let (task, code) = index.add_documents(NESTED_DOCUMENTS.clone(), None).await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 3: Remove the comparison feature but keep equality
+    let (task, code) = index
+        .update_settings(json!({"filterableAttributes": [{
+            "attributePatterns": ["cattos"],
+            "features": {
+                "facetSearch": false,
+                "filter": { "equality": true, "comparison": false }
+            }
+        }]}))
+        .await;
+    assert_eq!(code, 202, "{task}");
+    server.wait_task(task.uid()).await.succeeded();
+
+    // Step 4: Test that equality filter still works
+    index
+        .search(json!({ "filter": "cattos = simba" }), |response, code| {
+            snapshot!(code, @"200 OK");
+            // Assert we find the matching document
+            snapshot!(json_string!(response["hits"]), @r###"
+            [
+              {
+                "id": 654,
+                "father": "pierre",
+                "mother": "sabine",
+                "doggos": [
+                  {
+                    "name": "gros bill",
+                    "age": 8
+                  }
+                ],
+                "cattos": [
+                  "simba",
+                  "pestiféré"
+                ]
+              }
+            ]
+            "###);
+        })
+        .await;
+}
+
+#[actix_rt::test]
 async fn test_filterable_attributes_priority() {
     // Test that the filterable attributes priority is respected
 
@@ -1169,4 +1233,54 @@ async fn vector_filter_regenerate() {
       "requestUid": "[uuid]"
     }
     "###);
+}
+
+#[actix_rt::test]
+async fn issue_6335() {
+    test_settings_documents_indexing_swapping_and_search(
+        &NESTED_DOCUMENTS,
+        &json!({"filterableAttributes": [{"attributePatterns": ["cattos"],
+        "features": {
+                  "facetSearch": false,
+                  "filter": {"equality": true, "comparison": true}
+        }}]}),
+        &json!({
+            "filter": "cattos < pestiféré"
+        }),
+        |response, code| {
+            snapshot!(code, @"200 OK");
+            snapshot!(json_string!(response["hits"]), @r#"
+            [
+              {
+                "id": 750,
+                "father": "romain",
+                "mother": "michelle",
+                "cattos": [
+                  "enigma"
+                ]
+              },
+              {
+                "id": 951,
+                "father": "jean-baptiste",
+                "mother": "sophie",
+                "doggos": [
+                  {
+                    "name": "turbo",
+                    "age": 5
+                  },
+                  {
+                    "name": "fast",
+                    "age": 6
+                  }
+                ],
+                "cattos": [
+                  "moumoute",
+                  "gomez"
+                ]
+              }
+            ]
+            "#);
+        },
+    )
+    .await;
 }

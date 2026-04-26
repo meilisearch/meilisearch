@@ -15,7 +15,10 @@ use super::del_add::{DelAdd, DelAddOperation};
 use super::index_documents::{IndexDocumentsConfig, Transform};
 use super::{ChatSettings, IndexerConfig};
 use crate::attribute_patterns::{match_field_legacy, PatternMatch};
-use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
+use crate::constants::{
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME,
+    RESERVED_GEO_LNG_FIELD_NAME,
+};
 use crate::criterion::Criterion;
 use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::error::UserError::{self, InvalidChatSettingsDocumentTemplateMaxBytes};
@@ -562,7 +565,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(true)
     }
 
-    fn update_distinct_field(&mut self) -> Result<bool> {
+    fn update_distinct_attribute(&mut self) -> Result<bool> {
         match self.distinct_field {
             Setting::Set(ref attr) => {
                 self.index.put_distinct_field(self.wtxn, attr)?;
@@ -801,7 +804,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         }
     }
 
-    fn update_filterable(&mut self) -> Result<()> {
+    fn update_filterable_attributes(&mut self) -> Result<()> {
         match self.filterable_fields {
             Setting::Set(ref fields) => {
                 self.index.put_filterable_attributes_rules(self.wtxn, fields)?;
@@ -814,7 +817,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         Ok(())
     }
 
-    fn update_sortable(&mut self) -> Result<()> {
+    fn update_sortable_attributes(&mut self) -> Result<()> {
         match self.sortable_fields {
             Setting::Set(ref fields) => {
                 let mut new_fields = HashSet::new();
@@ -1473,7 +1476,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
 
         // never trigger re-indexing
         self.update_displayed()?;
-        self.update_distinct_field()?;
+        self.update_distinct_attribute()?;
         self.update_criteria()?;
         self.update_primary_key()?;
         self.update_authorize_typos()?;
@@ -1486,8 +1489,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         self.update_foreign_keys()?;
 
         // could trigger re-indexing
-        self.update_filterable()?;
-        self.update_sortable()?;
+        self.update_filterable_attributes()?;
+        self.update_sortable_attributes()?;
         self.update_stop_words()?;
         self.update_non_separator_tokens()?;
         self.update_separator_tokens()?;
@@ -1629,15 +1632,15 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         if let Self {
             searchable_fields: _,
             displayed_fields: Setting::NotSet,
-            filterable_fields: Setting::NotSet,
-            sortable_fields: Setting::NotSet,
-            foreign_keys: Setting::NotSet,
-            criteria: Setting::NotSet,
+            filterable_fields: _,
+            sortable_fields: _,
+            foreign_keys: _,
+            criteria: _,
             stop_words: Setting::NotSet, // TODO (require force reindexing of searchables)
             non_separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
             separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
             dictionary: Setting::NotSet, // TODO (require force reindexing of searchables)
-            distinct_field: Setting::NotSet,
+            distinct_field: _,
             synonyms: Setting::NotSet,
             primary_key: Setting::NotSet,
             authorize_typos: Setting::NotSet,
@@ -1651,7 +1654,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             proximity_precision: _,
             embedder_settings: _,
             search_cutoff: Setting::NotSet,
-            localized_attributes_rules: Setting::NotSet, // TODO to start with
+            localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
             prefix_search: Setting::NotSet,              // TODO continue with this
             facet_search: Setting::NotSet,
             disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
@@ -1674,6 +1677,11 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_user_defined_searchable_attributes()?;
             self.update_exact_attributes()?;
             self.update_proximity_precision()?;
+            self.update_filterable_attributes()?;
+            self.update_sortable_attributes()?;
+            self.update_distinct_attribute()?;
+            self.update_foreign_keys()?;
+            self.update_criteria()?;
 
             // Note that we don't need to update the searchables here,
             // as it will be done after the settings update.
@@ -2097,14 +2105,14 @@ impl InnerIndexSettings {
             Some(_) if index.is_geo_enabled(rtxn)? => {
                 // if `_geo` is faceted then we get the `lat` and `lng`
                 let field_ids = fields_ids_map
-                    .insert("_geo.lat")
-                    .zip(fields_ids_map.insert("_geo.lng"))
+                    .insert(RESERVED_GEO_LAT_FIELD_NAME)
+                    .zip(fields_ids_map.insert(RESERVED_GEO_LNG_FIELD_NAME))
                     .ok_or(UserError::AttributeLimitReached)?;
                 Some(field_ids)
             }
             _ => None,
         };
-        let geo_json_fid = fields_ids_map.id(RESERVED_GEOJSON_FIELD_NAME);
+        let geojson_fid = fields_ids_map.id(RESERVED_GEOJSON_FIELD_NAME);
         let localized_attributes_rules =
             index.localized_attributes_rules(rtxn)?.unwrap_or_default();
         let filterable_attributes_rules = index.filterable_attributes_rules(rtxn)?;
@@ -2136,7 +2144,7 @@ impl InnerIndexSettings {
             runtime_embedders,
             embedder_category_id,
             geo_fields_ids,
-            geojson_fid: geo_json_fid,
+            geojson_fid,
             prefix_search,
             facet_search,
             disabled_typos_terms,
@@ -2645,6 +2653,18 @@ pub trait SettingsDelta {
     fn old_proximity_precision(&self) -> &ProximityPrecision;
     fn new_proximity_precision(&self) -> &ProximityPrecision;
 
+    fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
+    fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
+
+    fn old_match_faceted_field(&self, field_name: &str) -> PatternMatch;
+    fn new_match_faceted_field(&self, field_name: &str) -> PatternMatch;
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)>;
+
+    fn old_geojson_field_id(&self) -> Option<FieldId>;
+    fn new_geojson_field_id(&self) -> Option<FieldId>;
+
     fn old_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedders(&self) -> &RuntimeEmbedders;
     fn new_embedder_category_id(&self) -> &HashMap<String, u8>;
@@ -2690,6 +2710,34 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_proximity_precision(&self) -> &ProximityPrecision {
         &self.new.proximity_precision
+    }
+
+    fn old_filterable_rules(&self) -> &[FilterableAttributesRule] {
+        &self.old.filterable_attributes_rules
+    }
+    fn new_filterable_rules(&self) -> &[FilterableAttributesRule] {
+        &self.new.filterable_attributes_rules
+    }
+
+    fn old_match_faceted_field(&self, field_name: &str) -> PatternMatch {
+        self.old.match_faceted_field(field_name)
+    }
+    fn new_match_faceted_field(&self, field_name: &str) -> PatternMatch {
+        self.new.match_faceted_field(field_name)
+    }
+
+    fn old_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.old.geo_fields_ids
+    }
+    fn new_geo_fields_ids(&self) -> Option<(FieldId, FieldId)> {
+        self.new.geo_fields_ids
+    }
+
+    fn old_geojson_field_id(&self) -> Option<FieldId> {
+        self.old.geojson_fid
+    }
+    fn new_geojson_field_id(&self) -> Option<FieldId> {
+        self.new.geojson_fid
     }
 
     fn old_embedders(&self) -> &RuntimeEmbedders {

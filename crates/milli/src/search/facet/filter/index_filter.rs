@@ -11,7 +11,8 @@ use roaring::{MultiOps, RoaringBitmap};
 
 use super::facet_range_search;
 use crate::constants::{
-    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
+    RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME,
+    RESERVED_GEO_LNG_FIELD_NAME, RESERVED_VECTORS_FIELD_NAME,
 };
 use crate::error::{Error, UserError};
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
@@ -83,6 +84,8 @@ impl<'a> IndexFilter<'a> {
     ) -> Result<RoaringBitmap> {
         let numbers_db = index.facet_id_f64_docids;
         let strings_db = index.facet_id_string_docids;
+        let left_normalized_value;
+        let right_normalized_value;
 
         // Make sure we always bound the ranges with the field id and the level,
         // as the facets values are all in the same database and prefixed by the
@@ -124,25 +127,29 @@ impl<'a> IndexFilter<'a> {
             Condition::GreaterThan(val) => {
                 let number = val.parse_finite_float().ok();
                 let number_bounds = number.map(|number| (Excluded(number), Included(f64::MAX)));
-                let str_bounds = (Excluded(val.fragment()), Unbounded);
+                left_normalized_value = crate::normalize_facet(val.fragment());
+                let str_bounds = (Excluded(left_normalized_value.as_str()), Unbounded);
                 (number_bounds, str_bounds)
             }
             Condition::GreaterThanOrEqual(val) => {
                 let number = val.parse_finite_float().ok();
                 let number_bounds = number.map(|number| (Included(number), Included(f64::MAX)));
-                let str_bounds = (Included(val.fragment()), Unbounded);
+                left_normalized_value = crate::normalize_facet(val.fragment());
+                let str_bounds = (Included(left_normalized_value.as_str()), Unbounded);
                 (number_bounds, str_bounds)
             }
             Condition::LowerThan(val) => {
                 let number = val.parse_finite_float().ok();
                 let number_bounds = number.map(|number| (Included(f64::MIN), Excluded(number)));
-                let str_bounds = (Unbounded, Excluded(val.fragment()));
+                left_normalized_value = crate::normalize_facet(val.fragment());
+                let str_bounds = (Unbounded, Excluded(left_normalized_value.as_str()));
                 (number_bounds, str_bounds)
             }
             Condition::LowerThanOrEqual(val) => {
                 let number = val.parse_finite_float().ok();
                 let number_bounds = number.map(|number| (Included(f64::MIN), Included(number)));
-                let str_bounds = (Unbounded, Included(val.fragment()));
+                left_normalized_value = crate::normalize_facet(val.fragment());
+                let str_bounds = (Unbounded, Included(left_normalized_value.as_str()));
                 (number_bounds, str_bounds)
             }
             Condition::Between { from, to } => {
@@ -151,7 +158,12 @@ impl<'a> IndexFilter<'a> {
 
                 let number_bounds =
                     from_number.zip(to_number).map(|(from, to)| (Included(from), Included(to)));
-                let str_bounds = (Included(from.fragment()), Included(to.fragment()));
+                left_normalized_value = crate::normalize_facet(from.fragment());
+                right_normalized_value = crate::normalize_facet(to.fragment());
+                let str_bounds = (
+                    Included(left_normalized_value.as_str()),
+                    Included(right_normalized_value.as_str()),
+                );
                 (number_bounds, str_bounds)
             }
             Condition::Null => {
@@ -636,7 +648,7 @@ impl<'a> IndexFilter<'a> {
 
                     let geo_lat_token = top_right_point[0]
                         .clone()
-                        .with_modified_fragment(Some("_geo.lat".to_string()));
+                        .with_modified_fragment(Some(RESERVED_GEO_LAT_FIELD_NAME.to_string()));
 
                     let condition_lat = IndexFilterCondition::Condition {
                         fid: geo_lat_token,
@@ -656,7 +668,7 @@ impl<'a> IndexFilter<'a> {
 
                     let geo_lng_token = top_right_point[1]
                         .clone()
-                        .with_modified_fragment(Some("_geo.lng".to_string()));
+                        .with_modified_fragment(Some(RESERVED_GEO_LNG_FIELD_NAME.to_string()));
 
                     let selected_lng = if top_right[1] < bottom_left[1] {
                         // In this case the bounding box is wrapping around the earth (going from 180 to -180).

@@ -1,15 +1,18 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::iter;
 
 use either::Either;
 use facet_bulk::generate_facet_levels;
 use fst::Streamer;
-use heed::types::{Bytes, DecodeIgnore, Str};
-use heed::RwTxn;
+use heed::types::{Bytes, DecodeIgnore, Str, Unit};
+use heed::{RoTxn, RwTxn};
 use itertools::{merge_join_by, EitherOrBoth};
 
 use super::document_changes::IndexingContext;
 use crate::facet::FacetType;
+use crate::heed_codec::facet::{FacetGroupKey, FacetGroupKeyCodec};
+use crate::heed_codec::StrRefCodec;
 use crate::index::main_key::{WORDS_FST_KEY, WORDS_PREFIXES_FST_KEY};
 use crate::progress::Progress;
 use crate::update::del_add::DelAdd;
@@ -26,7 +29,7 @@ use crate::update::new::words_prefix_docids::{
 };
 use crate::update::new::FacetFieldIdsDelta;
 use crate::update::{FacetsUpdateBulk, GrenadParameters};
-use crate::{GlobalFieldsIdsMap, Index, Prefix, Result};
+use crate::{FieldId, GlobalFieldsIdsMap, Index, Prefix, Result};
 
 mod facet_bulk;
 
@@ -143,12 +146,11 @@ fn compute_word_fst(
     word_delta: &WordDelta,
     progress: &Progress,
 ) -> Result<Option<PrefixData>> {
-    let rtxn = index.read_txn()?;
     progress.update_progress(PostProcessingWords::WordFst);
 
-    let words_fst = index.words_fst(&rtxn)?;
+    let words_fst = index.words_fst(wtxn)?;
     let mut word_fst_builder = WordFstBuilder::new(&words_fst)?;
-    let prefix_settings = index.prefix_settings(&rtxn)?;
+    let prefix_settings = index.prefix_settings(wtxn)?;
     word_fst_builder.with_prefix_settings(prefix_settings);
 
     // we ignore modifications when rebuilding the FST
@@ -217,32 +219,53 @@ fn compute_facet_search_database(
         return Ok(());
     }
 
-    let localized_attributes_rules = index.localized_attributes_rules(&rtxn)?;
-    let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;
+    let localized_attributes_rules = index.localized_attributes_rules(wtxn)?;
+    let filterable_attributes_rules = index.filterable_attributes_rules(wtxn)?;
+
+    // Get the list of ranges corresponding to the facets that are marked as facet searchable.
+    // This way we can avoid iterating over all the facet values.
+    let mut facet_searchable_fids = BTreeSet::new();
+    global_fields_ids_map.for_each_metadata(|field_id, _field_name, metadata| {
+        if metadata
+            .filterable_attributes_features(&filterable_attributes_rules)
+            .is_facet_searchable()
+        {
+            facet_searchable_fids.insert(field_id);
+        }
+    });
+
+    fn level_0_searchable_facets<'a>(
+        txn: &'a RoTxn,
+        index: &'a Index,
+        facet_searchable_field_ids: &'a BTreeSet<FieldId>,
+    ) -> impl Iterator<Item = Result<(FacetGroupKey<&'a str>, ()), heed::Error>> + 'a {
+        facet_searchable_field_ids.iter().flat_map(|&field_id| {
+            index
+                .facet_id_string_docids
+                .remap_types::<FacetGroupKeyCodec<Unit>, DecodeIgnore>()
+                .prefix_iter(txn, &FacetGroupKey { field_id, level: 0, left_bound: () })
+                .map_or_else(
+                    |e| Either::Left(iter::once(Err(e))),
+                    |it| Either::Right(it.remap_key_type::<FacetGroupKeyCodec<StrRefCodec>>()),
+                )
+        })
+    }
+
+    let previous_facet_id_string = level_0_searchable_facets(&rtxn, index, &facet_searchable_fids);
+    let current_facet_id_string = level_0_searchable_facets(wtxn, index, &facet_searchable_fids);
+
     let mut facet_search_builder = FacetSearchBuilder::new(
         global_fields_ids_map,
         localized_attributes_rules.unwrap_or_default(),
         filterable_attributes_rules,
     );
 
-    let previous_facet_id_string_docids = index
-        .facet_id_string_docids
-        .iter(&rtxn)?
-        .remap_data_type::<DecodeIgnore>()
-        .filter(|r| r.as_ref().map_or(true, |(k, _)| k.level == 0));
-    let current_facet_id_string_docids = index
-        .facet_id_string_docids
-        .iter(wtxn)?
-        .remap_data_type::<DecodeIgnore>()
-        .filter(|r| r.as_ref().map_or(true, |(k, _)| k.level == 0));
-    for eob in merge_join_by(
-        previous_facet_id_string_docids,
-        current_facet_id_string_docids,
-        |lhs, rhs| match (lhs, rhs) {
+    for eob in merge_join_by(previous_facet_id_string, current_facet_id_string, |lhs, rhs| {
+        match (lhs, rhs) {
             (Ok((l, _)), Ok((r, _))) => l.cmp(r),
             (Err(_), _) | (_, Err(_)) => Ordering::Equal,
-        },
-    ) {
+        }
+    }) {
         match eob {
             EitherOrBoth::Both(lhs, rhs) => {
                 let (_, _) = lhs?;
@@ -275,9 +298,7 @@ fn compute_facet_level_database(
     global_fields_ids_map: &mut GlobalFieldsIdsMap,
     progress: &Progress,
 ) -> Result<()> {
-    let rtxn = index.read_txn()?;
-
-    let filterable_attributes_rules = index.filterable_attributes_rules(&rtxn)?;
+    let filterable_attributes_rules = index.filterable_attributes_rules(wtxn)?;
     let mut deltas: Vec<_> = facet_field_ids_delta.consume_facet_string_delta().collect();
     // We move all bulks at the front and incrementals (others) at the end.
     deltas.sort_by_key(|(_, delta)| if let FacetFieldIdDelta::Bulk = delta { 0 } else { 1 });
@@ -287,6 +308,9 @@ fn compute_facet_level_database(
         let Some(metadata) = global_fields_ids_map.metadata(fid) else {
             continue;
         };
+
+        // Note in case of a settings change we will recompute the facet level database if the
+        // user only enabled the facet search and the field is marked as comparable or sortable.
         if !metadata.require_facet_level_database(&filterable_attributes_rules) {
             continue;
         }

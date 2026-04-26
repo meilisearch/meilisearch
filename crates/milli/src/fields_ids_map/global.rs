@@ -117,6 +117,14 @@ impl<'indexing> GlobalFieldsIdsMap<'indexing> {
 
         self.local.metadata(id)
     }
+
+    /// Iterate over all fields with their metadata.
+    pub fn for_each_metadata(&self, mut f: impl FnMut(FieldId, &str, Metadata)) {
+        let global = self.global.read().unwrap();
+        for (field_id, field_name, metadata) in global.iter() {
+            f(field_id, field_name, metadata);
+        }
+    }
 }
 
 impl MutFieldIdMapper for GlobalFieldsIdsMap<'_> {

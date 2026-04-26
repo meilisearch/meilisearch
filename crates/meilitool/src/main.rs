@@ -93,6 +93,9 @@ enum Command {
         offset: Option<usize>,
     },
 
+    /// Exports the word FST for the given index into a {index_name}.words.fst file.
+    ExportWordFst { index_name: String },
+
     /// Attempts to upgrade from one major version to the next without a dump.
     ///
     /// Make sure to run this commmand when Meilisearch is not running!
@@ -161,6 +164,7 @@ fn main() -> anyhow::Result<()> {
         Command::ExportDocuments { index_name, ignore_vectors, offset } => {
             export_documents(db_path, index_name, ignore_vectors, offset)
         }
+        Command::ExportWordFst { index_name } => export_word_fst(db_path, &index_name),
         Command::OfflineUpgrade { target_version } => {
             let target_version = parse_version(&target_version).context("While parsing `--target-version`. Make sure `--target-version` is in the format MAJOR.MINOR.PATCH")?;
             OfflineUpgrade { db_path, current_version: detected_version, target_version }.upgrade()
@@ -633,6 +637,42 @@ fn export_documents(
             stdout.flush()?;
         } else {
             eprintln!("Found index {uid} but it's not the right index...");
+        }
+    }
+
+    Ok(())
+}
+
+fn export_word_fst(db_path: PathBuf, index_name: &str) -> anyhow::Result<()> {
+    let index_scheduler_path = db_path.join("tasks");
+    let env = unsafe {
+        EnvOpenOptions::new().read_txn_without_tls().max_dbs(100).open(&index_scheduler_path)
+    }
+    .with_context(|| format!("While trying to open {:?}", index_scheduler_path.display()))?;
+
+    let rtxn = env.read_txn()?;
+    let index_mapping: Database<Str, UuidCodec> =
+        try_opening_database(&env, &rtxn, "index-mapping")?;
+
+    for result in index_mapping.iter(&rtxn)? {
+        let (uid, uuid) = result?;
+        if uid == index_name {
+            let index_path = db_path.join("indexes").join(uuid.to_string());
+            let index = Index::new(
+                EnvOpenOptions::new().read_txn_without_tls(),
+                &index_path,
+                CreateOrOpen::Open,
+            )
+            .with_context(|| {
+                format!("While trying to open the index at path {:?}", index_path.display())
+            })?;
+
+            let rtxn = index.read_txn()?;
+            let fst = index.words_fst(&rtxn)?;
+            let mut file = File::create_new(format!("{uid}.words.fst"))?;
+            file.write_all(fst.as_fst().as_bytes())?;
+            file.sync_all()?;
+            break;
         }
     }
 

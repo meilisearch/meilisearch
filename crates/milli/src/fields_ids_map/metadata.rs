@@ -15,7 +15,7 @@ use crate::{
     Index, LocalizedAttributesRule, OrderBy, Result, Weight,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Metadata {
     /// The weight as defined in the FieldidsWeightsMap of the searchable attribute if it is searchable.
     pub searchable: Option<Weight>,
@@ -41,7 +41,7 @@ pub struct Metadata {
     pub sort_by: OrderBy,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FieldSortOrder {
     Asc,
     Desc,
@@ -56,7 +56,7 @@ impl std::fmt::Display for FieldSortOrder {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FieldIdMapWithMetadata {
     fields_ids_map: FieldsIdsMap,
     builder: MetadataBuilder,
@@ -228,7 +228,7 @@ impl Metadata {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MetadataBuilder {
     searchable_attributes: Option<Vec<String>>,
     exact_searchable_attributes: Vec<String>,

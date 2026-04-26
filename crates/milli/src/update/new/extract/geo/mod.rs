@@ -11,10 +11,15 @@ use serde_json::Value;
 
 use crate::error::GeoError;
 use crate::update::new::document::{Document, DocumentContext};
-use crate::update::new::indexer::document_changes::Extractor;
+use crate::update::new::indexer::document_changes::{Extractor, IndexingContext};
+use crate::update::new::indexer::settings_change_extract;
+use crate::update::new::indexer::settings_changes::{
+    DocumentsIndentifiers, SettingsChangeExtractor,
+};
 use crate::update::new::ref_cell_ext::RefCellExt as _;
-use crate::update::new::thread_local::MostlySend;
-use crate::update::new::DocumentChange;
+use crate::update::new::steps::IndexingStep;
+use crate::update::new::thread_local::{FullySend, MostlySend, ThreadLocal};
+use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::GrenadParameters;
 use crate::{lat_lng_to_xyz, DocumentId, GeoPoint, Index, InternalError, Result};
 
@@ -35,6 +40,59 @@ impl GeoExtractor {
         } else {
             Ok(None)
         }
+    }
+
+    fn extract_document_from_settings_change(
+        document: DocumentIdentifiers<'_>,
+        context: &DocumentContext<RefCell<GeoExtractorData>>,
+    ) -> Result<()> {
+        let rtxn = &context.rtxn;
+        let index = context.index;
+
+        let external_id = document.external_document_id();
+        let docid = document.docid();
+        let db_fields_ids_map = context.db_fields_ids_map;
+        let mut data_ref = context.data.borrow_mut_or_yield();
+
+        let geo = document
+            .current(rtxn, index, db_fields_ids_map)?
+            .geo_field()?
+            .map(|geo| extract_geo_coordinates(external_id, geo))
+            .transpose()?;
+
+        if let Some(lat_lng) = geo.flatten() {
+            let geopoint = ExtractedGeoPoint { docid, lat_lng };
+            match &mut data_ref.spilled_inserted {
+                Some(file) => file.write_all(bytes_of(&geopoint))?,
+                None => data_ref.inserted.push(geopoint),
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, MSP>(
+        documents: &'indexer DocumentsIndentifiers<'indexer>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
+        step: IndexingStep,
+    ) -> Result<Vec<RefCell<GeoExtractorData<'extractor>>>>
+    where
+        MSP: Fn() -> bool + Sync,
+    {
+        let datastore = ThreadLocal::new();
+        let extractor_data = GeoSettingExtractor;
+
+        settings_change_extract(
+            documents,
+            &extractor_data,
+            indexing_context,
+            extractor_allocs,
+            &datastore,
+            step,
+        )?;
+
+        Ok(datastore.into_iter().collect())
     }
 }
 
@@ -337,5 +395,32 @@ pub fn extract_finite_float_from_value(value: Value) -> result::Result<f64, Valu
         Ok(number)
     } else {
         Err(value)
+    }
+}
+
+pub struct GeoSettingExtractor;
+
+impl<'extractor> SettingsChangeExtractor<'extractor> for GeoSettingExtractor {
+    type Data = RefCell<GeoExtractorData<'extractor>>;
+
+    fn init_data<'doc>(&'doc self, extractor_alloc: &'extractor Bump) -> crate::Result<Self::Data> {
+        Ok(RefCell::new(GeoExtractorData {
+            removed: bumpalo::collections::Vec::new_in(extractor_alloc),
+            inserted: bumpalo::collections::Vec::new_in(extractor_alloc),
+            spilled_inserted: None,
+            spilled_removed: None,
+        }))
+    }
+
+    fn process<'doc>(
+        &'doc self,
+        documents: impl Iterator<Item = crate::Result<DocumentIdentifiers<'doc>>>,
+        context: &'doc DocumentContext<Self::Data>,
+    ) -> crate::Result<()> {
+        for document in documents {
+            let document = document?;
+            GeoExtractor::extract_document_from_settings_change(document, context)?;
+        }
+        Ok(())
     }
 }
