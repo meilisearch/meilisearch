@@ -9,7 +9,7 @@ pub mod metadata;
 pub use global::GlobalFieldsIdsMap;
 pub use metadata::{FieldIdMapWithMetadata, FieldSortOrder, MetadataBuilder};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FieldsIdsMap {
     names_ids: BTreeMap<String, FieldId>,
     ids_names: BTreeMap<FieldId, String>,

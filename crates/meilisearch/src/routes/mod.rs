@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::Ordering;
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
@@ -578,6 +579,7 @@ struct HealthResponse {
 enum HealthStatus {
     #[default]
     Available,
+    MustRestart,
 }
 
 /// Get health
@@ -599,6 +601,11 @@ pub async fn get_health(
     auth_controller: Data<AuthController>,
     search_queue: Data<SearchQueue>,
 ) -> Result<HttpResponse, ResponseError> {
+    if tasks::compact::COMPACTION_SUCCESSFUL.load(Ordering::Relaxed) {
+        return Ok(HttpResponse::InternalServerError()
+            .json(HealthResponse { status: HealthStatus::MustRestart }));
+    }
+
     search_queue.health().unwrap();
     index_scheduler.health().unwrap();
     auth_controller.health().unwrap();

@@ -20,7 +20,7 @@ jobs:
     name: Check OpenAPI specification
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@1.91.1
@@ -29,7 +29,7 @@ jobs:
         uses: Swatinem/rust-cache@v2.8.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 

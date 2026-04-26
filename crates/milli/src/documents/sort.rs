@@ -3,7 +3,9 @@ use std::collections::{BTreeSet, VecDeque};
 use heed::Database;
 use roaring::RoaringBitmap;
 
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{
+    RESERVED_GEO_FIELD_NAME, RESERVED_GEO_LAT_FIELD_NAME, RESERVED_GEO_LNG_FIELD_NAME,
+};
 use crate::documents::geo_sort::next_bucket;
 use crate::documents::GeoSortParameter;
 use crate::heed_codec::facet::{FacetGroupKeyCodec, FacetGroupValueCodec};
@@ -445,9 +447,10 @@ pub fn recursive_sort<'ctx>(
         }
         if let Some((target_point, ascending)) = geofield {
             if sortable_fields.contains(RESERVED_GEO_FIELD_NAME) {
-                if let (Some(lat), Some(lng)) =
-                    (fields_ids_map.id("_geo.lat"), fields_ids_map.id("_geo.lng"))
-                {
+                if let (Some(lat), Some(lng)) = (
+                    fields_ids_map.id(RESERVED_GEO_LAT_FIELD_NAME),
+                    fields_ids_map.id(RESERVED_GEO_LNG_FIELD_NAME),
+                ) {
                     need_geo_candidates = true;
                     fields.push(AscDescId::Geo { field_ids: [lat, lng], target_point, ascending });
                     continue;

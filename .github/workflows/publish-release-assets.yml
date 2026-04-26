@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     # No need to check the version for dry run (cron or workflow_dispatch)
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       # Check if the tag has the v<nmumber>.<number>.<number> format.
       # If yes, it means we are publishing an official release.
       # If no, we are releasing a RC, so no need to check the version.
@@ -84,7 +84,7 @@ jobs:
             use-cross: true
     needs: check-version
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Install cross
         if: matrix.use-cross
@@ -112,7 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Setup Rust
         uses: actions-rs/toolchain@v1
         with:

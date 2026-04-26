@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 
 use bumpalo::Bump;
@@ -13,6 +13,7 @@ use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use super::settings_changes::settings_change_extract;
+use crate::constants::RESERVED_GEO_FIELD_NAME;
 use crate::documents::{FieldIdMapper, PrimaryKey};
 use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
@@ -20,10 +21,9 @@ use crate::update::new::extract::cellulite::GeoJsonExtractor;
 use crate::update::new::extract::EmbeddingExtractor;
 use crate::update::new::indexer::settings_changes::DocumentsIndentifiers;
 use crate::update::new::indexer::WordDelta;
-use crate::update::new::merger::merge_scan_and_send_docids;
-use crate::update::new::merger::EntryStatus;
-use crate::update::new::merger::Operation;
-use crate::update::new::merger::{merge_and_send_cellulite, merge_and_send_rtree};
+use crate::update::new::merger::{
+    merge_and_send_rtree, merge_scan_and_send_docids, EntryStatus, Operation,
+};
 use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, FacetDatabases};
 use crate::update::settings::SettingsDelta;
 use crate::vector::db::{EmbedderInfo, IndexEmbeddingConfig};
@@ -337,37 +337,27 @@ where
     }
 
     'cellulite: {
-        let Some(extractor) =
-            GeoJsonExtractor::new(&rtxn, index, *indexing_context.grenad_parameters)?
+        let Some(extractor) = GeoJsonExtractor::new(&rtxn, index, extractor_sender.geojson())?
         else {
             break 'cellulite;
         };
         let datastore = ThreadLocal::with_capacity(rayon::current_num_threads());
 
-        {
-            let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
-            let _entered = span.enter();
+        let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
+        let _entered = span.enter();
 
-            extract(
-                document_changes,
-                &extractor,
-                indexing_context,
-                extractor_allocs,
-                &datastore,
-                IndexingStep::WritingGeoJson,
-            )?;
-        }
-
-        merge_and_send_cellulite(
-            datastore,
-            &rtxn,
-            index,
-            extractor_sender.geojson(),
-            &indexing_context.must_stop_processing,
+        extract(
+            document_changes,
+            &extractor,
+            indexing_context,
+            extractor_allocs,
+            &datastore,
+            IndexingStep::WritingGeoJson,
         )?;
     }
+
     indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
-    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+    finished_extraction.store(true, Ordering::Relaxed);
 
     Result::Ok((facet_field_ids_delta, word_delta, index_embeddings))
 }
@@ -383,7 +373,7 @@ pub(super) fn extract_all_settings_changes<MSP, SD>(
     field_distribution: &mut BTreeMap<String, u64>,
     mut index_embeddings: Vec<IndexEmbeddingConfig>,
     embedder_stats: &EmbedderStats,
-) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta)>
+) -> Result<(Vec<IndexEmbeddingConfig>, WordDelta, FacetFieldIdsDelta)>
 where
     MSP: Fn() -> bool + Sync,
     SD: SettingsDelta + Sync,
@@ -400,6 +390,7 @@ where
     let _entered = span.enter();
 
     let word_delta;
+    let facet_field_ids_delta;
 
     update_database_documents(
         &documents,
@@ -408,6 +399,36 @@ where
         settings_delta,
         extractor_allocs,
     )?;
+
+    {
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", parent: &indexer_span, "faceted");
+            let _entered = span.enter();
+
+            FacetedDocidsExtractor::run_extraction_from_settings(
+                settings_delta,
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                &extractor_sender.field_id_docid_facet_sender(),
+                IndexingStep::ExtractingFacets,
+            )?
+        };
+
+        {
+            let span = tracing::trace_span!(target: "indexing::documents::merge", parent: &indexer_span, "faceted");
+            let _entered = span.enter();
+            indexing_context.progress.update_progress(IndexingStep::MergingFacetCaches);
+
+            facet_field_ids_delta = merge_and_send_facet_docids(
+                caches,
+                FacetDatabases::new(index),
+                index,
+                &rtxn,
+                extractor_sender.facet_docids(),
+            )?;
+        }
+    }
 
     {
         let WordDocidsCaches {
@@ -419,7 +440,7 @@ where
         } = {
             let span = tracing::trace_span!(target: "indexing::documents::extract", "word_docids");
             let _entered = span.enter();
-            SettingsChangeWordDocidsExtractors::run_extraction(
+            WordDocidsExtractors::run_extraction_from_settings(
                 settings_delta,
                 &documents,
                 indexing_context,
@@ -524,7 +545,7 @@ where
             let span = tracing::trace_span!(target: "indexing::documents::extract", "word_pair_proximity_docids");
             let _entered = span.enter();
 
-            SettingsChangeWordPairProximityDocidsExtractors::run_extraction(
+            WordPairProximityDocidsExtractor::run_extraction_from_settings(
                 settings_delta,
                 &documents,
                 indexing_context,
@@ -604,10 +625,66 @@ where
         }
     }
 
-    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
-    finished_extraction.store(true, std::sync::atomic::Ordering::Relaxed);
+    'geo: {
+        let enabled_filterable_geo =
+            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geo())
+                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geo());
+        let enabled_sortable_geo = settings_delta
+            .new_fields_ids_map()
+            .id_with_metadata(RESERVED_GEO_FIELD_NAME)
+            .is_some_and(|(_id, meta)| meta.is_sortable());
 
-    Result::Ok((index_embeddings, word_delta))
+        if !enabled_filterable_geo && !enabled_sortable_geo {
+            break 'geo;
+        }
+
+        let caches = {
+            let span = tracing::trace_span!(target: "indexing::documents::extract", "geo");
+            let _entered = span.enter();
+
+            GeoExtractor::run_extraction_from_settings(
+                &documents,
+                indexing_context,
+                extractor_allocs,
+                IndexingStep::WritingGeoPoints,
+            )?
+        };
+
+        merge_and_send_rtree(
+            caches,
+            &rtxn,
+            index,
+            extractor_sender.geo(),
+            &indexing_context.must_stop_processing,
+        )?;
+    }
+
+    'cellulite: {
+        let enabled_filterable_geojson =
+            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geojson())
+                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geojson());
+
+        if !enabled_filterable_geojson {
+            break 'cellulite;
+        }
+
+        let span = tracing::trace_span!(target: "indexing::documents::extract", "cellulite");
+        let _entered = span.enter();
+
+        GeoJsonExtractor::run_extraction_from_settings(
+            settings_delta,
+            &documents,
+            indexing_context,
+            extractor_allocs,
+            extractor_sender.geojson(),
+            IndexingStep::WritingGeoPoints,
+        )?;
+    }
+
+    indexing_context.progress.update_progress(IndexingStep::WaitingForDatabaseWrites);
+    finished_extraction.store(true, Ordering::Relaxed);
+
+    Result::Ok((index_embeddings, word_delta, facet_field_ids_delta))
 }
 
 fn primary_key_from_db<'indexer>(
