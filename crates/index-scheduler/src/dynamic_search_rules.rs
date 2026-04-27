@@ -4,7 +4,7 @@ use http_client::policy::IpPolicy;
 use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRules, RuleAction, RuleUid,
 };
-use meilisearch_types::heed::{self, EnvFlags, RoTxn};
+use meilisearch_types::heed::{self, EnvFlags, RoTxn, RwTxn, WithoutTls};
 use meilisearch_types::milli::documents::documents_batch_reader_from_objects;
 use meilisearch_types::milli::index::PrefixSearch;
 use meilisearch_types::milli::progress::Progress;
@@ -238,35 +238,68 @@ impl DynamicSearchRulesStore {
         })
     }
 
-    pub fn put(&self, value: DynamicSearchRules) -> Result<()> {
-        self.ingest_rules(value.into_values())
+    pub fn put(&self, new_rules: DynamicSearchRules) -> Result<()> {
+        let mut wtxn = self.index.write_txn()?;
+        let old_rules = self.get_internal(&wtxn)?;
+        let mut to_delete = vec![];
+
+        for old_rule in old_rules.keys() {
+            if !new_rules.contains_key(old_rule) {
+                to_delete.push(old_rule);
+            }
+        }
+
+        if !to_delete.is_empty() {
+            self.delete_many(&mut wtxn, to_delete)?;
+        }
+
+        self.ingest_rules(&mut wtxn, new_rules.into_values())?;
+        wtxn.commit()?;
+
+        Ok(())
     }
 
     pub fn put_one(&self, rule: &DynamicSearchRule) -> Result<()> {
-        self.ingest_rules([rule.clone()])
+        let mut wtxn = self.index.write_txn()?;
+        self.ingest_rules(&mut wtxn, [rule.clone()])?;
+        wtxn.commit()?;
+
+        Ok(())
     }
 
     pub fn delete_one(&self, uid: &RuleUid) -> Result<bool> {
         let mut wtxn = self.index.write_txn()?;
-        let rtxn = self.index.read_txn()?;
+        let count = self.delete_many(&mut wtxn, [uid])?;
+        wtxn.commit()?;
+
+        Ok(count > 0)
+    }
+
+    fn delete_many<'a>(&self, wtxn: &mut RwTxn<'_>, uids: impl IntoIterator<Item = &'a RuleUid>) -> Result<usize> {
         let external_document_ids = self.index.external_documents_ids();
+        let mut to_delete = RoaringBitmap::new();
 
-        let Some(ext_id) =
-            external_document_ids.get(&wtxn, uid.as_str()).map_err(dsr_milli_error)?
-        else {
-            return Ok(false);
-        };
+        for uid in uids {
+            if let Some(ext_id) =
+                external_document_ids.get(wtxn, uid.as_str()).map_err(dsr_milli_error)?
+            {
+                to_delete.insert(ext_id);
+            }
+        }
 
-        let db_fields_ids_map = self.index.fields_ids_map(&wtxn)?;
+        let deleted = to_delete.len() as usize;
+        if to_delete.is_empty() {
+            return Ok(0);
+        }
+
+        let rtxn = self.index.read_txn()?;
+        let db_fields_ids_map = self.index.fields_ids_map(wtxn)?;
         let mut new_fields_ids_map = db_fields_ids_map.clone();
         let primary_key =
             self.index.primary_key(&rtxn)?.expect("a rule to always have a defined primary key");
         let primary_key =
             milli::documents::PrimaryKey::new_or_insert(primary_key, &mut new_fields_ids_map)
                 .map_err(dsr_milli_error)?;
-
-        let mut to_delete = roaring::RoaringBitmap::new();
-        to_delete.insert(ext_id);
 
         let mut indexer = milli::update::new::indexer::DocumentDeletion::new();
         indexer.delete_documents_by_docids(to_delete);
@@ -277,7 +310,7 @@ impl DynamicSearchRulesStore {
         let embedder_stats = milli::progress::EmbedderStats::default();
 
         milli::update::new::indexer::index(
-            &mut wtxn,
+            wtxn,
             &self.index,
             &self.indexer_config.thread_pool,
             self.indexer_config.grenad_parameters(),
@@ -293,17 +326,20 @@ impl DynamicSearchRulesStore {
         )
         .map_err(dsr_milli_error)?;
 
-        wtxn.commit()?;
-
-        Ok(true)
+        Ok(deleted)
     }
 
     pub fn get(&self) -> Result<DynamicSearchRules> {
         let rtxn = self.index.read_txn()?;
-        let docids = self.index.documents_ids(&rtxn).map_err(dsr_milli_error)?;
-        let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
 
-        self.load_rules_from_docids(&rtxn, fields, docids, None)
+        self.get_internal(&rtxn)
+    }
+
+    fn get_internal(&self, rtxn: &RoTxn<WithoutTls>) -> Result<DynamicSearchRules> {
+        let docids = self.index.documents_ids(rtxn).map_err(dsr_milli_error)?;
+        let fields = self.index.fields_ids_map(rtxn).map_err(dsr_milli_error)?;
+
+        self.load_rules_from_docids(rtxn, fields, docids, None)
     }
 
     pub fn search_for_rule_candidates(
@@ -462,9 +498,7 @@ impl DynamicSearchRulesStore {
         Ok(rules)
     }
 
-    fn ingest_rules(&self, rules: impl IntoIterator<Item = DynamicSearchRule>) -> Result<()> {
-        let mut wtxn = self.index.write_txn()?;
-
+    fn ingest_rules<'a>(&'a self, wtxn: &mut RwTxn<'a>, rules: impl IntoIterator<Item = DynamicSearchRule>) -> Result<()> {
         let objects = rules
             .into_iter()
             .map(DbDynamicSearchRule::from)
@@ -479,7 +513,7 @@ impl DynamicSearchRulesStore {
 
         let embedder_stats = Arc::default();
         let builder = milli::update::IndexDocuments::new(
-            &mut wtxn,
+            wtxn,
             &self.index,
             &self.indexer_config,
             IndexDocumentsConfig::default(),
@@ -495,8 +529,6 @@ impl DynamicSearchRulesStore {
         let (builder, user_result) = builder.add_documents(reader).map_err(dsr_milli_error)?;
         user_result.map_err(dsr_milli_error)?;
         builder.execute().map_err(dsr_milli_error)?;
-
-        wtxn.commit()?;
 
         Ok(())
     }
