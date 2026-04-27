@@ -141,15 +141,21 @@ pub enum DbActivationCondition {
     },
 }
 
+fn dsr_milli_error(e: impl Into<milli::Error>) -> crate::error::Error {
+    crate::error::Error::from_milli(e.into(), Some("$search_rules".to_string()))
+}
+
+struct ActivationCtx<'a> {
+    index_uid: &'a str,
+    query: Option<&'a str>,
+    now: OffsetDateTime,
+}
+
 #[derive(Clone)]
 pub(crate) struct DynamicSearchRulesStore {
     pub(crate) index: milli::Index,
     indexer_config: Arc<IndexerConfig>,
     ip_policy: IpPolicy,
-}
-
-fn dsr_milli_error(e: impl Into<milli::Error>) -> crate::error::Error {
-    crate::error::Error::from_milli(e.into(), Some("$search_rules".to_string()))
 }
 
 impl DynamicSearchRulesStore {
@@ -364,7 +370,12 @@ impl DynamicSearchRulesStore {
         let universe =
             docids_without_conditions | docids_with_time_window | docids_with_query_scope;
 
-        self.load_rules_from_docids(&rtxn, fields, universe, Some(index_uid))
+        self.load_rules_from_docids(
+            &rtxn,
+            fields,
+            universe,
+            Some(ActivationCtx { index_uid, query, now: OffsetDateTime::now_utc() }),
+        )
     }
 
     fn run_filter(&self, rtxn: &RoTxn<'_>, filter: &str) -> Result<RoaringBitmap> {
@@ -387,7 +398,7 @@ impl DynamicSearchRulesStore {
         rtxn: &RoTxn<'_>,
         fields: FieldsIdsMap,
         docids: RoaringBitmap,
-        target_index_uid: Option<&str>,
+        activation_ctx: Option<ActivationCtx<'_>>,
     ) -> Result<DynamicSearchRules> {
         let docs = self.index.iter_documents(rtxn, docids).map_err(dsr_milli_error)?;
         let mut rules = DynamicSearchRules::new();
@@ -402,14 +413,40 @@ impl DynamicSearchRulesStore {
             let uid = db_rule.uid.clone();
             let mut rule: DynamicSearchRule = db_rule.into();
 
-            if let Some(target_index_uid) = target_index_uid {
+            if let Some(ctx) = &activation_ctx {
                 rule.actions.retain(|action| {
                     action
                         .selector
                         .index_uid
                         .as_ref()
-                        .is_none_or(|uid| uid.as_str() == target_index_uid)
+                        .is_none_or(|uid| uid.as_str() == ctx.index_uid)
                 });
+
+                if rule.actions.is_empty() {
+                    continue;
+                }
+
+                let normalized_query = ctx.query.map(milli::normalize_facet);
+
+                // all conditions were already checked individually, but if we have multiple conditions,
+                // we need to tell that they are all true as a whole for the rule to be activated
+                let activated = rule.conditions.iter().all(|cond| match cond {
+                    Condition::Query { is_empty: None, contains: None } => unreachable!("this situation is not possible"),
+                    Condition::Query { is_empty: Some(is_empty), .. } => ctx.query.is_none() && *is_empty || ctx.query.is_some() && !*is_empty,
+                    Condition::Query { contains: Some(contains), .. } => {
+                        normalized_query.as_ref().is_some_and(|q| q.contains(contains))
+                    },
+                    Condition::Time { start: None, end: None } => true,
+                    &Condition::Time { start: Some(start), end: None } => start <= ctx.now,
+                    &Condition::Time { start: None, end: Some(end) } => end >= ctx.now,
+                    &Condition::Time { start: Some(start), end: Some(end) } => {
+                        start <= ctx.now && end >= ctx.now
+                    }
+                });
+
+                if !activated {
+                    continue;
+                }
             }
 
             rules.insert(uid, rule);
