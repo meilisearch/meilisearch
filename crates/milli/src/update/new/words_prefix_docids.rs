@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::io::{BufReader, BufWriter, Read as _, Seek as _, Write};
+use std::io::{BufReader, BufWriter, Read as _, Seek as _};
 use std::iter;
 use std::num::NonZeroU32;
 
@@ -55,7 +55,6 @@ impl WordPrefixDocids {
                 let mut entries = Vec::new();
                 let mut values = tempfile::tempfile().map(BufWriter::new)?;
 
-                let mut tmp_buffer = Vec::new();
                 for (prefix_index, prefix) in prefix_to_compute.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
@@ -68,15 +67,15 @@ impl WordPrefixDocids {
                         .map(|result| result.map(|(_word, bitmap)| bitmap))
                         .union()?;
 
-                    tmp_buffer.clear();
-                    CboRoaringBitmapCodec::serialize_into_vec(&output, &mut tmp_buffer);
+                    let serialized_length = CboRoaringBitmapCodec::serialized_size(&output);
                     // safety: the serialized length will never exceed u32::MAX (4GiB).
-                    let serialized_length = tmp_buffer.len().try_into().unwrap();
+                    let serialized_length = serialized_length.try_into().unwrap();
+
+                    CboRoaringBitmapCodec::serialize_into_writer(&output, &mut values)?;
                     entries.push(PrefixEntry {
                         prefix: prefix.clone(),
                         serialized_length: NonZeroU32::new(serialized_length),
                     });
-                    values.write_all(&tmp_buffer)?;
                 }
 
                 Ok((entries, values))
@@ -166,7 +165,6 @@ impl WordPrefixIntegerDocids {
                 let mut entries = Vec::new();
                 let mut values = tempfile::tempfile().map(BufWriter::new)?;
 
-                let mut tmp_buffer = Vec::new();
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
                     // Is prefix for another thread?
                     if prefix_index % thread_count != thread_id {
@@ -211,16 +209,17 @@ impl WordPrefixIntegerDocids {
                                 .into_iter()
                                 .map(CboRoaringBitmapCodec::deserialize_from)
                                 .union()?;
-                            tmp_buffer.clear();
-                            CboRoaringBitmapCodec::serialize_into_vec(&output, &mut tmp_buffer);
+
+                            let serialized_length = CboRoaringBitmapCodec::serialized_size(&output);
                             // safety: the serialized length will never exceed u32::MAX (4GiB).
-                            let serialized_length = tmp_buffer.len().try_into().unwrap();
+                            let serialized_length = serialized_length.try_into().unwrap();
+
+                            CboRoaringBitmapCodec::serialize_into_writer(&output, &mut values)?;
                             entries.push(PrefixIntegerEntry {
                                 prefix: prefix.clone(),
                                 pos,
                                 serialized_length: NonZeroU32::new(serialized_length),
                             });
-                            values.write_all(&tmp_buffer)?;
                         }
                     }
                 }
