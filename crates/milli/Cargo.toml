@@ -100,7 +100,7 @@ tracing = "0.1.41"
 url = "2.5.7"
 hashbrown = "0.15.5"
 bumpalo = "3.19.0"
-bumparaw-collections = "0.1.4"
+bumparaw-collections = "0.1.5"
 steppe = { version = "0.4", default-features = false }
 thread_local = "1.1.9"
 rustc-hash = "2.1.1"

@@ -43,7 +43,7 @@ jobs:
       matrix:
         edition: [community, enterprise]
         release:
-          [macos-amd64, macos-aarch64, windows, linux-amd64, linux-aarch64]
+          [macos-amd64, macos-aarch64, windows, linux-amd64, linux-aarch64, linux-armv7]
         include:
           - edition: "community"
             feature-flag: ""
@@ -76,11 +76,24 @@ jobs:
             binary_path: aarch64-unknown-linux-gnu/release/meilisearch
             asset_name: linux-aarch64
             extra-args: "--target aarch64-unknown-linux-gnu"
+          - release: linux-armv7
+            os: ubuntu-22.04
+            cross: true
+            binary_path: armv7-unknown-linux-gnueabihf/release/meilisearch
+            asset_name: linux-armv7
+            extra-args: "--target armv7-unknown-linux-gnueabihf"
     needs: check-version
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@1.91.1
+      - name: Install Cross
+        if: matrix.cross == true
+        run: cargo install cross
+      - name: Build Cross
+        if: matrix.cross == true
+        run: cross build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
       - name: Build
+        if: matrix.cross != true
         run: cargo build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
       # No need to upload binaries for dry run (cron or workflow_dispatch)
       - name: Upload binaries to release
