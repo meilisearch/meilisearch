@@ -329,6 +329,8 @@ impl DynamicSearchRulesStore {
                     now = now,
                 ),
             )?;
+
+        let query = query.filter(|q| !q.trim().is_empty());
         let docids_with_query_scope = if let Some(query) = query {
             let mut docids_with_contains = self.run_filter(
                 &rtxn,
@@ -374,11 +376,7 @@ impl DynamicSearchRulesStore {
             &rtxn,
             fields,
             universe,
-            Some(ActivationCtx {
-                index_uid,
-                query: query.filter(|q| !q.trim().is_empty()),
-                now: OffsetDateTime::now_utc(),
-            }),
+            Some(ActivationCtx { index_uid, query, now: OffsetDateTime::now_utc() }),
         )
     }
 
@@ -442,7 +440,8 @@ impl DynamicSearchRulesStore {
                         ctx.query.is_none() && *is_empty || ctx.query.is_some() && !*is_empty
                     }
                     Condition::Query { contains: Some(contains), .. } => {
-                        normalized_query.as_ref().is_some_and(|q| q.contains(contains))
+                        let normalized_contains = milli::normalize_facet(contains);
+                        normalized_query.as_ref().is_some_and(|q| q.contains(&normalized_contains))
                     }
                     Condition::Time { start: None, end: None } => true,
                     &Condition::Time { start: Some(start), end: None } => start <= ctx.now,
