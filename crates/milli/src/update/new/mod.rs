@@ -16,7 +16,6 @@ mod facet_search_builder;
 mod fst_merger_builder;
 pub mod indexer;
 mod merger;
-mod offloader;
 mod parallel_iterator_ext;
 mod ref_cell_ext;
 pub mod reindex;
