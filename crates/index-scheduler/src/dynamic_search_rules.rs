@@ -112,7 +112,7 @@ impl From<DynamicSearchRule> for DbDynamicSearchRule {
             .collect();
 
         for action in &mut value.actions {
-            if action.selector.index_uid.as_ref().is_none() {
+            if action.selector.index_uid.is_none() {
                 action.selector.index_uid =
                     Some(IndexUid::new_unchecked(GLOBAL_INDEX_UID_SENTINEL));
             }
