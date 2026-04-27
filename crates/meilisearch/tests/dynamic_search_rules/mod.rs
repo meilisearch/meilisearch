@@ -839,6 +839,63 @@ async fn search_applies_pins_when_query_contains_value() {
 }
 
 #[actix_web::test]
+async fn search_applies_global_action_from_rule_with_other_index_action() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "Batman Returns" },
+                { "id": "global-pin", "title": "The Matrix" },
+                { "id": "products-pin", "title": "Pulp Fiction" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "mixed-global-and-products-actions",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "query", "contains": "returns" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "indexUid": "products", "id": "products-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    },
+                    {
+                        "selector": { "id": "global-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (value, code) = index.search_post(json!({ "q": "Batman Returns" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "global-pin",
+        "title": "The Matrix"
+      },
+      {
+        "id": "organic-match",
+        "title": "Batman Returns"
+      }
+    ]
+    "#);
+}
+
+#[actix_web::test]
 async fn search_applies_only_rules_inside_the_current_time_window() {
     let server = dynamic_search_rules_server().await;
     let index = server.index("movies");
