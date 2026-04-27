@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::io::{BufReader, BufWriter, Read as _, Seek as _};
+use std::io::{self, BufReader, BufWriter, Read as _, Seek as _};
 use std::iter;
 use std::num::NonZeroU32;
 
@@ -84,7 +84,6 @@ impl WordPrefixDocids {
 
         // We iterate over all the collected and serialized bitmaps
         // to eventually put them in the final database.
-        let mut tmp_buffer = Vec::new();
         for (index, values) in outputs {
             let mut values = values.into_inner().map_err(|e| e.into_error())?;
             values.rewind()?;
@@ -92,12 +91,15 @@ impl WordPrefixDocids {
             for PrefixEntry { prefix, serialized_length } in index {
                 match serialized_length {
                     Some(serialized_length) => {
-                        tmp_buffer.resize(serialized_length.get() as usize, 0);
-                        values.read_exact(&mut tmp_buffer)?;
-                        self.prefix_database.remap_data_type::<Bytes>().put(
+                        let values = &mut values;
+                        self.prefix_database.remap_data_type::<Bytes>().put_reserved(
                             wtxn,
                             prefix.as_bytes(),
-                            &tmp_buffer,
+                            serialized_length.get() as usize,
+                            |space| {
+                                io::copy(&mut values.take(serialized_length.get() as u64), space)?;
+                                Ok(())
+                            },
                         )?;
                     }
                     None => {
@@ -231,11 +233,10 @@ impl WordPrefixIntegerDocids {
         // We iterate over all the collected and serialized bitmaps through
         // the files and entries to eventually put them in the final database.
         let mut tmp_key_buffer = Vec::new();
-        let mut tmp_buffer = Vec::new();
-        for (index, file) in outputs {
-            let mut file = file.into_inner().map_err(|e| e.into_error())?;
-            file.rewind()?;
-            let mut file = BufReader::new(file);
+        for (index, values) in outputs {
+            let mut values = values.into_inner().map_err(|e| e.into_error())?;
+            values.rewind()?;
+            let mut values = BufReader::new(values);
             for PrefixIntegerEntry { prefix, pos, serialized_length } in index {
                 tmp_key_buffer.clear();
                 tmp_key_buffer.extend_from_slice(prefix.as_bytes());
@@ -243,12 +244,15 @@ impl WordPrefixIntegerDocids {
                 tmp_key_buffer.extend_from_slice(&pos.to_be_bytes());
                 match serialized_length {
                     Some(serialized_length) => {
-                        tmp_buffer.resize(serialized_length.get() as usize, 0);
-                        file.read_exact(&mut tmp_buffer)?;
-                        self.prefix_database.remap_data_type::<Bytes>().put(
+                        let values = &mut values;
+                        self.prefix_database.put_reserved(
                             wtxn,
                             &tmp_key_buffer,
-                            &tmp_buffer,
+                            serialized_length.get() as usize,
+                            |space| {
+                                io::copy(&mut values.take(serialized_length.get() as u64), space)?;
+                                Ok(())
+                            },
                         )?;
                     }
                     None => {
