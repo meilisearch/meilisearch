@@ -374,7 +374,11 @@ impl DynamicSearchRulesStore {
             &rtxn,
             fields,
             universe,
-            Some(ActivationCtx { index_uid, query, now: OffsetDateTime::now_utc() }),
+            Some(ActivationCtx {
+                index_uid,
+                query: query.filter(|q| !q.trim().is_empty()),
+                now: OffsetDateTime::now_utc(),
+            }),
         )
     }
 
