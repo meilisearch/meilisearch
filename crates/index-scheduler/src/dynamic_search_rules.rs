@@ -431,11 +431,15 @@ impl DynamicSearchRulesStore {
                 // all conditions were already checked individually, but if we have multiple conditions,
                 // we need to tell that they are all true as a whole for the rule to be activated
                 let activated = rule.conditions.iter().all(|cond| match cond {
-                    Condition::Query { is_empty: None, contains: None } => unreachable!("this situation is not possible"),
-                    Condition::Query { is_empty: Some(is_empty), .. } => ctx.query.is_none() && *is_empty || ctx.query.is_some() && !*is_empty,
+                    Condition::Query { is_empty: None, contains: None } => {
+                        unreachable!("this situation is not possible")
+                    }
+                    Condition::Query { is_empty: Some(is_empty), .. } => {
+                        ctx.query.is_none() && *is_empty || ctx.query.is_some() && !*is_empty
+                    }
                     Condition::Query { contains: Some(contains), .. } => {
                         normalized_query.as_ref().is_some_and(|q| q.contains(contains))
-                    },
+                    }
                     Condition::Time { start: None, end: None } => true,
                     &Condition::Time { start: Some(start), end: None } => start <= ctx.now,
                     &Condition::Time { start: None, end: Some(end) } => end >= ctx.now,
