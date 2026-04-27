@@ -5,6 +5,7 @@ use meilisearch_types::dynamic_search_rules::{
     Condition, DynamicSearchRule, DynamicSearchRules, RuleAction, RuleUid,
 };
 use meilisearch_types::heed::{self, EnvFlags, RoTxn, RwTxn, WithoutTls};
+use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::documents::documents_batch_reader_from_objects;
 use meilisearch_types::milli::index::PrefixSearch;
 use meilisearch_types::milli::progress::Progress;
@@ -18,6 +19,7 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 
 const DSR_DIR_NAME: &str = "search_rules";
+const GLOBAL_INDEX_UID_SENTINEL: &str = "__global__";
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,7 +38,7 @@ struct DbDynamicSearchRule {
 }
 
 impl From<DbDynamicSearchRule> for DynamicSearchRule {
-    fn from(value: DbDynamicSearchRule) -> Self {
+    fn from(mut value: DbDynamicSearchRule) -> Self {
         let conditions = value
             .conditions
             .into_iter()
@@ -59,6 +61,17 @@ impl From<DbDynamicSearchRule> for DynamicSearchRule {
             })
             .collect();
 
+        for action in &mut value.actions {
+            if action
+                .selector
+                .index_uid
+                .as_ref()
+                .is_some_and(|uid| uid.as_str() == GLOBAL_INDEX_UID_SENTINEL)
+            {
+                action.selector.index_uid = None;
+            }
+        }
+
         Self {
             uid: value.uid,
             description: value.description,
@@ -71,7 +84,7 @@ impl From<DbDynamicSearchRule> for DynamicSearchRule {
 }
 
 impl From<DynamicSearchRule> for DbDynamicSearchRule {
-    fn from(value: DynamicSearchRule) -> Self {
+    fn from(mut value: DynamicSearchRule) -> Self {
         let conditions = value
             .conditions
             .into_iter()
@@ -97,6 +110,13 @@ impl From<DynamicSearchRule> for DbDynamicSearchRule {
                 _ => None,
             })
             .collect();
+
+        for action in &mut value.actions {
+            if action.selector.index_uid.as_ref().is_none() {
+                action.selector.index_uid =
+                    Some(IndexUid::new_unchecked(GLOBAL_INDEX_UID_SENTINEL));
+            }
+        }
 
         Self {
             uid: value.uid,
@@ -275,7 +295,11 @@ impl DynamicSearchRulesStore {
         Ok(count > 0)
     }
 
-    fn delete_many<'a>(&self, wtxn: &mut RwTxn<'_>, uids: impl IntoIterator<Item = &'a RuleUid>) -> Result<usize> {
+    fn delete_many<'a>(
+        &self,
+        wtxn: &mut RwTxn<'_>,
+        uids: impl IntoIterator<Item = &'a RuleUid>,
+    ) -> Result<usize> {
         let external_document_ids = self.index.external_documents_ids();
         let mut to_delete = RoaringBitmap::new();
 
@@ -352,7 +376,7 @@ impl DynamicSearchRulesStore {
         let progress = Progress::default();
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
         let base_filter = format!(
-            r#"active = true AND (actions.selector.indexUid = "{index_uid}" OR actions.selector.indexUid NOT EXISTS)"#,
+            r#"active = true AND (actions.selector.indexUid = "{index_uid}" OR actions.selector.indexUid = "{GLOBAL_INDEX_UID_SENTINEL}")"#,
         );
         let docids_without_conditions =
             self.run_filter(&rtxn, &format!(r#"{base_filter} AND conditions.kind NOT EXISTS"#))?;
@@ -498,7 +522,11 @@ impl DynamicSearchRulesStore {
         Ok(rules)
     }
 
-    fn ingest_rules<'a>(&'a self, wtxn: &mut RwTxn<'a>, rules: impl IntoIterator<Item = DynamicSearchRule>) -> Result<()> {
+    fn ingest_rules<'a>(
+        &'a self,
+        wtxn: &mut RwTxn<'a>,
+        rules: impl IntoIterator<Item = DynamicSearchRule>,
+    ) -> Result<()> {
         let objects = rules
             .into_iter()
             .map(DbDynamicSearchRule::from)
@@ -531,67 +559,5 @@ impl DynamicSearchRulesStore {
         builder.execute().map_err(dsr_milli_error)?;
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use meilisearch_types::dynamic_search_rules::{DynamicSearchRuleAction, Selector};
-
-    use super::*;
-    use crate::IndexScheduler;
-
-    fn pin_rule(uid: &str, selector_index_uid: Option<&str>) -> DynamicSearchRule {
-        DynamicSearchRule {
-            uid: RuleUid::from_str(uid).unwrap(),
-            description: None,
-            priority: None,
-            active: true,
-            conditions: vec![Condition::Query {
-                is_empty: None,
-                contains: Some("batman".to_string()),
-            }],
-            actions: vec![RuleAction {
-                selector: Selector {
-                    index_uid: selector_index_uid.map(|index_uid| index_uid.parse().unwrap()),
-                    id: Some(uid.to_string()),
-                },
-                action: DynamicSearchRuleAction::Pin { position: 0 },
-            }],
-        }
-    }
-
-    #[test]
-    fn search_for_rule_candidates_filters_rules_by_target_index_uid() {
-        let (scheduler, _handle) = IndexScheduler::test(true, vec![]);
-        let mut rules = DynamicSearchRules::new();
-        rules.insert(RuleUid::from_str("global-rule").unwrap(), pin_rule("global-rule", None));
-        rules.insert(
-            RuleUid::from_str("movies-rule").unwrap(),
-            pin_rule("movies-rule", Some("movies")),
-        );
-        rules.insert(
-            RuleUid::from_str("products-rule").unwrap(),
-            pin_rule("products-rule", Some("products")),
-        );
-
-        scheduler.put_dynamic_search_rules(rules).unwrap();
-
-        let movies_candidates =
-            scheduler.dynamic_search_rules_search_for_candidates(Some("batman"), "movies").unwrap();
-        assert_eq!(
-            movies_candidates.keys().map(|uid| uid.as_str()).collect::<Vec<_>>(),
-            vec!["global-rule", "movies-rule"]
-        );
-
-        let products_candidates = scheduler
-            .dynamic_search_rules_search_for_candidates(Some("batman"), "products")
-            .unwrap();
-        assert_eq!(
-            products_candidates.keys().map(|uid| uid.as_str()).collect::<Vec<_>>(),
-            vec!["global-rule", "products-rule"]
-        );
     }
 }
