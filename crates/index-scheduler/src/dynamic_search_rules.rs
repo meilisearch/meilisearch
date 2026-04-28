@@ -10,7 +10,11 @@ use meilisearch_types::milli::documents::documents_batch_reader_from_objects;
 use meilisearch_types::milli::index::PrefixSearch;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexerConfig};
-use meilisearch_types::milli::{self, CreateOrOpen, FieldsIdsMap, FilterableAttributesRule};
+use meilisearch_types::milli::{
+    self, AttributePatterns, CreateOrOpen, FieldsIdsMap, FilterableAttributesRule, IndexFilter,
+    PatternMatch,
+};
+use meilisearch_types::pagination::PaginationView;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -19,6 +23,7 @@ use std::sync::Arc;
 use time::OffsetDateTime;
 
 const DSR_DIR_NAME: &str = "search_rules";
+const DYNAMIC_SEARCH_RULES_MAX_LIMIT: usize = 10_000;
 const GLOBAL_INDEX_UID_SENTINEL: &str = "__global__";
 
 #[derive(Serialize, Deserialize)]
@@ -169,6 +174,54 @@ struct ActivationCtx<'a> {
     index_uid: &'a str,
     query: Option<&'a str>,
     now: OffsetDateTime,
+}
+
+fn matches_attribute_patterns(
+    rule: &DynamicSearchRule,
+    attribute_patterns: Option<&AttributePatterns>,
+) -> bool {
+    attribute_patterns.is_none_or(|patterns| {
+        !matches!(patterns.match_str(&rule.uid), PatternMatch::NoMatch | PatternMatch::Parent)
+    })
+}
+
+fn paginate_rules(
+    rules: impl IntoIterator<Item = DynamicSearchRule>,
+    active: Option<bool>,
+    attribute_patterns: Option<&AttributePatterns>,
+    offset: usize,
+    limit: usize,
+) -> PaginationView<DynamicSearchRule> {
+    let limit = limit.min(DYNAMIC_SEARCH_RULES_MAX_LIMIT);
+    let mut total = 0;
+    let mut results = Vec::with_capacity(limit);
+
+    for rule in rules {
+        if active.is_some_and(|active| active != rule.active)
+            || !matches_attribute_patterns(&rule, attribute_patterns)
+        {
+            continue;
+        }
+
+        if total >= offset && results.len() < limit {
+            results.push(rule);
+        }
+
+        total += 1;
+    }
+
+    PaginationView::new(offset, limit, total, results)
+}
+
+fn parse_filter(filter: &str) -> Result<IndexFilter<'_>> {
+    let filter = milli::Filter::from_str(filter)
+        .expect("filter is manually created and always valid")
+        .unwrap();
+
+    Ok(crate::filter::filters_into_index_filters_unchecked(vec![Some(filter)])?
+        .pop()
+        .flatten()
+        .expect("we always expect one filter"))
 }
 
 #[derive(Clone)]
@@ -362,8 +415,66 @@ impl DynamicSearchRulesStore {
     fn get_internal(&self, rtxn: &RoTxn<WithoutTls>) -> Result<DynamicSearchRules> {
         let docids = self.index.documents_ids(rtxn).map_err(dsr_milli_error)?;
         let fields = self.index.fields_ids_map(rtxn).map_err(dsr_milli_error)?;
+        let rules = self.load_rules_from_docids(rtxn, &fields, docids, None)?;
 
-        self.load_rules_from_docids(rtxn, fields, docids, None)
+        Ok(rules.into_iter().map(|rule| (rule.uid.clone(), rule)).collect())
+    }
+
+    pub fn list(
+        &self,
+        query: Option<&str>,
+        active: Option<bool>,
+        attribute_patterns: Option<&AttributePatterns>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<PaginationView<DynamicSearchRule>> {
+        let query = query.filter(|query| !query.trim().is_empty());
+        let rtxn = self.index.read_txn()?;
+        let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
+
+        if let Some(query) = query {
+            if attribute_patterns.is_none() {
+                let result = self.search_rule_docids(&rtxn, query, active, offset, limit)?;
+                let total = result.candidates.len() as usize;
+                let rules =
+                    self.load_rules_from_docids(&rtxn, &fields, result.documents_ids, None)?;
+
+                return Ok(PaginationView::new(offset, limit, total, rules));
+            }
+
+            // attribute patterns are applied after milli search, so pagination must be
+            // applied after that filtering too.
+            let result = self.search_rule_docids(&rtxn, query, active, 0, usize::MAX)?;
+            let rules = self.load_rules_from_docids(&rtxn, &fields, result.documents_ids, None)?;
+
+            return Ok(paginate_rules(rules, active, attribute_patterns, offset, limit));
+        }
+
+        let docids = self.index.documents_ids(&rtxn).map_err(dsr_milli_error)?;
+        let rules = self.load_rules_from_docids(&rtxn, &fields, docids, None)?;
+
+        Ok(paginate_rules(rules, active, attribute_patterns, offset, limit))
+    }
+
+    fn search_rule_docids(
+        &self,
+        rtxn: &RoTxn<'_>,
+        query: &str,
+        active: Option<bool>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<milli::SearchResult> {
+        let progress = Progress::default();
+        let mut search = milli::Search::new(rtxn, &self.index, &progress);
+
+        search.query(query).offset(offset).limit(limit).exhaustive_number_hits(true);
+        let expr = active.map(|active| format!("active = {active}"));
+
+        if let Some(filter) = expr.as_ref().map(|expr| parse_filter(expr)).transpose()? {
+            search.filter(filter);
+        }
+
+        search.execute().map_err(dsr_milli_error)
     }
 
     pub fn search_for_rule_candidates(
@@ -371,25 +482,23 @@ impl DynamicSearchRulesStore {
         query: Option<&str>,
         index_uid: &str,
     ) -> Result<DynamicSearchRules> {
+        let query = query.filter(|query| !query.trim().is_empty());
         let rtxn = self.index.read_txn()?;
-        let now = OffsetDateTime::now_utc().unix_timestamp();
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
+        let now = OffsetDateTime::now_utc();
+        let now_timestamp = now.unix_timestamp();
         let base_filter = format!(
             r#"active = true AND (actions.selector.indexUid = "{index_uid}" OR actions.selector.indexUid = "{GLOBAL_INDEX_UID_SENTINEL}")"#,
         );
         let docids_without_conditions =
             self.run_filter(&rtxn, &format!(r#"{base_filter} AND conditions.kind NOT EXISTS"#))?;
-        let docids_with_time_window =
-            self.run_filter(
-                &rtxn,
-                &format!(
-                    r#"{base_filter} AND conditions.kind = "timeWindow" AND (conditions.startTimestamp <= {now} OR conditions.startTimestamp NOT EXISTS) AND (conditions.endTimestamp >= {now} OR conditions.endTimestamp NOT EXISTS)"#,
-                    base_filter = base_filter,
-                    now = now,
-                ),
-            )?;
+        let docids_with_time_window = self.run_filter(
+            &rtxn,
+            &format!(
+                r#"{base_filter} AND conditions.kind = "timeWindow" AND (conditions.startTimestamp <= {now_timestamp} OR conditions.startTimestamp NOT EXISTS) AND (conditions.endTimestamp >= {now_timestamp} OR conditions.endTimestamp NOT EXISTS)"#,
+            ),
+        )?;
 
-        let query = query.filter(|q| !q.trim().is_empty());
         let docids_with_query_scope = if query.is_some() {
             let docids_with_contains = self.run_filter(
                 &rtxn,
@@ -411,23 +520,18 @@ impl DynamicSearchRulesStore {
         let universe =
             docids_without_conditions | docids_with_time_window | docids_with_query_scope;
 
-        self.load_rules_from_docids(
+        let rules = self.load_rules_from_docids(
             &rtxn,
-            fields,
+            &fields,
             universe,
-            Some(ActivationCtx { index_uid, query, now: OffsetDateTime::now_utc() }),
-        )
+            Some(ActivationCtx { index_uid, query, now }),
+        )?;
+
+        Ok(rules.into_iter().map(|rule| (rule.uid.clone(), rule)).collect())
     }
 
     fn run_filter(&self, rtxn: &RoTxn<'_>, filter: &str) -> Result<RoaringBitmap> {
-        let filter = milli::Filter::from_str(filter)
-            .expect("filter is manually created and always valid")
-            .unwrap();
-
-        let filter = crate::filter::filters_into_index_filters_unchecked(vec![Some(filter)])?
-            .pop()
-            .expect("we always expect one filter");
-
+        let filter = Some(parse_filter(filter)?);
         let set = milli::filtered_universe(&self.index, rtxn, &filter, &Progress::default())
             .map_err(dsr_milli_error)?;
 
@@ -437,21 +541,20 @@ impl DynamicSearchRulesStore {
     fn load_rules_from_docids(
         &self,
         rtxn: &RoTxn<'_>,
-        fields: FieldsIdsMap,
-        docids: RoaringBitmap,
+        fields: &FieldsIdsMap,
+        docids: impl IntoIterator<Item = milli::DocumentId>,
         activation_ctx: Option<ActivationCtx<'_>>,
-    ) -> Result<DynamicSearchRules> {
+    ) -> Result<Vec<DynamicSearchRule>> {
         let docs = self.index.iter_documents(rtxn, docids).map_err(dsr_milli_error)?;
-        let mut rules = DynamicSearchRules::new();
+        let mut rules = Vec::new();
 
         for doc in docs {
             let (_id, obkv) = doc.map_err(dsr_milli_error)?;
-            let obj = milli::all_obkv_to_json(obkv, &fields).map_err(dsr_milli_error)?;
+            let obj = milli::all_obkv_to_json(obkv, fields).map_err(dsr_milli_error)?;
             let db_rule: DbDynamicSearchRule = serde_json::from_value(obj.into()).map_err(|e| {
                 dsr_milli_error(milli::Error::UserError(milli::UserError::SerdeJson(e)))
             })?;
 
-            let uid = db_rule.uid.clone();
             let mut rule: DynamicSearchRule = db_rule.into();
 
             if let Some(ctx) = &activation_ctx {
@@ -495,7 +598,7 @@ impl DynamicSearchRulesStore {
                 }
             }
 
-            rules.insert(uid, rule);
+            rules.push(rule);
         }
 
         Ok(rules)

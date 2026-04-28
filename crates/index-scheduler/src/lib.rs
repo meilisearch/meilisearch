@@ -70,9 +70,10 @@ use meilisearch_types::milli::vector::json_template::JsonTemplate;
 use meilisearch_types::milli::vector::{
     Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
-use meilisearch_types::milli::{self, Index};
+use meilisearch_types::milli::{self, AttributePatterns, Index};
 use meilisearch_types::network::route::Status;
 use meilisearch_types::network::{Network, RemoteAvailability};
+use meilisearch_types::pagination::PaginationView;
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
@@ -1167,6 +1168,17 @@ impl IndexScheduler {
 
     pub fn dynamic_search_rules(&self) -> Result<DynamicSearchRules> {
         self.dynamic_search_rules.get()
+    }
+
+    pub fn list_dynamic_search_rules(
+        &self,
+        query: Option<&str>,
+        active: Option<bool>,
+        attribute_patterns: Option<&AttributePatterns>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<PaginationView<DynamicSearchRule>> {
+        self.dynamic_search_rules.list(query, active, attribute_patterns, offset, limit)
     }
 
     pub fn dynamic_search_rules_search_for_candidates(

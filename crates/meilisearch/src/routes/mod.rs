@@ -14,6 +14,7 @@ use meilisearch_types::milli::{
     AttributePatterns, FilterFeatures, FilterableAttributesFeatures, FilterableAttributesPatterns,
     FilterableAttributesRule,
 };
+pub use meilisearch_types::pagination::PaginationView;
 use meilisearch_types::settings::{
     Checked, FacetingSettings, MinWordSizeTyposSetting, PaginationSettings, Settings, TypoSettings,
     Unchecked,
@@ -226,20 +227,6 @@ pub struct Pagination {
     pub limit: usize,
 }
 
-#[derive(Debug, Clone, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
-pub struct PaginationView<T> {
-    /// Items for the current page.
-    pub results: Vec<T>,
-    /// Number of items skipped.
-    pub offset: usize,
-    /// Maximum number of items returned.
-    pub limit: usize,
-    /// Total number of items matching the query.
-    pub total: usize,
-}
-
 impl Pagination {
     /// Given the full data to paginate, returns the selected section.
     pub fn auto_paginate_sized<T>(
@@ -295,12 +282,6 @@ impl Pagination {
         T: Serialize,
     {
         PaginationView { results, offset: self.offset, limit: self.limit, total }
-    }
-}
-
-impl<T> PaginationView<T> {
-    pub fn new(offset: usize, limit: usize, total: usize, results: Vec<T>) -> Self {
-        Self { offset, limit, results, total }
     }
 }
 
