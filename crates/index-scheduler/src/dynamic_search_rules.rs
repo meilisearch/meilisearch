@@ -373,7 +373,6 @@ impl DynamicSearchRulesStore {
     ) -> Result<DynamicSearchRules> {
         let rtxn = self.index.read_txn()?;
         let now = OffsetDateTime::now_utc().unix_timestamp();
-        let progress = Progress::default();
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
         let base_filter = format!(
             r#"active = true AND (actions.selector.indexUid = "{index_uid}" OR actions.selector.indexUid = "{GLOBAL_INDEX_UID_SENTINEL}")"#,
@@ -391,8 +390,8 @@ impl DynamicSearchRulesStore {
             )?;
 
         let query = query.filter(|q| !q.trim().is_empty());
-        let docids_with_query_scope = if let Some(query) = query {
-            let mut docids_with_contains = self.run_filter(
+        let docids_with_query_scope = if query.is_some() {
+            let docids_with_contains = self.run_filter(
                 &rtxn,
                 &format!(r#"{base_filter} AND conditions.kind = "queryContains""#),
             )?;
@@ -400,26 +399,6 @@ impl DynamicSearchRulesStore {
                 &rtxn,
                 &format!(r#"{base_filter} AND conditions.kind = "queryIsNotEmpty""#),
             )?;
-
-            if !docids_with_contains.is_empty() {
-                if let Some(contains_fid) = fields.id("conditions.contains") {
-                    let mut ctx =
-                        milli::SearchContext::new(&self.index, &rtxn).map_err(dsr_milli_error)?;
-                    ctx.attributes_to_search_on(&["conditions.contains".to_string()])
-                        .map_err(dsr_milli_error)?;
-
-                    docids_with_contains = ctx
-                        .resolve_query_terms_within_field_id(
-                            query,
-                            contains_fid,
-                            &docids_with_contains,
-                            None,
-                            None,
-                            &progress,
-                        )
-                        .map_err(dsr_milli_error)?;
-                }
-            }
 
             docids_not_empty_query | docids_with_contains
         } else {

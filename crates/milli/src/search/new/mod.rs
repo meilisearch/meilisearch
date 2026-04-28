@@ -38,14 +38,11 @@ pub use logger::{DefaultSearchLogger, SearchLogger};
 use query_graph::{QueryGraph, QueryNode};
 use query_term::{
     located_query_terms_from_tokens, ExtractedTokens, LocatedQueryTerm, Phrase, QueryTerm,
-    QueryTermSubset,
 };
 use ranking_rules::{
     BoxRankingRule, PlaceholderQuery, RankingRule, RankingRuleOutput, RankingRuleQueryTrait,
 };
-use resolve_query_graph::{
-    compute_query_graph_docids, compute_query_term_subset_docids_within_field_id, PhraseDocIdsCache,
-};
+use resolve_query_graph::{compute_query_graph_docids, PhraseDocIdsCache};
 use roaring::RoaringBitmap;
 use sort::Sort;
 
@@ -217,33 +214,6 @@ impl<'ctx> SearchContext<'ctx> {
         }
 
         Ok(())
-    }
-
-    pub fn resolve_query_terms_within_field_id(
-        &mut self,
-        query: &str,
-        fid: FieldId,
-        universe: &RoaringBitmap,
-        words_limit: Option<usize>,
-        locales: Option<&Vec<Language>>,
-        progress: &Progress,
-    ) -> Result<RoaringBitmap> {
-        let ExtractedTokens { query_terms, negative_words: _, negative_phrases: _ } =
-            extract_query_tokens(self, query, words_limit, locales, progress)?;
-
-        let mut docids = RoaringBitmap::new();
-
-        for query_term in query_terms {
-            let term_subset = QueryTermSubset::full(query_term.value);
-            docids |= compute_query_term_subset_docids_within_field_id(
-                self,
-                Some(universe),
-                &term_subset,
-                fid,
-            )?;
-        }
-
-        Ok(docids & universe)
     }
 }
 
