@@ -11,18 +11,19 @@ use meilisearch_types::error::deserr_codes::{
     InvalidDynamicSearchRuleFilter, InvalidDynamicSearchRuleFilterActive,
     InvalidDynamicSearchRuleFilterAttributePatterns, InvalidDynamicSearchRuleLimit,
     InvalidDynamicSearchRuleOffset, InvalidDynamicSearchRulePriority,
+    InvalidDynamicSearchRuleQuery,
 };
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::milli::{AttributePatterns, PatternMatch};
+use meilisearch_types::milli::AttributePatterns;
 use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::{Pagination, PaginationView, PAGINATION_DEFAULT_LIMIT};
+use crate::routes::{PaginationView, PAGINATION_DEFAULT_LIMIT};
 
 #[routes::routes(
     routes(
@@ -81,6 +82,10 @@ pub struct ListRulesFilter {
 #[derive(Deserr, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct ListRules {
+    /// Search query used to rank and restrict rules by description, query conditions, and targeted index.
+    #[schema(required = false)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleQuery>)]
+    pub q: Option<String>,
     /// Number of rules to skip. Defaults to 0.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleOffset>)]
@@ -93,29 +98,6 @@ pub struct ListRules {
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleFilter>)]
     pub filter: Option<ListRulesFilter>,
-}
-
-impl ListRules {
-    fn apply_filter(&self, rule: &DynamicSearchRule) -> bool {
-        if let Some(filter) = &self.filter {
-            if let Some(patterns) = &filter.attribute_patterns {
-                if matches!(
-                    patterns.match_str(&rule.uid),
-                    PatternMatch::NoMatch | PatternMatch::Parent
-                ) {
-                    return false;
-                }
-            }
-
-            if let Some(active) = &filter.active {
-                if *active != rule.active {
-                    return false;
-                }
-            }
-        }
-
-        true
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -240,10 +222,16 @@ async fn list_rules(
         .features()
         .check_dynamic_search_rules("Using the `/dynamic-search-rules` routes")?;
 
-    let rules = index_scheduler.dynamic_search_rules()?;
-    let pagination = Pagination { offset: body.0.offset, limit: body.0.limit };
-    let pagination_view =
-        pagination.auto_paginate_counting(rules.values().filter(|rule| body.0.apply_filter(rule)));
+    let ListRules { q, offset, limit, filter } = body.0;
+    let active = filter.as_ref().and_then(|filter| filter.active);
+    let attribute_patterns = filter.as_ref().and_then(|filter| filter.attribute_patterns.as_ref());
+    let pagination_view = index_scheduler.list_dynamic_search_rules(
+        q.as_deref(),
+        active,
+        attribute_patterns,
+        offset,
+        limit,
+    )?;
 
     Ok(HttpResponse::Ok().json(pagination_view))
 }

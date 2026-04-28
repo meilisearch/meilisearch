@@ -469,6 +469,7 @@ ImmutableWebhookUuid                           , InvalidRequest       , BAD_REQU
 ImmutableWebhookIsEditable                     , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleOffset                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleLimit                  , InvalidRequest       , BAD_REQUEST ;
+InvalidDynamicSearchRuleQuery                  , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleFilter                 , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRuleDescription            , InvalidRequest       , BAD_REQUEST ;
 InvalidDynamicSearchRulePriority               , InvalidRequest       , BAD_REQUEST ;
