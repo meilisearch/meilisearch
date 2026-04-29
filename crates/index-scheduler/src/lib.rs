@@ -52,6 +52,7 @@ use std::time::Duration;
 
 use byte_unit::Byte;
 use dump::Dump;
+pub use dynamic_search_rules::DynamicSearchRulePaginationView;
 pub use error::Error;
 pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
@@ -73,7 +74,6 @@ use meilisearch_types::milli::vector::{
 use meilisearch_types::milli::{self, AttributePatterns, Index};
 use meilisearch_types::network::route::Status;
 use meilisearch_types::network::{Network, RemoteAvailability};
-use meilisearch_types::pagination::PaginationView;
 use meilisearch_types::task_view::TaskView;
 use meilisearch_types::tasks::network::{
     DbTaskNetwork, NetworkTopologyChange, Origin, TaskNetwork,
@@ -1177,7 +1177,7 @@ impl IndexScheduler {
         attribute_patterns: Option<&AttributePatterns>,
         offset: usize,
         limit: usize,
-    ) -> Result<PaginationView<DynamicSearchRule>> {
+    ) -> Result<DynamicSearchRulePaginationView> {
         self.dynamic_search_rules.list(query, active, attribute_patterns, offset, limit)
     }
 
