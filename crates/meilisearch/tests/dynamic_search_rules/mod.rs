@@ -259,6 +259,173 @@ async fn list_filters_by_active_and_combines_filters() {
 }
 
 #[actix_web::test]
+async fn list_searches_rules() {
+    let server = dynamic_search_rules_server().await;
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "black-friday",
+            json!({
+                "description": "Black Friday products campaign",
+                "conditions": [
+                    { "scope": "query", "contains": "winter boots" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "indexUid": "products", "id": "black-friday-doc" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "summer-sale",
+            json!({
+                "description": "Summer footwear campaign",
+                "conditions": [
+                    { "scope": "query", "contains": "sandals" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "indexUid": "products", "id": "summer-sale-doc" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "movie-night",
+            json!({
+                "description": "Movie night campaign",
+                "conditions": [
+                    { "scope": "query", "contains": "batman" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "indexUid": "movies", "id": "movie-night-doc" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (value, code) = server.list_dynamic_search_rules_with(json!({ "q": "black" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "black-friday",
+          "description": "Black Friday products campaign",
+          "active": true,
+          "conditions": [
+            {
+              "scope": "query",
+              "contains": "winter boots"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "products",
+                "id": "black-friday-doc"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "#);
+
+    let (value, code) = server.list_dynamic_search_rules_with(json!({ "q": "sandals" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "summer-sale",
+          "description": "Summer footwear campaign",
+          "active": true,
+          "conditions": [
+            {
+              "scope": "query",
+              "contains": "sandals"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "products",
+                "id": "summer-sale-doc"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "#);
+
+    let (value, code) = server.list_dynamic_search_rules_with(json!({ "q": "movies" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "movie-night",
+          "description": "Movie night campaign",
+          "active": true,
+          "conditions": [
+            {
+              "scope": "query",
+              "contains": "batman"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "movies",
+                "id": "movie-night-doc"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "#);
+}
+
+#[actix_web::test]
 async fn create_and_get() {
     let server = dynamic_search_rules_server().await;
 
