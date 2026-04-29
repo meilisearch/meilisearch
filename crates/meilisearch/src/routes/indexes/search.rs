@@ -641,10 +641,8 @@ pub(crate) async fn search(
             _ => ResponseError::from(err),
         })?;
 
-        let rtxn = index.read_txn()?;
         let search_kind =
-            search_kind(&query, &index_scheduler, index_uid.to_string(), &index, &rtxn)?;
-        drop(rtxn);
+            search_kind(&query, &index_scheduler, index_uid.to_string(), &index, None)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
         let progress_clone = progress.clone();
@@ -800,7 +798,7 @@ pub fn search_kind(
     index_scheduler: &IndexScheduler,
     index_uid: String,
     index: &milli::Index,
-    rtxn: &milli::heed::RoTxn,
+    rtxn: Option<&milli::heed::RoTxn>,
 ) -> Result<SearchKind, ResponseError> {
     let is_placeholder_query =
         if let Some(q) = query.q.as_deref() { q.trim().is_empty() } else { true };

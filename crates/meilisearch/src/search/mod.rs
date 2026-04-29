@@ -713,7 +713,7 @@ impl SearchKind {
         index_scheduler: &index_scheduler::IndexScheduler,
         index_uid: String,
         index: &Index,
-        rtxn: &RoTxn,
+        rtxn: Option<&RoTxn>,
         embedder_name: &str,
         vector_len: Option<usize>,
     ) -> Result<Self, ResponseError> {
@@ -733,7 +733,7 @@ impl SearchKind {
         index_scheduler: &index_scheduler::IndexScheduler,
         index_uid: String,
         index: &Index,
-        rtxn: &RoTxn,
+        rtxn: Option<&RoTxn>,
         embedder_name: &str,
         semantic_ratio: f32,
         vector_len: Option<usize>,
@@ -754,12 +754,18 @@ impl SearchKind {
         index_scheduler: &index_scheduler::IndexScheduler,
         index_uid: String,
         index: &Index,
-        rtxn: &RoTxn,
+        rtxn: Option<&RoTxn>,
         embedder_name: &str,
         vector_len: Option<usize>,
         route: Route,
     ) -> Result<(String, Arc<Embedder>, bool), ResponseError> {
-        let embedder_configs = index.embedding_configs().embedding_configs(rtxn)?;
+        let embedder_configs = match rtxn {
+            Some(rtxn) => index.embedding_configs().embedding_configs(rtxn)?,
+            None => {
+                let rtxn = index.read_txn()?;
+                index.embedding_configs().embedding_configs(&rtxn)?
+            }
+        };
         let embedders = index_scheduler.embedders(index_uid, embedder_configs)?;
 
         let (embedder, quantized) = embedders
@@ -2562,7 +2568,7 @@ pub fn perform_similar(
         index_scheduler,
         index_uid.to_string(),
         &index,
-        &rtxn,
+        Some(&rtxn),
         &embedder,
         None,
         Route::Similar,

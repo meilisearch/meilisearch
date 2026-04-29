@@ -1392,7 +1392,7 @@ impl SearchByIndex {
                     &params.index_scheduler,
                     index_uid.to_string(),
                     &index,
-                    &rtxn,
+                    Some(&rtxn),
                 )?;
 
                 let canonicalization_kind = match (&search_kind, &query.q) {
