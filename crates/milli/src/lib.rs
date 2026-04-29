@@ -189,6 +189,16 @@ impl Deadline {
         }
     }
 
+    /// Returns the tighter of this deadline and the provided `other` instant.
+    ///
+    /// If this `Deadline` is bounded, the earlier of the two instants is returned;
+    /// otherwise (`Deadline::never()`) `other` is returned. This lets callers compose
+    /// a parent search budget with a local fallback without reaching into the
+    /// `Deadline`'s internal representation.
+    pub fn min_with(&self, other: std::time::Instant) -> std::time::Instant {
+        self.deadline.map_or(other, |d| d.min(other))
+    }
+
     #[cfg(test)]
     pub fn with_stop_after(mut self, stop_after: usize) -> Self {
         use std::sync::atomic::AtomicUsize;

@@ -1623,6 +1623,11 @@ pub fn fuse_filters(left: Option<Value>, right: Option<Value>) -> Option<Value> 
     }
 }
 
+/// Hard upper bound on the time spent computing a semantic-only query
+/// embedding. Acts as a safety net when the search cutoff is unbounded
+/// (`Deadline::never()`); otherwise the parent cutoff is honored.
+const SEMANTIC_EMBED_HARD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(10);
+
 #[allow(clippy::too_many_arguments)]
 pub fn prepare_search<'t>(
     index: &'t Index,
@@ -1638,7 +1643,7 @@ pub fn prepare_search<'t>(
         features.check_multimodal("passing `media` in a search query")?;
     }
     let mut search = index.search(rtxn, progress);
-    search.deadline(deadline);
+    search.deadline(deadline.clone());
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
     }
@@ -1661,7 +1666,9 @@ pub fn prepare_search<'t>(
                     let span = tracing::trace_span!(target: "search::vector", "embed_one");
                     let _entered = span.enter();
 
-                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                    // Honor the search cutoff while keeping a hard fallback for unbounded deadlines.
+                    let embed_deadline = deadline
+                        .min_with(std::time::Instant::now() + SEMANTIC_EMBED_HARD_DEADLINE);
 
                     let q = query.q.as_deref();
                     let media = query.media.as_ref();
@@ -1672,7 +1679,7 @@ pub fn prepare_search<'t>(
                     };
 
                     embedder
-                        .embed_search(search_query, Some(deadline))
+                        .embed_search(search_query, Some(embed_deadline))
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }
