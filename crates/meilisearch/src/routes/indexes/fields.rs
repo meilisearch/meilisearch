@@ -57,13 +57,15 @@ impl<'a> Field<'a> {
 
         Field {
             name,
-            displayed: FieldDisplayConfig { enabled: metadata.displayed },
-            searchable: FieldSearchConfig { enabled: metadata.searchable.is_some() },
-            sortable: FieldSortableConfig { enabled: metadata.sortable },
-            distinct: FieldDistinctConfig { enabled: metadata.distinct },
+            displayed: FieldDisplayConfig { enabled: metadata.displayed == PatternMatch::Match },
+            searchable: FieldSearchConfig {
+                enabled: metadata.is_searchable() == PatternMatch::Match,
+            },
+            sortable: FieldSortableConfig { enabled: metadata.sortable == PatternMatch::Match },
+            distinct: FieldDistinctConfig { enabled: metadata.distinct == PatternMatch::Match },
             ranking_rule: FieldRankingRuleConfig {
-                enabled: metadata.is_asc_desc(),
-                order: metadata.asc_desc,
+                enabled: metadata.is_asc_desc() == PatternMatch::Match,
+                order: metadata.asc_desc.1,
             },
             filterable: FieldFilterableConfig {
                 enabled: is_filterable,

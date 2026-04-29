@@ -17,7 +17,7 @@ use crate::update::index_documents::helpers::{
     MergeDeladdBtreesetString, MergeDeladdCboRoaringBitmaps,
 };
 use crate::update::settings::{InnerIndexSettings, InnerIndexSettingsDiff};
-use crate::{FieldId, Result, MAX_FACET_VALUE_LENGTH};
+use crate::{FieldId, PatternMatch, Result, MAX_FACET_VALUE_LENGTH};
 
 /// Extracts the facet string and the documents ids where this facet string appear.
 ///
@@ -91,7 +91,7 @@ fn extract_facet_string_docids_document_update<R: io::Read + io::Seek>(
             unreachable!("metadata not found for field_id: {}", field_id)
         };
 
-        if !metadata.is_faceted(&settings.filterable_attributes_rules) {
+        if metadata.is_faceted(&settings.filterable_attributes_rules) != PatternMatch::Match {
             continue;
         }
 
