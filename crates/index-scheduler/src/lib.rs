@@ -1337,8 +1337,10 @@ pub struct IndexStats {
     /// Whether this index is currently performing indexation, according to the scheduler.
     pub is_indexing: bool,
     /// Internal stats computed from the index.
-    pub inner_stats: index_mapper::IndexStats,
+    pub inner_stats: InnerIndexStats,
 }
+
+pub use index_mapper::IndexStats as InnerIndexStats;
 
 /// These structure are not meant to be exposed to the end user, if needed, use the meilisearch-types::webhooks structure instead.
 /// /!\ Everytime you deserialize this structure you should fill the cli_webhook later on with the `with_cli` method. /!\
