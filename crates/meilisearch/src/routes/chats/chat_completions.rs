@@ -351,7 +351,7 @@ async fn process_search_request(
         add_search_rules(&mut query.filter, search_rules);
     }
     let search_kind =
-        search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index)?;
+        search_kind(&query, index_scheduler.get_ref(), index_uid.to_string(), &index, &rtxn)?;
 
     progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
     let permit = search_queue.try_get_search_permit().await?;

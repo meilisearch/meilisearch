@@ -1387,8 +1387,13 @@ impl SearchByIndex {
         for QueryByIndex { query, weight, query_index, filter } in queries {
             // use an immediately invoked lambda to capture the result without returning from the function
             let res: Result<(), ResponseError> = (|| {
-                let search_kind =
-                    search_kind(&query, &params.index_scheduler, index_uid.to_string(), &index)?;
+                let search_kind = search_kind(
+                    &query,
+                    &params.index_scheduler,
+                    index_uid.to_string(),
+                    &index,
+                    &rtxn,
+                )?;
 
                 let canonicalization_kind = match (&search_kind, &query.q) {
                     (SearchKind::SemanticOnly { .. }, _) => {
