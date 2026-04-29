@@ -693,20 +693,35 @@ fn parse_foreign_operator(input: Span, depth: usize) -> IResult<FilterCondition>
     Ok((input, FilterCondition::Foreign { fid, op: op.into() }))
 }
 
+/// Parse the common framing of a `_geo*(..)` filter function: optional leading
+/// whitespace, the literal name, then the parenthesized body parsed by `body`.
+/// If the name matches but the body fails, the error is promoted to a failure
+/// with the provided `kind` so the caller doesn't need to repeat the pattern.
+fn parse_geo_function<'a, F, T>(
+    input: Span<'a>,
+    name: &'static str,
+    kind: ErrorKind<'a>,
+    body: F,
+) -> IResult<'a, T>
+where
+    F: FnMut(Span<'a>) -> IResult<'a, T>,
+{
+    // we want to allow space BEFORE the function name but not after
+    let (input, _) = tuple((multispace0, word_exact(name)))(input)?;
+
+    // if we were able to parse the name and can't parse the rest of the input we return a failure
+    delimited(char('('), body, char(')'))(input).map_cut(kind)
+}
+
 /// geoRadius      = WS* "_geoRadius(float WS* "," WS* float WS* "," WS* float)
 /// If we parse `_geoRadius` we MUST parse the rest of the expression.
 fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
-    // we want to allow space BEFORE the _geoRadius but not after
-
-    let (input, _) = tuple((multispace0, word_exact("_geoRadius")))(input)?;
-
-    // if we were able to parse `_geoRadius` and can't parse the rest of the input we return a failure
-
-    let parsed =
-        delimited(char('('), separated_list1(tag(","), ws(recognize_float)), char(')'))(input)
-            .map_cut(ErrorKind::GeoRadius);
-
-    let (input, args) = parsed?;
+    let (input, args) = parse_geo_function(
+        input,
+        "_geoRadius",
+        ErrorKind::GeoRadius,
+        separated_list1(tag(","), ws(recognize_float)),
+    )?;
 
     if !(3..=4).contains(&args.len()) {
         return Err(Error::failure_from_kind(
@@ -727,21 +742,15 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
 /// geoBoundingBox      = WS* "_geoBoundingBox([float WS* "," WS* float WS* "], [float WS* "," WS* float WS* "]")
 /// If we parse `_geoBoundingBox` we MUST parse the rest of the expression.
 fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
-    // we want to allow space BEFORE the _geoBoundingBox but not after
-
-    let (input, _) = tuple((multispace0, word_exact("_geoBoundingBox")))(input)?;
-
-    // if we were able to parse `_geoBoundingBox` and can't parse the rest of the input we return a failure
-
-    let (input, args) = delimited(
-        char('('),
+    let (input, args) = parse_geo_function(
+        input,
+        "_geoBoundingBox",
+        ErrorKind::GeoBoundingBox,
         separated_list1(
             tag(","),
             ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
         ),
-        char(')'),
-    )(input)
-    .map_cut(ErrorKind::GeoBoundingBox)?;
+    )?;
 
     if args.len() != 2 {
         return Err(Error::failure_from_kind(input.into(), ErrorKind::GeoBoundingBox));
@@ -765,21 +774,18 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
 /// geoPolygon     = "_geoPolygon([[" WS* float WS* "," WS* float WS* "],+])"
 /// If we parse `_geoPolygon` we MUST parse the rest of the expression.
 fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
-    // we want to allow space BEFORE the _geoPolygon but not after
-
-    let (input, _) = tuple((multispace0, word_exact("_geoPolygon")))(input)?;
-
-    // if we were able to parse `_geoPolygon` and can't parse the rest of the input we return a failure
-
-    let (input, args): (_, Vec<Vec<LocatedSpan<_, _>>>) = delimited(
-        char('('),
-        separated_list1(
-            tag(","),
-            ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
+    let (input, args): (_, Vec<Vec<LocatedSpan<_, _>>>) = parse_geo_function(
+        input,
+        "_geoPolygon",
+        ErrorKind::GeoPolygon,
+        terminated(
+            separated_list1(
+                tag(","),
+                ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
+            ),
+            opt(ws(char(','))), // Tolerate trailing comma
         ),
-        preceded(opt(ws(char(','))), char(')')), // Tolerate trailing comma
-    )(input)
-    .map_cut(ErrorKind::GeoPolygon)?;
+    )?;
 
     if args.len() < 3 {
         let context = args.last().and_then(|a| a.last()).unwrap_or(&input);
