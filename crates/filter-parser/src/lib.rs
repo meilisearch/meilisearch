@@ -696,32 +696,34 @@ fn parse_foreign_operator(input: Span, depth: usize) -> IResult<FilterCondition>
 /// Parse the common framing of a `_geo*(..)` filter function: optional leading
 /// whitespace, the literal name, then the parenthesized body parsed by `body`.
 /// If the name matches but the body fails, the error is promoted to a failure
-/// with the provided `kind` so the caller doesn't need to repeat the pattern.
+/// with the kind produced by `kind` so the caller doesn't need to repeat the
+/// pattern. `kind` is a function pointer so the returned parser can be called
+/// repeatedly (e.g. inside `alt`).
 fn parse_geo_function<'a, F, T>(
-    input: Span<'a>,
     name: &'static str,
-    kind: ErrorKind<'a>,
-    body: F,
-) -> IResult<'a, T>
+    kind: fn() -> ErrorKind<'static>,
+    mut body: F,
+) -> impl FnMut(Span<'a>) -> IResult<'a, T>
 where
     F: FnMut(Span<'a>) -> IResult<'a, T>,
 {
-    // we want to allow space BEFORE the function name but not after
-    let (input, _) = tuple((multispace0, word_exact(name)))(input)?;
+    move |input: Span<'a>| {
+        // we want to allow space BEFORE the function name but not after
+        let (input, _) = tuple((multispace0, word_exact(name)))(input)?;
 
-    // if we were able to parse the name and can't parse the rest of the input we return a failure
-    delimited(char('('), body, char(')'))(input).map_cut(kind)
+        // if we were able to parse the name and can't parse the rest of the input we return a failure
+        delimited(char('('), &mut body, char(')'))(input).map_cut(kind())
+    }
 }
 
 /// geoRadius      = WS* "_geoRadius(float WS* "," WS* float WS* "," WS* float)
 /// If we parse `_geoRadius` we MUST parse the rest of the expression.
 fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
     let (input, args) = parse_geo_function(
-        input,
         "_geoRadius",
-        ErrorKind::GeoRadius,
+        || ErrorKind::GeoRadius,
         separated_list1(tag(","), ws(recognize_float)),
-    )?;
+    )(input)?;
 
     if !(3..=4).contains(&args.len()) {
         return Err(Error::failure_from_kind(
@@ -743,14 +745,13 @@ fn parse_geo_radius(input: Span) -> IResult<FilterCondition> {
 /// If we parse `_geoBoundingBox` we MUST parse the rest of the expression.
 fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
     let (input, args) = parse_geo_function(
-        input,
         "_geoBoundingBox",
-        ErrorKind::GeoBoundingBox,
+        || ErrorKind::GeoBoundingBox,
         separated_list1(
             tag(","),
             ws(delimited(char('['), separated_list1(tag(","), ws(recognize_float)), char(']'))),
         ),
-    )?;
+    )(input)?;
 
     if args.len() != 2 {
         return Err(Error::failure_from_kind(input.into(), ErrorKind::GeoBoundingBox));
@@ -775,9 +776,8 @@ fn parse_geo_bounding_box(input: Span) -> IResult<FilterCondition> {
 /// If we parse `_geoPolygon` we MUST parse the rest of the expression.
 fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
     let (input, args): (_, Vec<Vec<LocatedSpan<_, _>>>) = parse_geo_function(
-        input,
         "_geoPolygon",
-        ErrorKind::GeoPolygon,
+        || ErrorKind::GeoPolygon,
         terminated(
             separated_list1(
                 tag(","),
@@ -785,7 +785,7 @@ fn parse_geo_polygon(input: Span) -> IResult<FilterCondition> {
             ),
             opt(ws(char(','))), // Tolerate trailing comma
         ),
-    )?;
+    )(input)?;
 
     if args.len() < 3 {
         let context = args.last().and_then(|a| a.last()).unwrap_or(&input);
