@@ -14,7 +14,6 @@ use meilisearch_types::milli::{
     self, AttributePatterns, CreateOrOpen, FieldsIdsMap, FilterableAttributesRule, IndexFilter,
     PatternMatch,
 };
-use meilisearch_types::pagination::PaginationView;
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -176,6 +175,13 @@ struct ActivationCtx<'a> {
     now: OffsetDateTime,
 }
 
+pub struct DynamicSearchRulePaginationView {
+    pub results: Vec<DynamicSearchRule>,
+    pub offset: usize,
+    pub limit: usize,
+    pub total: usize,
+}
+
 fn matches_attribute_patterns(
     rule: &DynamicSearchRule,
     attribute_patterns: Option<&AttributePatterns>,
@@ -191,7 +197,7 @@ fn paginate_rules(
     attribute_patterns: Option<&AttributePatterns>,
     offset: usize,
     limit: usize,
-) -> PaginationView<DynamicSearchRule> {
+) -> DynamicSearchRulePaginationView {
     let limit = limit.min(DYNAMIC_SEARCH_RULES_MAX_LIMIT);
     let mut total = 0;
     let mut results = Vec::with_capacity(limit);
@@ -210,7 +216,7 @@ fn paginate_rules(
         total += 1;
     }
 
-    PaginationView::new(offset, limit, total, results)
+    DynamicSearchRulePaginationView { results, offset, limit, total }
 }
 
 fn parse_filter(filter: &str) -> Result<IndexFilter<'_>> {
@@ -427,7 +433,7 @@ impl DynamicSearchRulesStore {
         attribute_patterns: Option<&AttributePatterns>,
         offset: usize,
         limit: usize,
-    ) -> Result<PaginationView<DynamicSearchRule>> {
+    ) -> Result<DynamicSearchRulePaginationView> {
         let query = query.filter(|query| !query.trim().is_empty());
         let rtxn = self.index.read_txn()?;
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
@@ -439,7 +445,12 @@ impl DynamicSearchRulesStore {
                 let rules =
                     self.load_rules_from_docids(&rtxn, &fields, result.documents_ids, None)?;
 
-                return Ok(PaginationView::new(offset, limit, total, rules));
+                return Ok(DynamicSearchRulePaginationView {
+                    results: rules,
+                    offset,
+                    limit,
+                    total,
+                });
             }
 
             // attribute patterns are applied after milli search, so pagination must be

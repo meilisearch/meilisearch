@@ -225,13 +225,14 @@ async fn list_rules(
     let ListRules { q, offset, limit, filter } = body.0;
     let active = filter.as_ref().and_then(|filter| filter.active);
     let attribute_patterns = filter.as_ref().and_then(|filter| filter.attribute_patterns.as_ref());
-    let pagination_view = index_scheduler.list_dynamic_search_rules(
+    let page = index_scheduler.list_dynamic_search_rules(
         q.as_deref(),
         active,
         attribute_patterns,
         offset,
         limit,
     )?;
+    let pagination_view = PaginationView::new(page.offset, page.limit, page.total, page.results);
 
     Ok(HttpResponse::Ok().json(pagination_view))
 }
