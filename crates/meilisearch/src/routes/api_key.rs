@@ -140,7 +140,7 @@ impl ListApiKeys {
                         "updatedAt": "2021-11-12T10:00:00Z"
                     }
                 ],
-                "limit": 20,
+                "limit": 3,
                 "offset": 0,
                 "total": 1
             }
