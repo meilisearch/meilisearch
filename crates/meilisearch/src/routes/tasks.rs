@@ -184,8 +184,8 @@ impl TaskDeletionOrCancelationQuery {
 #[deserr(error = DeserrQueryParamError, rename_all = camelCase, deny_unknown_fields)]
 #[into_params(rename_all = "camelCase", parameter_in = Query)]
 pub struct TaskDeletionOrCancelationQuery {
-    /// Permits to filter tasks by their uid. By default, when the `uids` query
-    /// parameter is not set, all task uids are returned. It's possible to
+    /// Permits to select tasks by their uid. When the `uids` query
+    /// parameter is set to `*`, all task uids included. It's possible to
     /// specify several uids by separating them with the `,` character.
     #[deserr(default, error = DeserrQueryParamError<InvalidTaskUids>)]
     #[param(required = false, value_type = Option<Vec<u32>>, example = json!([231, 423, 598]))]
