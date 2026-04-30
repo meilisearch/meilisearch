@@ -1,9 +1,15 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::env::VarError;
+use std::io;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
+use futures::channel::oneshot;
+use futures::future::Shared;
+use futures::FutureExt;
+use hashbrown::HashSet;
 use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
 use meilisearch_types::milli::{CreateOrOpen, Index, Result};
 use time::OffsetDateTime;
@@ -12,6 +18,9 @@ use uuid::Uuid;
 use super::IndexStatus::{self, Available, BeingDeleted, Closing, Missing};
 use crate::clamp_to_page_size;
 use crate::lru::{InsertionOutcome, LruMap};
+
+type IndexTransferCompletion = Shared<oneshot::Receiver<Result<(), Arc<io::Error>>>>;
+
 /// Keep an internally consistent view of the open indexes in memory.
 ///
 /// This view is made of an LRU cache that will evict the least frequently used indexes when new indexes are opened.
@@ -30,7 +39,17 @@ pub struct IndexMap {
     /// or because they are being closed.
     ///
     /// If they are being deleted, the UUID points to `None`.
-    unavailable: BTreeMap<Uuid, Option<ClosingIndex>>,
+    unavailable: LruMap<Uuid, ClosingIndex>,
+    /// A set of indexes that have been deleted.
+    deleting: HashSet<Uuid>,
+
+    /// The set of indexes that are currently being uploaded and downloaded.
+    ///
+    /// One must wait for the upload to complete before opening an index that is being uploaded.
+    /// Note that opening it after the upload has completed will block until the **download** completes.
+    ///
+    /// One must wait for the download to complete before opening an index that is being downloaded.
+    transferring: HashMap<Uuid, IndexTransferCompletion>,
 
     /// A monotonically increasing generation number, used to differentiate between multiple successive index closing requests.
     ///
@@ -45,6 +64,12 @@ pub struct IndexMap {
     /// closing request was made, so the reader that "lost the race" has the old generation and will need to wait again for the index
     /// to close.
     generation: usize,
+}
+
+#[derive(Clone)]
+pub enum TransferState {
+    Downloading(IndexTransferCompletion),
+    Uploading(IndexTransferCompletion),
 }
 
 #[derive(Clone)]
@@ -98,8 +123,8 @@ impl ReopenableIndex {
     /// | Closing         | Available or Closing depending on generation |
     /// | Available       | Available                                    |
     ///
-    pub fn reopen(self, map: &mut IndexMap, path: &Path) -> Result<()> {
-        if let Closing(reopen) = map.get(&self.uuid) {
+    pub async fn reopen(self, map: &mut IndexMap, path: &Path) -> Result<()> {
+        if let Closing(reopen) = map.get(&self.uuid).await {
             if reopen.generation != self.generation {
                 return Ok(());
             }
@@ -111,7 +136,8 @@ impl ReopenableIndex {
                 self.enable_mdb_writemap,
                 self.map_size,
                 CreateOrOpen::Open,
-            )?;
+            )
+            .await?;
         }
         Ok(())
     }
@@ -129,8 +155,8 @@ impl ReopenableIndex {
     /// | BeingDeleted    | BeingDeleted                               |
     /// | Closing         | Missing or Closing depending on generation |
     /// | Available       | Available                                  |
-    pub fn close(self, map: &mut IndexMap) {
-        if let Closing(reopen) = map.get(&self.uuid) {
+    pub async fn close(self, map: &mut IndexMap) {
+        if let Closing(reopen) = map.get(&self.uuid).await {
             if reopen.generation != self.generation {
                 return;
             }
@@ -140,29 +166,52 @@ impl ReopenableIndex {
 }
 
 impl IndexMap {
-    pub fn new(cap: usize) -> IndexMap {
-        Self { unavailable: Default::default(), available: LruMap::new(cap), generation: 0 }
+    /// Creates a new `IndexMap` with the specified number of opened and on-disk indexes.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `on_disk_cap` is smaller than `opened_cap`.
+    pub fn new(opened_cap: usize, on_disk_cap: usize) -> IndexMap {
+        let unavailable = match on_disk_cap.checked_sub(opened_cap) {
+            Some(unavailable) => unavailable,
+            None => panic!(
+                "on-disk capacity ({on_disk_cap}) must be greater than or equal to opened capacity ({opened_cap})"
+            ),
+        };
+
+        Self {
+            available: LruMap::new(opened_cap),
+            unavailable: LruMap::new(unavailable),
+            deleting: HashSet::default(),
+            transferring: HashMap::default(),
+            generation: 0,
+        }
     }
 
     /// Gets the current status of an index in the map.
     ///
     /// If the index is available it can be accessed from the returned status.
-    pub fn get(&self, uuid: &Uuid) -> IndexStatus {
-        self.available
-            .get(uuid)
-            .map(|index| Available(index.clone()))
-            .unwrap_or_else(|| self.get_unavailable(uuid))
+    pub async fn get(&self, uuid: &Uuid) -> IndexStatus {
+        match self.available.get(uuid) {
+            Some(index) => Available(index.clone()),
+            None => self.get_unavailable(uuid).await,
+        }
     }
 
-    fn get_unavailable(&self, uuid: &Uuid) -> IndexStatus {
+    async fn get_unavailable(&self, uuid: &Uuid) -> IndexStatus {
         match self.unavailable.get(uuid) {
-            Some(Some(reopen)) => Closing(reopen.clone()),
-            Some(None) => BeingDeleted,
-            None => Missing,
+            Some(reopen) => Closing(reopen.clone()),
+            None if self.deleting.get(uuid).is_some() => BeingDeleted,
+            None => match self.transferring.get(uuid) {
+                Some(_) => todo!(),
+                None => Missing,
+            },
         }
     }
 
     /// Attempts to create a new index that wasn't existing before.
+    ///
+    /// None is returned if the index is being transferred.
     ///
     /// # Status table
     ///
@@ -173,7 +222,7 @@ impl IndexMap {
     /// | Closing         | panics     |
     /// | Available       | panics     |
     ///
-    pub fn create(
+    pub async fn create(
         &mut self,
         uuid: &Uuid,
         path: &Path,
@@ -181,12 +230,35 @@ impl IndexMap {
         enable_mdb_writemap: bool,
         map_size: usize,
         create_or_open: CreateOrOpen,
-    ) -> Result<Index> {
-        if !matches!(self.get_unavailable(uuid), Missing) {
+    ) -> Result<Option<Index>> {
+        if !matches!(self.get_unavailable(uuid).await, Missing) {
+            // The index could be in the transferring state, right?
             panic!("Attempt to open an index that was unavailable");
         }
-        let index =
-            create_or_open_index(path, date, enable_mdb_writemap, map_size, create_or_open)?;
+
+        let index = match create_or_open {
+            CreateOrOpen::Open => {
+                // 1. check if the index exists
+                // 2. if it does, open it;
+                // 3. if not, register a download task and wait for it to complete
+                //    Warning: we must NOT wait for the download to complete here
+                //    or we will block the entire index management system.
+                //    We *MUST* rather return immediately an async task that the
+                //    caller can await on. We can return an Either<Index, Shared<OneShot>>.
+                // 4. Once the download is complete, open the index
+                // 5. insert it in the available map
+                let (sender, receiver) = oneshot::channel();
+                todo!("Do the download");
+                let receiver = receiver.shared();
+                todo!("do not insert another transferring job if one is already in progress");
+                self.transferring.insert(*uuid, receiver.clone());
+                return Ok(None);
+            }
+            create_or_open @ CreateOrOpen::Create { .. } => {
+                create_or_open_index(path, date, enable_mdb_writemap, map_size, create_or_open)?
+            }
+        };
+
         match self.available.insert(*uuid, index.clone()) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
@@ -196,7 +268,8 @@ impl IndexMap {
                 panic!("Attempt to open an index that was already opened")
             }
         }
-        Ok(index)
+
+        Ok(Some(index))
     }
 
     /// Increases the current generation. See documentation for this field.
@@ -245,10 +318,20 @@ impl IndexMap {
         let map_size = index.map_size() + map_size_growth;
         let closing_event = index.prepare_for_closing();
         let generation = self.next_generation();
-        self.unavailable.insert(
-            uuid,
-            Some(ClosingIndex { uuid, closing_event, enable_mdb_writemap, map_size, generation }),
-        );
+        let closing_index =
+            ClosingIndex { uuid, closing_event, enable_mdb_writemap, map_size, generation };
+        match self.unavailable.insert(uuid, closing_index) {
+            InsertionOutcome::InsertedNew => (),
+            InsertionOutcome::Evicted(evicted_uuid, evicted_closing_index) => {
+                let (sender, receiver) = oneshot::channel();
+                // What should we do about the index being closed?
+                // Should I give the closing_event to the uploader?
+                // I think I don't care about the closing_event, right?
+                todo!("upload the index and delete it once the upload is successful");
+                self.transferring.insert(evicted_uuid, receiver.shared());
+            }
+            InsertionOutcome::Replaced(_) => unreachable!(),
+        }
     }
 
     /// Attempts to delete and index.
@@ -268,12 +351,12 @@ impl IndexMap {
         uuid: &Uuid,
     ) -> std::result::Result<Option<EnvClosingEvent>, Option<ClosingIndex>> {
         if let Some(index) = self.available.remove(uuid) {
-            self.unavailable.insert(*uuid, None);
+            self.deleting.insert(*uuid);
             return Ok(Some(index.prepare_for_closing()));
         }
         match self.unavailable.remove(uuid) {
-            Some(Some(reopen)) => Err(Some(reopen)),
-            Some(None) => Err(None),
+            Some(reopen) => Err(Some(reopen)),
+            None if self.deleting.contains(uuid) => Err(None),
             None => Ok(None),
         }
     }
@@ -295,11 +378,53 @@ impl IndexMap {
             self.available.get(uuid).is_none(),
             "Attempt to finish deletion of an index that was not being deleted"
         );
+        self.deleting.remove(uuid);
         // Do not panic if the index was Missing or BeingDeleted
         assert!(
-            !matches!(self.unavailable.remove(uuid), Some(Some(_))),
+            !matches!(self.unavailable.remove(uuid), Some(_)),
             "Attempt to finish deletion of an index that was being closed"
         );
+    }
+
+    /// Finishes the download of an index that is being transferred
+    /// and do not insert it anywhere. The caller will receive Missing
+    /// and will open the freshly downloaded index.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is not being transferred or the transfer a
+    /// copy of an `Arc` error is kept alive.
+    pub async fn end_downloading(&mut self, uuid: &Uuid) -> Result<(), io::Error> {
+        assert!(
+            self.available.get(uuid).is_none(),
+            "Attempt to finish the download of an available index"
+        );
+        match self.transferring.remove(uuid) {
+            Some(task) => {
+                // safety: we must be the last ones to get this error
+                task.await.unwrap().map_err(|err| Arc::into_inner(err).unwrap())
+            }
+            None => {
+                panic!("Attempt to finish the download of an index that is not being transferred")
+            }
+        }
+    }
+
+    // TBD we could probably merge this with `end_downloading`
+    pub async fn end_uploading(&mut self, uuid: &Uuid) -> Result<(), io::Error> {
+        assert!(
+            self.available.get(uuid).is_none(),
+            "Attempt to finish the download of an available index"
+        );
+        match self.transferring.remove(uuid) {
+            Some(task) => {
+                // safety: we must be the last ones to get this error
+                task.await.unwrap().map_err(|err| Arc::into_inner(err).unwrap())
+            }
+            None => {
+                panic!("Attempt to finish the download of an index that is not being transferred")
+            }
+        }
     }
 }
 
@@ -347,6 +472,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::super::IndexMapper;
+    use crate::index_mapper::index_map::ClosingIndex;
     use crate::test_utils::IndexSchedulerHandle;
     use crate::utils::clamp_to_page_size;
     use crate::IndexScheduler;
@@ -360,20 +486,22 @@ mod tests {
 
     fn check_first_unavailable(mapper: &IndexMapper, expected_uuid: Uuid, is_closing: bool) {
         let index_map = mapper.index_map.read().unwrap();
-        let (uuid, state) = index_map.unavailable.first_key_value().unwrap();
+        // let (uuid, state) = index_map.unavailable.first_key_value().unwrap();
+        let (uuid, state): (&Uuid, Option<ClosingIndex>) =
+            todo!("check the first key value another way with the LRU");
         assert_eq!(uuid, &expected_uuid);
         assert_eq!(state.is_some(), is_closing);
     }
 
-    #[test]
-    fn evict_indexes() {
+    #[tokio::test]
+    async fn evict_indexes() {
         let (mapper, env, _handle) = IndexMapper::test();
         let mut uuids = vec![];
         // LRU cap + 1
         for i in 0..(5 + 1) {
             let index_name = format!("index-{i}");
             let wtxn = env.write_txn().unwrap();
-            mapper.create_index(wtxn, &index_name, None, None).unwrap();
+            mapper.create_index(wtxn, &index_name, None, None).await.unwrap();
             let txn = env.read_txn().unwrap();
             uuids.push(mapper.index_mapping.get(&txn, &index_name).unwrap().unwrap());
         }
@@ -382,26 +510,29 @@ mod tests {
 
         // get back the evicted index
         let wtxn = env.write_txn().unwrap();
-        mapper.create_index(wtxn, "index-0", None, None).unwrap();
+        mapper.create_index(wtxn, "index-0", None, None).await.unwrap();
 
         // Least recently used is now index-1
         check_first_unavailable(&mapper, uuids[1], true);
     }
 
-    #[test]
-    fn resize_index() {
+    #[tokio::test]
+    async fn resize_index() {
         let (mapper, env, _handle) = IndexMapper::test();
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
+        let index =
+            mapper.create_index(env.write_txn().unwrap(), "index", None, None).await.unwrap();
         assert_index_size(index, mapper.index_base_map_size);
 
         mapper.resize_index(&env.read_txn().unwrap(), "index").unwrap();
 
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
+        let index =
+            mapper.create_index(env.write_txn().unwrap(), "index", None, None).await.unwrap();
         assert_index_size(index, mapper.index_base_map_size + mapper.index_growth_amount);
 
         mapper.resize_index(&env.read_txn().unwrap(), "index").unwrap();
 
-        let index = mapper.create_index(env.write_txn().unwrap(), "index", None, None).unwrap();
+        let index =
+            mapper.create_index(env.write_txn().unwrap(), "index", None, None).await.unwrap();
         assert_index_size(index, mapper.index_base_map_size + mapper.index_growth_amount * 2);
     }
 
