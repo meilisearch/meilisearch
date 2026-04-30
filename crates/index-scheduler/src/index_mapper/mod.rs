@@ -215,7 +215,7 @@ impl IndexMapper {
                 // Error if the UUIDv4 somehow already exists in the map, since it should be fresh.
                 // This is very unlikely to happen in practice.
                 // TODO: it would be better to lazily create the index. But we need an Index::open function for milli.
-                let index = self
+                let index = match self
                     .index_map
                     .write()
                     .unwrap()
@@ -228,7 +228,12 @@ impl IndexMapper {
                         CreateOrOpen::Create { shards },
                     )
                     .await
-                    .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
+                    .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?
+                {
+                    Some(index) => index,
+                    None => unreachable!("Index doesn't exist so must not be downloaded"),
+                };
+
                 let index_rtxn = index.read_txn()?;
                 let stats = crate::index_mapper::IndexStats::new(&index, &index_rtxn)
                     .map_err(|e| Error::from_milli(e, Some(name.to_string())))?;
@@ -461,7 +466,7 @@ impl IndexMapper {
                         Missing => {
                             let index_path = self.index_path(uuid);
 
-                            break index_map
+                            match index_map
                                 .create(
                                     &uuid,
                                     &index_path,
@@ -471,15 +476,15 @@ impl IndexMapper {
                                     CreateOrOpen::Open,
                                 )
                                 .await
-                                .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?;
-                        }
-                        Transferring(_) => {
-                            // awaiting the download/upload will be handled in the next loop operation
-                            continue;
+                                .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?
+                            {
+                                Some(index) => break index,
+                                None => continue,
+                            }
                         }
                         Available(index) => break index,
-                        Closing(_) => {
-                            // the reopening will be handled in the next loop operation
+                        Closing(_) | Transferring(_) => {
+                            // awaiting the download/upload or reopening will be handled in the next loop operation
                             continue;
                         }
                         BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),

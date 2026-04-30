@@ -18,6 +18,9 @@ use uuid::Uuid;
 use super::IndexStatus::{self, Available, BeingDeleted, Closing, Missing};
 use crate::clamp_to_page_size;
 use crate::lru::{InsertionOutcome, LruMap};
+
+type IndexTransferCompletion = Shared<oneshot::Receiver<Result<(), Arc<io::Error>>>>;
+
 /// Keep an internally consistent view of the open indexes in memory.
 ///
 /// This view is made of an LRU cache that will evict the least frequently used indexes when new indexes are opened.
@@ -46,7 +49,7 @@ pub struct IndexMap {
     /// Note that opening it after the upload has completed will block until the **download** completes.
     ///
     /// One must wait for the download to complete before opening an index that is being downloaded.
-    transferring: HashMap<Uuid, Shared<oneshot::Receiver<Result<(), Arc<io::Error>>>>>,
+    transferring: HashMap<Uuid, IndexTransferCompletion>,
 
     /// A monotonically increasing generation number, used to differentiate between multiple successive index closing requests.
     ///
@@ -65,8 +68,8 @@ pub struct IndexMap {
 
 #[derive(Clone)]
 pub enum TransferState {
-    Downloading(Shared<oneshot::Receiver<Result<(), Arc<io::Error>>>>),
-    Uploading(Shared<oneshot::Receiver<Result<(), Arc<io::Error>>>>),
+    Downloading(IndexTransferCompletion),
+    Uploading(IndexTransferCompletion),
 }
 
 #[derive(Clone)]
@@ -208,6 +211,8 @@ impl IndexMap {
 
     /// Attempts to create a new index that wasn't existing before.
     ///
+    /// None is returned if the index is being transferred.
+    ///
     /// # Status table
     ///
     /// | Previous Status | New Status |
@@ -225,12 +230,35 @@ impl IndexMap {
         enable_mdb_writemap: bool,
         map_size: usize,
         create_or_open: CreateOrOpen,
-    ) -> Result<Index> {
+    ) -> Result<Option<Index>> {
         if !matches!(self.get_unavailable(uuid).await, Missing) {
+            // The index could be in the transferring state, right?
             panic!("Attempt to open an index that was unavailable");
         }
-        let index =
-            create_or_open_index(path, date, enable_mdb_writemap, map_size, create_or_open)?;
+
+        let index = match create_or_open {
+            CreateOrOpen::Open => {
+                // 1. check if the index exists
+                // 2. if it does, open it;
+                // 3. if not, register a download task and wait for it to complete
+                //    Warning: we must NOT wait for the download to complete here
+                //    or we will block the entire index management system.
+                //    We *MUST* rather return immediately an async task that the
+                //    caller can await on. We can return an Either<Index, Shared<OneShot>>.
+                // 4. Once the download is complete, open the index
+                // 5. insert it in the available map
+                let (sender, receiver) = oneshot::channel();
+                todo!("Do the download");
+                let receiver = receiver.shared();
+                todo!("do not insert another transferring job if one is already in progress");
+                self.transferring.insert(*uuid, receiver.clone());
+                return Ok(None);
+            }
+            create_or_open @ CreateOrOpen::Create { .. } => {
+                create_or_open_index(path, date, enable_mdb_writemap, map_size, create_or_open)?
+            }
+        };
+
         match self.available.insert(*uuid, index.clone()) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
@@ -240,7 +268,8 @@ impl IndexMap {
                 panic!("Attempt to open an index that was already opened")
             }
         }
-        Ok(index)
+
+        Ok(Some(index))
     }
 
     /// Increases the current generation. See documentation for this field.
