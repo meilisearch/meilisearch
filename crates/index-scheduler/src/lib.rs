@@ -1184,9 +1184,10 @@ impl IndexScheduler {
     pub fn dynamic_search_rules_search_for_candidates(
         &self,
         query: Option<&str>,
+        filter: Option<&milli::IndexFilter<'_>>,
         index_uid: &str,
     ) -> Result<DynamicSearchRules> {
-        self.dynamic_search_rules.search_for_rule_candidates(query, index_uid)
+        self.dynamic_search_rules.search_for_rule_candidates(query, filter, index_uid)
     }
 
     pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {

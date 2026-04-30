@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
+use std::fmt;
 
 use deserr::{DeserializeError, Deserr, ErrorKind, ValuePointerRef};
+use milli::IndexFilter;
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
@@ -45,6 +47,7 @@ const fn default_dynamic_search_rule_active() -> bool {
     true
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, Eq, ToSchema)]
 #[deserr(tag = "scope", rename_all = camelCase, validate = validate_condition -> DeserrJsonError)]
 #[serde(tag = "scope", rename_all = "camelCase")]
@@ -78,6 +81,18 @@ pub enum Condition {
         )]
         #[deserr(default, try_from(Option<String>) = parse_optional_rfc3339_datetime -> ParseOffsetDateTimeError)]
         end: Option<OffsetDateTime>,
+    },
+
+    #[deserr(rename_all = camelCase)]
+    #[serde(rename_all = "camelCase")]
+    Filter {
+        #[schema(value_type = String)]
+        #[serde(
+            serialize_with = "serialize_index_filter",
+            deserialize_with = "deserialize_index_filter"
+        )]
+        #[deserr(try_from(String) = parse_index_filter -> ParseIndexFilterError)]
+        filter: IndexFilter<'static>,
     },
 }
 
@@ -126,9 +141,48 @@ fn validate_condition<E: DeserializeError>(
                 }
             }
         }
+
+        Condition::Filter { filter: _ } => {}
     }
 
     Ok(condition)
+}
+
+#[derive(Debug)]
+pub struct ParseIndexFilterError(pub String);
+
+impl fmt::Display for ParseIndexFilterError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+pub fn parse_index_filter(
+    expression: String,
+) -> Result<IndexFilter<'static>, ParseIndexFilterError> {
+    milli::parse_index_filter_unchecked(&expression)
+        .map(IndexFilter::into_owned)
+        .map_err(|e| ParseIndexFilterError(e.to_string()))
+}
+
+pub fn serialize_index_filter<S>(
+    filter: &IndexFilter<'static>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    let filter = milli::serialize_index_filter_to_filter_string(filter)
+        .map_err(serde::ser::Error::custom)?;
+    serializer.serialize_str(&filter)
+}
+
+pub fn deserialize_index_filter<'de, D>(deserializer: D) -> Result<IndexFilter<'static>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let expression = String::deserialize(deserializer)?;
+    parse_index_filter(expression).map_err(serde::de::Error::custom)
 }
 
 #[derive(Serialize, Deserialize, Deserr, Debug, Clone, PartialEq, ToSchema)]

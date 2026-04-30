@@ -3,7 +3,7 @@ use std::fmt::{Debug, Write as FmtWrite};
 use std::ops::Bound::{self, Excluded, Included, Unbounded};
 
 pub use filter_parser::Condition;
-use filter_parser::{IndexFilterCondition, VectorFilter};
+use filter_parser::{FilterCondition, IndexFilterCondition, VectorFilter};
 use heed::types::LazyDecode;
 use heed::BytesEncode;
 use memchr::memmem::Finder;
@@ -21,7 +21,7 @@ use crate::search::facet::facet_range_search::find_docids_of_facet_within_bounds
 use crate::search::facet::filter::{FilterError, MAX_FILTER_DEPTH};
 use crate::search::facet::BadGeoError;
 use crate::{
-    distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap,
+    distance_between_two_points, lat_lng_to_xyz, FieldId, FieldsIdsMap, Filter,
     FilterableAttributesFeatures, FilterableAttributesRule, Index, InternalError, Result,
     SerializationError, SHARD_FIELD,
 };
@@ -791,6 +791,59 @@ impl<'a> IndexFilter<'a> {
                 Ok(result)
             }
         }
+    }
+}
+
+pub fn parse_index_filter_unchecked(filter: &str) -> Result<IndexFilter<'_>> {
+    let filter = Filter::from_str(filter)?.expect("filter cannot be empty");
+
+    filter_into_index_filter_unchecked(filter)
+}
+
+/// Convert a vector of filters into a vector of index filters without evaluating the foreign filters
+///
+/// This function will not open any foreign index but will panic if a foreign filter is encountered.
+pub fn filter_into_index_filter_unchecked(filter: Filter<'_>) -> Result<IndexFilter<'_>> {
+    condition_to_index_condition(filter.condition, &mut |_| unreachable!())
+        .map(|condition| IndexFilter { condition })
+}
+
+pub fn condition_to_index_condition<'a, F>(
+    filter: FilterCondition<'a>,
+    foreign_filter: &mut F,
+) -> Result<IndexFilterCondition<'a>>
+where
+    F: FnMut(FilterCondition<'a>) -> Result<IndexFilterCondition<'a>>,
+{
+    match filter {
+        FilterCondition::Not(filter) => condition_to_index_condition(*filter, foreign_filter)
+            .map(Box::new)
+            .map(IndexFilterCondition::Not),
+        FilterCondition::Condition { fid, op } => Ok(IndexFilterCondition::Condition { fid, op }),
+        FilterCondition::In { fid, els } => Ok(IndexFilterCondition::In { fid, els }),
+        FilterCondition::Or(filters) => filters
+            .into_iter()
+            .map(|filter| condition_to_index_condition(filter, foreign_filter))
+            .collect::<Result<_>>()
+            .map(IndexFilterCondition::Or),
+
+        FilterCondition::And(filters) => filters
+            .into_iter()
+            .map(|filter| condition_to_index_condition(filter, foreign_filter))
+            .collect::<Result<_>>()
+            .map(IndexFilterCondition::And),
+
+        FilterCondition::VectorExists { fid, embedder, filter } => {
+            Ok(IndexFilterCondition::VectorExists { fid, embedder, filter })
+        }
+        FilterCondition::GeoLowerThan { point, radius, resolution } => {
+            Ok(IndexFilterCondition::GeoLowerThan { point, radius, resolution })
+        }
+        FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
+            Ok(IndexFilterCondition::GeoBoundingBox { top_right_point, bottom_left_point })
+        }
+        FilterCondition::GeoPolygon { points } => Ok(IndexFilterCondition::GeoPolygon { points }),
+        FilterCondition::Foreign { .. } => foreign_filter(filter),
     }
 }
 

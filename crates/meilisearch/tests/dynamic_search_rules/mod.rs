@@ -1006,6 +1006,91 @@ async fn search_applies_pins_when_query_contains_value() {
 }
 
 #[actix_web::test]
+async fn search_applies_pins_when_filter_matches_value() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) = index.update_settings(json!({ "filterableAttributes": ["brand"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "running shoes", "brand": "Nike" },
+                { "id": "filter-pin", "title": "Air Max", "brand": "Nike" },
+                { "id": "other-brand", "title": "running shoes", "brand": "Adidas" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "pin-when-filter-matches-brand",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "filter", "filter": "brand = Nike" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "filter-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+    snapshot!(json_string!(value["conditions"]), @r#"
+    [
+      {
+        "scope": "filter",
+        "filter": "'brand' = 'Nike'"
+      }
+    ]
+    "#);
+
+    let (value, code) = index.search_post(json!({ "q": "running", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "organic-match",
+        "title": "running shoes",
+        "brand": "Nike"
+      },
+      {
+        "id": "other-brand",
+        "title": "running shoes",
+        "brand": "Adidas"
+      }
+    ]
+    "#);
+
+    let (value, code) =
+        index.search_post(json!({ "q": "running", "filter": "brand = nike", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "filter-pin",
+        "title": "Air Max",
+        "brand": "Nike"
+      },
+      {
+        "id": "organic-match",
+        "title": "running shoes",
+        "brand": "Nike"
+      }
+    ]
+    "#);
+}
+
+#[actix_web::test]
 async fn search_applies_global_action_from_rule_with_other_index_action() {
     let server = dynamic_search_rules_server().await;
     let index = server.index("movies");

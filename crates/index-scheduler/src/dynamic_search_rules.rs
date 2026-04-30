@@ -11,17 +11,18 @@ use meilisearch_types::milli::index::PrefixSearch;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexerConfig};
 use meilisearch_types::milli::{
-    self, AttributePatterns, CreateOrOpen, FieldsIdsMap, FilterableAttributesRule, IndexFilter,
-    PatternMatch,
+    self, parse_index_filter_unchecked, AttributePatterns, CreateOrOpen, FieldsIdsMap,
+    FilterableAttributesRule, IndexFilter, IndexFilterCondition, PatternMatch,
 };
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env::VarError;
 use std::sync::Arc;
 use time::OffsetDateTime;
 
-const DSR_DIR_NAME: &str = "search_rules";
+const DYNAMIC_SEARCH_RULES_DIR_NAME: &str = "search_rules";
 const DYNAMIC_SEARCH_RULES_MAX_LIMIT: usize = 10_000;
 const GLOBAL_INDEX_UID_SENTINEL: &str = "__global__";
 
@@ -62,6 +63,7 @@ impl From<DbDynamicSearchRule> for DynamicSearchRule {
                     start_timestamp: _,
                     end_timestamp: _,
                 } => Condition::Time { start, end },
+                DbActivationCondition::Filter { filter } => Condition::Filter { filter },
             })
             .collect();
 
@@ -110,6 +112,7 @@ impl From<DynamicSearchRule> for DbDynamicSearchRule {
                     start_timestamp: start.map(OffsetDateTime::unix_timestamp),
                     end_timestamp: end.map(OffsetDateTime::unix_timestamp),
                 }),
+                Condition::Filter { filter } => Some(DbActivationCondition::Filter { filter }),
 
                 _ => None,
             })
@@ -133,6 +136,7 @@ impl From<DynamicSearchRule> for DbDynamicSearchRule {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DbActivationCondition {
@@ -163,6 +167,15 @@ pub enum DbActivationCondition {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         end_timestamp: Option<i64>,
     },
+
+    #[serde(rename_all = "camelCase")]
+    Filter {
+        #[serde(
+            serialize_with = "meilisearch_types::dynamic_search_rules::serialize_index_filter",
+            deserialize_with = "meilisearch_types::dynamic_search_rules::deserialize_index_filter"
+        )]
+        filter: IndexFilter<'static>,
+    },
 }
 
 fn dsr_milli_error(e: impl Into<milli::Error>) -> crate::error::Error {
@@ -172,6 +185,7 @@ fn dsr_milli_error(e: impl Into<milli::Error>) -> crate::error::Error {
 struct ActivationCtx<'a> {
     index_uid: &'a str,
     query: Option<&'a str>,
+    filter_set: FilterSet,
     now: OffsetDateTime,
 }
 
@@ -219,15 +233,318 @@ fn paginate_rules(
     DynamicSearchRulePaginationView { results, offset, limit, total }
 }
 
-fn parse_filter(filter: &str) -> Result<IndexFilter<'_>> {
-    let filter = milli::Filter::from_str(filter)
-        .expect("filter is manually created and always valid")
-        .unwrap();
+enum RuleFilterCondition {
+    // when conditions diverge
+    False,
+    Equal(String),
+    In(HashSet<String>),
+    Contains(String),
+    And(BTreeMap<String, RuleFilterAtom>),
+    Or(BTreeMap<String, RuleFilterAtom>),
+}
 
-    Ok(crate::filter::filters_into_index_filters_unchecked(vec![Some(filter)])?
-        .pop()
-        .flatten()
-        .expect("we always expect one filter"))
+struct RuleFilterAtom {
+    negated: bool,
+    condition: RuleFilterCondition,
+}
+
+enum FilterOp {
+    Or,
+    And,
+}
+
+#[derive(Default)]
+struct FilterSet {
+    // atoms: BTreeMap<String, RuleFilterAtom>,
+}
+
+impl FilterSet {
+    fn from(filter: &IndexFilter) -> Self {
+        struct State<'a> {
+            visited: bool,
+            negated: bool,
+            node: &'a IndexFilterCondition<'a>,
+        }
+
+        let mut this = FilterSet::default();
+        let mut result = vec![];
+        let mut parent_groups = vec![];
+        let mut current_op = FilterOp::Or;
+        let mut current = BTreeMap::<String, RuleFilterAtom>::new();
+        let mut stack = vec![State { visited: false, negated: false, node: &filter.condition }];
+
+        while let Some(mut item) = stack.pop() {
+            match item.node {
+                IndexFilterCondition::Not(inner) => {
+                    stack.push(State {
+                        visited: item.visited,
+                        negated: !item.negated,
+                        node: inner,
+                    });
+                }
+
+                IndexFilterCondition::Condition { fid, op } => match op {
+                    milli::Condition::Equal(token) | milli::Condition::NotEqual(token) => {
+                        if matches!(op, milli::Condition::NotEqual(_)) {
+                            item.negated = !item.negated;
+                        }
+
+                        let attribute = milli::normalize_facet(fid.fragment());
+
+                        let new = RuleFilterAtom {
+                            negated: item.negated,
+                            condition: RuleFilterCondition::Equal(milli::normalize_facet(
+                                token.fragment(),
+                            )),
+                        };
+
+                        match current.entry(attribute) {
+                            Entry::Vacant(entry) => {
+                                entry.insert(new);
+                            }
+
+                            Entry::Occupied(mut entry) => {
+                                let old = entry.get_mut();
+
+                                if matches!(current_op, FilterOp::Or) && old.negated == item.negated
+                                {
+                                    match (old.condition, new.condition) {
+                                        (
+                                            RuleFilterCondition::In(in_old),
+                                            RuleFilterCondition::In(in_new),
+                                        ) => {
+                                            let mut grouped = HashSet::new();
+                                            grouped.extend(in_old.iter().cloned());
+                                            grouped.extend(in_new.iter().cloned());
+
+                                            *old = RuleFilterAtom {
+                                                negated: item.negated,
+                                                condition: RuleFilterCondition::In(grouped),
+                                            }
+                                        }
+
+                                        (
+                                            RuleFilterCondition::In(values),
+                                            RuleFilterCondition::Equal(eq_value),
+                                        )
+                                        | (
+                                            RuleFilterCondition::Equal(eq_value),
+                                            RuleFilterCondition::In(values),
+                                        ) => {
+                                            let mut grouped = HashSet::new();
+                                            grouped.extend(values.iter().cloned());
+                                            grouped.insert(eq_value);
+
+                                            *old = RuleFilterAtom {
+                                                negated: item.negated,
+                                                condition: RuleFilterCondition::In(grouped),
+                                            }
+                                        }
+
+                                        // unsupported or doesn't make sense
+                                        _ => {
+                                            entry.insert(RuleFilterAtom {
+                                                negated: false,
+                                                condition: RuleFilterCondition::False,
+                                            });
+                                        }
+                                    }
+                                } else {
+                                    entry.insert(RuleFilterAtom {
+                                        negated: false,
+                                        condition: RuleFilterCondition::False,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
+                    _ => {}
+                },
+
+                IndexFilterCondition::In { fid, els } => {
+                    let attribute = milli::normalize_facet(fid.fragment());
+                    let mut in_new = HashSet::<String>::from_iter(
+                        els.iter().map(|e| milli::normalize_facet(e.fragment())),
+                    );
+
+                    match current.entry(attribute) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(RuleFilterAtom {
+                                negated: item.negated,
+                                condition: RuleFilterCondition::In(in_new),
+                            });
+                        }
+
+                        Entry::Occupied(mut entry) => {
+                            let old = entry.get_mut();
+
+                            if matches!(current_op, FilterOp::Or) && old.negated == item.negated {
+                                match old.condition {
+                                    RuleFilterCondition::In(in_old) => {
+                                        in_new.extend(in_old.iter().cloned());
+
+                                        *old = RuleFilterAtom {
+                                            negated: item.negated,
+                                            condition: RuleFilterCondition::In(in_new),
+                                        }
+                                    }
+
+                                    RuleFilterCondition::Equal(eq_value) => {
+                                        in_new.insert(eq_value);
+
+                                        *old = RuleFilterAtom {
+                                            negated: item.negated,
+                                            condition: RuleFilterCondition::In(in_new),
+                                        }
+                                    }
+
+                                    // unsupported or doesn't make sense
+                                    _ => {
+                                        entry.insert(RuleFilterAtom {
+                                            negated: false,
+                                            condition: RuleFilterCondition::False,
+                                        });
+                                    }
+                                }
+                            } else {
+                                entry.insert(RuleFilterAtom {
+                                    negated: false,
+                                    condition: RuleFilterCondition::False,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                IndexFilterCondition::Or(children) | IndexFilterCondition::And(children) => {
+                    if item.visited {
+                        if let Some(group) = parent_groups.pop() {
+                            match current_op {
+                                FilterOp::Or => result.push(RuleFilterCondition::Or(group)),
+                                FilterOp::And => result.push(RuleFilterCondition::And(group)),
+                            }
+                        }
+
+                        continue;
+                    }
+
+                    if matches!(item.node, IndexFilterCondition::Or(_)) {
+                        current_op = FilterOp::Or;
+                    } else {
+                        current_op = FilterOp::And;
+                    }
+
+                    if !current.is_empty() {
+                        parent_groups.push(current);
+                        current = BTreeMap::new();
+                    }
+
+                    item.visited = true;
+                    stack.push(item);
+                    for child in children {
+                        stack.push(State { visited: false, negated: item.negated, node: child });
+                    }
+                }
+
+                _ => {}
+            }
+        }
+
+        this
+    }
+
+    fn is_activated(&self, filter: &IndexFilter) -> bool {
+        struct State<'a> {
+            negated: bool,
+            condition: &'a IndexFilterCondition<'a>,
+        }
+
+        if self.atoms.is_empty() {
+            return false;
+        }
+
+        let mut stack = vec![State { negated: false, condition: &filter.condition }];
+
+        while let Some(item) = stack.pop() {
+            match item.condition {
+                IndexFilterCondition::Not(inner) => {
+                    stack.push(State { negated: !item.negated, condition: inner });
+                }
+
+                IndexFilterCondition::Condition { fid, op } => match op {
+                    milli::Condition::Equal(token) => {
+                        let normalized_token = milli::normalize_facet(token.fragment());
+
+                        if let Some(set) = self.atoms.get(fid.fragment()) {
+                            // like the NotEqual branch
+                            if item.negated
+                                && !set.included
+                                && set.values.contains(&normalized_token)
+                            {
+                                return true;
+                            }
+
+                            if !item.negated
+                                && set.included
+                                && set.values.contains(&normalized_token)
+                                || !set.included && !set.values.contains(&normalized_token)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+
+                    milli::Condition::NotEqual(token) => {
+                        let normalized_token = milli::normalize_facet(token.fragment());
+
+                        if let Some(set) = self.atoms.get(fid.fragment()) {
+                            // like the Equal branch
+                            if item.negated
+                                && set.included
+                                && set.values.contains(&normalized_token)
+                                || !set.included && !set.values.contains(&normalized_token)
+                            {
+                                return true;
+                            }
+
+                            if !item.negated
+                                && !set.included
+                                && set.values.contains(&normalized_token)
+                            {
+                                return true;
+                            }
+                        }
+                    }
+
+                    _ => {}
+                },
+
+                IndexFilterCondition::In { fid, els } => {
+                    if let Some(set) = self.atoms.get(fid.fragment()) {
+                        if !item.negated
+                            && set.included
+                            && els
+                                .iter()
+                                .any(|e| set.values.contains(&milli::normalize_facet(e.fragment())))
+                        {
+                            return true;
+                        }
+                    }
+                }
+
+                IndexFilterCondition::Or(children) | IndexFilterCondition::And(children) => {
+                    for child in children {
+                        stack.push(State { negated: item.negated, condition: child });
+                    }
+                }
+
+                _ => {}
+            }
+        }
+
+        false
+    }
 }
 
 #[derive(Clone)]
@@ -239,7 +556,7 @@ pub(crate) struct DynamicSearchRulesStore {
 
 impl DynamicSearchRulesStore {
     pub fn new(options: &IndexSchedulerOptions, budget: &IndexBudget) -> Result<Self> {
-        let dsr_db_path = options.indexes_path.join(DSR_DIR_NAME);
+        let dsr_db_path = options.indexes_path.join(DYNAMIC_SEARCH_RULES_DIR_NAME);
 
         std::fs::create_dir_all(&dsr_db_path)?;
 
@@ -285,6 +602,7 @@ impl DynamicSearchRulesStore {
             settings.set_searchable_fields(vec![
                 "description".to_string(),
                 "conditions.contains".to_string(),
+                "conditions.filter".to_string(),
                 "actions.selector.indexUid".to_string(),
             ]);
 
@@ -481,8 +799,8 @@ impl DynamicSearchRulesStore {
         search.query(query).offset(offset).limit(limit).exhaustive_number_hits(true);
         let expr = active.map(|active| format!("active = {active}"));
 
-        if let Some(filter) = expr.as_ref().map(|expr| parse_filter(expr)).transpose()? {
-            search.filter(filter);
+        if let Some(filter) = &expr {
+            search.filter(parse_index_filter_unchecked(filter).map_err(dsr_milli_error)?);
         }
 
         search.execute().map_err(dsr_milli_error)
@@ -491,9 +809,11 @@ impl DynamicSearchRulesStore {
     pub fn search_for_rule_candidates(
         &self,
         query: Option<&str>,
+        filter: Option<&IndexFilter<'_>>,
         index_uid: &str,
     ) -> Result<DynamicSearchRules> {
         let query = query.filter(|query| !query.trim().is_empty());
+        let filter_set = filter.map(FilterSet::from).unwrap_or_default();
         let rtxn = self.index.read_txn()?;
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
         let now = OffsetDateTime::now_utc();
@@ -528,21 +848,29 @@ impl DynamicSearchRulesStore {
             )?
         };
 
-        let universe =
-            docids_without_conditions | docids_with_time_window | docids_with_query_scope;
+        let docids_with_filter_scope = if filter.is_some() {
+            self.run_filter(&rtxn, &format!(r#"{base_filter} AND conditions.kind = "filter""#))?
+        } else {
+            RoaringBitmap::new()
+        };
+
+        let universe = docids_without_conditions
+            | docids_with_time_window
+            | docids_with_query_scope
+            | docids_with_filter_scope;
 
         let rules = self.load_rules_from_docids(
             &rtxn,
             &fields,
             universe,
-            Some(ActivationCtx { index_uid, query, now }),
+            Some(ActivationCtx { index_uid, query, filter_set, now }),
         )?;
 
         Ok(rules.into_iter().map(|rule| (rule.uid.clone(), rule)).collect())
     }
 
     fn run_filter(&self, rtxn: &RoTxn<'_>, filter: &str) -> Result<RoaringBitmap> {
-        let filter = Some(parse_filter(filter)?);
+        let filter = Some(parse_index_filter_unchecked(filter).map_err(dsr_milli_error)?);
         let set = milli::filtered_universe(&self.index, rtxn, &filter, &Progress::default())
             .map_err(dsr_milli_error)?;
 
@@ -602,6 +930,7 @@ impl DynamicSearchRulesStore {
                     &Condition::Time { start: Some(start), end: Some(end) } => {
                         start <= ctx.now && end >= ctx.now
                     }
+                    Condition::Filter { filter } => ctx.filter_set.is_activated(filter),
                 });
 
                 if !activated {

@@ -1,5 +1,7 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
+use meilisearch_types::milli::{condition_to_index_condition, filter_into_index_filter_unchecked};
 use meilisearch_types::{
     error::ResponseError,
     heed::RoTxn,
@@ -9,7 +11,6 @@ use meilisearch_types::{
     },
     Index,
 };
-use std::collections::HashMap;
 
 use crate::{Error, IndexScheduler, Result};
 
@@ -139,14 +140,13 @@ pub fn filters_into_index_filters<'a>(
                 })?;
 
             // convert inner foreign filter into an index filter, throw an error if there is a nested foreign filter
-            let index_filter = IndexFilter::from(condition_to_index_condition(*op, &mut |_| {
-                Err(Error::Milli {
-                    error: milli::Error::UserError(milli::UserError::InvalidFilter(
-                        "Nested foreign filters are not supported".to_string(),
-                    )),
-                    index_uid: Some(index_uid.as_ref().to_string()),
-                })
-            })?);
+            let index_filter = condition_to_index_condition(*op, &mut |_| {
+                Err(milli::Error::UserError(milli::UserError::InvalidFilter(
+                    "Nested foreign filters are not supported".to_string(),
+                )))
+            })
+            .map(IndexFilter::from)
+            .map_err(|err| Error::from_milli(err, Some(index_uid.as_ref().to_string())))?;
 
             // index_uid and foreign_index_uid are RCs and can be cloned safely
             foreign_filters.push((
@@ -234,6 +234,7 @@ pub fn filters_into_index_filters<'a>(
                 Ok(IndexFilterCondition::In { fid, els })
             })
             .map(|condition| Some(IndexFilter { condition }))
+            .map_err(|err| Error::from_milli(err, Some(_index_uid.as_ref().to_string())))
         })
         .collect()
 }
@@ -241,56 +242,18 @@ pub fn filters_into_index_filters<'a>(
 /// Convert a vector of filters into a vector of index filters without evaluating the foreign filters
 ///
 /// This function will not open any foreign index but will panic if a foreign filter is encountered.
-pub fn filters_into_index_filters_unchecked<'a>(
-    filters: Vec<Option<Filter<'a>>>,
-) -> Result<Vec<Option<IndexFilter<'a>>>> {
+pub fn filters_into_index_filters_unchecked(
+    filters: Vec<Option<Filter<'_>>>,
+) -> Result<Vec<Option<IndexFilter<'_>>>> {
     filters
         .into_iter()
         .map(|filter| {
             let Some(filter) = filter else { return Ok(None) };
-            condition_to_index_condition(filter.condition, &mut |_| unreachable!())
-                .map(|condition| Some(IndexFilter { condition }))
+            filter_into_index_filter_unchecked(filter)
+                .map(Some)
+                .map_err(|err| Error::from_milli(err, None))
         })
-        .collect::<Result<_>>()
-}
-
-fn condition_to_index_condition<'a, F>(
-    filter: FilterCondition<'a>,
-    foreign_filter: &mut F,
-) -> Result<IndexFilterCondition<'a>>
-where
-    F: FnMut(FilterCondition<'a>) -> Result<IndexFilterCondition<'a>>,
-{
-    match filter {
-        FilterCondition::Not(filter) => condition_to_index_condition(*filter, foreign_filter)
-            .map(Box::new)
-            .map(IndexFilterCondition::Not),
-        FilterCondition::Condition { fid, op } => Ok(IndexFilterCondition::Condition { fid, op }),
-        FilterCondition::In { fid, els } => Ok(IndexFilterCondition::In { fid, els }),
-        FilterCondition::Or(filters) => filters
-            .into_iter()
-            .map(|filter| condition_to_index_condition(filter, foreign_filter))
-            .collect::<Result<_>>()
-            .map(IndexFilterCondition::Or),
-
-        FilterCondition::And(filters) => filters
-            .into_iter()
-            .map(|filter| condition_to_index_condition(filter, foreign_filter))
-            .collect::<Result<_>>()
-            .map(IndexFilterCondition::And),
-
-        FilterCondition::VectorExists { fid, embedder, filter } => {
-            Ok(IndexFilterCondition::VectorExists { fid, embedder, filter })
-        }
-        FilterCondition::GeoLowerThan { point, radius, resolution } => {
-            Ok(IndexFilterCondition::GeoLowerThan { point, radius, resolution })
-        }
-        FilterCondition::GeoBoundingBox { top_right_point, bottom_left_point } => {
-            Ok(IndexFilterCondition::GeoBoundingBox { top_right_point, bottom_left_point })
-        }
-        FilterCondition::GeoPolygon { points } => Ok(IndexFilterCondition::GeoPolygon { points }),
-        FilterCondition::Foreign { .. } => foreign_filter(filter),
-    }
+        .collect()
 }
 
 /// Retrieve the foreign keys settings for a list of indexes

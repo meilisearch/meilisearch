@@ -7,6 +7,7 @@ use once_cell::sync::Lazy;
 use roaring::bitmap::RoaringBitmap;
 
 pub use self::facet::{
+    condition_to_index_condition, filter_into_index_filter_unchecked, parse_index_filter_unchecked,
     serialize_index_filter_to_filter_string, FacetDistribution, Filter, IndexFilter, OrderBy,
     DEFAULT_VALUES_PER_FACET,
 };
