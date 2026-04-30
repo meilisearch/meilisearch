@@ -1447,6 +1447,10 @@ impl SearchByIndex {
 
                 let retrieve_vectors = RetrieveVectors::new(query.retrieve_vectors);
 
+                let dynamic_search_rules_filter = filter
+                    .as_ref()
+                    .map(|filter| IndexFilter { condition: filter.condition.clone() });
+
                 let (mut search, _is_finite_pagination, _max_total_hits, _offset) = prepare_search(
                     &index,
                     &rtxn,
@@ -1468,6 +1472,7 @@ impl SearchByIndex {
                     let dynamic_search_rules =
                         params.index_scheduler.dynamic_search_rules_search_for_candidates(
                             query.q.as_deref(),
+                            dynamic_search_rules_filter.as_ref(),
                             &index_uid,
                         )?;
                     resolve_pins(&dynamic_search_rules, &index, &rtxn)?

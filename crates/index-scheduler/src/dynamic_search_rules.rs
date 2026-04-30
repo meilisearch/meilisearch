@@ -11,8 +11,8 @@ use meilisearch_types::milli::index::PrefixSearch;
 use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::{IndexDocumentsConfig, IndexerConfig};
 use meilisearch_types::milli::{
-    self, AttributePatterns, CreateOrOpen, FieldsIdsMap, FilterableAttributesRule, IndexFilter,
-    PatternMatch,
+    self, parse_index_filter_unchecked, AttributePatterns, CreateOrOpen, FieldsIdsMap,
+    FilterableAttributesRule, IndexFilter, IndexFilterCondition, PatternMatch,
 };
 use roaring::RoaringBitmap;
 use serde::{Deserialize, Serialize};
@@ -21,9 +21,13 @@ use std::env::VarError;
 use std::sync::Arc;
 use time::OffsetDateTime;
 
-const DSR_DIR_NAME: &str = "search_rules";
+const DYNAMIC_SEARCH_RULES_DIR_NAME: &str = "search_rules";
 const DYNAMIC_SEARCH_RULES_MAX_LIMIT: usize = 10_000;
-const GLOBAL_INDEX_UID_SENTINEL: &str = "__global__";
+const GLOBAL_INDEX_UID_SENTINEL: &str = "__meilisearch_dsr_global__";
+
+pub fn is_reserved_dynamic_search_rule_index_uid(index_uid: &str) -> bool {
+    index_uid == GLOBAL_INDEX_UID_SENTINEL
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -62,6 +66,9 @@ impl From<DbDynamicSearchRule> for DynamicSearchRule {
                     start_timestamp: _,
                     end_timestamp: _,
                 } => Condition::Time { start, end },
+                DbActivationCondition::Filter { filter, filter_facets: _ } => {
+                    Condition::Filter { filter }
+                }
             })
             .collect();
 
@@ -110,6 +117,10 @@ impl From<DynamicSearchRule> for DbDynamicSearchRule {
                     start_timestamp: start.map(OffsetDateTime::unix_timestamp),
                     end_timestamp: end.map(OffsetDateTime::unix_timestamp),
                 }),
+                Condition::Filter { filter } => {
+                    let filter_facets = FilterSet::from(&filter).collect_facets();
+                    Some(DbActivationCondition::Filter { filter, filter_facets })
+                }
 
                 _ => None,
             })
@@ -133,6 +144,7 @@ impl From<DynamicSearchRule> for DbDynamicSearchRule {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DbActivationCondition {
@@ -163,15 +175,41 @@ pub enum DbActivationCondition {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         end_timestamp: Option<i64>,
     },
+
+    #[serde(rename_all = "camelCase")]
+    Filter {
+        #[serde(
+            serialize_with = "meilisearch_types::dynamic_search_rules::serialize_index_filter",
+            deserialize_with = "meilisearch_types::dynamic_search_rules::deserialize_index_filter"
+        )]
+        filter: IndexFilter<'static>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        filter_facets: Vec<String>,
+    },
 }
 
 fn dsr_milli_error(e: impl Into<milli::Error>) -> crate::error::Error {
     crate::error::Error::from_milli(e.into(), Some("$search_rules".to_string()))
 }
 
+fn quote_filter_value(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for c in value.chars() {
+        match c {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            c => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
 struct ActivationCtx<'a> {
     index_uid: &'a str,
     query: Option<&'a str>,
+    filter_set: FilterSet,
     now: OffsetDateTime,
 }
 
@@ -198,7 +236,6 @@ fn paginate_rules(
     offset: usize,
     limit: usize,
 ) -> DynamicSearchRulePaginationView {
-    let limit = limit.min(DYNAMIC_SEARCH_RULES_MAX_LIMIT);
     let mut total = 0;
     let mut results = Vec::with_capacity(limit);
 
@@ -219,15 +256,248 @@ fn paginate_rules(
     DynamicSearchRulePaginationView { results, offset, limit, total }
 }
 
-fn parse_filter(filter: &str) -> Result<IndexFilter<'_>> {
-    let filter = milli::Filter::from_str(filter)
-        .expect("filter is manually created and always valid")
-        .unwrap();
+#[derive(Copy, Clone)]
+enum FilterOp {
+    Equal,
+    Contains,
+    In,
+    Or,
+    And,
+}
 
-    Ok(crate::filter::filters_into_index_filters_unchecked(vec![Some(filter)])?
-        .pop()
-        .flatten()
-        .expect("we always expect one filter"))
+enum FilterAst {
+    Ident(String),
+    // should be FilterAst but in this case, arrays only hold string value
+    // so no need for making the type more complicated than it needs to be
+    Array(HashSet<String>),
+    Binary { lhs: Box<FilterAst>, op: FilterOp, rhs: Box<FilterAst> },
+    Not(Box<FilterAst>),
+}
+
+impl FilterAst {
+    fn intersect(&self, other: &Self) -> bool {
+        match self {
+            Self::Binary { lhs, op, rhs } => match (lhs.as_ref(), op, rhs.as_ref()) {
+                (Self::Ident(attr), FilterOp::Equal, Self::Ident(value)) => {
+                    is_attr_value_included(attr, value, other)
+                }
+
+                (Self::Ident(attr), FilterOp::Contains, Self::Ident(value)) => {
+                    is_attr_value_contained(attr, value, other)
+                }
+
+                (Self::Ident(attr), FilterOp::In, Self::Array(values)) => {
+                    values.iter().any(|value| is_attr_value_included(attr, value, other))
+                }
+
+                (_, FilterOp::Or, _) => lhs.intersect(other) || rhs.intersect(other),
+
+                (_, FilterOp::And, _) => lhs.intersect(other) && rhs.intersect(other),
+
+                _ => false,
+            },
+
+            Self::Not(inner) => match other {
+                Self::Not(other_inner) => inner.intersect(other_inner),
+
+                Self::Binary { lhs, op: FilterOp::Or | FilterOp::And, rhs } => {
+                    self.intersect(lhs) || self.intersect(rhs)
+                }
+
+                _ => false,
+            },
+
+            _ => false,
+        }
+    }
+}
+
+fn is_attr_value_included(attr: &str, value: &str, other: &FilterAst) -> bool {
+    match other {
+        FilterAst::Binary { lhs, op, rhs } => match (lhs.as_ref(), op, rhs.as_ref()) {
+            (FilterAst::Ident(other_attr), FilterOp::Equal, FilterAst::Ident(other_value)) => {
+                attr == other_attr && value == other_value
+            }
+
+            (FilterAst::Ident(other_attr), FilterOp::Contains, FilterAst::Ident(other_value)) => {
+                attr == other_attr && other_value.contains(value)
+            }
+
+            (FilterAst::Ident(other_attr), FilterOp::In, FilterAst::Array(other_values)) => {
+                attr == other_attr && other_values.contains(value)
+            }
+
+            (_, FilterOp::Or | FilterOp::And, _) => {
+                is_attr_value_included(attr, value, lhs) || is_attr_value_included(attr, value, rhs)
+            }
+
+            _ => false,
+        },
+
+        _ => false,
+    }
+}
+
+fn is_attr_value_contained(attr: &str, value: &str, other: &FilterAst) -> bool {
+    match other {
+        FilterAst::Binary { lhs, op, rhs } => match (lhs.as_ref(), op, rhs.as_ref()) {
+            (FilterAst::Ident(other_attr), FilterOp::Equal, FilterAst::Ident(other_value)) => {
+                attr == other_attr && other_value.contains(value)
+            }
+
+            (FilterAst::Ident(other_attr), FilterOp::Contains, FilterAst::Ident(other_value)) => {
+                attr == other_attr && value == other_value
+            }
+
+            (FilterAst::Ident(other_attr), FilterOp::In, FilterAst::Array(other_values)) => {
+                attr == other_attr && other_values.iter().any(|v| v.contains(value))
+            }
+
+            (_, FilterOp::Or | FilterOp::And, _) => {
+                is_attr_value_contained(attr, value, lhs)
+                    || is_attr_value_contained(attr, value, rhs)
+            }
+
+            _ => false,
+        },
+
+        _ => false,
+    }
+}
+
+#[derive(Default)]
+struct FilterSet {
+    ast: Option<FilterAst>,
+}
+
+impl FilterSet {
+    fn from(filter: &IndexFilter) -> Self {
+        fn go(current: &IndexFilterCondition<'_>) -> Option<FilterAst> {
+            match current {
+                IndexFilterCondition::Not(inner) => go(inner).map(|r| FilterAst::Not(Box::new(r))),
+
+                IndexFilterCondition::Condition { fid, op } => match op {
+                    milli::Condition::Equal(token) => Some(FilterAst::Binary {
+                        lhs: Box::new(FilterAst::Ident(fid.fragment().to_string())),
+                        op: FilterOp::Equal,
+                        rhs: Box::new(FilterAst::Ident(milli::normalize_facet(token.fragment()))),
+                    }),
+
+                    milli::Condition::NotEqual(token) => {
+                        Some(FilterAst::Not(Box::new(FilterAst::Binary {
+                            lhs: Box::new(FilterAst::Ident(fid.fragment().to_string())),
+                            op: FilterOp::Equal,
+                            rhs: Box::new(FilterAst::Ident(milli::normalize_facet(
+                                token.fragment(),
+                            ))),
+                        })))
+                    }
+
+                    milli::Condition::Contains { word, .. } => Some(FilterAst::Binary {
+                        lhs: Box::new(FilterAst::Ident(fid.fragment().to_string())),
+                        op: FilterOp::Contains,
+                        rhs: Box::new(FilterAst::Ident(milli::normalize_facet(word.fragment()))),
+                    }),
+
+                    // unsupported for now
+                    _ => None,
+                },
+
+                IndexFilterCondition::In { fid, els } => Some(FilterAst::Binary {
+                    lhs: Box::new(FilterAst::Ident(fid.fragment().to_string())),
+                    op: FilterOp::In,
+                    rhs: Box::new(FilterAst::Array(
+                        els.iter().map(|t| milli::normalize_facet(t.fragment())).collect(),
+                    )),
+                }),
+
+                // OR/AND are left-associative
+                IndexFilterCondition::Or(children) | IndexFilterCondition::And(children) => {
+                    let [first, second, rest @ ..] = children.as_slice() else {
+                        unreachable!("or/and have at least 2 children")
+                    };
+
+                    let op = if matches!(current, IndexFilterCondition::And(_)) {
+                        FilterOp::And
+                    } else {
+                        FilterOp::Or
+                    };
+
+                    let mut binary = FilterAst::Binary {
+                        lhs: Box::new(go(first)?),
+                        op,
+                        rhs: Box::new(go(second)?),
+                    };
+
+                    for child in rest {
+                        binary = FilterAst::Binary {
+                            lhs: Box::new(binary),
+                            op,
+                            rhs: Box::new(go(child)?),
+                        };
+                    }
+
+                    Some(binary)
+                }
+
+                // unsupported
+                _ => None,
+            }
+        }
+
+        Self { ast: go(&filter.condition) }
+    }
+
+    fn intersect(&self, other: &Self) -> bool {
+        if let Some(this) = &self.ast {
+            if let Some(other) = &other.ast {
+                return this.intersect(other);
+            }
+
+            return false;
+        }
+
+        false
+    }
+
+    fn collect_facets(&self) -> Vec<String> {
+        fn go(ast: &FilterAst) -> Option<HashSet<String>> {
+            match ast {
+                FilterAst::Binary { lhs, op, rhs } => match (lhs.as_ref(), op, rhs.as_ref()) {
+                    (FilterAst::Ident(attr), FilterOp::Equal, FilterAst::Ident(value)) => {
+                        Some(HashSet::from_iter([format!("{attr}\\u0000{value}")]))
+                    }
+
+                    (FilterAst::Ident(attr), FilterOp::In, FilterAst::Array(values)) => {
+                        Some(values.iter().map(|v| format!("{attr}\\u0000{v}")).collect())
+                    }
+
+                    (_, FilterOp::Or, _) => {
+                        let mut acc = go(lhs)?;
+                        acc.extend(go(rhs)?);
+
+                        Some(acc)
+                    }
+
+                    (_, FilterOp::And, _) => match (go(lhs), go(rhs)) {
+                        (Some(mut lhs), Some(rhs)) => {
+                            lhs.extend(rhs);
+                            Some(lhs)
+                        }
+
+                        (Some(facets), None) | (None, Some(facets)) => Some(facets),
+                        _ => None,
+                    },
+
+                    _ => None,
+                },
+
+                _ => None,
+            }
+        }
+
+        self.ast.as_ref().and_then(go).unwrap_or_default().into_iter().collect()
+    }
 }
 
 #[derive(Clone)]
@@ -239,7 +509,7 @@ pub(crate) struct DynamicSearchRulesStore {
 
 impl DynamicSearchRulesStore {
     pub fn new(options: &IndexSchedulerOptions, budget: &IndexBudget) -> Result<Self> {
-        let dsr_db_path = options.indexes_path.join(DSR_DIR_NAME);
+        let dsr_db_path = options.indexes_path.join(DYNAMIC_SEARCH_RULES_DIR_NAME);
 
         std::fs::create_dir_all(&dsr_db_path)?;
 
@@ -285,6 +555,7 @@ impl DynamicSearchRulesStore {
             settings.set_searchable_fields(vec![
                 "description".to_string(),
                 "conditions.contains".to_string(),
+                "conditions.filter".to_string(),
                 "actions.selector.indexUid".to_string(),
             ]);
 
@@ -293,6 +564,7 @@ impl DynamicSearchRulesStore {
                 FilterableAttributesRule::Field("conditions.kind".to_string()),
                 FilterableAttributesRule::Field("conditions.startTimestamp".to_string()),
                 FilterableAttributesRule::Field("conditions.endTimestamp".to_string()),
+                FilterableAttributesRule::Field("conditions.filterFacets".to_string()),
                 FilterableAttributesRule::Field("actions.selector.indexUid".to_string()),
             ]);
 
@@ -434,6 +706,7 @@ impl DynamicSearchRulesStore {
         offset: usize,
         limit: usize,
     ) -> Result<DynamicSearchRulePaginationView> {
+        let limit = limit.min(DYNAMIC_SEARCH_RULES_MAX_LIMIT);
         let query = query.filter(|query| !query.trim().is_empty());
         let rtxn = self.index.read_txn()?;
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
@@ -481,8 +754,8 @@ impl DynamicSearchRulesStore {
         search.query(query).offset(offset).limit(limit).exhaustive_number_hits(true);
         let expr = active.map(|active| format!("active = {active}"));
 
-        if let Some(filter) = expr.as_ref().map(|expr| parse_filter(expr)).transpose()? {
-            search.filter(filter);
+        if let Some(filter) = &expr {
+            search.filter(parse_index_filter_unchecked(filter).map_err(dsr_milli_error)?);
         }
 
         search.execute().map_err(dsr_milli_error)
@@ -491,9 +764,11 @@ impl DynamicSearchRulesStore {
     pub fn search_for_rule_candidates(
         &self,
         query: Option<&str>,
+        filter: Option<&IndexFilter<'_>>,
         index_uid: &str,
     ) -> Result<DynamicSearchRules> {
         let query = query.filter(|query| !query.trim().is_empty());
+        let filter_set = filter.map(FilterSet::from).unwrap_or_default();
         let rtxn = self.index.read_txn()?;
         let fields = self.index.fields_ids_map(&rtxn).map_err(dsr_milli_error)?;
         let now = OffsetDateTime::now_utc();
@@ -528,21 +803,44 @@ impl DynamicSearchRulesStore {
             )?
         };
 
-        let universe =
-            docids_without_conditions | docids_with_time_window | docids_with_query_scope;
+        let docids_with_filter_scope = if filter.is_some() {
+            let filter_facets = filter_set.collect_facets();
+            if filter_facets.is_empty() {
+                self.run_filter(&rtxn, &format!(r#"{base_filter} AND conditions.kind = "filter""#))?
+            } else {
+                let filter_facets = filter_facets
+                    .iter()
+                    .map(|facet| quote_filter_value(facet))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                self.run_filter(
+                    &rtxn,
+                    &format!(
+                        r#"{base_filter} AND conditions.kind = "filter" AND (conditions.filterFacets IN [{filter_facets}] OR conditions.filterFacets NOT EXISTS)"#
+                    ),
+                )?
+            }
+        } else {
+            RoaringBitmap::new()
+        };
+
+        let universe = docids_without_conditions
+            | docids_with_time_window
+            | docids_with_query_scope
+            | docids_with_filter_scope;
 
         let rules = self.load_rules_from_docids(
             &rtxn,
             &fields,
             universe,
-            Some(ActivationCtx { index_uid, query, now }),
+            Some(ActivationCtx { index_uid, query, filter_set, now }),
         )?;
 
         Ok(rules.into_iter().map(|rule| (rule.uid.clone(), rule)).collect())
     }
 
     fn run_filter(&self, rtxn: &RoTxn<'_>, filter: &str) -> Result<RoaringBitmap> {
-        let filter = Some(parse_filter(filter)?);
+        let filter = Some(parse_index_filter_unchecked(filter).map_err(dsr_milli_error)?);
         let set = milli::filtered_universe(&self.index, rtxn, &filter, &Progress::default())
             .map_err(dsr_milli_error)?;
 
@@ -593,6 +891,8 @@ impl DynamicSearchRulesStore {
                         ctx.query.is_none() && *is_empty || ctx.query.is_some() && !*is_empty
                     }
                     Condition::Query { contains: Some(contains), .. } => {
+                        // Keep `contains` literal: DSR-index search would add token/prefix semantics
+                        // that differ from substring activation.
                         let normalized_contains = milli::normalize_facet(contains);
                         normalized_query.as_ref().is_some_and(|q| q.contains(&normalized_contains))
                     }
@@ -601,6 +901,9 @@ impl DynamicSearchRulesStore {
                     &Condition::Time { start: None, end: Some(end) } => end >= ctx.now,
                     &Condition::Time { start: Some(start), end: Some(end) } => {
                         start <= ctx.now && end >= ctx.now
+                    }
+                    Condition::Filter { filter } => {
+                        FilterSet::from(filter).intersect(&ctx.filter_set)
                     }
                 });
 

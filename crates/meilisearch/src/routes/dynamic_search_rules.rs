@@ -2,7 +2,7 @@ use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
-use index_scheduler::IndexScheduler;
+use index_scheduler::{is_reserved_dynamic_search_rule_index_uid, IndexScheduler};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::dynamic_search_rules::{Condition, DynamicSearchRule, RuleAction, RuleUid};
 use meilisearch_types::error::deserr_codes::{
@@ -110,6 +110,10 @@ enum DynamicSearchRulesError {
         "Cannot set an empty list of actions to a dynamic search rule.\n - Note: for rule `{0}`."
     )]
     EmptyActions(RuleUid),
+    #[error(
+        "Invalid value at `.actions[{index}].selector.indexUid`: `{index_uid}` is reserved and cannot be used as an index UID in dynamic search rule actions"
+    )]
+    ReservedActionIndexUid { index: usize, index_uid: String },
 }
 
 impl ErrorCode for DynamicSearchRulesError {
@@ -118,8 +122,25 @@ impl ErrorCode for DynamicSearchRulesError {
             DynamicSearchRulesError::NotFound(_) => Code::DynamicSearchRuleNotFound,
             DynamicSearchRulesError::CannotResetActions(_) => Code::InvalidDynamicSearchRuleActions,
             DynamicSearchRulesError::EmptyActions(_) => Code::InvalidDynamicSearchRuleActions,
+            DynamicSearchRulesError::ReservedActionIndexUid { .. } => {
+                Code::InvalidDynamicSearchRuleActions
+            }
         }
     }
+}
+
+fn validate_actions(actions: &[RuleAction]) -> Result<(), DynamicSearchRulesError> {
+    for (i, action) in actions.iter().enumerate() {
+        let Some(index_uid) = &action.selector.index_uid else { continue };
+        if is_reserved_dynamic_search_rule_index_uid(index_uid) {
+            return Err(DynamicSearchRulesError::ReservedActionIndexUid {
+                index: i,
+                index_uid: index_uid.to_string(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Serialize, Default)]
@@ -390,7 +411,10 @@ async fn update_or_create_rule(
         Setting::Set(new_actions) if new_actions.is_empty() => {
             return Err(DynamicSearchRulesError::EmptyActions(uid).into())
         }
-        Setting::Set(new_actions) => *actions = new_actions,
+        Setting::Set(new_actions) => {
+            validate_actions(&new_actions)?;
+            *actions = new_actions;
+        }
         Setting::Reset => return Err(DynamicSearchRulesError::CannotResetActions(uid).into()),
         Setting::NotSet if is_new => return Err(DynamicSearchRulesError::EmptyActions(uid).into()),
         Setting::NotSet => (),

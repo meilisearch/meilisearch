@@ -799,6 +799,34 @@ async fn create_missing_actions() {
 }
 
 #[actix_web::test]
+async fn create_rejects_reserved_action_index_uid() {
+    let server = dynamic_search_rules_server().await;
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "reserved-index-uid",
+            json!({
+                "actions": [
+                    {
+                        "selector": { "indexUid": "__meilisearch_dsr_global__", "id": "1" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(json_string!(value), @r#"
+    {
+      "message": "Invalid value at `.actions[0].selector.indexUid`: `__meilisearch_dsr_global__` is reserved and cannot be used as an index UID in dynamic search rule actions",
+      "code": "invalid_dynamic_search_rule_actions",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_dynamic_search_rule_actions"
+    }
+    "#);
+}
+
+#[actix_web::test]
 async fn create_empty_body() {
     let server = dynamic_search_rules_server().await;
 
@@ -1000,6 +1028,146 @@ async fn search_applies_pins_when_query_contains_value() {
       {
         "id": "local",
         "title": "Batman Returns"
+      }
+    ]
+    "#);
+}
+
+#[actix_web::test]
+async fn search_applies_pins_when_filter_matches_value() {
+    let server = dynamic_search_rules_server().await;
+    let (value, code) = server.set_features(json!({ "containsFilter": true })).await;
+    assert_eq!(code, 200, "{value}");
+    assert_eq!(value["containsFilter"], json!(true));
+
+    let index = server.index("products");
+
+    let (task, code) =
+        index.update_settings(json!({ "filterableAttributes": ["brand", "category"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "running shoes", "brand": "Nike", "category": "Shoes" },
+                { "id": "filter-pin", "title": "Air Max", "brand": "Nike", "category": "Shoes" },
+                { "id": "other-brand", "title": "running shoes", "brand": "Adidas", "category": "Shoes" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "pin-when-filter-matches-brand",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "filter", "filter": "brand = Nike" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "filter-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+    snapshot!(json_string!(value["conditions"]), @r#"
+    [
+      {
+        "scope": "filter",
+        "filter": "'brand' = 'Nike'"
+      }
+    ]
+    "#);
+
+    let (value, code) = index.search_post(json!({ "q": "running", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "organic-match",
+        "title": "running shoes",
+        "brand": "Nike",
+        "category": "Shoes"
+      },
+      {
+        "id": "other-brand",
+        "title": "running shoes",
+        "brand": "Adidas",
+        "category": "Shoes"
+      }
+    ]
+    "#);
+
+    let (value, code) =
+        index.search_post(json!({ "q": "running", "filter": "brand = nike", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "filter-pin",
+        "title": "Air Max",
+        "brand": "Nike",
+        "category": "Shoes"
+      },
+      {
+        "id": "organic-match",
+        "title": "running shoes",
+        "brand": "Nike",
+        "category": "Shoes"
+      }
+    ]
+    "#);
+
+    let (value, code) = index
+        .search_post(json!({ "q": "running", "filter": "brand CONTAINS nike", "limit": 10 }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "filter-pin",
+        "title": "Air Max",
+        "brand": "Nike",
+        "category": "Shoes"
+      },
+      {
+        "id": "organic-match",
+        "title": "running shoes",
+        "brand": "Nike",
+        "category": "Shoes"
+      }
+    ]
+    "#);
+
+    let (value, code) = index
+        .search_post(json!({
+            "q": "running",
+            "filter": "brand = nike AND category = shoes",
+            "limit": 10
+        }))
+        .await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "filter-pin",
+        "title": "Air Max",
+        "brand": "Nike",
+        "category": "Shoes"
+      },
+      {
+        "id": "organic-match",
+        "title": "running shoes",
+        "brand": "Nike",
+        "category": "Shoes"
       }
     ]
     "#);
