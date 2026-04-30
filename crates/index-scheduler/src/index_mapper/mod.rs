@@ -94,6 +94,9 @@ pub enum IndexStatus {
     /// Temporarily do not insert the index in the index map as it is currently being resized/evicted from the map.
     Closing(index_map::ClosingIndex),
     /// You can use the index without worrying about anything.
+    ///
+    /// If the index is being transferred (uploaded or downloaded),
+    /// it will be available after an await.
     Available(Index),
 }
 
@@ -171,7 +174,10 @@ impl IndexMapper {
         budget: IndexBudget,
     ) -> Result<Self> {
         Ok(Self {
-            index_map: Arc::new(RwLock::new(IndexMap::new(budget.index_count))),
+            index_map: Arc::new(RwLock::new(IndexMap::new(
+                2, // TBD available capacity
+                4, // TBD on-disk capacity
+            ))),
             index_mapping: env.create_database(wtxn, Some(db_name::INDEX_MAPPING))?,
             index_stats: env.create_database(wtxn, Some(db_name::INDEX_STATS))?,
             base_path: options.indexes_path.clone(),

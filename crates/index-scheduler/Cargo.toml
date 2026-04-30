@@ -24,6 +24,7 @@ dump = { path = "../dump" }
 enum-iterator = "2.3.0"
 file-store = { path = "../file-store" }
 flate2 = "1.1.5"
+futures = "0.3.32"
 hashbrown = "0.15.5"
 http-client = { path = "../http-client" }
 indexmap = "2.12.0"

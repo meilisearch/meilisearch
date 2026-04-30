@@ -1,9 +1,15 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::env::VarError;
+use std::io;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
+use futures::channel::oneshot;
+use futures::future::Shared;
+use futures::FutureExt;
+use hashbrown::HashSet;
 use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
 use meilisearch_types::milli::{CreateOrOpen, Index, Result};
 use time::OffsetDateTime;
@@ -30,7 +36,16 @@ pub struct IndexMap {
     /// or because they are being closed.
     ///
     /// If they are being deleted, the UUID points to `None`.
-    unavailable: BTreeMap<Uuid, Option<ClosingIndex>>,
+    unavailable: LruMap<Uuid, ClosingIndex>,
+    /// A set of indexes that have been deleted.
+    deleting: HashSet<Uuid>,
+    /// The set of indexes that are currently being uploaded and downloaded.
+    ///
+    /// One must wait for the upload to complete before opening an index that is being uploaded.
+    /// Note that opening it after the upload has completed will block until the **download** completes.
+    ///
+    /// One must wait for the download to complete before opening an index that is being downloaded.
+    transferring: HashMap<Uuid, Shared<oneshot::Receiver<Result<(), Arc<io::Error>>>>>,
 
     /// A monotonically increasing generation number, used to differentiate between multiple successive index closing requests.
     ///
@@ -140,8 +155,26 @@ impl ReopenableIndex {
 }
 
 impl IndexMap {
-    pub fn new(cap: usize) -> IndexMap {
-        Self { unavailable: Default::default(), available: LruMap::new(cap), generation: 0 }
+    /// Creates a new `IndexMap` with the specified number of opened and on-disk indexes.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `on_disk_cap` is smaller than `opened_cap`.
+    pub fn new(opened_cap: usize, on_disk_cap: usize) -> IndexMap {
+        let unavailable = match on_disk_cap.checked_sub(opened_cap) {
+            Some(unavailable) => unavailable,
+            None => panic!(
+                "on-disk capacity ({on_disk_cap}) must be greater than or equal to opened capacity ({opened_cap})"
+            ),
+        };
+
+        Self {
+            available: LruMap::new(opened_cap),
+            unavailable: LruMap::new(unavailable),
+            deleting: HashSet::default(),
+            transferring: HashMap::default(),
+            generation: 0,
+        }
     }
 
     /// Gets the current status of an index in the map.
@@ -155,9 +188,10 @@ impl IndexMap {
     }
 
     fn get_unavailable(&self, uuid: &Uuid) -> IndexStatus {
+        // TBD I think we need to use get_mut on the LRU map here
         match self.unavailable.get(uuid) {
-            Some(Some(reopen)) => Closing(reopen.clone()),
-            Some(None) => BeingDeleted,
+            Some(reopen) => Closing(reopen.clone()),
+            None if self.deleting.get(uuid).is_some() => BeingDeleted,
             None => Missing,
         }
     }
@@ -245,10 +279,20 @@ impl IndexMap {
         let map_size = index.map_size() + map_size_growth;
         let closing_event = index.prepare_for_closing();
         let generation = self.next_generation();
-        self.unavailable.insert(
-            uuid,
-            Some(ClosingIndex { uuid, closing_event, enable_mdb_writemap, map_size, generation }),
-        );
+        let closing_index =
+            ClosingIndex { uuid, closing_event, enable_mdb_writemap, map_size, generation };
+        match self.unavailable.insert(uuid, closing_index) {
+            InsertionOutcome::InsertedNew => (),
+            InsertionOutcome::Evicted(evicted_uuid, evicted_closing_index) => {
+                let (sender, receiver) = oneshot::channel();
+                // What should we do about the index being closed?
+                // Should I give the closing_event to the uploader?
+                // I think I don't care about the closing_event, right?
+                todo!("upload the index and delete it once the upload is successful");
+                self.transferring.insert(evicted_uuid, receiver.shared());
+            }
+            InsertionOutcome::Replaced(_) => unreachable!(),
+        }
     }
 
     /// Attempts to delete and index.
@@ -268,12 +312,12 @@ impl IndexMap {
         uuid: &Uuid,
     ) -> std::result::Result<Option<EnvClosingEvent>, Option<ClosingIndex>> {
         if let Some(index) = self.available.remove(uuid) {
-            self.unavailable.insert(*uuid, None);
+            self.deleting.insert(*uuid);
             return Ok(Some(index.prepare_for_closing()));
         }
         match self.unavailable.remove(uuid) {
-            Some(Some(reopen)) => Err(Some(reopen)),
-            Some(None) => Err(None),
+            Some(reopen) => Err(Some(reopen)),
+            None if self.deleting.contains(uuid) => Err(None),
             None => Ok(None),
         }
     }
@@ -295,9 +339,10 @@ impl IndexMap {
             self.available.get(uuid).is_none(),
             "Attempt to finish deletion of an index that was not being deleted"
         );
+        self.deleting.remove(uuid);
         // Do not panic if the index was Missing or BeingDeleted
         assert!(
-            !matches!(self.unavailable.remove(uuid), Some(Some(_))),
+            !matches!(self.unavailable.remove(uuid), Some(_)),
             "Attempt to finish deletion of an index that was being closed"
         );
     }
@@ -347,6 +392,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::super::IndexMapper;
+    use crate::index_mapper::index_map::ClosingIndex;
     use crate::test_utils::IndexSchedulerHandle;
     use crate::utils::clamp_to_page_size;
     use crate::IndexScheduler;
@@ -360,7 +406,9 @@ mod tests {
 
     fn check_first_unavailable(mapper: &IndexMapper, expected_uuid: Uuid, is_closing: bool) {
         let index_map = mapper.index_map.read().unwrap();
-        let (uuid, state) = index_map.unavailable.first_key_value().unwrap();
+        // let (uuid, state) = index_map.unavailable.first_key_value().unwrap();
+        let (uuid, state): (&Uuid, Option<ClosingIndex>) =
+            todo!("check the first key value another way with the LRU");
         assert_eq!(uuid, &expected_uuid);
         assert_eq!(state.is_some(), is_closing);
     }
