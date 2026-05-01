@@ -90,6 +90,7 @@ jobs:
         if: matrix.use_cross
         run: cargo install cross --locked
       - name: Build
+        shell: bash
         env:
           BUILD_TOOL: ${{ matrix.use_cross && 'cross' || 'cargo' }}
         run: $BUILD_TOOL build --release --locked ${{ matrix.feature-flag }} ${{ matrix.extra-args }}
