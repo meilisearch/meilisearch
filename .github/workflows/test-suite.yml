@@ -36,7 +36,7 @@ jobs:
       - name: Setup test with Rust stable
         uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
         with:
           key: ${{ matrix.features }}
       - name: Run cargo build without any default features
@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Run cargo build without any default features
         uses: actions-rs/cargo@v1
@@ -87,7 +87,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Run cargo build without any default features
         uses: actions-rs/cargo@v1
@@ -178,7 +178,7 @@ jobs:
       - name: Setup test with Rust stable
         uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo test
         uses: actions-rs/cargo@v1
         with:
@@ -221,7 +221,7 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Build
         run: cargo build --release --locked --target x86_64-unknown-linux-gnu
 
@@ -243,7 +243,7 @@ jobs:
         with:
           components: clippy
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo clippy
         uses: actions-rs/cargo@v1
         with:
@@ -265,7 +265,7 @@ jobs:
         with:
           components: rustfmt
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Run cargo fmt
         # Since we never ran the `build.rs` script in the benchmark directory we are missing one auto-generated import file.
         # Since we want to trigger (and fail) this action as fast as possible, instead of building the benchmark crate
@@ -289,7 +289,7 @@ jobs:
           sudo rm -rf "/usr/local/share/boost" || true
       - uses: dtolnay/rust-toolchain@1.91.1
       - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2.8.0
+        uses: Swatinem/rust-cache@v2.9.1
       - name: Run declarative tests
         run: |
           cargo xtask test workloads/tests/*.json
