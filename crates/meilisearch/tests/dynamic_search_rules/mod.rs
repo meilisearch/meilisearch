@@ -1,4 +1,6 @@
 use meili_snap::{json_string, snapshot};
+use time::format_description::well_known::Rfc3339;
+use time::{Duration, OffsetDateTime, UtcOffset};
 
 use crate::common::Server;
 use crate::json;
@@ -240,6 +242,173 @@ async fn list_filters_by_active_and_combines_filters() {
             {
               "selector": {
                 "id": "1"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "#);
+}
+
+#[actix_web::test]
+async fn list_searches_rules() {
+    let server = dynamic_search_rules_server().await;
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "black-friday",
+            json!({
+                "description": "Black Friday products campaign",
+                "conditions": [
+                    { "scope": "query", "contains": "winter boots" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "indexUid": "products", "id": "black-friday-doc" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "summer-sale",
+            json!({
+                "description": "Summer footwear campaign",
+                "conditions": [
+                    { "scope": "query", "contains": "sandals" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "indexUid": "products", "id": "summer-sale-doc" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "movie-night",
+            json!({
+                "description": "Movie night campaign",
+                "conditions": [
+                    { "scope": "query", "contains": "batman" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "indexUid": "movies", "id": "movie-night-doc" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (value, code) = server.list_dynamic_search_rules_with(json!({ "q": "black" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "black-friday",
+          "description": "Black Friday products campaign",
+          "active": true,
+          "conditions": [
+            {
+              "scope": "query",
+              "contains": "winter boots"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "products",
+                "id": "black-friday-doc"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "#);
+
+    let (value, code) = server.list_dynamic_search_rules_with(json!({ "q": "sandals" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "summer-sale",
+          "description": "Summer footwear campaign",
+          "active": true,
+          "conditions": [
+            {
+              "scope": "query",
+              "contains": "sandals"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "products",
+                "id": "summer-sale-doc"
+              },
+              "action": {
+                "type": "pin",
+                "position": 0
+              }
+            }
+          ]
+        }
+      ],
+      "offset": 0,
+      "limit": 20,
+      "total": 1
+    }
+    "#);
+
+    let (value, code) = server.list_dynamic_search_rules_with(json!({ "q": "movies" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value), @r#"
+    {
+      "results": [
+        {
+          "uid": "movie-night",
+          "description": "Movie night campaign",
+          "active": true,
+          "conditions": [
+            {
+              "scope": "query",
+              "contains": "batman"
+            }
+          ],
+          "actions": [
+            {
+              "selector": {
+                "indexUid": "movies",
+                "id": "movie-night-doc"
               },
               "action": {
                 "type": "pin",
@@ -830,6 +999,227 @@ async fn search_applies_pins_when_query_contains_value() {
       },
       {
         "id": "local",
+        "title": "Batman Returns"
+      }
+    ]
+    "#);
+}
+
+#[actix_web::test]
+async fn search_applies_pins_when_filter_matches_value() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("products");
+
+    let (task, code) = index.update_settings(json!({ "filterableAttributes": ["brand"] })).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "running shoes", "brand": "Nike" },
+                { "id": "filter-pin", "title": "Air Max", "brand": "Nike" },
+                { "id": "other-brand", "title": "running shoes", "brand": "Adidas" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "pin-when-filter-matches-brand",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "filter", "filter": "brand = Nike" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "filter-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+    snapshot!(json_string!(value["conditions"]), @r#"
+    [
+      {
+        "scope": "filter",
+        "filter": "'brand' = 'Nike'"
+      }
+    ]
+    "#);
+
+    let (value, code) = index.search_post(json!({ "q": "running", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "organic-match",
+        "title": "running shoes",
+        "brand": "Nike"
+      },
+      {
+        "id": "other-brand",
+        "title": "running shoes",
+        "brand": "Adidas"
+      }
+    ]
+    "#);
+
+    let (value, code) =
+        index.search_post(json!({ "q": "running", "filter": "brand = nike", "limit": 10 })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "filter-pin",
+        "title": "Air Max",
+        "brand": "Nike"
+      },
+      {
+        "id": "organic-match",
+        "title": "running shoes",
+        "brand": "Nike"
+      }
+    ]
+    "#);
+}
+
+#[actix_web::test]
+async fn search_applies_global_action_from_rule_with_other_index_action() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "Batman Returns" },
+                { "id": "global-pin", "title": "The Matrix" },
+                { "id": "products-pin", "title": "Pulp Fiction" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (_, code) = server
+        .create_dynamic_search_rule(
+            "mixed-global-and-products-actions",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "query", "contains": "returns" }
+                ],
+                "actions": [
+                    {
+                        "selector": { "indexUid": "products", "id": "products-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    },
+                    {
+                        "selector": { "id": "global-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    snapshot!(code, @"201 Created");
+
+    let (value, code) = index.search_post(json!({ "q": "Batman Returns" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "global-pin",
+        "title": "The Matrix"
+      },
+      {
+        "id": "organic-match",
+        "title": "Batman Returns"
+      }
+    ]
+    "#);
+}
+
+#[actix_web::test]
+async fn search_applies_only_rules_inside_the_current_time_window() {
+    let server = dynamic_search_rules_server().await;
+    let index = server.index("movies");
+    let now = OffsetDateTime::now_utc();
+    let offset = UtcOffset::from_hms(-4, 0, 0).unwrap();
+
+    let active_start = (now - Duration::days(1)).to_offset(offset).format(&Rfc3339).unwrap();
+    let active_end = (now + Duration::days(1)).to_offset(offset).format(&Rfc3339).unwrap();
+    let expired_start = (now - Duration::days(4)).to_offset(offset).format(&Rfc3339).unwrap();
+    let expired_end = (now - Duration::days(2)).to_offset(offset).format(&Rfc3339).unwrap();
+
+    let (task, code) = index
+        .add_documents(
+            json!([
+                { "id": "organic-match", "title": "Batman Returns" },
+                { "id": "active-window-pin", "title": "The Matrix" },
+                { "id": "expired-window-pin", "title": "Pulp Fiction" }
+            ]),
+            None,
+        )
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(task.uid()).await.succeeded();
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "pin-inside-window",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "time", "start": active_start, "end": active_end }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "active-window-pin" },
+                        "action": { "type": "pin", "position": 0 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    assert_eq!(code, 201, "{value}");
+
+    let (value, code) = server
+        .create_dynamic_search_rule(
+            "pin-outside-window",
+            json!({
+                "active": true,
+                "conditions": [
+                    { "scope": "time", "start": expired_start, "end": expired_end }
+                ],
+                "actions": [
+                    {
+                        "selector": { "id": "expired-window-pin" },
+                        "action": { "type": "pin", "position": 1 }
+                    }
+                ]
+            }),
+        )
+        .await;
+    assert_eq!(code, 201, "{value}");
+
+    let (value, code) = index.search_post(json!({ "q": "Batman Returns" })).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(value["hits"]), @r#"
+    [
+      {
+        "id": "active-window-pin",
+        "title": "The Matrix"
+      },
+      {
+        "id": "organic-match",
         "title": "Batman Returns"
       }
     ]

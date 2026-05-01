@@ -52,6 +52,7 @@ use std::time::Duration;
 
 use byte_unit::Byte;
 use dump::Dump;
+pub use dynamic_search_rules::DynamicSearchRulePaginationView;
 pub use error::Error;
 pub use features::RoFeatures;
 use flate2::bufread::GzEncoder;
@@ -70,7 +71,7 @@ use meilisearch_types::milli::vector::json_template::JsonTemplate;
 use meilisearch_types::milli::vector::{
     Embedder, EmbedderOptions, RuntimeEmbedder, RuntimeEmbedders, RuntimeFragment,
 };
-use meilisearch_types::milli::{self, Index};
+use meilisearch_types::milli::{self, AttributePatterns, Index};
 use meilisearch_types::network::route::Status;
 use meilisearch_types::network::{Network, RemoteAvailability};
 use meilisearch_types::task_view::TaskView;
@@ -278,7 +279,6 @@ impl IndexScheduler {
             + Queue::nb_db()
             + IndexMapper::nb_db()
             + features::FeatureData::nb_db()
-            + dynamic_search_rules::DynamicSearchRulesStore::nb_db()
             + 1 // chat-prompts
             + 1 // persisted
     }
@@ -344,7 +344,7 @@ impl IndexScheduler {
 
         let features = features::FeatureData::new(&env, &mut wtxn, options.instance_features)?;
         let dynamic_search_rules =
-            dynamic_search_rules::DynamicSearchRulesStore::new(&env, &mut wtxn)?;
+            dynamic_search_rules::DynamicSearchRulesStore::new(&options, &budget)?;
         let queue = Queue::new(&env, &mut wtxn, &options)?;
         let index_mapper = IndexMapper::new(&env, &mut wtxn, &options, budget)?;
         let chat_settings = env.create_database(&mut wtxn, Some(db_name::CHAT_SETTINGS))?;
@@ -1163,27 +1163,39 @@ impl IndexScheduler {
     }
 
     pub fn put_dynamic_search_rules(&self, rules: DynamicSearchRules) -> Result<()> {
-        let wtxn = self.env.write_txn().map_err(Error::HeedTransaction)?;
-        self.dynamic_search_rules.put(wtxn, rules)?;
-        Ok(())
+        self.dynamic_search_rules.put(rules)
     }
 
-    pub fn dynamic_search_rules(&self) -> Arc<DynamicSearchRules> {
+    pub fn dynamic_search_rules(&self) -> Result<DynamicSearchRules> {
         self.dynamic_search_rules.get()
     }
 
+    pub fn list_dynamic_search_rules(
+        &self,
+        query: Option<&str>,
+        active: Option<bool>,
+        attribute_patterns: Option<&AttributePatterns>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<DynamicSearchRulePaginationView> {
+        self.dynamic_search_rules.list(query, active, attribute_patterns, offset, limit)
+    }
+
+    pub fn dynamic_search_rules_search_for_candidates(
+        &self,
+        query: Option<&str>,
+        filter: Option<&milli::IndexFilter<'_>>,
+        index_uid: &str,
+    ) -> Result<DynamicSearchRules> {
+        self.dynamic_search_rules.search_for_rule_candidates(query, filter, index_uid)
+    }
+
     pub fn put_dynamic_search_rule(&self, rule: &DynamicSearchRule) -> Result<()> {
-        let mut wtxn = self.env.write_txn()?;
-        self.dynamic_search_rules.put_one(&mut wtxn, rule)?;
-        wtxn.commit()?;
-        Ok(())
+        self.dynamic_search_rules.put_one(rule)
     }
 
     pub fn delete_dynamic_search_rule(&self, uid: &RuleUid) -> Result<bool> {
-        let mut wtxn = self.env.write_txn()?;
-        let deleted = self.dynamic_search_rules.delete_one(&mut wtxn, uid)?;
-        wtxn.commit()?;
-        Ok(deleted)
+        self.dynamic_search_rules.delete_one(uid)
     }
 
     pub fn update_runtime_webhooks(&self, runtime: RuntimeWebhooks) -> Result<()> {
