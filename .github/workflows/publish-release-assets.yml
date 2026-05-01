@@ -96,7 +96,7 @@ jobs:
       # No need to upload binaries for dry run (cron or workflow_dispatch)
       - name: Upload binaries to release
         if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@2.11.2
+        uses: svenstaro/upload-release-action@2.11.5
         with:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: target/${{ matrix.binary_path }}
@@ -122,7 +122,7 @@ jobs:
       - name: Upload OpenAPI file to Release
         # No need to upload for dry run (cron or workflow_dispatch)
         if: github.event_name == 'release'
-        uses: svenstaro/upload-release-action@2.11.2
+        uses: svenstaro/upload-release-action@2.11.5
         with:
           repo_token: ${{ secrets.MEILI_BOT_GH_PAT }}
           file: ./meilisearch-openapi.json
