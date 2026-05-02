@@ -641,7 +641,8 @@ pub(crate) async fn search(
             _ => ResponseError::from(err),
         })?;
 
-        let search_kind = search_kind(&query, &index_scheduler, index_uid.to_string(), &index)?;
+        let search_kind =
+            search_kind(&query, &index_scheduler, index_uid.to_string(), &index, None)?;
         let retrieve_vector = RetrieveVectors::new(query.retrieve_vectors);
 
         let progress_clone = progress.clone();
@@ -797,6 +798,7 @@ pub fn search_kind(
     index_scheduler: &IndexScheduler,
     index_uid: String,
     index: &milli::Index,
+    rtxn: Option<&milli::heed::RoTxn>,
 ) -> Result<SearchKind, ResponseError> {
     let is_placeholder_query =
         if let Some(q) = query.q.as_deref() { q.trim().is_empty() } else { true };
@@ -818,21 +820,34 @@ pub fn search_kind(
         (false, false, _, None) => Ok(SearchKind::KeywordOnly),
         // hybrid S100 => semantic
         (_, _, Some(HybridQuery { semantic_ratio, embedder }), v) if **semantic_ratio == 1.0 => {
-            SearchKind::semantic(index_scheduler, index_uid, index, embedder, v.map(|v| v.len()))
+            SearchKind::semantic(
+                index_scheduler,
+                index_uid,
+                index,
+                rtxn,
+                embedder,
+                v.map(|v| v.len()),
+            )
         }
         // q + hybrid => hybrid
         (_, true, Some(HybridQuery { semantic_ratio, embedder }), v) => SearchKind::hybrid(
             index_scheduler,
             index_uid,
             index,
+            rtxn,
             embedder,
             **semantic_ratio,
             v.map(|v| v.len()),
         ),
         // !q + hybrid => semantic
-        (_, false, Some(HybridQuery { semantic_ratio: _, embedder }), v) => {
-            SearchKind::semantic(index_scheduler, index_uid, index, embedder, v.map(|v| v.len()))
-        }
+        (_, false, Some(HybridQuery { semantic_ratio: _, embedder }), v) => SearchKind::semantic(
+            index_scheduler,
+            index_uid,
+            index,
+            rtxn,
+            embedder,
+            v.map(|v| v.len()),
+        ),
         // q => keyword
         (false, true, None, None) => Ok(SearchKind::KeywordOnly),
     }

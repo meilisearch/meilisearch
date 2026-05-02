@@ -292,8 +292,13 @@ pub async fn search(
         let index = index_scheduler.index(&index_uid)?;
         let rtxn = index.read_txn()?;
         let deadline = index.search_deadline(&rtxn)?;
-        let search_kind =
-            search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
+        let search_kind = search_kind(
+            &search_query,
+            &index_scheduler,
+            index_uid.to_string(),
+            &index,
+            Some(&rtxn),
+        )?;
         let filter = match &search_query.filter {
             Some(filter) => {
                 let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
