@@ -55,7 +55,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ matrix.registry }}
           # Prevent `latest` to be updated for each new tag pushed.
@@ -173,7 +173,7 @@ jobs:
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ matrix.registry }}
           # Prevent `latest` to be updated for each new tag pushed.
