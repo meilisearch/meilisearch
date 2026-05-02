@@ -34,6 +34,8 @@ pub mod documents;
 pub mod facet_search;
 mod fields;
 pub use fields::{ListFields, ListFieldsFilter};
+pub mod render;
+mod render_analytics;
 pub mod search;
 mod search_analytics;
 #[cfg(test)]
@@ -53,6 +55,7 @@ mod similar_analytics;
         "/{index_uid}/settings" => sub(settings::SettingsApi),
         "/{index_uid}/compact" => sub(compact::CompactApi),
         "/{index_uid}/search" => sub(search::SearchApi),
+        "/{index_uid}/render" => sub(render::RenderApi),
         "/{index_uid}/stats" => get(get_index_stats),
         "/{index_uid}/fields" => post(fields::post_index_fields),
     ),

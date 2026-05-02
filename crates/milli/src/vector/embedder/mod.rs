@@ -76,7 +76,7 @@ pub enum EmbedderOptions {
 }
 
 impl EmbedderOptions {
-    pub fn fragment(&self, name: &str) -> Option<&serde_json::Value> {
+    pub fn indexing_fragment(&self, name: &str) -> Option<&serde_json::Value> {
         match &self {
             EmbedderOptions::HuggingFace(_)
             | EmbedderOptions::OpenAi(_)
@@ -90,6 +90,65 @@ impl EmbedderOptions {
                     embedder_options.indexing_fragments.get(name)
                 } else {
                     None
+                }
+            }
+        }
+    }
+
+    pub fn search_fragment(&self, name: &str) -> Option<&serde_json::Value> {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => None,
+            EmbedderOptions::Rest(embedder_options) => embedder_options.search_fragments.get(name),
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.search {
+                    embedder_options.search_fragments.get(name)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
+    pub fn indexing_fragments<'a>(&'a self) -> impl Iterator<Item = &'a str> + 'a {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => either::Left(std::iter::empty()),
+            EmbedderOptions::Rest(embedder_options) => either::Right(
+                embedder_options.indexing_fragments.keys().map(std::ops::Deref::deref),
+            ),
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.index {
+                    either::Right(
+                        embedder_options.indexing_fragments.keys().map(std::ops::Deref::deref),
+                    )
+                } else {
+                    either::Left(std::iter::empty())
+                }
+            }
+        }
+    }
+
+    pub fn search_fragments<'a>(&'a self) -> impl Iterator<Item = &'a str> + 'a {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_)
+            | EmbedderOptions::UserProvided(_) => either::Left(std::iter::empty()),
+            EmbedderOptions::Rest(embedder_options) => {
+                either::Right(embedder_options.search_fragments.keys().map(std::ops::Deref::deref))
+            }
+            EmbedderOptions::Composite(embedder_options) => {
+                if let SubEmbedderOptions::Rest(embedder_options) = &embedder_options.search {
+                    either::Right(
+                        embedder_options.search_fragments.keys().map(std::ops::Deref::deref),
+                    )
+                } else {
+                    either::Left(std::iter::empty())
                 }
             }
         }

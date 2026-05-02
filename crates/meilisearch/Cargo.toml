@@ -49,6 +49,7 @@ is-terminal = "0.4.17"
 itertools = "0.14.0"
 jsonwebtoken = { version = "10.3.0", features = ["rust_crypto"] }
 lazy_static = "1.5.0"
+liquid = "0.26.11"
 meilisearch-auth = { path = "../meilisearch-auth" }
 meilisearch-types = { path = "../meilisearch-types" }
 memmap2 = "0.9.9"

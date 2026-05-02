@@ -9,9 +9,9 @@ use tokio::sync::mpsc;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-use crate::common::Value;
+use crate::common::{Server, Value};
 use crate::json;
-use crate::vector::{get_server_vector, GetAllDocumentsOptions};
+use crate::vector::GetAllDocumentsOptions;
 
 pub async fn create_mock() -> (&'static MockServer, Value) {
     let mock_server = Box::leak(Box::new(MockServer::start().await));
@@ -408,7 +408,7 @@ async fn dummy_testing_the_mock() {
 async fn bad_request() {
     let (mock, _setting) = create_mock().await;
 
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     // No placeholder string appear in the template
@@ -644,7 +644,7 @@ async fn bad_request() {
 async fn bad_response() {
     let (mock, _setting) = create_mock().await;
 
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     // No placeholder string appear in the template
@@ -920,7 +920,7 @@ async fn bad_response() {
 async fn bad_settings() {
     let (mock, _setting) = create_mock().await;
 
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1092,7 +1092,7 @@ async fn bad_settings() {
 #[actix_rt::test]
 async fn add_vector_and_user_provided() {
     let (_mock, setting) = create_mock().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1198,7 +1198,7 @@ async fn add_vector_and_user_provided() {
 #[actix_rt::test]
 async fn server_returns_bad_request() {
     let (mock, _setting) = create_mock_multiple().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1314,7 +1314,7 @@ async fn server_returns_bad_request() {
 #[actix_rt::test]
 async fn server_returns_bad_response() {
     let (mock, _setting) = create_mock_multiple().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1609,7 +1609,7 @@ async fn server_returns_bad_response() {
 #[actix_rt::test]
 async fn server_returns_multiple() {
     let (_mock, setting) = create_mock_multiple().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1715,7 +1715,7 @@ async fn server_returns_multiple() {
 #[actix_rt::test]
 async fn server_single_input_returns_in_array() {
     let (_mock, setting) = create_mock_single_response_in_array().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1821,7 +1821,7 @@ async fn server_single_input_returns_in_array() {
 #[actix_rt::test]
 async fn server_raw() {
     let (_mock, setting) = create_mock_raw().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -1928,7 +1928,7 @@ async fn server_raw() {
 async fn server_custom_header() {
     let (mock, setting) = create_mock_raw_with_custom_header().await;
 
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -2057,7 +2057,7 @@ async fn server_custom_header() {
 #[actix_rt::test]
 async fn searchable_reindex() {
     let (_mock, setting) = create_mock_default_template().await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index
@@ -2167,7 +2167,7 @@ async fn searchable_reindex() {
 async fn last_error_stats() {
     let (sender, mut receiver) = mpsc::channel(10);
     let (_mock, setting) = create_faulty_mock_raw(sender).await;
-    let server = get_server_vector().await;
+    let server = Server::new().await;
     let index = server.index("doggo");
 
     let (response, code) = index

@@ -458,6 +458,16 @@ InvalidIndexFieldsFilterDistinct               , InvalidRequest       , BAD_REQU
 InvalidIndexFieldsFilterRankingRule            , InvalidRequest       , BAD_REQUEST ;
 InvalidIndexFieldsFilterFilterable             , InvalidRequest       , BAD_REQUEST ;
 RequiresEnterpriseEdition                      , InvalidRequest       , UNAVAILABLE_FOR_LEGAL_REASONS ;
+// Render
+InvalidRenderTemplate                          , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderTemplateId                        , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderTemplateInline                    , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInput                             , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInputDocumentId                   , InvalidRequest       , BAD_REQUEST ;
+InvalidRenderInputInline                       , InvalidRequest       , BAD_REQUEST ;
+RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND ;
+TemplateParsingError                           , InvalidRequest       , BAD_REQUEST ;
+TemplateRenderingError                         , InvalidRequest       , BAD_REQUEST ;
 // Webhooks
 InvalidWebhooks                                , InvalidRequest       , BAD_REQUEST ;
 InvalidWebhookUrl                              , InvalidRequest       , BAD_REQUEST ;
