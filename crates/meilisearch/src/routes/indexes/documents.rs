@@ -10,8 +10,7 @@ use bstr::ByteSlice as _;
 use deserr::actix_web::{AwebJson, AwebQueryParameter};
 use deserr::Deserr;
 use futures::StreamExt;
-use index_scheduler::filter::filter_into_index_filter;
-use index_scheduler::{IndexScheduler, TaskId};
+use index_scheduler::{IndexScheduler, RoFeatures, TaskId};
 use meilisearch_types::deserr::query_params::Param;
 use meilisearch_types::deserr::{DeserrJsonError, DeserrQueryParamError};
 use meilisearch_types::document_formats::{read_csv, read_json, read_ndjson, PayloadType};
@@ -21,10 +20,9 @@ use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::milli::documents::sort::recursive_sort;
 use meilisearch_types::milli::index::EmbeddingsWithMetadata;
-use meilisearch_types::milli::progress::Progress;
 use meilisearch_types::milli::update::{IndexDocumentsMethod, MissingDocumentPolicy};
 use meilisearch_types::milli::vector::parsed_vectors::ExplicitVectors;
-use meilisearch_types::milli::{AscDesc, DocumentId, IndexFilter};
+use meilisearch_types::milli::{AscDesc, DocumentId};
 use meilisearch_types::serde_cs::vec::CS;
 use meilisearch_types::star_or::OptionStarOrList;
 use meilisearch_types::tasks::KindWithContent;
@@ -48,6 +46,7 @@ use crate::extractors::authentication::GuardedData;
 use crate::extractors::payload::Payload;
 use crate::proxy::{proxy, task_network_and_check_leader_and_version, Body};
 use crate::routes::indexes::search::fix_sort_query_parameters;
+use crate::routes::indexes::streaming::{stream_documents, StreamedJsonObject};
 use crate::routes::{
     get_task_id, is_dry_run, PaginationView, SummarizedTaskView, PAGINATION_DEFAULT_LIMIT,
 };
@@ -711,34 +710,25 @@ fn documents_by_query(
 
     let index = index_scheduler.index(&index_uid)?;
     let rtxn = index.read_txn()?;
-    let progress = Progress::default();
-
-    let filter = &filter;
-    let filter = if let Some(filter) = filter {
-        let filter = parse_filter(filter, Code::InvalidDocumentFilter, index_scheduler.features())?;
-        filter
-            .map(|f| {
-                filter_into_index_filter(f, &index, &rtxn, index_scheduler, &progress, &index_uid)
-            })
-            .transpose()?
-    } else {
-        None
-    };
-    let (total, documents) = retrieve_documents(
+    let (total, ids) = retrieve_document_ids(
         &index,
         &rtxn,
         offset,
         limit,
         ids,
         filter,
-        fields,
-        retrieve_vectors,
+        index_scheduler.features(),
         sort_criteria,
     )?;
 
-    let ret = PaginationView::new(offset, limit, total as usize, documents);
+    let header = PaginationViewHeader { offset, limit, total: total as usize };
 
-    Ok(HttpResponse::Ok().json(ret))
+    let documents_stream =
+        stream_documents(index.clone(), ids.into_iter(), fields, retrieve_vectors);
+    let response_stream = StreamedJsonObject::new(header, documents_stream);
+
+    debug!(returns = "[streaming documents]", "Get documents");
+    Ok(HttpResponse::Ok().streaming(response_stream))
 }
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
@@ -771,6 +761,14 @@ pub struct UpdateDocumentsQuery {
     #[param(required = false, example = true)]
     #[deserr(default, try_from(&String) = from_string_skip_creation -> DeserrQueryParamError<InvalidSkipCreation>, error = DeserrQueryParamError<InvalidSkipCreation>)]
     pub skip_creation: Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PaginationViewHeader {
+    offset: usize,
+    limit: usize,
+    total: usize,
 }
 
 #[derive(Deserialize, Debug, Deserr, IntoParams)]
@@ -1822,17 +1820,23 @@ fn some_documents<'a, 't: 'a>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn retrieve_documents<S: AsRef<str>>(
+fn retrieve_document_ids(
     index: &Index,
-    rtxn: &RoTxn,
+    rtxn: &RoTxn<'_>,
     offset: usize,
     limit: usize,
     ids: Option<Vec<ExternalDocumentId>>,
-    filter: Option<IndexFilter>,
-    attributes_to_retrieve: Option<Vec<S>>,
-    retrieve_vectors: RetrieveVectors,
+    filter: Option<Value>,
+    features: RoFeatures,
     sort_criteria: Option<Vec<AscDesc>>,
-) -> Result<(u64, Vec<Document>), ResponseError> {
+) -> Result<(u64, Vec<DocumentId>), ResponseError> {
+    let filter = &filter;
+    let filter = if let Some(filter) = filter {
+        parse_filter(filter, Code::InvalidDocumentFilter, features)?
+    } else {
+        None
+    };
+
     let mut candidates = if let Some(ids) = ids {
         let external_document_ids = index.external_documents_ids();
         let mut candidates = RoaringBitmap::new();
@@ -1856,51 +1860,24 @@ fn retrieve_documents<S: AsRef<str>>(
         })?
     }
 
-    let (it, number_of_documents) = if let Some(sort) = sort_criteria {
+    let (ids, number_of_documents) = if let Some(sort) = sort_criteria {
         let number_of_documents = candidates.len();
         let facet_sort = recursive_sort(index, rtxn, sort, &candidates)?;
         let iter = facet_sort.iter()?;
-        let mut documents = Vec::with_capacity(limit);
+        let mut ids = Vec::with_capacity(limit);
         for result in iter.skip(offset).take(limit) {
-            documents.push(result?);
+            ids.push(result?);
         }
-        (
-            itertools::Either::Left(some_documents(
-                index,
-                rtxn,
-                documents.into_iter(),
-                retrieve_vectors,
-            )?),
-            number_of_documents,
-        )
+        (ids, number_of_documents)
     } else {
         let number_of_documents = candidates.len();
         (
-            itertools::Either::Right(some_documents(
-                index,
-                rtxn,
-                candidates.into_iter().skip(offset).take(limit),
-                retrieve_vectors,
-            )?),
+            candidates.into_iter().skip(offset).take(limit).collect(),
             number_of_documents,
         )
     };
 
-    let documents: Vec<_> = it
-        .map(|document| {
-            Ok(match &attributes_to_retrieve {
-                Some(attributes_to_retrieve) => permissive_json_pointer::select_values(
-                    document?,
-                    attributes_to_retrieve.iter().map(|s| s.as_ref()).chain(
-                        (retrieve_vectors == RetrieveVectors::Retrieve).then_some("_vectors"),
-                    ),
-                ),
-                None => document?,
-            })
-        })
-        .collect::<Result<_, ResponseError>>()?;
-
-    Ok((number_of_documents, documents))
+    Ok((number_of_documents, ids))
 }
 
 fn retrieve_document<S: AsRef<str>>(

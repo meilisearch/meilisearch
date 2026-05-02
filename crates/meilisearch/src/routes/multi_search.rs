@@ -151,7 +151,7 @@ pub async fn multi_search_with_post(
     // Since we don't want to process half of the search requests and then get a permit refused
     // we're going to get one permit for the whole duration of the multi-search request.
     let progress = Progress::default();
-    progress.update_progress(TotalProcessingTimeStep::WaitInQueue);
+    progress.update_progress(TotalProcessingTimeStep::WaitForPermit);
     let permit = search_queue.try_get_search_permit().await?;
     progress.update_progress(TotalProcessingTimeStep::Search);
     let request_uid = Uuid::now_v7();
@@ -232,6 +232,7 @@ pub async fn multi_search_with_post(
             );
 
             let (search_result, _) = search_result?;
+
             HttpResponse::Ok().json(search_result)
         }
         None => {
@@ -262,7 +263,7 @@ pub async fn multi_search_with_post(
                         ));
                     }
 
-                    let search_result = crate::routes::indexes::search::search(
+                    let (res, _deadline) = crate::routes::indexes::search::search(
                         query,
                         index_scheduler.clone(),
                         index_uid.clone(),
@@ -274,6 +275,11 @@ pub async fn multi_search_with_post(
                     )
                     .await
                     .with_index(query_index)?;
+
+                    let search_result =
+                        crate::routes::indexes::search::search_to_full_result(res, &progress)
+                            .await
+                            .with_index(query_index)?;
 
                     search_results.push(SearchResultWithIndex {
                         index_uid: index_uid.into_inner(),
