@@ -427,8 +427,6 @@ fn get_ranking_rules_for_vector<'ctx>(
             | crate::Criterion::Typo
             | crate::Criterion::Proximity
             | crate::Criterion::Attribute
-            | crate::Criterion::AttributeRank
-            | crate::Criterion::WordPosition
             | crate::Criterion::Exactness => {
                 if !vector {
                     let vector_candidates = ctx.index.documents_ids(ctx.txn)?;
@@ -506,10 +504,12 @@ fn get_ranking_rules_for_query_graph_search<'ctx>(
     let mut ranking_rules: Vec<BoxRankingRule<'ctx, QueryGraph>> = vec![];
     let settings_ranking_rules = ctx.index.criteria(ctx.txn)?;
     for rr in settings_ranking_rules {
-        // Add Words before any of: typo, proximity, attribute
+        // Add Words before any of: typo, proximity, attribute, attributeRank, wordPosition, exactness
         match rr {
             crate::Criterion::Typo
             | crate::Criterion::Attribute
+            | crate::Criterion::AttributeRank
+            | crate::Criterion::WordPosition
             | crate::Criterion::Proximity
             | crate::Criterion::Exactness => {
                 if !words {

@@ -1,0 +1,5 @@
+---
+source: crates/milli/src/search/new/tests/words_ranking_rules_order.rs
+expression: "format!(\"{documents_ids:?}\")"
+---
+[0, 1, 3, 5]
