@@ -30,6 +30,7 @@ use crate::Opt;
 
 pub mod compact;
 pub mod documents;
+pub mod streaming;
 
 pub mod facet_search;
 mod fields;
@@ -377,7 +378,6 @@ impl Aggregate for IndexUpdatedAggregate {
 #[derive(Deserr, Serialize, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields = deny_immutable_fields_index)]
 #[schema(rename_all = "camelCase")]
-#[serde(rename_all = "camelCase")]
 pub struct UpdateIndexRequest {
     /// New [primary key](https://www.meilisearch.com/docs/learn/getting_started/primary_key) of the index
     #[schema(required = false)]
@@ -554,7 +554,6 @@ pub async fn delete_index(
 /// Stats of an `Index`, as known to the `stats` route.
 #[derive(Serialize, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[schema(rename_all = "camelCase")]
 pub struct IndexStats {
     /// Number of documents in the index
     pub number_of_documents: u64,
