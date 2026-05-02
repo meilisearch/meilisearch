@@ -1,7 +1,9 @@
 mod extract_facets;
 mod facet_document;
+mod field_facet_status;
 
 pub use extract_facets::FacetedDocidsExtractor;
+pub use field_facet_status::FieldFacetStatus;
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy)]
