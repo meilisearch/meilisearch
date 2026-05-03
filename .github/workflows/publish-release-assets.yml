@@ -43,7 +43,16 @@ jobs:
       matrix:
         edition: [community, enterprise]
         release:
-          [macos-amd64, macos-aarch64, windows, linux-amd64, linux-aarch64, linux-riscv64]
+          [
+            macos-amd64,
+            macos-aarch64,
+            windows,
+            linux-amd64,
+            linux-aarch64,
+            linux-riscv64,
+            linux-amd64-musl,
+            linux-aarch64-musl,
+          ]
         include:
           - edition: "community"
             feature-flag: ""
@@ -81,6 +90,18 @@ jobs:
             binary_path: riscv64gc-unknown-linux-gnu/release/meilisearch
             asset_name: linux-riscv64
             extra-args: "--target riscv64gc-unknown-linux-gnu"
+            use_cross: true
+          - release: linux-amd64-musl
+            os: ubuntu-22.04
+            binary_path: x86_64-unknown-linux-musl/release/meilisearch
+            asset_name: linux-amd64-musl
+            extra-args: "--target x86_64-unknown-linux-musl"
+            use_cross: true
+          - release: linux-aarch64-musl
+            os: ubuntu-22.04
+            binary_path: aarch64-unknown-linux-musl/release/meilisearch
+            asset_name: linux-aarch64-musl
+            extra-args: "--target aarch64-unknown-linux-musl"
             use_cross: true
     needs: check-version
     steps:
