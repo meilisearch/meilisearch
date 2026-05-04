@@ -221,6 +221,163 @@ async fn errors_on_param() {
     "###);
 }
 
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn errors_on_param_sharding() {
+    let server = Server::new().await;
+
+    let (response, code) = server.set_features(json!({"network": true})).await;
+    meili_snap::snapshot!(code, @"200 OK");
+    meili_snap::snapshot!(meili_snap::json_string!(response["network"]), @r#"true"#);
+
+    // 1. not leader
+    let (response, code) =
+        server.set_network(json!({"self": "myself", "leader": "someoneelse"})).await;
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "This remote is not the leader of the network.\n  - Note: only the leader `someoneelse` can receive new tasks.",
+      "code": "not_leader",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#not_leader"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+
+    // 2. leader not in remotes
+    let (response, code) = server.set_network(json!({"self": "myself", "leader": "myself"})).await;
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "leader `myself` is missing from remotes",
+      "code": "invalid_network_remotes",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_network_remotes"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+
+    // 3. no shards
+    let (response, code) = server
+        .set_network(json!({"self": "myself", "leader": "myself",
+        "remotes": {
+          "myself": {"url": "http://localhost:7700"}
+        }}))
+        .await;
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "there must be at least one shard owned by at least one remote",
+      "code": "invalid_network_shards",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_network_shards"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+
+    // 4. remoteless-shard
+    let (response, code) = server
+        .set_network(json!({"self": "myself", "leader": "myself",
+          "remotes": {
+            "myself": {"url": "http://localhost:7700"}
+          },
+          "shards": {
+            "all": {
+              "remotes": []
+            }
+          }
+        }))
+        .await;
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "there must be at least one shard owned by at least one remote",
+      "code": "invalid_network_shards",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_network_shards"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+
+    // 5. shard with unknown remote
+    let (response, code) = server
+        .set_network(json!({"self": "myself", "leader": "myself",
+          "remotes": {
+            "myself": {"url": "http://localhost:7700"}
+          },
+          "shards": {
+            "all": {
+              "remotes": [ "unknown" ]
+            }
+          }
+        }))
+        .await;
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "unknown remote `unknown` in `.all.remotes`",
+      "code": "invalid_network_shards",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_network_shards"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+
+    // 6. renaming
+    let (response, code) = server
+        .set_network(json!({"self": "myself", "leader": null,
+          "remotes": {
+            "myself": {"url": "http://localhost:7700"}
+          },
+          "shards": {
+            "all": {
+              "remotes": [ "myself" ]
+            }
+          }
+        }))
+        .await;
+    meili_snap::snapshot!(meili_snap::json_string!(response, {".version" => "[version]"}), @r###"
+    {
+      "self": "myself",
+      "remotes": {
+        "myself": {
+          "url": "http://localhost:7700",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "all": {
+          "remotes": [
+            "myself"
+          ]
+        }
+      },
+      "leader": null,
+      "version": "[version]"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"200 OK");
+
+    let (response, code) = server
+        .set_network(json!({"self": "someoneelse", "leader": "someoneelse",
+          "remotes": {
+            "myself": {"url": "http://localhost:7700"}
+          },
+          "shards": {
+            "all": {
+              "remotes": [ "myself" ]
+            }
+          }
+        }))
+        .await;
+    meili_snap::snapshot!(meili_snap::json_string!(response), @r###"
+    {
+      "message": "Renaming a remote is not supported when a leader is defined.\n  - Note: applying this change would rename `myself` to `someoneelse`.\n  - Hint: Send this change to `someoneelse` if it already exists.",
+      "code": "invalid_network_self",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_network_self"
+    }
+    "###);
+    meili_snap::snapshot!(code, @"400 Bad Request");
+}
+
 #[actix_rt::test]
 async fn auth() {
     let mut server = Server::new_auth().await;
