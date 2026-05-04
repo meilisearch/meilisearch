@@ -18,6 +18,7 @@ use crate::fields_ids_map::metadata::FieldIdMapWithMetadata;
 use crate::update::del_add::DelAdd;
 use crate::GlobalFieldsIdsMap;
 
+pub mod filters;
 pub struct Prompt {
     template: liquid::Template,
     template_text: String,
@@ -56,7 +57,11 @@ impl Clone for Prompt {
 }
 
 fn new_template(text: &str) -> Result<liquid::Template, liquid::Error> {
-    liquid::ParserBuilder::with_stdlib().build().unwrap().parse(text)
+    liquid::ParserBuilder::with_stdlib()
+        .filter(filters::fetch_url::FetchUrl)
+        .build()
+        .unwrap()
+        .parse(text)
 }
 
 fn default_template() -> liquid::Template {
@@ -95,6 +100,7 @@ impl Prompt {
     pub fn new(template: String, max_bytes: Option<NonZeroUsize>) -> Result<Self, NewPromptError> {
         let this = Self {
             template: liquid::ParserBuilder::with_stdlib()
+                .filter(filters::fetch_url::FetchUrl)
                 .build()
                 .unwrap()
                 .parse(&template)

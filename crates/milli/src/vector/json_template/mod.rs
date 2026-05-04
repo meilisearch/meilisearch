@@ -143,7 +143,10 @@ impl JsonTemplate {
 fn build_templates(value: &Value) -> Result<Vec<TemplateAtPath>, Error> {
     let mut current_path = ValuePath::new();
     let mut templates = Vec::new();
-    let compiler = liquid::ParserBuilder::with_stdlib().build().unwrap();
+    let compiler = liquid::ParserBuilder::with_stdlib()
+        .filter(crate::prompt::filters::fetch_url::FetchUrl)
+        .build()
+        .unwrap();
     parse_value(value, &mut current_path, &mut templates, &compiler)?;
     Ok(templates)
 }
