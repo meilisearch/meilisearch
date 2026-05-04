@@ -4172,8 +4172,7 @@ checksum = "df1d3c3b53da64cf5760482273a98e575c651a67eec7f77df96b5b642de8f039"
 [[package]]
 name = "liquid"
 version = "0.26.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a494c3f9dad3cb7ed16f1c51812cbe4b29493d6c2e5cd1e2b87477263d9534d"
+source = "git+https://codeberg.org/dureuill/liquid-rust.git?branch=render-with-runtime#bf921ab4dec50e195aa39af019e2aa4f4d35a236"
 dependencies = [
  "liquid-core",
  "liquid-derive",
@@ -4184,8 +4183,7 @@ dependencies = [
 [[package]]
 name = "liquid-core"
 version = "0.26.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc623edee8a618b4543e8e8505584f4847a4e51b805db1af6d9af0a3395d0d57"
+source = "git+https://codeberg.org/dureuill/liquid-rust.git?branch=render-with-runtime#bf921ab4dec50e195aa39af019e2aa4f4d35a236"
 dependencies = [
  "anymap2",
  "itertools 0.14.0",
@@ -4201,8 +4199,7 @@ dependencies = [
 [[package]]
 name = "liquid-derive"
 version = "0.26.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de66c928222984aea59fcaed8ba627f388aaac3c1f57dcb05cc25495ef8faefe"
+source = "git+https://codeberg.org/dureuill/liquid-rust.git?branch=render-with-runtime#bf921ab4dec50e195aa39af019e2aa4f4d35a236"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4212,8 +4209,7 @@ dependencies = [
 [[package]]
 name = "liquid-lib"
 version = "0.26.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9befeedd61f5995bc128c571db65300aeb50d62e4f0542c88282dbcb5f72372a"
+source = "git+https://codeberg.org/dureuill/liquid-rust.git?branch=render-with-runtime#bf921ab4dec50e195aa39af019e2aa4f4d35a236"
 dependencies = [
  "itertools 0.14.0",
  "liquid-core",

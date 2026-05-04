@@ -85,7 +85,9 @@ hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", 
 ] }
 safetensors = "0.6.2"
 tiktoken-rs = "0.9.1"
-liquid = "0.26.11"
+liquid = {version ="0.26.11", git = "https://codeberg.org/dureuill/liquid-rust.git", branch = "render-with-runtime"}
+liquid-core = {version ="0.26.11", git = "https://codeberg.org/dureuill/liquid-rust.git", branch = "render-with-runtime"}
+liquid-derive = {version ="0.26.10", git = "https://codeberg.org/dureuill/liquid-rust.git", branch = "render-with-runtime"}
 rhai = { version = "1.23.6", features = [
     "serde",
     "no_module",
