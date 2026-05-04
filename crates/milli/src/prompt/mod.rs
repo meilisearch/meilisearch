@@ -130,14 +130,44 @@ impl Prompt {
             self.max_bytes.unwrap_or_else(default_max_bytes).get(),
             doc_alloc,
         );
-        self.template.render_to(&mut rendered, &context).map_err(|liquid_error| {
-            RenderPromptError::missing_context_with_external_docid(
-                external_docid.to_owned(),
-                liquid_error,
+
+        let tickets_urls = self
+            .template
+            .render_to_with(
+                &mut rendered,
+                &context,
+                |_| {},
+                |runtime| {
+                    std::mem::take(
+                        &mut *runtime.registers().get_mut::<filters::fetch_url::FetchUrlTickets>(),
+                    )
+                },
             )
-        })?;
-        Ok(std::str::from_utf8(rendered.into_bump_slice())
-            .expect("render can only write UTF-8 because all inputs and processing preserve utf-8"))
+            .map_err(|liquid_error| {
+                RenderPromptError::missing_context_with_external_docid(
+                    external_docid.to_owned(),
+                    liquid_error,
+                )
+            })?;
+
+        let rendered = std::str::from_utf8(rendered.into_bump_slice())
+            .expect("render can only write UTF-8 because all inputs and processing preserve utf-8");
+
+        let rendered = if let Some(replaced) = tickets_urls.resolve_url(client, rendered)? {
+            doc_alloc.alloc_str(&replaced)
+        } else {
+            if let Some(max_bytes) = self.max_bytes {
+                if let Some(char_boundary) = must_truncate(rendered, max_bytes.get()) {
+                    &rendered[0..char_boundary]
+                } else {
+                    rendered
+                }
+            } else {
+                rendered
+            }
+        };
+
+        Ok(rendered)
     }
 
     pub fn render_kvdeladd(
@@ -151,25 +181,47 @@ impl Prompt {
         let fields = OwnedFields::new(&document, field_id_map);
         let context = Context::new(&document, &fields);
 
-        let mut rendered =
-            self.template.render(&context).map_err(RenderPromptError::missing_context)?;
-        if let Some(max_bytes) = self.max_bytes {
-            truncate(&mut rendered, max_bytes.get());
+        let (mut rendered, tickets_urls) = self
+            .template
+            .render_with(
+                &context,
+                |_| {},
+                |runtime| {
+                    std::mem::take(
+                        &mut *runtime.registers().get_mut::<filters::fetch_url::FetchUrlTickets>(),
+                    )
+                },
+            )
+            .map_err(RenderPromptError::missing_context)?;
+
+        if let Some(replaced) = tickets_urls.resolve_url(client, &rendered)? {
+            rendered = replaced;
+        } else {
+            // unfortunately, cannot truncate when we contain a ticket, otherwise we risk truncating the ticket or the resulting base64
+            if let Some(max_bytes) = self.max_bytes {
+                truncate(&mut rendered, max_bytes.get());
+            }
         }
         Ok(rendered)
     }
 }
 
 fn truncate(s: &mut String, max_bytes: usize) {
+    if let Some(char_boundary) = must_truncate(s, max_bytes) {
+        s.truncate(char_boundary);
+    }
+}
+
+fn must_truncate(s: &str, max_bytes: usize) -> Option<usize> {
     if max_bytes >= s.len() {
-        return;
+        return None;
     }
     for i in (0..=max_bytes).rev() {
         if s.is_char_boundary(i) {
-            s.truncate(i);
-            break;
+            return Some(i);
         }
     }
+    return Some(0);
 }
 
 #[cfg(test)]

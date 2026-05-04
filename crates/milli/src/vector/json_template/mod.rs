@@ -101,8 +101,29 @@ impl JsonTemplate {
     ) -> Result<Value, Error> {
         let mut rendered = self.value.clone();
         for TemplateAtPath { template, path } in &self.templates {
-            let injected_value =
-                template.render(context).map_err(|err| error_with_path(err, path.clone()))?;
+            let (mut injected_value, tickets_urls) = template
+                .render_with(
+                    &context,
+                    |_| {},
+                    |runtime| {
+                        std::mem::take(
+                            &mut *runtime
+                                .registers()
+                                .get_mut::<crate::prompt::filters::fetch_url::FetchUrlTickets>(),
+                        )
+                    },
+                )
+                .map_err(|err| error_with_path(err, path.clone()))?;
+
+            injected_value = if let Some(replaced) =
+                tickets_urls.resolve_url(client, &injected_value).map_err(|err| {
+                    error_with_path(liquid::Error::with_msg(err.to_string()), path.clone())
+                })? {
+                replaced
+            } else {
+                injected_value
+            };
+
             inject_value(&mut rendered, path, Value::String(injected_value));
         }
         Ok(rendered)
