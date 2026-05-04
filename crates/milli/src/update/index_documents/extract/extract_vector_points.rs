@@ -220,6 +220,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
     settings_diff: &InnerIndexSettingsDiff,
     embedder_info: &[(String, EmbedderInfo)],
     possible_embedding_mistakes: &PossibleEmbeddingMistakes,
+    client: &http_client::ureq::Agent,
 ) -> Result<(Vec<ExtractedVectorPoints>, UnusedVectorsDistribution)> {
     let mut unused_vectors_distribution = UnusedVectorsDistribution::new();
     let mut manual_errors = None;
@@ -485,9 +486,15 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
+                                client,
                             )
                         } else {
-                            regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
+                            regenerate_prompt(
+                                obkv,
+                                &runtime.document_template,
+                                new_fields_ids_map,
+                                client,
+                            )?
                         }
                     }
                 },
@@ -503,7 +510,12 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
 
                         if !has_fragments {
                             // removing fragments
-                            regenerate_prompt(obkv, &runtime.document_template, new_fields_ids_map)?
+                            regenerate_prompt(
+                                obkv,
+                                &runtime.document_template,
+                                new_fields_ids_map,
+                                client,
+                            )?
                         } else if is_adding_fragments ||
                         // regenerate all fragments when going from user provided to ! user provided
                         old_is_user_provided
@@ -513,6 +525,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
+                                client,
                             )
                         } else {
                             let mut fragment_diff = Vec::new();
@@ -540,7 +553,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                         )
                                     });
                                     let old = old.as_ref();
-                                    Extractor::diff_settings(&new, &obkv_document, &(), old)
+                                    Extractor::diff_settings(&new, &obkv_document, &(), old, client)
                                 }
                                 .expect("ignoring errors so this cannot fail");
                                 fragment_diff.push((name.clone(), diff));
@@ -572,12 +585,14 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                                 &doc_alloc,
                                 new_fields_ids_map,
                                 obkv,
+                                client,
                             )
                         } else {
                             regenerate_if_prompt_changed(
                                 obkv,
                                 (&old_runtime.document_template, &runtime.document_template),
                                 (old_fields_ids_map, new_fields_ids_map),
+                                client,
                             )?
                         }
                     } else {
@@ -596,6 +611,7 @@ pub fn extract_vector_points<R: io::Read + io::Seek>(
                     embedder_name,
                     embedder_is_manual,
                     &mut manual_errors,
+                    client,
                 )?,
             };
 
@@ -698,6 +714,7 @@ fn extract_vector_document_diff(
     embedder_name: &str,
     embedder_is_manual: bool,
     manual_errors: &mut Option<ManualEmbedderErrors>,
+    client: &http_client::ureq::Agent,
 ) -> Result<VectorStateDelta> {
     let delta = match (old, new) {
         // regardless of the previous state, if a document now contains inline _vectors, they must
@@ -753,7 +770,7 @@ fn extract_vector_document_diff(
                             RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
 
                         let diff = fragment
-                            .diff_documents(&old_document, &new_document, &())
+                            .diff_documents(&old_document, &new_document, &(), client)
                             .expect("ignoring errors so this cannot fail");
 
                         fragment_diff.push((name.clone(), diff));
@@ -763,11 +780,15 @@ fn extract_vector_document_diff(
                     let prompt = &runtime.document_template;
                     // Don't give up if the old prompt was failing
                     let old_prompt = Some(&prompt).map(|p| {
-                        p.render_kvdeladd(obkv, DelAdd::Deletion, old_fields_ids_map)
+                        p.render_kvdeladd(obkv, DelAdd::Deletion, old_fields_ids_map, client)
                             .unwrap_or_default()
                     });
-                    let new_prompt =
-                        prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map)?;
+                    let new_prompt = prompt.render_kvdeladd(
+                        obkv,
+                        DelAdd::Addition,
+                        new_fields_ids_map,
+                        client,
+                    )?;
                     if old_prompt.as_ref() != Some(&new_prompt) {
                         let old_prompt = old_prompt.unwrap_or_default();
                         tracing::trace!(
@@ -808,6 +829,7 @@ fn extract_vector_document_diff(
                         doc_alloc,
                         new_fields_ids_map,
                         obkv,
+                        client,
                     )
                 } else {
                     // becomes autogenerated
@@ -815,6 +837,7 @@ fn extract_vector_document_diff(
                         obkv,
                         DelAdd::Addition,
                         new_fields_ids_map,
+                        client,
                     )?)
                 }
             } else {
@@ -847,11 +870,13 @@ fn regenerate_if_prompt_changed(
     obkv: &obkv::KvReader<FieldId>,
     (old_prompt, new_prompt): (&Prompt, &Prompt),
     (old_fields_ids_map, new_fields_ids_map): (&FieldIdMapWithMetadata, &FieldIdMapWithMetadata),
+    client: &http_client::ureq::Agent,
 ) -> Result<VectorStateDelta> {
     let old_prompt = old_prompt
-        .render_kvdeladd(obkv, DelAdd::Deletion, old_fields_ids_map)
+        .render_kvdeladd(obkv, DelAdd::Deletion, old_fields_ids_map, client)
         .unwrap_or(Default::default());
-    let new_prompt = new_prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map)?;
+    let new_prompt =
+        new_prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map, client)?;
 
     if new_prompt == old_prompt {
         return Ok(VectorStateDelta::NoChange);
@@ -863,8 +888,9 @@ fn regenerate_prompt(
     obkv: &obkv::KvReader<FieldId>,
     prompt: &Prompt,
     new_fields_ids_map: &FieldIdMapWithMetadata,
+    client: &http_client::ureq::Agent,
 ) -> Result<VectorStateDelta> {
-    let prompt = prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map)?;
+    let prompt = prompt.render_kvdeladd(obkv, DelAdd::Addition, new_fields_ids_map, client)?;
 
     Ok(VectorStateDelta::NowGenerated(prompt))
 }
@@ -874,6 +900,7 @@ fn regenerate_all_fragments<'a>(
     doc_alloc: &Bump,
     new_fields_ids_map: &FieldIdMapWithMetadata,
     obkv: &KvReaderU16,
+    client: &http_client::ureq::Agent,
 ) -> VectorStateDelta {
     let mut fragment_diff = Vec::new();
     let new_fields_ids_map = new_fields_ids_map.as_fields_ids_map();
@@ -887,7 +914,8 @@ fn regenerate_all_fragments<'a>(
         let name = &new.name;
         let new = RequestFragmentExtractor::new(new, doc_alloc).ignore_errors();
 
-        let diff = new.extract(&obkv_document, &()).expect("ignoring errors so this cannot fail");
+        let diff =
+            new.extract(&obkv_document, &(), client).expect("ignoring errors so this cannot fail");
         if let Some(value) = diff {
             fragment_diff.push((name.clone(), value));
         }

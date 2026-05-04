@@ -94,7 +94,11 @@ impl JsonTemplate {
     /// # Error
     ///
     /// - If any of the strings contains a template that cannot be rendered with the given context.
-    pub fn render(&self, context: &dyn liquid::ObjectView) -> Result<Value, Error> {
+    pub fn render(
+        &self,
+        context: &dyn liquid::ObjectView,
+        client: &http_client::ureq::Agent,
+    ) -> Result<Value, Error> {
         let mut rendered = self.value.clone();
         for TemplateAtPath { template, path } in &self.templates {
             let injected_value =
@@ -113,10 +117,11 @@ impl JsonTemplate {
         &self,
         document: D,
         doc_alloc: &'doc Bump,
+        client: &http_client::ureq::Agent,
     ) -> Result<Value, Error> {
         let document = ParseableDocument::new(document, doc_alloc);
         let context = crate::prompt::Context::without_fields(&document);
-        self.render(&context)
+        self.render(&context, client)
     }
 
     /// Renders this value by replacing all its strings with the rendered version of the template they represent from the contents of the search query.
@@ -124,14 +129,19 @@ impl JsonTemplate {
     /// # Error
     ///
     /// - If any of the strings contains a template that cannot be rendered from the contents of the search query
-    pub fn render_search(&self, q: Option<&str>, media: Option<&Value>) -> Result<Value, Error> {
+    pub fn render_search(
+        &self,
+        q: Option<&str>,
+        media: Option<&Value>,
+        client: &http_client::ureq::Agent,
+    ) -> Result<Value, Error> {
         let search_data = match (q, media) {
             (None, None) => liquid::object!({}),
             (None, Some(media)) => liquid::object!({ "media": media }),
             (Some(q), None) => liquid::object!({"q": q}),
             (Some(q), Some(media)) => liquid::object!({"q": q, "media": media}),
         };
-        self.render(&search_data)
+        self.render(&search_data, client)
     }
 
     /// The JSON value representing the underlying template

@@ -25,6 +25,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
+use ::routes::Routes;
 use actix_cors::Cors;
 use actix_http::body::MessageBody;
 use actix_web::dev::{ServiceFactory, ServiceResponse};
@@ -64,7 +65,6 @@ use tracing_subscriber::filter::Targets;
 
 use crate::error::MeilisearchHttpError;
 use crate::personalization::PersonalizationService;
-use ::routes::Routes;
 
 /// Default number of simultaneously opened indexes.
 ///
@@ -676,7 +676,7 @@ fn import_dump(
             let (builder, user_result) = builder.add_documents(reader)?;
             let user_result = user_result?;
             tracing::info!(documents_found = user_result, "{} documents found.", user_result);
-            builder.execute()?;
+            builder.execute(index_scheduler.ip_policy())?;
         } else {
             let db_fields_ids_map = index.fields_ids_map(&rtxn)?;
             let primary_key = index.primary_key(&rtxn)?;

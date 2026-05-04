@@ -32,6 +32,7 @@ pub trait Extractor<'doc> {
         &self,
         doc: D,
         meta: &Self::DocumentMetadata,
+        client: &http_client::ureq::Agent,
     ) -> Result<Option<Self::Input>, Self::Error>;
 
     /// Unique `id` associated with this extractor.
@@ -52,12 +53,13 @@ pub trait Extractor<'doc> {
         old: OD,
         new: ND,
         meta: &Self::DocumentMetadata,
+        client: &http_client::ureq::Agent,
     ) -> Result<ExtractorDiff<Self::Input>, Self::Error>
     where
         'doc: 'a,
     {
-        let old_input = self.extract(old, meta);
-        let new_input = self.extract(new, meta);
+        let old_input = self.extract(old, meta, client);
+        let new_input = self.extract(new, meta, client);
         to_diff(old_input, new_input)
     }
 
@@ -73,9 +75,11 @@ pub trait Extractor<'doc> {
         doc: D,
         meta: &Self::DocumentMetadata,
         old: Option<&Self>,
+        client: &http_client::ureq::Agent,
     ) -> Result<ExtractorDiff<Self::Input>, Self::Error> {
-        let old_input = if let Some(old) = old { old.extract(&doc, meta) } else { Ok(None) };
-        let new_input = self.extract(&doc, meta);
+        let old_input =
+            if let Some(old) = old { old.extract(&doc, meta, client) } else { Ok(None) };
+        let new_input = self.extract(&doc, meta, client);
 
         to_diff(old_input, new_input)
     }
@@ -170,12 +174,14 @@ impl<'doc> Extractor<'doc> for DocumentTemplateExtractor<'doc, '_, '_> {
         &self,
         doc: D,
         external_docid: &Self::DocumentMetadata,
+        client: &http_client::ureq::Agent,
     ) -> Result<Option<Self::Input>, Self::Error> {
         Ok(Some(self.template.render_document(
             external_docid,
             doc,
             self.field_id_map,
             self.doc_alloc,
+            client,
         )?))
     }
 }
@@ -205,8 +211,9 @@ impl<'doc> Extractor<'doc> for RequestFragmentExtractor<'doc> {
         &self,
         doc: D,
         _meta: &Self::DocumentMetadata,
+        client: &http_client::ureq::Agent,
     ) -> Result<Option<Self::Input>, Self::Error> {
-        Ok(Some(self.fragment.render_document(doc, self.doc_alloc)?))
+        Ok(Some(self.fragment.render_document(doc, self.doc_alloc, client)?))
     }
 }
 
@@ -229,8 +236,9 @@ where
         &self,
         doc: D,
         meta: &Self::DocumentMetadata,
+        client: &http_client::ureq::Agent,
     ) -> Result<Option<Self::Input>, Self::Error> {
-        Ok(self.0.extract(doc, meta).ok().flatten())
+        Ok(self.0.extract(doc, meta, client).ok().flatten())
     }
 }
 

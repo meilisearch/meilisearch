@@ -138,6 +138,7 @@ where
                         document_ids,
                         modified_docids,
                         embedder_stats,
+                        embedder_ip_policy,
                     )
                 })
                 .unwrap()
@@ -343,6 +344,7 @@ where
                         field_distribution,
                         index_embeddings,
                         &embedder_stats,
+                        embedder_ip_policy,
                     )
                 })
                 .unwrap()
@@ -1024,4 +1026,25 @@ fn indexer_memory_settings(
     });
 
     (grenad_parameters, total_bbbuffer_capacity)
+}
+
+pub fn url_fetcher_client(
+    embedder_ip_policy: &http_client::policy::IpPolicy,
+) -> http_client::ureq::Agent {
+    let timeout = std::env::var("MEILI_EXPERIMENTAL_TEMPLATE_URLFETCHER_TIMEOUT_SECONDS")
+        .ok()
+        .map(|p| p.parse().unwrap())
+        .unwrap_or(30);
+    let config = http_client::ureq::config::Config::builder()
+        .prepare(|config| {
+            config
+                .max_idle_connections(0)
+                .max_idle_connections_per_host(0)
+                .timeout_global(Some(std::time::Duration::from_secs(timeout)))
+                // important in ureq 3: to be able to retrieve the response for HTTP 400
+                .http_status_as_error(false)
+        })
+        .build();
+    let client = http_client::ureq::Agent::new_with_config(config, embedder_ip_policy.clone());
+    client
 }

@@ -442,7 +442,13 @@ async fn process_search_request(
 
     let (rtxn, search_result) = output?;
     let render_alloc = Bump::new();
-    let formatted = format_documents(&rtxn, &index, &render_alloc, search_result.documents_ids)?;
+
+    let client = meilisearch_types::milli::update::new::indexer::url_fetcher_client(
+        index_scheduler.ip_policy(),
+    );
+
+    let formatted =
+        format_documents(&rtxn, &index, &render_alloc, search_result.documents_ids, &client)?;
     let text = formatted.join("\n");
     drop(rtxn);
 

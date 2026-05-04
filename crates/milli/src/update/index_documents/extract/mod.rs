@@ -53,6 +53,7 @@ pub(crate) fn data_from_obkv_documents(
     embedder_info: Arc<Vec<(String, EmbedderInfo)>>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
     embedder_stats: &Arc<EmbedderStats>,
+    client: http_client::ureq::Agent,
 ) -> Result<()> {
     let (original_pipeline_result, flattened_pipeline_result): (Result<_>, Result<_>) = rayon::join(
         || {
@@ -68,6 +69,7 @@ pub(crate) fn data_from_obkv_documents(
                         embedder_info.clone(),
                         possible_embedding_mistakes.clone(),
                         embedder_stats.clone(),
+                        client.clone(),
                     )
                 })
                 .collect::<Result<()>>()
@@ -240,6 +242,7 @@ fn send_original_documents_data(
     embedder_info: Arc<Vec<(String, EmbedderInfo)>>,
     possible_embedding_mistakes: Arc<PossibleEmbeddingMistakes>,
     embedder_stats: Arc<EmbedderStats>,
+    client: http_client::ureq::Agent,
 ) -> Result<()> {
     let original_documents_chunk =
         original_documents_chunk.and_then(|c| unsafe { as_cloneable_grenad(&c) })?;
@@ -274,6 +277,7 @@ fn send_original_documents_data(
                 &settings_diff,
                 embedder_info.as_slice(),
                 &possible_embedding_mistakes,
+                &client,
             ) {
                 Ok((extracted_vectors, unused_vectors_distribution)) => {
                     for ExtractedVectorPoints {

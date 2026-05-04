@@ -121,6 +121,7 @@ impl Prompt {
         document: impl crate::update::new::document::Document<'a> + Debug,
         field_id_map: &RefCell<GlobalFieldsIdsMap>,
         doc_alloc: &'doc Bump,
+        client: &http_client::ureq::Agent,
     ) -> Result<&'doc str, RenderPromptError> {
         let document = ParseableDocument::new(document, doc_alloc);
         let fields = BorrowedFields::new(&document, field_id_map, doc_alloc);
@@ -144,6 +145,7 @@ impl Prompt {
         document: &obkv::KvReaderU16,
         side: DelAdd,
         field_id_map: &FieldIdMapWithMetadata,
+        client: &http_client::ureq::Agent,
     ) -> Result<String, RenderPromptError> {
         let document = Document::new(document, side, field_id_map.as_fields_ids_map());
         let fields = OwnedFields::new(&document, field_id_map);

@@ -382,7 +382,11 @@ impl Embedder {
                 return Err(EmbedError::rest_media_not_a_fragment())
             }
             (RequestData::FromFragments(request_from_fragments), SearchQuery::Text(q)) => {
-                let fragment = request_from_fragments.render_search_fragment(Some(q), None)?;
+                let fragment = request_from_fragments.render_search_fragment(
+                    Some(q),
+                    None,
+                    &self.data.client,
+                )?;
 
                 embed(&self.data, &[fragment], 1, Some(self.dimensions), deadline, embedder_stats)
             }
@@ -390,7 +394,8 @@ impl Embedder {
                 RequestData::FromFragments(request_from_fragments),
                 SearchQuery::Media { q, media },
             ) => {
-                let fragment = request_from_fragments.render_search_fragment(q, media)?;
+                let fragment =
+                    request_from_fragments.render_search_fragment(q, media, &self.data.client)?;
 
                 embed(&self.data, &[fragment], 1, Some(self.dimensions), deadline, embedder_stats)
             }
@@ -690,9 +695,10 @@ impl RequestFromFragments {
         &self,
         q: Option<&str>,
         media: Option<&Value>,
+        client: &http_client::ureq::Agent,
     ) -> Result<Value, EmbedError> {
         let mut it = self.search_fragments.iter().filter_map(|(name, template)| {
-            let render = template.render_search(q, media).ok()?;
+            let render = template.render_search(q, media, client).ok()?;
             Some((name, render))
         });
         let Some((name, fragment)) = it.next() else {

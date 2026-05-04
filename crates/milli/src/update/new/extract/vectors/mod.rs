@@ -39,6 +39,7 @@ pub struct EmbeddingExtractor<'a, 'b> {
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     embedder_stats: &'a EmbedderStats,
     threads: &'a ThreadPoolNoAbort,
+    client: &'a http_client::ureq::Agent,
     failure_modes: EmbedderFailureModes,
 }
 
@@ -49,6 +50,7 @@ impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
         field_distribution: &'a FieldDistribution,
         embedder_stats: &'a EmbedderStats,
         threads: &'a ThreadPoolNoAbort,
+        client: &'a http_client::ureq::Agent,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
         let failure_modes = EmbedderFailureModes::from_env();
@@ -59,6 +61,7 @@ impl<'a, 'b> EmbeddingExtractor<'a, 'b> {
             possible_embedding_mistakes,
             embedder_stats,
             failure_modes,
+            client,
         }
     }
 }
@@ -176,6 +179,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     old_is_user_provided,
                                     old_must_regenerate,
                                     true,
+                                    self.client,
                                 )?;
                             }
                         // no `_vectors` field, so only regenerate if the document is already set to in the DB.
@@ -200,6 +204,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                 old_is_user_provided,
                                 old_must_regenerate,
                                 true,
+                                self.client,
                             )?;
                         }
                     }
@@ -243,6 +248,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                     context.new_fields_ids_map,
                                     &unused_vectors_distribution,
                                     true,
+                                    self.client,
                                 )?;
                             } else {
                                 chunks.set_status(
@@ -261,6 +267,7 @@ impl<'extractor> Extractor<'extractor> for EmbeddingExtractor<'_, '_> {
                                 context.new_fields_ids_map,
                                 &unused_vectors_distribution,
                                 true,
+                                self.client,
                             )?;
                         }
                     }
@@ -281,6 +288,7 @@ pub struct SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
     sender: EmbeddingSender<'a, 'b>,
     possible_embedding_mistakes: PossibleEmbeddingMistakes,
     threads: &'a ThreadPoolNoAbort,
+    client: &'a http_client::ureq::Agent,
     failure_modes: EmbedderFailureModes,
 }
 
@@ -292,6 +300,7 @@ impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
         sender: EmbeddingSender<'a, 'b>,
         field_distribution: &'a FieldDistribution,
         threads: &'a ThreadPoolNoAbort,
+        client: &'a http_client::ureq::Agent,
     ) -> Self {
         let possible_embedding_mistakes = PossibleEmbeddingMistakes::new(field_distribution);
         let failure_modes = EmbedderFailureModes::from_env();
@@ -303,6 +312,7 @@ impl<'a, 'b, SD: SettingsDelta> SettingsChangeEmbeddingExtractor<'a, 'b, SD> {
             threads,
             possible_embedding_mistakes,
             failure_modes,
+            client,
         }
     }
 }
@@ -425,6 +435,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                             &unused_vectors_distribution,
                             old_is_user_provided,
                             fragments_changed,
+                            self.client,
                         )?;
                     }
                     ReindexAction::FullReindex => {
@@ -462,6 +473,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
                                 &unused_vectors_distribution,
                                 old_is_user_provided,
                                 true,
+                                self.client,
                             )?;
                         } else if is_new_embedder {
                             chunks.set_status(document.docid(), false, true, false, false);
@@ -659,6 +671,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
         old_is_user_provided: bool,
         full_reindex: bool,
+        client: &http_client::ureq::Agent,
     ) -> Result<()>
     where
         'a: 'doc,
@@ -690,6 +703,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         &(),
                         session,
                         unused_vectors_distribution,
+                        client,
                     )?;
                     return Ok(());
                 }
@@ -712,7 +726,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                             extractor_id: extractor.extractor_id(),
                         };
 
-                        match extractor.diff_settings(&document, &(), old.as_ref())? {
+                        match extractor.diff_settings(&document, &(), old.as_ref(), client)? {
                             ExtractorDiff::Removed => {
                                 OnEmbed::process_embedding_response(
                                     session.on_embed_mut(),
@@ -768,9 +782,19 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                 let extractor_diff = if *ignore_document_template_failures {
                     let extractor = extractor.ignore_errors();
                     let old_extractor = old_extractor.map(DocumentTemplateExtractor::ignore_errors);
-                    extractor.diff_settings(document, &external_docid, old_extractor.as_ref())?
+                    extractor.diff_settings(
+                        document,
+                        &external_docid,
+                        old_extractor.as_ref(),
+                        client,
+                    )?
                 } else {
-                    extractor.diff_settings(document, &external_docid, old_extractor.as_ref())?
+                    extractor.diff_settings(
+                        document,
+                        &external_docid,
+                        old_extractor.as_ref(),
+                        client,
+                    )?
                 };
 
                 match extractor_diff {
@@ -809,6 +833,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         old_is_user_provided: bool,
         old_must_regenerate: bool,
         new_must_regenerate: bool,
+        client: &http_client::ureq::Agent,
     ) -> Result<()>
     where
         'a: 'doc,
@@ -845,6 +870,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         old_is_user_provided,
                         session,
                         unused_vectors_distribution,
+                        client,
                     )
                 } else {
                     update_autogenerated(
@@ -858,6 +884,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         old_is_user_provided,
                         session,
                         unused_vectors_distribution,
+                        client,
                     )
                 }?
             }
@@ -881,6 +908,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         &(),
                         session,
                         unused_vectors_distribution,
+                        client,
                     )?;
                     return Ok(());
                 }
@@ -896,6 +924,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     false,
                     session,
                     unused_vectors_distribution,
+                    client,
                 )?
             }
         };
@@ -912,6 +941,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
         new_fields_ids_map: &'a RefCell<crate::GlobalFieldsIdsMap>,
         unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
         new_must_regenerate: bool,
+        client: &http_client::ureq::Agent,
     ) -> Result<()>
     where
         'a: 'doc,
@@ -946,6 +976,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         &external_docid,
                         session,
                         unused_vectors_distribution,
+                        client,
                     )?;
                 } else {
                     insert_autogenerated(
@@ -956,6 +987,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                         &external_docid,
                         session,
                         unused_vectors_distribution,
+                        client,
                     )?;
                 }
             }
@@ -973,6 +1005,7 @@ impl<'a, 'b, 'extractor> Chunks<'a, 'b, 'extractor> {
                     &(),
                     session,
                     unused_vectors_distribution,
+                    client,
                 )?;
             }
         }
@@ -1108,6 +1141,7 @@ fn update_autogenerated<'doc, 'a: 'doc, 'b, E, OD, ND>(
     mut must_clear_on_generation: bool,
     session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
+    client: &http_client::ureq::Agent,
 ) -> Result<()>
 where
     OD: Document<'doc> + Debug,
@@ -1117,12 +1151,12 @@ where
     crate::Error: From<E::Error>,
 {
     for extractor in extractors {
-        let new_rendered = extractor.extract(&new_document, meta)?;
+        let new_rendered = extractor.extract(&new_document, meta, client)?;
         let must_regenerate = if !old_must_regenerate {
             // we just enabled `regenerate`
             true
         } else {
-            let old_rendered = extractor.extract(&old_document, meta);
+            let old_rendered = extractor.extract(&old_document, meta, client);
 
             if let Ok(old_rendered) = old_rendered {
                 // must regenerate if the rendered changed
@@ -1165,6 +1199,7 @@ fn insert_autogenerated<'doc, 'a: 'doc, 'b, E, D: Document<'doc> + Debug>(
     meta: &E::DocumentMetadata,
     session: &mut EmbedSession<'a, OnEmbeddingDocumentUpdates<'a, 'b>, E::Input>,
     unused_vectors_distribution: &UnusedVectorsDistributionBump<'a>,
+    client: &http_client::ureq::Agent,
 ) -> Result<()>
 where
     E: VectorExtractor<'a>,
@@ -1172,7 +1207,7 @@ where
     crate::Error: From<E::Error>,
 {
     for extractor in extractors {
-        let new_rendered = extractor.extract(&new_document, meta)?;
+        let new_rendered = extractor.extract(&new_document, meta, client)?;
 
         if let Some(new_rendered) = new_rendered {
             session.request_embedding(
