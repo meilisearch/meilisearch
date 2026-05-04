@@ -88,6 +88,7 @@ tiktoken-rs = "0.9.1"
 liquid = {version ="0.26.11", git = "https://codeberg.org/dureuill/liquid-rust.git", branch = "render-with-runtime"}
 liquid-core = {version ="0.26.11", git = "https://codeberg.org/dureuill/liquid-rust.git", branch = "render-with-runtime"}
 liquid-derive = {version ="0.26.10", git = "https://codeberg.org/dureuill/liquid-rust.git", branch = "render-with-runtime"}
+base64 = "0.22.1"
 rhai = { version = "1.23.6", features = [
     "serde",
     "no_module",
@@ -125,6 +126,7 @@ twox-hash = { version = "2.1.2", default-features = false, features = [
 ] }
 geo-types = "=0.7.17" # fixed version: see <https://github.com/meilisearch/meilisearch/pull/6118>
 zerometry = "0.3.0"
+infer = "0.19.0"
 
 [dev-dependencies]
 mimalloc = { workspace = true }
