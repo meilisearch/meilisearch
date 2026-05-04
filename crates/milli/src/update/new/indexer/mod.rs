@@ -1045,6 +1045,5 @@ pub fn url_fetcher_client(
                 .http_status_as_error(false)
         })
         .build();
-    let client = http_client::ureq::Agent::new_with_config(config, embedder_ip_policy.clone());
-    client
+    http_client::ureq::Agent::new_with_config(config, embedder_ip_policy.clone())
 }

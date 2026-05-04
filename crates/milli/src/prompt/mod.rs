@@ -155,16 +155,14 @@ impl Prompt {
 
         let rendered = if let Some(replaced) = tickets_urls.resolve_url(client, rendered)? {
             doc_alloc.alloc_str(&replaced)
-        } else {
-            if let Some(max_bytes) = self.max_bytes {
-                if let Some(char_boundary) = must_truncate(rendered, max_bytes.get()) {
-                    &rendered[0..char_boundary]
-                } else {
-                    rendered
-                }
+        } else if let Some(max_bytes) = self.max_bytes {
+            if let Some(char_boundary) = must_truncate(rendered, max_bytes.get()) {
+                &rendered[0..char_boundary]
             } else {
                 rendered
             }
+        } else {
+            rendered
         };
 
         Ok(rendered)
@@ -221,7 +219,7 @@ fn must_truncate(s: &str, max_bytes: usize) -> Option<usize> {
             return Some(i);
         }
     }
-    return Some(0);
+    Some(0)
 }
 
 #[cfg(test)]

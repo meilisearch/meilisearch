@@ -66,7 +66,7 @@ impl liquid_core::Filter for FetchUrlFilter {
         let url = input
             .as_scalar()
             .ok_or_else(|| {
-                liquid_core::Error::with_msg(&format!("expected string, got {}", input.type_name()))
+                liquid_core::Error::with_msg(format!("expected string, got {}", input.type_name()))
             })?
             .into_string();
 
