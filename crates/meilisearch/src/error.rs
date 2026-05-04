@@ -142,6 +142,8 @@ pub enum MeilisearchHttpError {
     InvalidHeaderValue { header_name: &'static str, msg: String },
     #[error("This remote is not the leader of the network.\n  - Note: only the leader `{leader}` can receive new tasks.")]
     NotLeader { leader: String },
+    #[error("Renaming a remote is not supported when a leader is defined.\n  - Note: applying this change would rename `{old_self}` to `{new_self}`.\n  - Hint: Send this change to `{new_self}` if it already exists.")]
+    RenamedSelf { old_self: String, new_self: String },
     #[error("Unexpected `previousRemotes` in network call.\n  - Note: `previousRemote` is reserved for internal use.")]
     UnexpectedNetworkPreviousRemotes,
     #[error("The network version in request is too old.\n  - Received: {received}\n  - Expected at least: {expected_at_least}")]
@@ -218,6 +220,7 @@ impl ErrorCode for MeilisearchHttpError {
             }
             MeilisearchHttpError::InvalidHeaderValue { .. } => Code::InvalidHeaderValue,
             MeilisearchHttpError::NotLeader { .. } => Code::NotLeader,
+            MeilisearchHttpError::RenamedSelf { .. } => Code::InvalidNetworkSelf,
             MeilisearchHttpError::UnexpectedNetworkPreviousRemotes => {
                 Code::UnexpectedNetworkPreviousRemotes
             }
