@@ -602,6 +602,7 @@ pub struct IndexStats {
     ///
     /// Database names can change from version to version.
     #[serde(skip_serializing_if = "serde_json::Map::is_empty")]
+    #[schema(value_type = HashMap<String, Size>)]
     // serde_json::Map<String, Size> is not Serialize, so we convert the Size to a serde_json::Value
     pub internal_database_sizes: serde_json::Map<String, serde_json::Value>,
     /// Number of embeddings in the index
@@ -677,7 +678,7 @@ impl IndexStats {
 /// Return statistics for a single index: document count, database size, indexing status, and field distribution.
 #[routes::path(
     security(("Bearer" = ["stats.get", "stats.*", "*"])),
-    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false)),
+    params(("index_uid" = String, example = "movies", description = "Unique identifier of the index.", nullable = false), GetIndexStatsParams),
     responses(
         (status = OK, description = "The stats of the index.", body = IndexStats, content_type = "application/json", example = json!(
             {
@@ -744,7 +745,7 @@ pub struct GetIndexStatsParams {
 
     /// Specify how to format the sizes:
     ///
-    /// - `"raw"`: format sizes as a number of bytes
+    /// - `"raw"` (default): format sizes as a number of bytes
     /// - `"human"`: format sizes as a human-readable string with an appropriate unit.
     #[deserr(default, error = DeserrQueryParamError<InvalidStatsSizeFormat>)]
     #[param(required = false, example = "human")]
