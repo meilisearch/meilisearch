@@ -239,6 +239,10 @@ impl Metadata {
                 if features.is_filterable() || features.is_facet_searchable() {
                     return PatternMatch::Match;
                 }
+                // If the field is not filterable or facet searchable,
+                // it may be a parent field of a filterable or facet searchable field.
+                // This case can happen when a field is added to the filterable attributes with every features deactivated.
+                pattern_match = PatternMatch::Parent;
             }
             (PatternMatch::Parent, _) => pattern_match = PatternMatch::Parent,
             (PatternMatch::NoMatch, _) => (),
@@ -422,14 +426,24 @@ impl MetadataBuilder {
 
         let searchable = match &self.searchable_attributes {
             // A field is searchable if it is faceted by a searchable attribute
-            Some(attributes) => attributes
-                .iter()
-                .enumerate()
-                .find_map(|(i, pattern)| match match_field_legacy(pattern, field) {
-                    PatternMatch::Match => Some((PatternMatch::Match, Some(i as u16))),
-                    pattern_match => Some((pattern_match, None)),
-                })
-                .unwrap_or((PatternMatch::NoMatch, None)),
+            Some(attributes) => {
+                let mut matching_searchable = PatternMatch::NoMatch;
+                let weight =
+                    attributes.iter().enumerate().find_map(
+                        |(i, pattern)| match match_field_legacy(pattern, field) {
+                            PatternMatch::Match => {
+                                matching_searchable = PatternMatch::Match;
+                                Some(i as u16)
+                            }
+                            PatternMatch::Parent => {
+                                matching_searchable = PatternMatch::Parent;
+                                None
+                            }
+                            PatternMatch::NoMatch => None,
+                        },
+                    );
+                (matching_searchable, weight)
+            }
             None => (PatternMatch::Match, Some(0)),
         };
 
