@@ -122,7 +122,7 @@ pub fn match_field_legacy(pattern: &str, field: &str) -> PatternMatch {
 ///
 /// * `patterns` - The set of patterns to match against.
 /// * `field` - The field to match against the patterns.
-pub fn field_match_any_patterns_legacy<'a, I, P>(patterns: I, field: &str) -> PatternMatch
+pub fn field_match_any_patterns_legacy<I, P>(patterns: I, field: &str) -> PatternMatch
 where
     I: IntoIterator<Item = P>,
     P: AsRef<str>,
