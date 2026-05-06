@@ -10,6 +10,7 @@ use crate::common::{
 use crate::json;
 use crate::search::{SCORE_DOCUMENTS, VECTOR_DOCUMENTS};
 
+mod metadata;
 mod proxy;
 
 pub async fn shared_movies_index() -> &'static Index<'static, Shared> {

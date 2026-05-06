@@ -1378,6 +1378,9 @@ impl FacetValue {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchMetadata {
+    /// Query string set for the query. (federated search only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
     /// Unique identifier for the query.
     pub query_uid: Uuid,
     /// UID of the index that was searched.
@@ -1849,6 +1852,7 @@ pub fn perform_search(
         let query_uid = Uuid::now_v7();
         let primary_key = index.primary_key(&rtxn)?.map(|pk| pk.to_string());
         Some(SearchMetadata {
+            query: None,
             query_uid,
             index_uid: index_uid_for_metadata,
             primary_key,

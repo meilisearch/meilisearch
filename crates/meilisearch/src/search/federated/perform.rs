@@ -99,6 +99,7 @@ pub async fn perform_federated_search(
             .iter()
             .map(|q| {
                 (
+                    q.q.clone(),
                     q.index_uid.to_string(),
                     q.federation_options.as_ref().and_then(|o| o.remote.clone()),
                 )
@@ -867,7 +868,7 @@ struct SearchResultByIndex {
 /// of primary keys to their respective indexes and remotes to prevent collisions when
 /// multiple remotes have the same index_uid but different primary keys.
 fn build_query_metadata(
-    precomputed_query_metadata: Vec<(String, Option<String>)>,
+    precomputed_query_metadata: Vec<(Option<String>, String, Option<String>)>,
     local_remote_name: Option<String>,
     remote_results: &[FederatedSearchResult],
     results_by_index: &[SearchResultByIndex],
@@ -904,13 +905,13 @@ fn build_query_metadata(
 
     // Build metadata in the same order as the original queries
     let mut query_metadata = Vec::new();
-    for (index_uid, remote) in precomputed_query_metadata {
+    for (query, index_uid, remote) in precomputed_query_metadata {
         let primary_key =
             primary_key_per_index.get(&(remote.as_ref(), &index_uid)).map(|pk| pk.to_string());
         let query_uid = Uuid::now_v7();
         // if the remote is not set, use the local remote name
         let remote = remote.or_else(|| local_remote_name.clone());
-        query_metadata.push(SearchMetadata { query_uid, primary_key, index_uid, remote });
+        query_metadata.push(SearchMetadata { query, query_uid, primary_key, index_uid, remote });
     }
     query_metadata
 }
