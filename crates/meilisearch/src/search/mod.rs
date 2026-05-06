@@ -1378,7 +1378,15 @@ impl FacetValue {
 #[serde(rename_all = "camelCase")]
 #[schema(rename_all = "camelCase")]
 pub struct SearchMetadata {
-    /// Query string set for the query. (federated search only).
+    /// Query string set for the query, if not already present in the response.
+    ///
+    /// Only set if:
+    ///
+    /// 1. the metadata corresponds to a query in a federated search request, **and**
+    /// 2. that federated search request query is not a placeholder search (empty or missing `q`)
+    ///
+    /// Never set for regular search and non-federated multi-search because
+    /// the query(ies) are already present in the response.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query: Option<String>,
     /// Unique identifier for the query.
