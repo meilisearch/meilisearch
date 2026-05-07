@@ -529,15 +529,13 @@ where
 {
     let _step = progress.update_progress_scoped(IndexingStep::DeletingFromGeoDatabases);
 
-    let new_fields_ids_map = settings_delta.new_fields_ids_map();
-    let new_filterable_rules = settings_delta.new_filterable_rules();
+    let new_enabled_geojson = settings_delta
+        .new_fields_ids_map()
+        .id_with_metadata(RESERVED_GEOJSON_FIELD_NAME)
+        .is_some_and(|(_id, meta)| meta.is_geojson_enabled());
 
-    let new_geojson_is_faceted =
-        new_fields_ids_map.id_with_metadata(RESERVED_GEOJSON_FIELD_NAME).is_some_and(
-            |(_, metadata)| metadata.is_faceted(new_filterable_rules) == PatternMatch::Match,
-        );
     // Clear the cellulite database when the geojson support is removed
-    if !new_geojson_is_faceted {
+    if !new_enabled_geojson {
         index.cellulite.clear(wtxn)?;
     }
 
@@ -545,12 +543,13 @@ where
         return Err(Error::InternalError(InternalError::AbortedIndexation));
     }
 
-    let new_geo_is_faceted =
-        new_fields_ids_map.id_with_metadata(RESERVED_GEO_FIELD_NAME).is_some_and(
-            |(_, metadata)| metadata.is_faceted(new_filterable_rules) == PatternMatch::Match,
-        );
+    let new_enabled_geo = settings_delta
+        .new_fields_ids_map()
+        .id_with_metadata(RESERVED_GEO_FIELD_NAME)
+        .is_some_and(|(_id, meta)| meta.is_geo_enabled());
+
     // Clear the geo rtree entry when the geo support is removed
-    if !new_geo_is_faceted {
+    if !new_enabled_geo {
         index.delete_geo_rtree(wtxn)?;
     }
 

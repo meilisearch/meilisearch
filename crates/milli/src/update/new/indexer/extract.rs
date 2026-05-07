@@ -13,7 +13,7 @@ use super::super::thread_local::{FullySend, ThreadLocal};
 use super::super::FacetFieldIdsDelta;
 use super::document_changes::{extract, DocumentChanges, IndexingContext};
 use super::settings_changes::settings_change_extract;
-use crate::constants::RESERVED_GEO_FIELD_NAME;
+use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
 use crate::documents::{FieldIdMapper, PrimaryKey};
 use crate::progress::{EmbedderStats, MergingWordCache};
 use crate::proximity::ProximityPrecision;
@@ -28,9 +28,7 @@ use crate::update::new::{merge_and_send_docids, merge_and_send_facet_docids, Fac
 use crate::update::settings::SettingsDelta;
 use crate::vector::db::{EmbedderInfo, IndexEmbeddingConfig};
 use crate::vector::RuntimeEmbedders;
-use crate::{
-    Index, InternalError, PatternMatch, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder,
-};
+use crate::{Index, InternalError, Result, ThreadPoolNoAbort, ThreadPoolNoAbortBuilder};
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn extract_all<'pl, 'extractor, DC, MSP>(
@@ -628,15 +626,16 @@ where
     }
 
     'geo: {
-        let enabled_filterable_geo =
-            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geo())
-                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geo());
-        let enabled_sortable_geo = settings_delta
+        let old_enabled_geo = settings_delta
+            .old_fields_ids_map()
+            .id_with_metadata(RESERVED_GEO_FIELD_NAME)
+            .is_some_and(|(_id, meta)| meta.is_geo_enabled());
+        let new_enabled_geo = settings_delta
             .new_fields_ids_map()
             .id_with_metadata(RESERVED_GEO_FIELD_NAME)
-            .is_some_and(|(_id, meta)| meta.is_sortable() == PatternMatch::Match);
+            .is_some_and(|(_id, meta)| meta.is_geo_enabled());
 
-        if !enabled_filterable_geo && !enabled_sortable_geo {
+        if old_enabled_geo || !new_enabled_geo {
             break 'geo;
         }
 
@@ -662,11 +661,16 @@ where
     }
 
     'cellulite: {
-        let enabled_filterable_geojson =
-            !settings_delta.old_filterable_rules().iter().any(|rule| rule.has_geojson())
-                && settings_delta.new_filterable_rules().iter().any(|rule| rule.has_geojson());
+        let old_enabled_geojson = settings_delta
+            .old_fields_ids_map()
+            .id_with_metadata(RESERVED_GEOJSON_FIELD_NAME)
+            .is_some_and(|(_id, meta)| meta.is_geojson_enabled());
+        let new_enabled_geojson = settings_delta
+            .new_fields_ids_map()
+            .id_with_metadata(RESERVED_GEOJSON_FIELD_NAME)
+            .is_some_and(|(_id, meta)| meta.is_geojson_enabled());
 
-        if !enabled_filterable_geojson {
+        if old_enabled_geojson || !new_enabled_geojson {
             break 'cellulite;
         }
 

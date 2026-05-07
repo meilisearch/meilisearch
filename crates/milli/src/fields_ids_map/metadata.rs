@@ -215,6 +215,17 @@ impl Metadata {
         self.geo
     }
 
+    pub fn is_geo_enabled(&self) -> bool {
+        self.geo == PatternMatch::Match
+            && (self.sortable == PatternMatch::Match
+                || self.filterable_attributes_rule_id.0 == PatternMatch::Match)
+    }
+
+    pub fn is_geojson_enabled(&self) -> bool {
+        self.geo_json == PatternMatch::Match
+            && self.filterable_attributes_rule_id.0 == PatternMatch::Match
+    }
+
     /// Returns the pattern match if the field is part of the facet databases. (sortable, distinct, asc_desc, filterable or facet searchable)
     pub fn is_faceted(&self, rules: &[FilterableAttributesRule]) -> PatternMatch {
         let mut pattern_match = PatternMatch::NoMatch;
