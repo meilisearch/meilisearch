@@ -36,9 +36,10 @@ use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
+use super::extract::FieldFacetStatus;
 use crate::{
-    Error, FieldsIdsMap, FilterFeatures, FilterableAttributesFeatures, GlobalFieldsIdsMap, Index,
-    InternalError, PatternMatch, Result, ThreadPoolNoAbort,
+    Error, FieldId, FieldsIdsMap, GlobalFieldsIdsMap, Index, InternalError, PatternMatch, Result,
+    ThreadPoolNoAbort,
 };
 
 pub(crate) mod de;
@@ -548,70 +549,22 @@ where
     let new_filterable_rules = settings_delta.new_filterable_rules();
 
     for (id, metadata) in old_fields_ids_map.iter_id_metadata() {
-        let FilterableAttributesFeatures { facet_search: old_facet_search, filter } =
-            metadata.filterable_attributes_features(old_filterable_rules);
-        let FilterFeatures { equality: old_equality, comparison: old_comparison } = filter;
-        let old_asc_desc = metadata.asc_desc.is_some();
-        let old_sortable = metadata.sortable;
-        let old_distinct = metadata.distinct;
+        let old_status = FieldFacetStatus::from_metadata(&metadata, old_filterable_rules);
+        let new_status =
+            FieldFacetStatus::from_field_id(new_fields_ids_map, new_filterable_rules, id);
 
-        let new_facet_search;
-        let new_equality;
-        let new_comparison;
-        let new_asc_desc;
-        let new_sortable;
-        let new_distinct;
-        match new_fields_ids_map.metadata(id) {
-            Some(metadata) => {
-                let FilterableAttributesFeatures { facet_search, filter } =
-                    metadata.filterable_attributes_features(new_filterable_rules);
-                let FilterFeatures { equality, comparison } = filter;
-                new_facet_search = facet_search;
-                new_equality = equality;
-                new_comparison = comparison;
-                new_asc_desc = metadata.asc_desc.is_some();
-                new_sortable = metadata.sortable;
-                new_distinct = metadata.distinct;
-            }
-            None => {
-                // This will trigger a clean deletion from everywhere
-                new_facet_search = false;
-                new_equality = false;
-                new_comparison = false;
-                new_asc_desc = false;
-                new_sortable = false;
-                new_distinct = false;
-            }
-        };
-
-        let is_old_faceted = old_equality
-            || old_comparison
-            || old_facet_search
-            || old_asc_desc
-            || old_sortable
-            || old_distinct;
-
-        let is_new_faceted = new_equality
-            || new_comparison
-            || new_facet_search
-            || new_asc_desc
-            || new_sortable
-            || new_distinct;
-
-        if is_old_faceted && !is_new_faceted {
+        if old_status.is_faceted() && !new_status.is_faceted() {
             // If we delete from everywhere we don't have to check the remaining conditions.
             remove_from_everywhere.insert(id);
             continue;
         }
 
-        if old_facet_search && !new_facet_search {
+        if old_status.facet_search && !new_status.facet_search {
             // Remove only from the facet search
             remove_from_facet_search.insert(id);
         }
 
-        let is_old_comparison = old_sortable || old_asc_desc || old_comparison;
-        let is_new_comparison = new_sortable || new_asc_desc || new_comparison;
-        if is_old_comparison && !is_new_comparison {
+        if old_status.is_comparison() && !new_status.is_comparison() {
             // Remove the comparison levels from the facets.
             remove_comparison_levels_only.insert(id);
         }
@@ -650,24 +603,14 @@ where
         ];
 
         progress.update_progress(IndexingStep::DeletingFromAllFilters);
-        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
-        progress.update_progress(db_progress_obj);
-
-        for database in databases {
-            if must_stop_processing() {
-                return Err(Error::InternalError(InternalError::AbortedIndexation));
-            }
-
-            for id in remove_from_everywhere.iter().copied() {
-                let mut iter = database.prefix_iter_mut(wtxn, &id.to_be_bytes())?;
-                while iter.next().transpose()?.is_some() {
-                    // safety: We don't keep any reference to the database.
-                    unsafe { iter.del_current()? };
-                }
-            }
-
-            db_progress.fetch_add(1, Ordering::Relaxed);
-        }
+        delete_field_ids_from_databases(
+            wtxn,
+            must_stop_processing,
+            progress,
+            &databases,
+            &remove_from_everywhere,
+            |_key| true,
+        )?;
     }
 
     // Delete the entries for these field IDs from the facet search datastructures.
@@ -676,25 +619,14 @@ where
             [facet_id_normalized_string_strings.remap_types(), facet_id_string_fst.remap_types()];
 
         progress.update_progress(IndexingStep::DeletingFromFacetsOnly);
-        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
-        progress.update_progress(db_progress_obj);
-
-        // TODO merge with the above code
-        for database in databases {
-            if must_stop_processing() {
-                return Err(Error::InternalError(InternalError::AbortedIndexation));
-            }
-
-            for id in remove_from_facet_search.iter().copied() {
-                let mut iter = database.prefix_iter_mut(wtxn, &id.to_be_bytes())?;
-                while iter.next().transpose()?.is_some() {
-                    // safety: We don't keep any reference to the database.
-                    unsafe { iter.del_current()? };
-                }
-            }
-
-            db_progress.fetch_add(1, Ordering::Relaxed);
-        }
+        delete_field_ids_from_databases(
+            wtxn,
+            must_stop_processing,
+            progress,
+            &databases,
+            &remove_from_facet_search,
+            |_key| true,
+        )?;
     }
 
     // Deletes the levels > 0 for the entries corresponding to these
@@ -704,32 +636,60 @@ where
             [facet_id_f64_docids.remap_types(), facet_id_string_docids.remap_types()];
 
         progress.update_progress(IndexingStep::DeletingFromComparisonsOnly);
-        let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
-        progress.update_progress(db_progress_obj);
+        delete_field_ids_from_databases(
+            wtxn,
+            must_stop_processing,
+            progress,
+            &databases,
+            &remove_comparison_levels_only,
+            // We want to delete everything that is not from
+            // the level 0 as it provides equality comparisons.
+            //
+            // The first two bytes corresponds to the field ID
+            // while the third byte corresponds to the level.
+            |key| key.get(2).copied() != Some(0),
+        )?;
+    }
 
-        // TODO merge with the above code (or not?)
-        for database in databases {
-            if must_stop_processing() {
-                return Err(Error::InternalError(InternalError::AbortedIndexation));
-            }
+    Ok(())
+}
 
-            for id in remove_comparison_levels_only.iter().copied() {
-                let mut iter = database.prefix_iter_mut(wtxn, &id.to_be_bytes())?;
-                while let Some((key, _ignored)) = iter.next().transpose()? {
-                    // We want to delete everything that is not from
-                    // the level 0 as it provides equality comparisons.
-                    //
-                    // The first two bytes corresponds to the field ID
-                    // while the third byte corresponds to the level.
-                    if key.get(2).copied() != Some(0) {
-                        // safety: We don't keep any reference to the database.
-                        unsafe { iter.del_current()? };
-                    }
+/// Iterate over the entries of `databases` whose key starts with one of the
+/// provided field IDs (encoded as big-endian bytes) and delete the ones for
+/// which `should_delete` returns `true`.
+///
+/// All three branches of `delete_old_fid_from_facet_databases` go through
+/// this helper to share the same iteration / progress / abort plumbing.
+fn delete_field_ids_from_databases<MSP>(
+    wtxn: &mut RwTxn<'_>,
+    must_stop_processing: &MSP,
+    progress: &Progress,
+    databases: &[Database<Bytes, DecodeIgnore>],
+    field_ids: &BTreeSet<FieldId>,
+    should_delete: impl Fn(&[u8]) -> bool,
+) -> Result<()>
+where
+    MSP: Fn() -> bool + Sync,
+{
+    let (db_progress, db_progress_obj) = AtomicDatabaseStep::new(databases.len() as u32);
+    progress.update_progress(db_progress_obj);
+
+    for database in databases {
+        if must_stop_processing() {
+            return Err(Error::InternalError(InternalError::AbortedIndexation));
+        }
+
+        for id in field_ids.iter().copied() {
+            let mut iter = database.prefix_iter_mut(wtxn, &id.to_be_bytes())?;
+            while let Some((key, _ignored)) = iter.next().transpose()? {
+                if should_delete(key) {
+                    // safety: We don't keep any reference to the database.
+                    unsafe { iter.del_current()? };
                 }
             }
-
-            db_progress.fetch_add(1, Ordering::Relaxed);
         }
+
+        db_progress.fetch_add(1, Ordering::Relaxed);
     }
 
     Ok(())

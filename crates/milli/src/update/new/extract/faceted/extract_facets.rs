@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use super::super::cache::BalancedCaches;
 use super::facet_document::{extract_document_facets, extract_geo_document};
+use super::field_facet_status::FieldFacetStatus;
 use super::FacetKind;
 use crate::fields_ids_map::metadata::Metadata;
 use crate::filterable_attributes_rules::match_faceted_field;
@@ -32,9 +33,8 @@ use crate::update::new::{DocumentChange, DocumentIdentifiers};
 use crate::update::settings::SettingsDelta;
 use crate::update::GrenadParameters;
 use crate::{
-    DocumentId, FieldId, FieldIdMapMissingEntry, FilterFeatures, FilterableAttributesFeatures,
-    FilterableAttributesRule, GlobalFieldsIdsMap, InternalError, PatternMatch, Result, UserError,
-    MAX_FACET_VALUE_LENGTH,
+    DocumentId, FieldId, FieldIdMapMissingEntry, FilterableAttributesRule, GlobalFieldsIdsMap,
+    InternalError, PatternMatch, Result, UserError, MAX_FACET_VALUE_LENGTH,
 };
 
 pub struct FacetedExtractorData<'a, 'b> {
@@ -643,66 +643,20 @@ impl FacetedDocidsExtractor {
 
         extract_document_facets(
             current_document,
-            // TODO extract into another function
             |field_name| {
                 let Some((field_id, metadata)) = old_fields_ids_map.id_with_metadata(field_name)
                 else {
                     return PatternMatch::NoMatch;
                 };
 
-                let FilterableAttributesFeatures { facet_search: old_facet_search, filter } =
-                    metadata.filterable_attributes_features(old_filterable_rules);
-                let FilterFeatures { equality: old_equality, comparison: old_comparison } = filter;
-                let old_asc_desc = metadata.asc_desc.is_some();
-                let old_sortable = metadata.sortable;
-                let old_distinct = metadata.distinct;
+                let old_status = FieldFacetStatus::from_metadata(&metadata, old_filterable_rules);
+                let new_status = FieldFacetStatus::from_field_id(
+                    new_fields_ids_map,
+                    new_filterable_rules,
+                    field_id,
+                );
 
-                let new_facet_search;
-                let new_equality;
-                let new_comparison;
-                let new_asc_desc;
-                let new_sortable;
-                let new_distinct;
-                // TODO do not duplicate this logic and put it in a function
-                //      for delete_old_fid_from_facet_databases to use it
-                match new_fields_ids_map.metadata(field_id) {
-                    Some(metadata) => {
-                        let FilterableAttributesFeatures { facet_search, filter } =
-                            metadata.filterable_attributes_features(new_filterable_rules);
-                        let FilterFeatures { equality, comparison } = filter;
-                        new_facet_search = facet_search;
-                        new_equality = equality;
-                        new_comparison = comparison;
-                        new_asc_desc = metadata.asc_desc.is_some();
-                        new_sortable = metadata.sortable;
-                        new_distinct = metadata.distinct;
-                    }
-                    None => {
-                        // This will trigger a clean deletion from everywhere
-                        new_facet_search = false;
-                        new_equality = false;
-                        new_comparison = false;
-                        new_asc_desc = false;
-                        new_sortable = false;
-                        new_distinct = false;
-                    }
-                };
-
-                let is_old_faceted = old_equality
-                    || old_comparison
-                    || old_facet_search
-                    || old_asc_desc
-                    || old_sortable
-                    || old_distinct;
-
-                let is_new_faceted = new_equality
-                    || new_comparison
-                    || new_facet_search
-                    || new_asc_desc
-                    || new_sortable
-                    || new_distinct;
-
-                if !is_old_faceted && is_new_faceted {
+                if !old_status.is_faceted() && new_status.is_faceted() {
                     PatternMatch::Match
                 } else {
                     // We force the system to go down the rabbit hole
