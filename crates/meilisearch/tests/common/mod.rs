@@ -534,6 +534,13 @@ pub async fn shared_index_with_geo_documents() -> &'static Index<'static, Shared
 
             let (response, _code) = index
                 ._update_settings(
+                    json!({"filterableAttributes": ["_geo", "type"], "sortableAttributes": ["_geo"]}),
+                )
+                .await;
+            server.wait_task(response.uid()).await.succeeded();
+
+            let (response, _code) = index
+                ._update_settings(
                     json!({"filterableAttributes": ["_geo"], "sortableAttributes": ["_geo"]}),
                 )
                 .await;
@@ -554,6 +561,10 @@ pub async fn shared_index_geojson_documents() -> &'static Index<'static, Shared>
             let lille = serde_json::from_str::<serde_json::Value>(countries).unwrap();
             let (response, _code) =
                 index._add_documents(Value(lille), Some("name"), None, false).await;
+            server.wait_task(response.uid()).await.succeeded();
+
+            let (response, _code) =
+                index._update_settings(json!({"filterableAttributes": ["_geojson", "name"]})).await;
             server.wait_task(response.uid()).await.succeeded();
 
             let (response, _code) =

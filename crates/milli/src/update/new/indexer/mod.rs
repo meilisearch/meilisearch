@@ -537,7 +537,7 @@ where
             |(_, metadata)| metadata.is_faceted(new_filterable_rules) == PatternMatch::Match,
         );
     // Clear the cellulite database when the geojson support is removed
-    if new_geojson_is_faceted {
+    if !new_geojson_is_faceted {
         index.cellulite.clear(wtxn)?;
     }
 
@@ -550,7 +550,7 @@ where
             |(_, metadata)| metadata.is_faceted(new_filterable_rules) == PatternMatch::Match,
         );
     // Clear the geo rtree entry when the geo support is removed
-    if new_geo_is_faceted {
+    if !new_geo_is_faceted {
         index.delete_geo_rtree(wtxn)?;
     }
 
