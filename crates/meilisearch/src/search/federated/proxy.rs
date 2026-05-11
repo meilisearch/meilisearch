@@ -110,14 +110,33 @@ pub async fn proxy_search(
     params: &ProxySearchParams,
     include_metadata: bool,
 ) -> Result<FederatedSearchResult, ProxySearchError> {
-    let url = route::url_from_base_and_route(&node.url, route::multi_search_path())
+    let federated = FederatedSearch { queries, federation: Some(federation) };
+
+    json_proxy(
+        route::multi_search_path(),
+        Method::POST,
+        node,
+        &federated,
+        params,
+        include_metadata,
+    )?
+    .await
+}
+
+pub fn json_proxy<Body: Serialize, Response: DeserializeOwned>(
+    path_and_query: PathAndQuery,
+    method: Method,
+    remote: &Remote,
+    body: Body,
+    params: &ProxySearchParams,
+    include_metadata: bool,
+) -> Result<impl Future<Output = Result<Response, ProxySearchError>> + 'static, ProxySearchError> {
+    let url = route::url_from_base_and_route(&remote.url, path_and_query)
         .map_err(|err| ProxySearchError::InvalidRemoteUrl { cause: err.to_string() })?;
 
     let url = url.to_string();
 
-    let federated = FederatedSearch { queries, federation: Some(federation) };
-
-    let search_api_key = node.search_api_key.as_deref();
+    let search_api_key = remote.search_api_key.as_deref();
 
     let timeout = std::env::var("MEILI_EXPERIMENTAL_REMOTE_SEARCH_TIMEOUT_SECONDS")
         .ok()
@@ -132,41 +151,8 @@ pub async fn proxy_search(
         max_deadline
     };
 
-    for i in 0..params.try_count {
-        match try_proxy_search(
-            &url,
-            search_api_key,
-            &federated,
-            &params.client,
-            deadline,
-            include_metadata,
-        )
-        .await
-        {
-            Ok(response) => return Ok(response),
-            Err(retry) => {
-                let duration = retry.into_duration(i)?;
-                tokio::time::sleep(duration).await;
-            }
-        }
-    }
-    try_proxy_search(&url, search_api_key, &federated, &params.client, deadline, include_metadata)
-        .await
-        .map_err(Retry::into_error)
-}
-
-async fn try_proxy_search(
-    url: &str,
-    search_api_key: Option<&str>,
-    federated: &FederatedSearch,
-    client: &Client,
-    deadline: std::time::Instant,
-    include_metadata: bool,
-) -> Result<FederatedSearchResult, Retry> {
-    let timeout = deadline.saturating_duration_since(std::time::Instant::now());
-
-    let request = client.post(url).prepare(|request| {
-        let request = request.json(&federated).timeout(timeout);
+    let request = params.client.request(method, url).prepare(|request| {
+        let request = request.json(&body);
         let request = if let Some(search_api_key) = search_api_key {
             request.bearer_auth(search_api_key)
         } else {
@@ -179,6 +165,33 @@ async fn try_proxy_search(
             request
         }
     });
+
+    let try_count = params.try_count;
+
+    Ok(async move {
+        for i in 0..try_count {
+            // unwrap: we are passing `json` body, no streaming.
+            let request = request.try_clone().unwrap();
+
+            match try_json_proxy(request, deadline).await {
+                Ok(response) => return Ok(response),
+                Err(retry) => {
+                    let duration = retry.into_duration(i)?;
+                    tokio::time::sleep(duration).await;
+                }
+            }
+        }
+        try_json_proxy(request, deadline).await.map_err(Retry::into_error)
+    })
+}
+
+async fn try_json_proxy<Response: DeserializeOwned>(
+    request: RequestBuilder,
+    deadline: std::time::Instant,
+) -> Result<Response, Retry> {
+    let timeout = deadline.saturating_duration_since(std::time::Instant::now());
+
+    let request = request.prepare(|request| request.timeout(timeout));
 
     let response = request.send().await;
     let response = match response {
