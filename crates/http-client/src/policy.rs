@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, SocketAddr};
 
 use reqwest::Url;
 
@@ -26,17 +26,16 @@ impl IpPolicy {
 
     /// Checks if the hostname is a direct URL, and if so performs [`Self::check_ip`] on it.
     pub fn check_ip_in_hostname(&self, url: &Url) -> Result<(), Error> {
-        let Some(host) = url.host_str() else { return Ok(()) };
-        // we want to use a parsing similar to reqwest's, so we're not directly parsing as a `IpAddr`
-        let ip_addr_v4: Option<Ipv4Addr> = host.parse().ok();
-        if let Some(ip_addr_v4) = ip_addr_v4 {
-            self.check_ip(IpAddr::V4(ip_addr_v4))?;
+        let Some(host) = url.host() else { return Ok(()) };
+
+        match host {
+            url::Host::Domain(_) => Ok(()),
+            url::Host::Ipv4(ipv4_addr) => self.check_ip(IpAddr::V4(ipv4_addr)),
+            url::Host::Ipv6(ipv6_addr) => match ipv6_addr.to_ipv4_mapped() {
+                Some(ipv4_addr) => self.check_ip(IpAddr::V4(ipv4_addr)),
+                None => self.check_ip(IpAddr::V6(ipv6_addr)),
+            },
         }
-        let ip_addr_v6: Option<Ipv6Addr> = host.parse().ok();
-        if let Some(ip_addr_v6) = ip_addr_v6 {
-            self.check_ip(IpAddr::V6(ip_addr_v6))?;
-        }
-        Ok(())
     }
 
     pub fn check_socket_addr(&self, addr: SocketAddr) -> Result<(), Error> {

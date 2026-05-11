@@ -24,6 +24,7 @@ hyper-util = { version = "0.1.19", features = [
 ] }
 tower-service = "0.3.3"
 cidr = "0.3.2"
+url = "2.5.7"
 
 [dev-dependencies]
 tokio = { version = "1.48.0", features = ["full"] }

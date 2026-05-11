@@ -69,4 +69,19 @@ mod tests {
             assert_eq!(format!("{origin:?}"), "DeniedLocalIp");
         })
     }
+
+    #[tokio::test]
+    async fn reqwest_mapped_ipv4() {
+        let client = crate::reqwest::ClientBuilder::new()
+            .prepare(|builder| builder.timeout(std::time::Duration::from_millis(100)))
+            .build_with_policies(IpPolicy::deny_all_local_ips(), Default::default())
+            .unwrap();
+        let err = client.get("http://[::ffff:172.17.0.1]:9999").send().await.unwrap_err();
+        let mut origin: &dyn std::error::Error = &err;
+        while let Some(source) = origin.source() {
+            origin = source;
+        }
+
+        assert_eq!(format!("{origin:?}"), "Policy(DeniedLocalIp)");
+    }
 }
