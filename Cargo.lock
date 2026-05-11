@@ -1116,9 +1116,9 @@ dependencies = [
 
 [[package]]
 name = "cellulite"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea10acbe37fc6de810cb2d03171f25161437582aa6184f0755cd5a8a448dec0e"
+checksum = "9375c46e50ef66180ba3f15f82149505d8a66058cf62cbf32827d0013a5b6824"
 dependencies = [
  "crossbeam",
  "geo",
