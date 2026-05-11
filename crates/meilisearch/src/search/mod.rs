@@ -51,8 +51,8 @@ use crate::search::value_paths_visitor::ValuePathsVisitor;
 
 mod federated;
 pub use federated::{
-    perform_federated_search, FederatedSearch, FederatedSearchResult, Federation,
-    FederationOptions, MergeFacets, Partition, PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE,
+    perform_federated_search, proxy, FederatedSearch, FederatedSearchResult, Federation,
+    FederationOptions, MergeFacets, Partition,
 };
 
 mod dynamic_rules;
