@@ -1,7 +1,7 @@
 pub use error::ProxySearchError;
 use error::ReqwestErrorWithoutUrl;
 use http_client::reqwest::{Client, Response, StatusCode};
-use meilisearch_types::network::Remote;
+use meilisearch_types::network::{route, Remote};
 use rand::Rng as _;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -18,6 +18,8 @@ mod error {
 
     #[derive(Debug, thiserror::Error)]
     pub enum ProxySearchError {
+        #[error("Invalid remote url: {cause}")]
+        InvalidRemoteUrl { cause: String },
         #[error("{0}")]
         CouldNotSendRequest(ReqwestErrorWithoutUrl),
         #[error("could not authenticate against the remote host\n  - hint: check that the remote instance was registered with a valid API key having the `search` action")]
@@ -50,6 +52,7 @@ mod error {
             use meilisearch_types::error::Code;
             let message = self.to_string();
             let code = match self {
+                ProxySearchError::InvalidRemoteUrl { .. } => Code::InvalidNetworkUrl,
                 ProxySearchError::CouldNotSendRequest(_) => Code::RemoteCouldNotSendRequest,
                 ProxySearchError::AuthenticationError => Code::RemoteInvalidApiKey,
                 ProxySearchError::BadRequest { .. } => Code::RemoteBadRequest,
@@ -100,7 +103,10 @@ pub async fn proxy_search(
     params: &ProxySearchParams,
     include_metadata: bool,
 ) -> Result<FederatedSearchResult, ProxySearchError> {
-    let url = format!("{}/multi-search", node.url);
+    let url = route::url_from_base_and_route(&node.url, route::multi_search_path())
+        .map_err(|err| ProxySearchError::InvalidRemoteUrl { cause: err.to_string() })?;
+
+    let url = url.to_string();
 
     let federated = FederatedSearch { queries, federation: Some(federation) };
 

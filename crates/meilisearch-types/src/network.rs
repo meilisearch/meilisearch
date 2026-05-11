@@ -140,6 +140,15 @@ pub mod route {
         PathAndQuery::from_static("/network/control")
     }
 
+    pub fn multi_search_path() -> PathAndQuery {
+        // WARNING: if you change this path, you must also change the path in the federated search route macro in the meilisearch crate.
+        PathAndQuery::from_static("/multi-search")
+    }
+
+    pub fn indexes_root_path() -> PathAndQuery {
+        PathAndQuery::from_static("/indexes")
+    }
+
     pub fn url_from_base_and_route(
         remote_base_url: &str,
         route: PathAndQuery,

@@ -17,6 +17,7 @@ use meilisearch_types::milli::progress::{Progress, VariableNameStep};
 use meilisearch_types::milli::update::{request_threads, Setting};
 use meilisearch_types::milli::vector::parsed_vectors::{ExplicitVectors, VectorOrArrayOfVectors};
 use meilisearch_types::milli::{self, obkv_to_json, Filter, InternalError};
+use meilisearch_types::network::route;
 use meilisearch_types::settings::{self, SecretPolicy};
 use meilisearch_types::tasks::network::headers::SetHeader as _;
 use meilisearch_types::tasks::network::{ImportData, ImportMetadata, Origin};
@@ -162,7 +163,13 @@ impl IndexScheduler {
         let primary_key =
             ctx.index.primary_key(ctx.index_rtxn).map_err(milli::Error::from).map_err(err)?;
         if !index_exists {
-            let url = format!("{base_url}/indexes", base_url = target.base_url);
+            let url = route::url_from_base_and_route(target.base_url, route::indexes_root_path())
+                .map_err(|error| Error::InvalidRemoteUrl {
+                url: target.base_url.to_owned(),
+                cause: error.to_string(),
+            })?;
+            let url = url.to_string();
+
             let _ = handle_response(
                 target.remote_name,
                 retry(ctx.must_stop_processing, || {
@@ -419,8 +426,6 @@ impl IndexScheduler {
         agent: &http_client::ureq::Agent,
         must_stop_processing: &MustStopProcessing,
     ) -> Result<(), Error> {
-        use meilisearch_types::network::route;
-
         let bearer = target.api_key.map(|api_key| format!("Bearer {api_key}"));
         let url = route::url_from_base_and_route(target.base_url, route::network_control_path())
             .map_err(|error| Error::InvalidRemoteUrl {
