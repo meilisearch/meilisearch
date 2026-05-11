@@ -261,7 +261,8 @@ impl<'a> SearchForFacetValues<'a> {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, PartialEq)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct FacetValueHit {
     /// The original facet value
     pub value: String,

@@ -48,8 +48,9 @@ pub struct FacetSearchApi;
 //
 // Intentionally don't use `deny_unknown_fields` to ignore search parameters sent by user
 /// Request body for searching facet values
-#[derive(Debug, Clone, Default, PartialEq, deserr::Deserr, ToSchema)]
+#[derive(Debug, Clone, Default, PartialEq, deserr::Deserr, Serialize, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase)]
+#[serde(rename_all = "camelCase")]
 pub struct FacetSearchQuery {
     /// Query string to search for facet values
     #[schema(required = false)]

@@ -1603,7 +1603,7 @@ pub struct FacetStats {
     pub max: f64,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FacetSearchResult {
     pub facet_hits: Vec<FacetValueHit>,
