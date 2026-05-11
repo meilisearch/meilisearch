@@ -145,6 +145,13 @@ pub mod route {
         PathAndQuery::from_static("/multi-search")
     }
 
+    pub fn facet_search_path(
+        index_uid: &crate::index_uid::IndexUid,
+    ) -> Result<PathAndQuery, HttpError> {
+        // WARNING: if you change this path, you must also change the path in the federated search route macro in the meilisearch crate.
+        Ok(PathAndQuery::try_from(format!("/indexes/{index_uid}/facet-search"))?)
+    }
+
     pub fn indexes_root_path() -> PathAndQuery {
         PathAndQuery::from_static("/indexes")
     }
