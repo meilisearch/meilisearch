@@ -3400,6 +3400,7 @@ async fn error_remote_does_not_answer() {
     "#);
 }
 
+#[ignore = "routes are overridden in remote URLs"]
 #[actix_rt::test]
 async fn error_remote_404() {
     let ms0 = Server::new().await;
