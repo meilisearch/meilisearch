@@ -1,17 +1,17 @@
 use std::collections::BTreeSet;
-use std::io::{BufReader, BufWriter, Read, Seek, Write};
+use std::io::{self, BufReader, BufWriter, Read as _, Seek as _};
 use std::iter;
+use std::num::NonZeroU32;
 
 use hashbrown::HashMap;
-use heed::types::{Bytes, DecodeIgnore, Str};
+use heed::types::{Bytes, DecodeIgnore};
 use heed::{Database, RwTxn};
 use rayon::iter::{IndexedParallelIterator as _, IntoParallelIterator, ParallelIterator as _};
 use roaring::MultiOps;
-use tempfile::spooled_tempfile;
 
 use crate::heed_codec::StrBEU16Codec;
-use crate::update::GrenadParameters;
-use crate::{CboRoaringBitmapCodec, Index, Prefix, Result};
+use crate::update::new::indexer::MiniString;
+use crate::{CboRoaringBitmapCodec, Index, Result};
 
 struct WordPrefixDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
