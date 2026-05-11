@@ -1756,9 +1756,7 @@ pub fn prepare_search<'t>(
     search.offset(offset);
     search.limit(limit);
 
-    if let Some(filter) = filter {
-        search.filter(filter);
-    }
+    search.filter(filter);
 
     if let Some(ref sort) = query.sort {
         let sort = match sort.iter().map(|s| AscDesc::from_str(s)).collect() {

@@ -161,8 +161,8 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn filter(&mut self, condition: IndexFilter<'a>) -> &mut Search<'a> {
-        self.filter = Some(condition);
+    pub fn filter(&mut self, condition: Option<IndexFilter<'a>>) -> &mut Search<'a> {
+        self.filter = condition;
         self
     }
 
