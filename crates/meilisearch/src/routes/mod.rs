@@ -607,6 +607,10 @@ enum HealthStatus {
 /// Get health
 ///
 /// The health check endpoint enables you to periodically test the health of your Meilisearch instance. Returns a simple status indicating that the server is available.
+///
+/// The engine will return `available` status with a `200` status code when the instance is healthy.
+/// It will return `mustRestart` status with a `500` status code if the instance requires a restart.
+/// This restart is required after a compaction of the task queue for example.
 #[routes::path(
     responses(
         (status = 200, description = "Instance is healthy.", body = HealthResponse, content_type = "application/json", example = json!(
