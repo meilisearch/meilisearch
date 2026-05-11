@@ -215,8 +215,12 @@ impl<'a> Search<'a> {
         self
     }
 
-    pub fn execute_for_candidates(&self, has_vector_search: bool) -> Result<RoaringBitmap> {
-        if has_vector_search {
+    pub fn execute_for_candidates(&self, is_hybrid_kind: bool) -> Result<RoaringBitmap> {
+        let has_vector = is_hybrid_kind || {
+            self.semantic.as_ref().and_then(|semantic| semantic.vector.as_ref()).is_some()
+        };
+
+        if has_vector {
             let ctx = SearchContext::new(self.index, self.rtxn)?;
             filtered_universe(ctx.index, ctx.txn, &self.filter, self.progress)
         } else {

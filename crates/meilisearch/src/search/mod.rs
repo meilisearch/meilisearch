@@ -1609,6 +1609,9 @@ pub struct FacetSearchResult {
     pub facet_hits: Vec<FacetValueHit>,
     pub facet_query: Option<String>,
     pub processing_time_ms: u128,
+    /// Errors from remote shards. Federated search only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_errors: Option<BTreeMap<String, ResponseError>>,
 }
 
 /// Incorporate search rules in search query
@@ -2480,15 +2483,17 @@ fn make_hits<'a>(
     Ok(documents)
 }
 
-pub fn perform_facet_search(
+#[allow(clippy::too_many_arguments)]
+pub fn perform_facet_search<'a>(
     index: &Index,
     rtxn: &RoTxn,
-    search: milli::Search,
+    mut search: milli::Search<'a>,
+    mut filters: impl Iterator<Item = Option<IndexFilter<'a>>>,
     facet_query: Option<String>,
     facet_name: String,
     search_kind: SearchKind,
     locales: Option<Vec<Language>>,
-) -> Result<FacetSearchResult, ResponseError> {
+) -> Result<(FacetSearchResult, OrderBy), ResponseError> {
     let before_search = Instant::now();
 
     if !index.facet_search(rtxn)? {
@@ -2512,11 +2517,16 @@ pub fn perform_facet_search(
             .filter(|locale| locales.as_ref().is_none_or(|locales| locales.contains(locale)))
             .collect()
     });
-    let mut facet_search = SearchForFacetValues::new(
-        facet_name,
-        search,
-        matches!(search_kind, SearchKind::Hybrid { .. }),
-    );
+
+    let candidates = filters.try_fold(RoaringBitmap::new(), |mut candidates, filter| {
+        search.filter(filter);
+
+        candidates |=
+            search.execute_for_candidates(matches!(search_kind, SearchKind::Hybrid { .. }))?;
+        Ok::<_, ResponseError>(candidates)
+    })?;
+
+    let mut facet_search = SearchForFacetValues::new(facet_name, index, rtxn);
     if let Some(facet_query) = &facet_query {
         facet_search.query(facet_query);
     }
@@ -2528,11 +2538,17 @@ pub fn perform_facet_search(
         facet_search.locales(locales);
     }
 
-    Ok(FacetSearchResult {
-        facet_hits: facet_search.execute()?,
-        facet_query,
-        processing_time_ms: before_search.elapsed().as_millis(),
-    })
+    let (facet_hits, order) = facet_search.execute(&candidates)?;
+
+    Ok((
+        FacetSearchResult {
+            facet_hits,
+            facet_query,
+            remote_errors: None,
+            processing_time_ms: before_search.elapsed().as_millis(),
+        },
+        order,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
