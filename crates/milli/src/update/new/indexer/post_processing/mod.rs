@@ -84,6 +84,7 @@ fn compute_prefix_database(
     grenad_parameters: &GrenadParameters,
     progress: &Progress,
 ) -> Result<()> {
+    progress.update_progress(PostProcessingWords::ComputePrefixes);
     let prefix_fst = fst::Set::new(&prefix_data.prefixes_fst_mmap[..])?;
     let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
     let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
