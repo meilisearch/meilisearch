@@ -37,6 +37,7 @@ use milli::{
 };
 use permissive_json_pointer::contained_in;
 use regex::Regex;
+use roaring::RoaringBitmap;
 use serde::de::DeserializeSeed as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

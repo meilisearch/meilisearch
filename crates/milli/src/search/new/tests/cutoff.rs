@@ -82,7 +82,7 @@ fn degraded_search_cannot_skip_filter() {
     search.limit(100);
     search.deadline(Deadline::from_budget(Duration::from_millis(0)));
     let filter_condition = Filter::from_str("id > 2").unwrap().unwrap();
-    search.filter(IndexFilter::from(filter_condition));
+    search.filter(Some(IndexFilter::from(filter_condition)));
 
     let result = search.execute().unwrap();
     assert!(result.degraded);

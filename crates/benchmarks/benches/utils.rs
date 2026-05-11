@@ -192,7 +192,7 @@ pub fn run_benches(c: &mut criterion::Criterion, confs: &[Conf]) {
                                 .terms_matching_strategy(TermsMatchingStrategy::default());
                             if let Some(filter) = conf.filter {
                                 let filter = Filter::from_str(filter).unwrap().unwrap();
-                                search.filter(filter_to_index_filter(filter));
+                                search.filter(Some(filter_to_index_filter(filter)));
                             }
                             if let Some(sort) = &conf.sort {
                                 let sort = sort.iter().map(|sort| sort.parse().unwrap()).collect();

@@ -56,7 +56,7 @@ macro_rules! test_filter {
             search.limit(EXTERNAL_DOCUMENTS_IDS.len());
 
             search.terms_matching_strategy(TermsMatchingStrategy::default());
-            search.filter(from_filter(filter_conditions));
+            search.filter(Some(from_filter(filter_conditions)));
 
             let SearchResult { documents_ids, .. } = search.execute().unwrap();
 

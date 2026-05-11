@@ -6,6 +6,7 @@ use charabia::normalizer::NormalizerOption;
 use charabia::{Language, Normalize, StrDetection, Token};
 use fst::automaton::{Automaton, Str};
 use fst::{IntoStreamer, Streamer};
+use heed::RoTxn;
 use roaring::RoaringBitmap;
 use tracing::error;
 
@@ -13,7 +14,7 @@ use crate::error::UserError;
 use crate::filterable_attributes_rules::{filtered_matching_patterns, matching_features};
 use crate::heed_codec::facet::{FacetGroupKey, FacetGroupValue};
 use crate::search::build_dfa;
-use crate::{DocumentId, FieldId, OrderBy, Result, Search};
+use crate::{DocumentId, FieldId, Index, OrderBy, Result};
 
 /// The maximum number of values per facet returned by the facet search route.
 const DEFAULT_MAX_NUMBER_OF_VALUES_PER_FACET: usize = 100;

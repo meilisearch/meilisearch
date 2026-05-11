@@ -3,7 +3,9 @@ use std::collections::BTreeMap;
 use meilisearch_types::error::ResponseError;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::network::{Network, Remote, RemoteAvailability};
+use serde_json::Value;
 
+use crate::routes::indexes::facet_search::FacetSearchQuery;
 use crate::search::{Federation, FederationOptions, SearchQuery, SearchQueryWithIndex};
 
 #[cfg(not(feature = "enterprise"))]

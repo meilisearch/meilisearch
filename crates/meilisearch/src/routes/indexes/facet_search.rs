@@ -1,16 +1,20 @@
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BTreeMap, BinaryHeap, HashSet, VecDeque};
 
 use actix_web::web::Data;
 use actix_web::{web, HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use index_scheduler::filter::filter_into_index_filter;
-use index_scheduler::IndexScheduler;
+use index_scheduler::{IndexScheduler, RoFeatures};
+use itertools::Itertools as _;
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::ResponseError;
-use meilisearch_types::error::{deserr_codes::*, Code};
+use meilisearch_types::error::deserr_codes::*;
+use meilisearch_types::error::{Code, ResponseError};
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::locales::Locale;
 use meilisearch_types::milli::progress::Progress;
+use meilisearch_types::milli::{FacetValueHit, OrderBy};
+use meilisearch_types::network::Network;
+use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
 use utoipa::ToSchema;
@@ -19,10 +23,11 @@ use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
+use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
     add_search_rules, parse_filter, perform_facet_search, prepare_search, FacetSearchResult,
-    HybridQuery, MatchingStrategy, RankingScoreThreshold, SearchQuery, SearchResult,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
+    HybridQuery, MatchingStrategy, NetworkableQuery, Partition, RankingScoreThreshold, SearchQuery,
+    SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
     DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;

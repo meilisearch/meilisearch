@@ -1,9 +1,13 @@
+use std::future::Future;
+
+use actix_http::uri::PathAndQuery;
 pub use error::ProxySearchError;
 use error::ReqwestErrorWithoutUrl;
-use http_client::reqwest::{Client, Response, StatusCode};
+use http_client::reqwest::{Method, RequestBuilder, Response, StatusCode};
 use meilisearch_types::network::{route, Remote};
 use rand::Rng as _;
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 use serde_json::Value;
 
 use super::types::{FederatedSearch, FederatedSearchResult, Federation};
