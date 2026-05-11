@@ -16,20 +16,14 @@ use crate::{CboRoaringBitmapCodec, Index, Result};
 struct WordPrefixDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-    max_memory_by_thread: Option<usize>,
 }
 
 impl WordPrefixDocids {
     fn new(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-        grenad_parameters: &GrenadParameters,
     ) -> WordPrefixDocids {
-        WordPrefixDocids {
-            database,
-            prefix_database,
-            max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
-        }
+        WordPrefixDocids { database, prefix_database }
     }
 
     fn execute(
@@ -59,9 +53,7 @@ impl WordPrefixDocids {
             .map(|(thread_id, rtxn)| {
                 // `indexes` represent offsets at which prefixes computations were stored in the `file`.
                 let mut indexes = Vec::new();
-                let mut file = BufWriter::new(spooled_tempfile(
-                    self.max_memory_by_thread.unwrap_or(usize::MAX),
-                ));
+                let mut values = tempfile::tempfile().map(BufWriter::new)?;
 
                 let mut buffer = Vec::new();
                 for (prefix_index, prefix) in prefix_to_compute.iter().enumerate() {
@@ -118,20 +110,14 @@ struct PrefixEntry<'a> {
 struct WordPrefixIntegerDocids {
     database: Database<Bytes, CboRoaringBitmapCodec>,
     prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-    max_memory_by_thread: Option<usize>,
 }
 
 impl WordPrefixIntegerDocids {
     fn new(
         database: Database<Bytes, CboRoaringBitmapCodec>,
         prefix_database: Database<Bytes, CboRoaringBitmapCodec>,
-        grenad_parameters: &'_ GrenadParameters,
     ) -> WordPrefixIntegerDocids {
-        WordPrefixIntegerDocids {
-            database,
-            prefix_database,
-            max_memory_by_thread: grenad_parameters.max_memory_by_thread(),
-        }
+        WordPrefixIntegerDocids { database, prefix_database }
     }
 
     fn execute(
@@ -166,9 +152,7 @@ impl WordPrefixIntegerDocids {
             .map(|(thread_id, rtxn)| {
                 // `indexes` represent offsets at which prefixes computations were stored in the `file`.
                 let mut indexes = Vec::new();
-                let mut file = BufWriter::new(spooled_tempfile(
-                    self.max_memory_by_thread.unwrap_or(usize::MAX),
-                ));
+                let mut values = tempfile::tempfile().map(BufWriter::new)?;
 
                 let mut buffer = Vec::new();
                 for (prefix_index, prefix) in prefixes.iter().enumerate() {
@@ -296,12 +280,10 @@ pub fn compute_word_prefix_docids(
     index: &Index,
     prefix_to_compute: &BTreeSet<Prefix>,
     prefix_to_delete: &BTreeSet<Prefix>,
-    grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.word_docids.remap_key_type(),
         index.word_prefix_docids.remap_key_type(),
-        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -312,12 +294,10 @@ pub fn compute_exact_word_prefix_docids(
     index: &Index,
     prefix_to_compute: &BTreeSet<Prefix>,
     prefix_to_delete: &BTreeSet<Prefix>,
-    grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.exact_word_docids.remap_key_type(),
         index.exact_word_prefix_docids.remap_key_type(),
-        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -328,12 +308,10 @@ pub fn compute_word_prefix_fid_docids(
     index: &Index,
     prefix_to_compute: &BTreeSet<Prefix>,
     prefix_to_delete: &BTreeSet<Prefix>,
-    grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_fid_docids.remap_key_type(),
         index.word_prefix_fid_docids.remap_key_type(),
-        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
@@ -344,12 +322,10 @@ pub fn compute_word_prefix_position_docids(
     index: &Index,
     prefix_to_compute: &BTreeSet<Prefix>,
     prefix_to_delete: &BTreeSet<Prefix>,
-    grenad_parameters: &GrenadParameters,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_position_docids.remap_key_type(),
         index.word_prefix_position_docids.remap_key_type(),
-        grenad_parameters,
     )
     .execute(wtxn, prefix_to_compute, prefix_to_delete)
 }
