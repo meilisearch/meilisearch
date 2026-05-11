@@ -24,6 +24,8 @@ mod error {
     pub enum ProxySearchError {
         #[error("Invalid remote url: {cause}")]
         InvalidRemoteUrl { cause: String },
+        #[error("Unknown remote `{remote}")]
+        UnknownRemote { remote: String },
         #[error("{0}")]
         CouldNotSendRequest(ReqwestErrorWithoutUrl),
         #[error("could not authenticate against the remote host\n  - hint: check that the remote instance was registered with a valid API key having the `search` action")]
@@ -56,6 +58,7 @@ mod error {
             use meilisearch_types::error::Code;
             let message = self.to_string();
             let code = match self {
+                ProxySearchError::UnknownRemote { .. } => Code::UnknownRemote,
                 ProxySearchError::InvalidRemoteUrl { .. } => Code::InvalidNetworkUrl,
                 ProxySearchError::CouldNotSendRequest(_) => Code::RemoteCouldNotSendRequest,
                 ProxySearchError::AuthenticationError => Code::RemoteInvalidApiKey,

@@ -397,6 +397,7 @@ NotLeader                                      , InvalidRequest       , BAD_REQU
 PayloadTooLarge                                , InvalidRequest       , PAYLOAD_TOO_LARGE ;
 RemoteBadResponse                              , System               , BAD_GATEWAY ;
 RemoteBadRequest                               , InvalidRequest       , BAD_REQUEST ;
+UnknownRemote                                  , InvalidRequest       , BAD_REQUEST ;
 RemoteCouldNotSendRequest                      , System               , BAD_GATEWAY ;
 RemoteInvalidApiKey                            , Auth                 , FORBIDDEN ;
 RemoteRemoteError                              , System               , BAD_GATEWAY ;
