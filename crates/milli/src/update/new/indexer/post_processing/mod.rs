@@ -94,7 +94,8 @@ fn compute_prefix_database(
     compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)
 }
 
-fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<BTreeSet<Prefix>>
+/// The words must be sorted.
+fn compute_prefixes<'a, I>(prefix_fst: &fst::Set<&[u8]>, words: I) -> Result<BTreeSet<MiniString>>
 where
     I: IntoIterator<Item = &'a str>,
 {
@@ -111,9 +112,12 @@ where
 
     let mut output = BTreeSet::new();
     loop {
+        // Current prefixes are only inserted once and each prefix is only inserted once.
         if current_word.as_bytes().starts_with(current_prefix) {
             let current_prefix = std::str::from_utf8(current_prefix)?;
-            output.insert(current_prefix.into());
+            // safety: Prefixes are 3 bytes or less
+            let current_prefix = MiniString::new(current_prefix).unwrap();
+            output.insert(current_prefix);
         }
 
         if current_word.as_bytes() < current_prefix {

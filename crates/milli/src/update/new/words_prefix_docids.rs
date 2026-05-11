@@ -29,8 +29,8 @@ impl WordPrefixDocids {
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &BTreeSet<Prefix>,
-        prefix_to_delete: &BTreeSet<Prefix>,
+        prefix_to_compute: &BTreeSet<MiniString>,
+        prefix_to_delete: &BTreeSet<MiniString>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
@@ -40,7 +40,7 @@ impl WordPrefixDocids {
     fn recompute_modified_prefixes_no_frozen(
         &self,
         wtxn: &mut RwTxn,
-        prefix_to_compute: &BTreeSet<Prefix>,
+        prefix_to_compute: &BTreeSet<MiniString>,
     ) -> Result<()> {
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| wtxn.nested_read_txn())
@@ -103,7 +103,7 @@ impl WordPrefixDocids {
 
 /// Represents a prefix and the lenght the bitmap takes on disk.
 struct PrefixEntry<'a> {
-    prefix: &'a str,
+    prefix: MiniString,
     serialized_length: usize,
 }
 
@@ -123,8 +123,8 @@ impl WordPrefixIntegerDocids {
     fn execute(
         self,
         wtxn: &mut heed::RwTxn,
-        prefix_to_compute: &BTreeSet<Prefix>,
-        prefix_to_delete: &BTreeSet<Prefix>,
+        prefix_to_compute: &BTreeSet<MiniString>,
+        prefix_to_delete: &BTreeSet<MiniString>,
     ) -> Result<()> {
         delete_prefixes(wtxn, &self.prefix_database, prefix_to_delete)?;
         self.recompute_modified_prefixes_no_frozen(wtxn, prefix_to_compute)
@@ -139,7 +139,7 @@ impl WordPrefixIntegerDocids {
     fn recompute_modified_prefixes_no_frozen(
         &self,
         wtxn: &mut RwTxn,
-        prefixes: &BTreeSet<Prefix>,
+        prefixes: &BTreeSet<MiniString>,
     ) -> Result<()> {
         let thread_count = rayon::current_num_threads();
         let rtxns = iter::repeat_with(|| wtxn.nested_read_txn())
@@ -251,7 +251,7 @@ impl WordPrefixIntegerDocids {
 
 /// Represents a prefix and the length the bitmap takes on disk.
 struct PrefixIntegerEntry<'a> {
-    prefix: &'a str,
+    prefix: MiniString,
     pos: u16,
     serialized_length: Option<usize>,
 }
@@ -260,7 +260,7 @@ struct PrefixIntegerEntry<'a> {
 fn delete_prefixes(
     wtxn: &mut RwTxn,
     prefix_database: &Database<Bytes, CboRoaringBitmapCodec>,
-    prefixes: &BTreeSet<Prefix>,
+    prefixes: &BTreeSet<MiniString>,
 ) -> Result<()> {
     // We remove all the entries that are no more required in this word prefix docids database.
     for prefix in prefixes {
@@ -278,8 +278,8 @@ fn delete_prefixes(
 pub fn compute_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &BTreeSet<Prefix>,
-    prefix_to_delete: &BTreeSet<Prefix>,
+    prefix_to_compute: &BTreeSet<MiniString>,
+    prefix_to_delete: &BTreeSet<MiniString>,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.word_docids.remap_key_type(),
@@ -292,8 +292,8 @@ pub fn compute_word_prefix_docids(
 pub fn compute_exact_word_prefix_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &BTreeSet<Prefix>,
-    prefix_to_delete: &BTreeSet<Prefix>,
+    prefix_to_compute: &BTreeSet<MiniString>,
+    prefix_to_delete: &BTreeSet<MiniString>,
 ) -> Result<()> {
     WordPrefixDocids::new(
         index.exact_word_docids.remap_key_type(),
@@ -306,8 +306,8 @@ pub fn compute_exact_word_prefix_docids(
 pub fn compute_word_prefix_fid_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &BTreeSet<Prefix>,
-    prefix_to_delete: &BTreeSet<Prefix>,
+    prefix_to_compute: &BTreeSet<MiniString>,
+    prefix_to_delete: &BTreeSet<MiniString>,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_fid_docids.remap_key_type(),
@@ -320,8 +320,8 @@ pub fn compute_word_prefix_fid_docids(
 pub fn compute_word_prefix_position_docids(
     wtxn: &mut RwTxn,
     index: &Index,
-    prefix_to_compute: &BTreeSet<Prefix>,
-    prefix_to_delete: &BTreeSet<Prefix>,
+    prefix_to_compute: &BTreeSet<MiniString>,
+    prefix_to_delete: &BTreeSet<MiniString>,
 ) -> Result<()> {
     WordPrefixIntegerDocids::new(
         index.word_position_docids.remap_key_type(),
