@@ -1649,7 +1649,7 @@ pub fn prepare_search<'t>(
         features.check_multimodal("passing `media` in a search query")?;
     }
     let mut search = index.search(rtxn, progress);
-    search.deadline(deadline);
+    search.deadline(deadline.clone());
     if let Some(ranking_score_threshold) = query.ranking_score_threshold {
         search.ranking_score_threshold(ranking_score_threshold.0);
     }
@@ -1672,8 +1672,6 @@ pub fn prepare_search<'t>(
                     let span = tracing::trace_span!(target: "search::vector", "embed_one");
                     let _entered = span.enter();
 
-                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-
                     let q = query.q.as_deref();
                     let media = query.media.as_ref();
 
@@ -1683,7 +1681,7 @@ pub fn prepare_search<'t>(
                     };
 
                     embedder
-                        .embed_search(search_query, Some(deadline))
+                        .embed_search(search_query, deadline.to_instant())
                         .map_err(milli::vector::Error::from)
                         .map_err(milli::Error::from)?
                 }

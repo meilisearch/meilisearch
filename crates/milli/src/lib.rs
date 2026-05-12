@@ -215,6 +215,10 @@ impl Deadline {
         };
         std::time::Instant::now() > deadline
     }
+
+    pub fn to_instant(&self) -> Option<std::time::Instant> {
+        self.deadline
+    }
 }
 
 // Convert an absolute word position into a relative position.
