@@ -140,7 +140,18 @@ impl DeRoaringBitmapCodec {
         // at the end of out buffer with a header indicating the matter.
         let decompressed = chunks.remainder();
         if !decompressed.is_empty() {
-            let header = encode_chunk_header(BitPackerLevel::None, u32::BITS as u8);
+            // Note that when storing the remaining, uncompresseable, integers
+            // we use the num bits to store the count of integers. Read more
+            // in the deserialize_from_with_tmp_buffer method.
+            let remaining_integers = match decompressed.len().try_into() {
+                Ok(count) => count,
+                // Note that it is not possible to have more than 256 remaining raw
+                // integers to encode as the BitPackers encodes between 32 and 256
+                // integers. We must always have less than 32 raw integers to encode.
+                Err(e) => return Err(io::Error::new(ErrorKind::InvalidData, e)),
+            };
+            let header = encode_chunk_header(BitPackerLevel::None, remaining_integers);
+
             // Note: Not convinced about the performance of writing a single
             //       byte followed by a larger write. However, we will use this
             //       codec with a BufWriter or directly with a Vec of bytes.
@@ -188,20 +199,12 @@ impl DeRoaringBitmapCodec {
             let (level, num_bits) = decode_chunk_header(chunk_header);
             let (bytes_read, decompressed) = match level {
                 BitPackerLevel::None => {
-                    if num_bits != u32::BITS as u8 {
-                        return Err(io::Error::new(
-                            ErrorKind::InvalidData,
-                            "invalid number of bits to encode non-compressed u32s",
-                        ));
-                    }
-
-                    let chunks = encoded.chunks_exact(size_of::<u32>());
-                    if !chunks.remainder().is_empty() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "expecting last chunk to be a multiple of the size of an u32",
-                        ));
-                    }
+                    // Note that when using no bitpacker and storing the remaining non-packed integers,
+                    // the num_bits is instead used to define the number of remaining integers. We cannot
+                    // simply use the remaining bytes as we are padding with zeroes when encoding the DeCbo
+                    // to make sure the CBO codec doesn't take our delta-encoded data for flat u32s.
+                    let remaining_integers_bytes = num_bits as usize * size_of::<u32>();
+                    let chunks = encoded[..remaining_integers_bytes].chunks_exact(size_of::<u32>());
 
                     let integers = chunks
                         // safety: This unwrap cannot happen as
@@ -266,28 +269,16 @@ impl DeRoaringBitmapCodec {
         }
 
         let mut length = 0;
-        while let Some((&chunk_header, encoded)) = compressed.split_first() {
+        while let Some((&chunk_header, _encoded)) = compressed.split_first() {
             let (level, num_bits) = decode_chunk_header(chunk_header);
             let bytes_read = match level {
                 BitPackerLevel::None => {
-                    if num_bits != u32::BITS as u8 {
-                        return Err(io::Error::new(
-                            ErrorKind::InvalidData,
-                            "invalid number of bits to encode non-compressed u32s",
-                        ));
-                    }
+                    // Note that when storing non-packed integers we use the
+                    // num_bits to store the remaining integers. Read more
+                    // in the deserialize_from_with_tmp_buffer method.
+                    let remaining_integers = num_bits as u64;
 
-                    let chunks = encoded.chunks_exact(size_of::<u32>());
-                    if !chunks.remainder().is_empty() {
-                        return Err(io::Error::new(
-                            io::ErrorKind::InvalidData,
-                            "expecting last chunk to be a multiple of the size of an u32",
-                        ));
-                    }
-
-                    // This call is optimized for performance
-                    // and will not iterate over the chunks.
-                    length += chunks.count() as u64;
+                    length += remaining_integers;
 
                     // This is basically always the last chunk that exists in
                     // this delta-encoded format as the raw u32s are appended
@@ -436,6 +427,54 @@ mod tests {
             let decompressed = DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(&compressed[..], take_all_blocks, &mut tmp_buffer).unwrap();
             length == bitmap.len() && decompressed == bitmap
         }
+    }
+
+    quickcheck! {
+        // Randomly generated integers and a little twist to pad the bytes with additional zeroes.
+        fn qc_random_padded(xs: Vec<u32>, additional: u8) -> bool {
+            let bitmap = RoaringBitmap::from_iter(xs);
+            let mut compressed = Vec::new();
+            let mut tmp_buffer = Vec::new();
+            DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(&bitmap, &mut compressed, &mut tmp_buffer).unwrap();
+            // Pad a little bit with zeroes
+            compressed.resize(compressed.len() +  additional as usize, 0);
+            let length = DeRoaringBitmapCodec::deserialize_length_from(&compressed[..]).unwrap();
+            let decompressed = DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(&compressed[..], take_all_blocks, &mut tmp_buffer).unwrap();
+            length == bitmap.len() && decompressed == bitmap
+        }
+    }
+
+    /// This test verifies that even when a list of integers are perfectly encoded by a BitPacker
+    /// with not a single byte it still decompresses correctly. We pad the compressed data with
+    /// additional zeroes to test that the decompression logic handles this case correctly.
+    #[test]
+    fn too_efficient() {
+        // By generating numbers from 0 to 32 we force the BitPacker1 to encode using zero bytes.
+        let bitmap = RoaringBitmap::from_iter(0..32);
+        let mut compressed = Vec::new();
+        let mut tmp_buffer = Vec::new();
+        DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(
+            &bitmap,
+            &mut compressed,
+            &mut tmp_buffer,
+        )
+        .unwrap();
+        // Header (2 bytes) + Chunk type identifier with num bits (1 byte) and ZERO bytes to encode sequential integers = 3 bytes
+        // This is smaller than the THRESHOLD (7 * 4 (size of 32) = 28 bytes) to consider encoded bytes to be flat-u32s encoded.
+        assert_eq!(compressed.len(), 3);
+        // So we pad them up to 28 bytes.
+        compressed.resize(28, 0);
+
+        let length = DeRoaringBitmapCodec::deserialize_length_from(&compressed[..]).unwrap();
+        let decompressed = DeRoaringBitmapCodec::deserialize_from_with_tmp_buffer(
+            &compressed[..],
+            take_all_blocks,
+            &mut tmp_buffer,
+        )
+        .unwrap();
+
+        assert_eq!(length, bitmap.len());
+        assert_eq!(decompressed, bitmap);
     }
 
     quickcheck! {

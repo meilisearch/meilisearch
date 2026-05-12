@@ -13,6 +13,9 @@ use crate::heed_codec::BytesDecodeOwned;
 /// to determine the encoding used only by using the array of bytes length.
 pub const THRESHOLD: usize = 7;
 
+/// The THRESHOLD but in number of bytes. See THRESHOLD documentation for more information.
+pub const THRESHOLD_BYTES: usize = THRESHOLD * size_of::<u32>();
+
 /// A conditionnal codec that either use the RoaringBitmap
 /// or a lighter ByteOrder en/decoding method.
 ///

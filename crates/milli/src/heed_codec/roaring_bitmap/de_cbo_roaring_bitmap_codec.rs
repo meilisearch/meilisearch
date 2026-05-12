@@ -8,6 +8,7 @@ use roaring::RoaringBitmap;
 
 use super::cbo_roaring_bitmap_codec::CboRoaringBitmapCodec;
 use super::de_roaring_bitmap_codec::DeRoaringBitmapCodec;
+use crate::heed_codec::roaring_bitmap::cbo_roaring_bitmap_codec::THRESHOLD_BYTES;
 use crate::heed_codec::roaring_bitmap::take_all_blocks;
 use crate::heed_codec::BytesDecodeOwned;
 use crate::update::del_add::{DelAdd, KvReaderDelAdd};
@@ -60,7 +61,19 @@ impl DeCboRoaringBitmapCodec {
         {
             CboRoaringBitmapCodec::serialize_into_writer(bitmap, writer)
         } else {
-            DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(bitmap, writer, tmp_buffer)
+            let mut writer = WriterCounter { writer, count: 0 };
+            DeRoaringBitmapCodec::serialize_into_with_tmp_buffer(bitmap, &mut writer, tmp_buffer)?;
+            let WriterCounter { writer, count } = writer;
+
+            match THRESHOLD_BYTES.checked_sub(count) {
+                Some(missing_bytes) => {
+                    let padding_buf = [0u8; THRESHOLD_BYTES + 1];
+                    // If the Cbo codec thinks that the number of written bytes
+                    // corresponds to flat u32s we need to pad up to THRESHOLD + 1.
+                    writer.write_all(&padding_buf[..missing_bytes + 1])
+                }
+                None => Ok(()),
+            }
         }
     }
 
@@ -257,6 +270,28 @@ impl DeltaEncodingStatusLock {
 
     pub fn is_disabled(&self) -> bool {
         !self.is_enabled()
+    }
+}
+
+/// A very simple wrapper around an [`io::Write`] that counts the number of bytes written.
+struct WriterCounter<'a, W: io::Write> {
+    writer: &'a mut W,
+    count: usize,
+}
+
+impl<'a, W: io::Write + 'a> io::Write for WriterCounter<'a, W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.count += buf.len();
+        self.writer.write(buf)
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+        self.count += buf.len();
+        self.writer.write_all(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.writer.flush()
     }
 }
 
