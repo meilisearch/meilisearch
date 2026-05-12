@@ -386,7 +386,7 @@ impl IndexMap {
         );
     }
 
-    /// Finishes the download of an index that is being transferred
+    /// Finishes the download and upload of an index that is being transferred
     /// and do not insert it anywhere. The caller will receive Missing
     /// and will open the freshly downloaded index.
     ///
@@ -394,36 +394,13 @@ impl IndexMap {
     ///
     /// Panics if the index is not being transferred or the transfer a
     /// copy of an `Arc` error is kept alive.
-    pub async fn end_downloading(&mut self, uuid: &Uuid) -> Result<(), io::Error> {
-        assert!(
-            self.available.get(uuid).is_none(),
-            "Attempt to finish the download of an available index"
-        );
+    pub async fn end_transferring(&mut self, uuid: &Uuid) -> Result<(), io::Error> {
         match self.transferring.remove(uuid) {
             Some(task) => {
                 // safety: we must be the last ones to get this error
                 task.await.unwrap().map_err(|err| Arc::into_inner(err).unwrap())
             }
-            None => {
-                panic!("Attempt to finish the download of an index that is not being transferred")
-            }
-        }
-    }
-
-    // TBD we could probably merge this with `end_downloading`
-    pub async fn end_uploading(&mut self, uuid: &Uuid) -> Result<(), io::Error> {
-        assert!(
-            self.available.get(uuid).is_none(),
-            "Attempt to finish the download of an available index"
-        );
-        match self.transferring.remove(uuid) {
-            Some(task) => {
-                // safety: we must be the last ones to get this error
-                task.await.unwrap().map_err(|err| Arc::into_inner(err).unwrap())
-            }
-            None => {
-                panic!("Attempt to finish the download of an index that is not being transferred")
-            }
+            None => Ok(()),
         }
     }
 }

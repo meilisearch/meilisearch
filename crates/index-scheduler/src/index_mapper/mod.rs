@@ -445,14 +445,14 @@ impl IndexMapper {
                     //         from an Arc in the end_downloading method
                     let _ = task.await;
                     // TBD correctly manage the error
-                    self.index_map.write().unwrap().end_downloading(&uuid).await.unwrap();
+                    self.index_map.write().unwrap().end_transferring(&uuid).await.unwrap();
                 }
                 Transferring(TransferState::Uploading(task)) => {
                     // safety: we must ignore the error as it is extracted
                     //         from an Arc in the end_uploading method
                     let _ = task.await;
                     // TBD correctly manage the error
-                    self.index_map.write().unwrap().end_uploading(&uuid).await.unwrap();
+                    self.index_map.write().unwrap().end_transferring(&uuid).await.unwrap();
                 }
                 BeingDeleted => return Err(Error::IndexNotFound(name.to_string())),
                 // since we're lazy, it's possible that the index has not been opened yet.
