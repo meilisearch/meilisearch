@@ -97,9 +97,22 @@ mod error {
 
 #[derive(Clone)]
 pub struct ProxySearchParams {
-    pub deadline: Option<std::time::Instant>,
+    pub deadline: std::time::Instant,
     pub try_count: u32,
     pub client: http_client::reqwest::Client,
+}
+
+impl ProxySearchParams {
+    pub fn new_with_deadline_from_env(client: http_client::reqwest::Client) -> Self {
+        let timeout = std::env::var("MEILI_EXPERIMENTAL_REMOTE_SEARCH_TIMEOUT_SECONDS")
+            .ok()
+            .map(|p| p.parse().unwrap())
+            .unwrap_or(25);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
+
+        Self { deadline, try_count: 3, client }
+    }
 }
 
 /// Performs a federated search on a remote host and returns the results
@@ -138,18 +151,7 @@ pub fn json_proxy<Body: Serialize, Response: DeserializeOwned>(
 
     let search_api_key = remote.search_api_key.as_deref();
 
-    let timeout = std::env::var("MEILI_EXPERIMENTAL_REMOTE_SEARCH_TIMEOUT_SECONDS")
-        .ok()
-        .map(|p| p.parse().unwrap())
-        .unwrap_or(25);
-
-    let max_deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout);
-
-    let deadline = if let Some(deadline) = params.deadline {
-        std::time::Instant::min(deadline, max_deadline)
-    } else {
-        max_deadline
-    };
+    let deadline = params.deadline;
 
     let request = params.client.request(method, url).prepare(|request| {
         let request = request.json(&body);

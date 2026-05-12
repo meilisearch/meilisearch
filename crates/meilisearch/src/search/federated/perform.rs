@@ -4,7 +4,7 @@ use std::iter::Zip;
 use std::rc::Rc;
 use std::str::FromStr as _;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use std::vec::{IntoIter, Vec};
 
 use actix_http::StatusCode;
@@ -68,12 +68,8 @@ pub async fn perform_federated_search(
     }
     let before_search = std::time::Instant::now();
 
-    let timeout = std::env::var("MEILI_EXPERIMENTAL_REMOTE_SEARCH_TIMEOUT_SECONDS")
-        .ok()
-        .map(|p| p.parse().unwrap())
-        .unwrap_or(25);
-
-    let deadline = before_search + std::time::Duration::from_secs(timeout);
+    let params =
+        ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
 
     let required_hit_count = match (federation.page, federation.hits_per_page) {
         // no pagination, use limit and offset
@@ -185,9 +181,8 @@ pub async fn perform_federated_search(
     let remote_search = RemoteSearch::start(
         partitioned_queries.remote_queries_by_host,
         &federation,
-        deadline,
+        &params,
         include_metadata,
-        index_scheduler.web_client(),
     );
 
     // 2.2. concurrently execute local queries
@@ -1147,9 +1142,8 @@ impl RemoteSearch {
     fn start(
         queries: RemoteQueriesByHost,
         federation: &Federation,
-        deadline: Instant,
+        params: &ProxySearchParams,
         include_metadata: bool,
-        client: &http_client::reqwest::Client,
     ) -> Self {
         let mut in_flight_remote_queries = BTreeMap::new();
 
@@ -1157,8 +1151,6 @@ impl RemoteSearch {
             return Self { in_flight_remote_queries };
         }
 
-        let params =
-            ProxySearchParams { deadline: Some(deadline), try_count: 3, client: client.clone() };
         for (node_name, (node, queries)) in queries {
             // spawn one task per host
             in_flight_remote_queries.insert(

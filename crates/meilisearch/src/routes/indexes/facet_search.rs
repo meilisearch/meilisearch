@@ -356,7 +356,8 @@ async fn search_federated(
     features: RoFeatures,
     network: Network,
 ) -> Result<FacetSearchResult, ResponseError> {
-    let before_search = std::time::Instant::now();
+    let params =
+        ProxySearchParams::new_with_deadline_from_env(index_scheduler.web_client().clone());
     let remote_availability = index_scheduler.remote_availability();
     let partition = Partition::new(network.clone(), remote_availability);
 
@@ -365,19 +366,6 @@ async fn search_federated(
             // true is left, false is right
             |(remote, _)| Some(remote) == network.local.as_ref(),
         );
-
-    let timeout = std::env::var("MEILI_EXPERIMENTAL_REMOTE_SEARCH_TIMEOUT_SECONDS")
-        .ok()
-        .map(|p| p.parse().unwrap())
-        .unwrap_or(25);
-
-    let deadline = before_search + std::time::Duration::from_secs(timeout);
-
-    let params = ProxySearchParams {
-        deadline: Some(deadline),
-        try_count: 3,
-        client: index_scheduler.web_client().clone(),
-    };
 
     let mut results: Vec<FacetSearchResult> = Vec::with_capacity(remote_queries.len() + 1);
 
