@@ -3282,6 +3282,7 @@ dependencies = [
  "tokio",
  "tower-service",
  "ureq 3.1.4",
+ "url",
 ]
 
 [[package]]
