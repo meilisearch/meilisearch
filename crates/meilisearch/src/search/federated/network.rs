@@ -59,8 +59,7 @@ impl ProxyQuery for &FacetSearchQuery {
     type ProxiedQuery = (String, Option<serde_json::Value>);
 
     fn proxy_with_remote(&self, remote: String) -> Self::ProxiedQuery {
-        let filter = self.filter.clone();
-        (remote, filter)
+        (remote, None)
     }
 
     fn filter_field(query: &mut Self::ProxiedQuery) -> &mut Option<Value> {

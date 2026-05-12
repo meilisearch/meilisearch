@@ -25,10 +25,11 @@ use crate::extractors::authentication::GuardedData;
 use crate::routes::indexes::search::search_kind;
 use crate::search::proxy::{json_proxy, ProxySearchError, ProxySearchParams};
 use crate::search::{
-    add_search_rules, parse_filter, perform_facet_search, prepare_search, FacetSearchResult,
-    HybridQuery, MatchingStrategy, NetworkableQuery, Partition, RankingScoreThreshold, SearchQuery,
-    SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET,
+    add_search_rules, fuse_filters, parse_filter, perform_facet_search, prepare_search,
+    FacetSearchResult, HybridQuery, MatchingStrategy, NetworkableQuery, Partition,
+    RankingScoreThreshold, SearchQuery, SearchResult, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET,
 };
 use crate::search_queue::SearchQueue;
 
@@ -374,7 +375,9 @@ async fn search_federated(
     const MAX_IN_FLIGHT_REQUESTS: usize = 40;
     let mut in_flight_requests = VecDeque::with_capacity(MAX_IN_FLIGHT_REQUESTS);
 
-    for (remote_name, filter) in remote_queries {
+    let original_filter = query.filter.clone();
+
+    for (remote_name, shard_filter) in remote_queries {
         let Some(remote) = network.remotes.get(&remote_name) else {
             errors.insert(
                 remote_name.clone(),
@@ -395,7 +398,7 @@ async fn search_federated(
                 continue;
             }
         };
-        query.filter = filter;
+        query.filter = fuse_filters(original_filter.clone(), shard_filter);
         let request = match json_proxy(
             path_and_query,
             http_client::reqwest::Method::POST,
@@ -427,6 +430,8 @@ async fn search_federated(
         }
         in_flight_requests.push_back(tokio::spawn(async move { (request.await, remote_name) }));
     }
+
+    query.filter = original_filter;
 
     let (mut local_results, order) =
         search_multi_local(local_queries, index_scheduler, query, index_uid, progress, features)
@@ -495,7 +500,7 @@ async fn search_multi_local(
     let facet_query = query.facet_query.clone();
     let facet_name = query.facet_name.clone();
     let locales = query.locales.clone().map(|l| l.into_iter().map(Into::into).collect());
-    let search_query = SearchQuery::from(query);
+    let mut search_query = SearchQuery::from(query);
 
     let progress_clone = progress.clone();
     let search_result = tokio::task::spawn_blocking(move || {
@@ -505,52 +510,43 @@ async fn search_multi_local(
         let search_kind =
             search_kind(&search_query, &index_scheduler, index_uid.to_string(), &index)?;
 
-        let filters: Result<Vec<_>, ResponseError> = local_queries
-            .iter() // no into_iter: we need to keep the original filters live as the IndexFilters reference them
-            .map(|(_, filter)| {
-                Ok(match filter {
-                    Some(filter) => {
-                        let filter = parse_filter(filter, Code::InvalidSearchFilter, features)?;
-                        filter
-                            .map(|f| {
-                                filter_into_index_filter(
-                                    f,
-                                    &index,
-                                    &rtxn,
-                                    &index_scheduler,
-                                    &progress_clone,
-                                    &index_uid,
-                                )
-                            })
-                            .transpose()?
-                    }
-                    None => None,
+        let shard_filters: Vec<serde_json::Value> =
+            local_queries.iter().filter_map(|(_, filter)| filter.clone()).collect();
+
+        // inner array is OR, which is what we want
+        let shard_filters = serde_json::Value::Array(vec![serde_json::Value::Array(shard_filters)]);
+
+        let filter = fuse_filters(search_query.filter.take(), Some(shard_filters));
+
+        let filter = filter
+            .as_ref()
+            .and_then(|f| parse_filter(f, Code::InvalidSearchFilter, features).transpose())
+            .map(|f| {
+                f.and_then(|f| {
+                    Ok(filter_into_index_filter(
+                        f,
+                        &index,
+                        &rtxn,
+                        &index_scheduler,
+                        &progress_clone,
+                        &index_uid,
+                    )?)
                 })
             })
-            .collect();
-        let filters = filters?;
+            .transpose()?;
 
         let (search, _, _, _) = prepare_search(
             &index,
             &rtxn,
             &search_query,
-            None,
+            filter,
             &search_kind,
             deadline,
             features,
             &progress_clone,
         )?;
 
-        perform_facet_search(
-            &index,
-            &rtxn,
-            search,
-            filters.into_iter(),
-            facet_query,
-            facet_name,
-            search_kind,
-            locales,
-        )
+        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
     })
     .await;
     search_result?
@@ -598,25 +594,15 @@ async fn search_local(
             &index,
             &rtxn,
             &search_query,
-            // Filter is passed as an iterator to facet search
-            None,
+            filter,
             &search_kind,
             deadline,
             features,
             &progress_clone,
         )?;
 
-        perform_facet_search(
-            &index,
-            &rtxn,
-            search,
-            std::iter::once(filter),
-            facet_query,
-            facet_name,
-            search_kind,
-            locales,
-        )
-        .map(|(results, _)| results)
+        perform_facet_search(&index, &rtxn, search, facet_query, facet_name, search_kind, locales)
+            .map(|(results, _)| results)
     })
     .await;
     search_result?

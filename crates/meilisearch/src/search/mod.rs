@@ -37,7 +37,6 @@ use milli::{
 };
 use permissive_json_pointer::contained_in;
 use regex::Regex;
-use roaring::RoaringBitmap;
 use serde::de::DeserializeSeed as _;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -2483,12 +2482,10 @@ fn make_hits<'a>(
     Ok(documents)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn perform_facet_search<'a>(
     index: &Index,
     rtxn: &RoTxn,
-    mut search: milli::Search<'a>,
-    mut filters: impl Iterator<Item = Option<IndexFilter<'a>>>,
+    search: milli::Search<'a>,
     facet_query: Option<String>,
     facet_name: String,
     search_kind: SearchKind,
@@ -2518,13 +2515,8 @@ pub fn perform_facet_search<'a>(
             .collect()
     });
 
-    let candidates = filters.try_fold(RoaringBitmap::new(), |mut candidates, filter| {
-        search.filter(filter);
-
-        candidates |=
-            search.execute_for_candidates(matches!(search_kind, SearchKind::Hybrid { .. }))?;
-        Ok::<_, ResponseError>(candidates)
-    })?;
+    let candidates =
+        search.execute_for_candidates(matches!(search_kind, SearchKind::Hybrid { .. }))?;
 
     let mut facet_search = SearchForFacetValues::new(facet_name, index, rtxn);
     if let Some(facet_query) = &facet_query {
