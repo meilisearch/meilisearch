@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 use std::env::VarError;
-use std::io;
-use std::path::Path;
+use std::io::{self, ErrorKind};
+use std::ops::Not as _;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,6 +14,10 @@ use hashbrown::HashSet;
 use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
 use meilisearch_types::milli::{CreateOrOpen, Index, Result};
 use time::OffsetDateTime;
+use tokio::runtime;
+use tokio::sync::mpsc::Receiver;
+use tokio::task::JoinHandle;
+use tracing::warn;
 use uuid::Uuid;
 
 use super::IndexStatus::{self, Available, BeingDeleted, Closing, Missing};
@@ -20,6 +25,7 @@ use crate::clamp_to_page_size;
 use crate::lru::{InsertionOutcome, LruMap};
 
 type IndexTransferCompletion = Shared<oneshot::Receiver<Result<(), Arc<io::Error>>>>;
+type IndexTransferCompletionNotifier = oneshot::Sender<Result<(), Arc<io::Error>>>;
 
 /// Keep an internally consistent view of the open indexes in memory.
 ///
@@ -51,6 +57,9 @@ pub struct IndexMap {
     /// One must wait for the download to complete before opening an index that is being downloaded.
     transferring: HashMap<Uuid, IndexTransferCompletion>,
 
+    /// The channel used to send index transfer requests to the transfer task.
+    transfer_sender: Option<tokio::sync::mpsc::Sender<IndexTransferRequest>>,
+
     /// A monotonically increasing generation number, used to differentiate between multiple successive index closing requests.
     ///
     /// Because multiple readers could be waiting on an index to close, the following could theoretically happen:
@@ -64,6 +73,15 @@ pub struct IndexMap {
     /// closing request was made, so the reader that "lost the race" has the old generation and will need to wait again for the index
     /// to close.
     generation: usize,
+}
+
+/// The request sent to the transfer task to download or upload an index.
+#[derive(Debug)]
+pub enum IndexTransferRequest {
+    /// Request to download an index to S3.
+    Download { uuid: Uuid, answer: IndexTransferCompletionNotifier },
+    /// Request to upload an index to S3.
+    Upload { uuid: Uuid, answer: IndexTransferCompletionNotifier },
 }
 
 #[derive(Clone)]
@@ -130,7 +148,7 @@ impl ReopenableIndex {
             }
             map.unavailable.remove(&self.uuid);
             map.create(
-                &self.uuid,
+                self.uuid,
                 path,
                 None,
                 self.enable_mdb_writemap,
@@ -168,10 +186,18 @@ impl ReopenableIndex {
 impl IndexMap {
     /// Creates a new `IndexMap` with the specified number of opened and on-disk indexes.
     ///
+    /// If `runtime` is `None`, the transfer task will not be spawned and index offloading
+    /// will not be supported.
+    ///
     /// ## Panics
     ///
     /// Panics if `on_disk_cap` is smaller than `opened_cap`.
-    pub fn new(opened_cap: usize, on_disk_cap: usize) -> IndexMap {
+    pub fn new(
+        opened_cap: usize,
+        on_disk_cap: usize,
+        runtime: Option<runtime::Handle>,
+        indexes_folder: PathBuf,
+    ) -> IndexMap {
         let unavailable = match on_disk_cap.checked_sub(opened_cap) {
             Some(unavailable) => unavailable,
             None => panic!(
@@ -179,11 +205,22 @@ impl IndexMap {
             ),
         };
 
+        let transfer_sender = match runtime {
+            Some(runtime) => {
+                // TODO why limiting to 10?
+                let (transfer_sender, transfer_receiver) = tokio::sync::mpsc::channel(10);
+                runtime.spawn(process_index_transfers(indexes_folder, transfer_receiver));
+                Some(transfer_sender)
+            }
+            None => None,
+        };
+
         Self {
             available: LruMap::new(opened_cap),
             unavailable: LruMap::new(unavailable),
             deleting: HashSet::default(),
             transferring: HashMap::default(),
+            transfer_sender,
             generation: 0,
         }
     }
@@ -211,7 +248,7 @@ impl IndexMap {
 
     /// Attempts to create a new index that wasn't existing before.
     ///
-    /// None is returned if the index is being transferred.
+    /// None is returned if the index is being downloaded.
     ///
     /// # Status table
     ///
@@ -224,42 +261,54 @@ impl IndexMap {
     ///
     pub async fn create(
         &mut self,
-        uuid: &Uuid,
+        uuid: Uuid,
         path: &Path,
         date: Option<(OffsetDateTime, OffsetDateTime)>,
         enable_mdb_writemap: bool,
         map_size: usize,
         create_or_open: CreateOrOpen,
     ) -> Result<Option<Index>> {
-        if !matches!(self.get_unavailable(uuid).await, Missing) {
-            // The index could be in the transferring state, right?
+        if !matches!(self.get_unavailable(&uuid).await, Missing) {
             panic!("Attempt to open an index that was unavailable");
         }
 
         let index = match create_or_open {
             CreateOrOpen::Open => {
-                // 1. check if the index exists
-                // 2. if it does, open it;
-                // 3. if not, register a download task and wait for it to complete
-                //    Warning: we must NOT wait for the download to complete here
-                //    or we will block the entire index management system.
-                //    We *MUST* rather return immediately an async task that the
-                //    caller can await on. We can return an Either<Index, Shared<OneShot>>.
-                // 4. Once the download is complete, open the index
-                // 5. insert it in the available map
-                let (sender, receiver) = oneshot::channel();
-                todo!("Do the download");
-                let receiver = receiver.shared();
-                todo!("do not insert another transferring job if one is already in progress");
-                self.transferring.insert(*uuid, receiver.clone());
-                return Ok(None);
+                match self.transfer_sender.as_ref() {
+                    Some(transfer_sender) if path.try_exists()?.not() => {
+                        // if index is not on disk, register a download task and wait for
+                        // it to complete Warning: we must NOT wait for the download to
+                        // complete here or we will block the entire index management system.
+                        // We *MUST* return immediately and make the caller to find out
+                        // that the index is being downloaded and wait for it to complete.
+                        let (answer, receiver) = oneshot::channel();
+                        // TODO do not unwrap
+                        transfer_sender
+                            .send(IndexTransferRequest::Download { uuid, answer })
+                            .await
+                            .unwrap();
+                        if self.transferring.insert(uuid, receiver.shared()).is_some() {
+                            panic!(
+                                "Attempt to download an index that was already being transfered"
+                            );
+                        }
+                        return Ok(None);
+                    }
+                    _ => create_or_open_index(
+                        path,
+                        date,
+                        enable_mdb_writemap,
+                        map_size,
+                        create_or_open,
+                    )?,
+                }
             }
             create_or_open @ CreateOrOpen::Create { .. } => {
                 create_or_open_index(path, date, enable_mdb_writemap, map_size, create_or_open)?
             }
         };
 
-        match self.available.insert(*uuid, index.clone()) {
+        match self.available.insert(uuid, index.clone()) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_index) => {
                 self.close(evicted_uuid, evicted_index, enable_mdb_writemap, 0);
@@ -323,12 +372,21 @@ impl IndexMap {
         match self.unavailable.insert(uuid, closing_index) {
             InsertionOutcome::InsertedNew => (),
             InsertionOutcome::Evicted(evicted_uuid, evicted_closing_index) => {
-                let (sender, receiver) = oneshot::channel();
-                // What should we do about the index being closed?
-                // Should I give the closing_event to the uploader?
-                // I think I don't care about the closing_event, right?
-                todo!("upload the index and delete it once the upload is successful");
-                self.transferring.insert(evicted_uuid, receiver.shared());
+                // In case of no runtime, we simply keep the index on disk but
+                // don't store it in the transferring map nor run the transfer task.
+                // This way, next time the index is needed, we can simply load it from disk.
+                if let Some(transfer_sender) = self.transfer_sender.as_ref() {
+                    // What should we do about the index being closed?
+                    // Should I give the closing_event to the uploader?
+                    // I think I don't care about the closing_event, right?
+                    let (answer, receiver) = oneshot::channel();
+                    // TODO We would probably prefer using the async `send` instead
+                    transfer_sender
+                        .blocking_send(IndexTransferRequest::Upload { uuid: evicted_uuid, answer })
+                        // TODO do not unwrap here
+                        .unwrap();
+                    self.transferring.insert(evicted_uuid, receiver.shared());
+                }
             }
             InsertionOutcome::Replaced(_) => unreachable!(),
         }
@@ -401,6 +459,73 @@ impl IndexMap {
                 task.await.unwrap().map_err(|err| Arc::into_inner(err).unwrap())
             }
             None => Ok(()),
+        }
+    }
+}
+
+// TODO move this the a `enterprise_edition` module.
+async fn process_index_transfers(
+    indexes: PathBuf,
+    mut transfer_receiver: Receiver<IndexTransferRequest>,
+) {
+    use tokio::fs::{create_dir_all, metadata};
+
+    /// It's 10 MB/s 🐌
+    fn fake_transfer_speed(size: u64) -> Duration {
+        Duration::from_secs(size / (10 * 1024 * 1024))
+    }
+
+    async fn download_index(
+        indexes_folder: &Path,
+        fake_s3_folder: &Path,
+        uuid: Uuid,
+    ) -> Result<(), io::Error> {
+        let index_path = indexes_folder.join(uuid.to_string());
+        let index_path_in_s3 = fake_s3_folder.join(uuid.to_string());
+        let index_size = metadata(index_path_in_s3.join("data.ms")).await?.len();
+        let download_duration = fake_transfer_speed(index_size);
+        tokio::time::sleep(download_duration).await;
+        tokio::fs::rename(index_path_in_s3, index_path).await?;
+        Ok(())
+    }
+
+    async fn upload_index(
+        indexes_folder: &Path,
+        fake_s3_folder: &Path,
+        uuid: Uuid,
+    ) -> Result<(), io::Error> {
+        let index_path = indexes_folder.join(uuid.to_string());
+        let index_path_in_s3 = fake_s3_folder.join(uuid.to_string());
+        let index_size = metadata(index_path.join("data.ms")).await?.len();
+        let upload_duration = fake_transfer_speed(index_size);
+        tokio::time::sleep(upload_duration).await;
+        tokio::fs::rename(index_path, index_path_in_s3).await?;
+        Ok(())
+    }
+
+    // Create the folder that fakes S3
+    // TODO remove this once we actually upload to S3
+    let fake_s3 = indexes.join("this-is-s3");
+    if let Err(e) = create_dir_all(&fake_s3).await {
+        if e.kind() != ErrorKind::AlreadyExists {
+            panic!("Failed to create fake S3 folder: {e}");
+        }
+    }
+
+    while let Some(request) = transfer_receiver.recv().await {
+        match request {
+            IndexTransferRequest::Download { uuid, answer } => {
+                let result = download_index(&indexes, &fake_s3, uuid).await.map_err(Arc::new);
+                if answer.send(result).is_err() {
+                    warn!("Couldn't send the download status of index {uuid}: channel closed");
+                }
+            }
+            IndexTransferRequest::Upload { uuid, answer } => {
+                let result = upload_index(&indexes, &fake_s3, uuid).await.map_err(Arc::new);
+                if answer.send(result).is_err() {
+                    warn!("Couldn't send the upload status of index {uuid}: channel closed");
+                }
+            }
         }
     }
 }

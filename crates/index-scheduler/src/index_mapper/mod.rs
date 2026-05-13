@@ -12,6 +12,7 @@ use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CreateOrOpen, FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tokio::runtime::{Handle, Runtime};
 use tracing::error;
 use uuid::Uuid;
 
@@ -173,11 +174,14 @@ impl IndexMapper {
         wtxn: &mut RwTxn,
         options: &IndexSchedulerOptions,
         budget: IndexBudget,
+        runtime: Option<Handle>,
     ) -> Result<Self> {
         Ok(Self {
             index_map: Arc::new(RwLock::new(IndexMap::new(
                 2, // TBD available capacity
-                4, // TBD on-disk capacity
+                4, // TBD on-disk capacity,
+                runtime,
+                options.indexes_path.clone(),
             ))),
             index_mapping: env.create_database(wtxn, Some(db_name::INDEX_MAPPING))?,
             index_stats: env.create_database(wtxn, Some(db_name::INDEX_STATS))?,
@@ -220,7 +224,7 @@ impl IndexMapper {
                     .write()
                     .unwrap()
                     .create(
-                        &uuid,
+                        uuid,
                         &index_path,
                         date,
                         self.enable_mdb_writemap,
@@ -231,7 +235,9 @@ impl IndexMapper {
                     .map_err(|e| Error::from_milli(e, Some(uuid.to_string())))?
                 {
                     Some(index) => index,
-                    None => unreachable!("Index doesn't exist so must not be downloaded"),
+                    None => unreachable!(
+                        "Attempt to download a non-existent index while it must be created"
+                    ),
                 };
 
                 let index_rtxn = index.read_txn()?;
@@ -465,10 +471,9 @@ impl IndexMapper {
                     match index_map.get(&uuid).await {
                         Missing => {
                             let index_path = self.index_path(uuid);
-
                             match index_map
                                 .create(
-                                    &uuid,
+                                    uuid,
                                     &index_path,
                                     None,
                                     self.enable_mdb_writemap,
