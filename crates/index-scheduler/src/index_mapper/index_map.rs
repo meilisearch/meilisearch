@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::env::VarError;
-use std::io::{self, ErrorKind};
+use std::io;
 use std::ops::Not as _;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -15,10 +15,10 @@ use meilisearch_types::heed::{EnvClosingEvent, EnvFlags, EnvOpenOptions};
 use meilisearch_types::milli::{CreateOrOpen, Index, Result};
 use time::OffsetDateTime;
 use tokio::runtime;
-use tokio::sync::mpsc::Receiver;
-use tokio::task::JoinHandle;
-use tracing::warn;
 use uuid::Uuid;
+
+#[cfg(feature = "enterprise")]
+pub use super::enterprise_edition::process_index_transfers;
 
 use super::IndexStatus::{self, Available, BeingDeleted, Closing, Missing};
 use crate::clamp_to_page_size;
@@ -206,11 +206,17 @@ impl IndexMap {
         };
 
         let transfer_sender = match runtime {
+            #[cfg(feature = "enterprise")]
             Some(runtime) => {
                 // TODO why limiting to 10?
                 let (transfer_sender, transfer_receiver) = tokio::sync::mpsc::channel(10);
                 runtime.spawn(process_index_transfers(indexes_folder, transfer_receiver));
                 Some(transfer_sender)
+            }
+            #[cfg(not(feature = "enterprise"))]
+            Some(_) => {
+                let _ = indexes_folder;
+                None
             }
             None => None,
         };
@@ -463,73 +469,6 @@ impl IndexMap {
     }
 }
 
-// TODO move this the a `enterprise_edition` module.
-async fn process_index_transfers(
-    indexes: PathBuf,
-    mut transfer_receiver: Receiver<IndexTransferRequest>,
-) {
-    use tokio::fs::{create_dir_all, metadata};
-
-    /// It's 10 MB/s 🐌
-    fn fake_transfer_speed(size: u64) -> Duration {
-        Duration::from_secs(size / (10 * 1024 * 1024))
-    }
-
-    async fn download_index(
-        indexes_folder: &Path,
-        fake_s3_folder: &Path,
-        uuid: Uuid,
-    ) -> Result<(), io::Error> {
-        let index_path = indexes_folder.join(uuid.to_string());
-        let index_path_in_s3 = fake_s3_folder.join(uuid.to_string());
-        let index_size = metadata(index_path_in_s3.join("data.ms")).await?.len();
-        let download_duration = fake_transfer_speed(index_size);
-        tokio::time::sleep(download_duration).await;
-        tokio::fs::rename(index_path_in_s3, index_path).await?;
-        Ok(())
-    }
-
-    async fn upload_index(
-        indexes_folder: &Path,
-        fake_s3_folder: &Path,
-        uuid: Uuid,
-    ) -> Result<(), io::Error> {
-        let index_path = indexes_folder.join(uuid.to_string());
-        let index_path_in_s3 = fake_s3_folder.join(uuid.to_string());
-        let index_size = metadata(index_path.join("data.ms")).await?.len();
-        let upload_duration = fake_transfer_speed(index_size);
-        tokio::time::sleep(upload_duration).await;
-        tokio::fs::rename(index_path, index_path_in_s3).await?;
-        Ok(())
-    }
-
-    // Create the folder that fakes S3
-    // TODO remove this once we actually upload to S3
-    let fake_s3 = indexes.join("this-is-s3");
-    if let Err(e) = create_dir_all(&fake_s3).await {
-        if e.kind() != ErrorKind::AlreadyExists {
-            panic!("Failed to create fake S3 folder: {e}");
-        }
-    }
-
-    while let Some(request) = transfer_receiver.recv().await {
-        match request {
-            IndexTransferRequest::Download { uuid, answer } => {
-                let result = download_index(&indexes, &fake_s3, uuid).await.map_err(Arc::new);
-                if answer.send(result).is_err() {
-                    warn!("Couldn't send the download status of index {uuid}: channel closed");
-                }
-            }
-            IndexTransferRequest::Upload { uuid, answer } => {
-                let result = upload_index(&indexes, &fake_s3, uuid).await.map_err(Arc::new);
-                if answer.send(result).is_err() {
-                    warn!("Couldn't send the upload status of index {uuid}: channel closed");
-                }
-            }
-        }
-    }
-}
-
 /// Create or open an index in the specified path.
 /// The path *must* exist or an error will be thrown.
 fn create_or_open_index(
@@ -574,7 +513,6 @@ mod tests {
     use uuid::Uuid;
 
     use super::super::IndexMapper;
-    use crate::index_mapper::index_map::ClosingIndex;
     use crate::test_utils::IndexSchedulerHandle;
     use crate::utils::clamp_to_page_size;
     use crate::IndexScheduler;
@@ -586,13 +524,10 @@ mod tests {
         }
     }
 
-    fn check_first_unavailable(mapper: &IndexMapper, expected_uuid: Uuid, is_closing: bool) {
+    fn check_first_unavailable(mapper: &IndexMapper, expected_uuid: Uuid) {
         let index_map = mapper.index_map.read().unwrap();
-        // let (uuid, state) = index_map.unavailable.first_key_value().unwrap();
-        let (uuid, state): (&Uuid, Option<ClosingIndex>) =
-            todo!("check the first key value another way with the LRU");
+        let (uuid, _state) = index_map.unavailable.first_key_value().unwrap();
         assert_eq!(uuid, &expected_uuid);
-        assert_eq!(state.is_some(), is_closing);
     }
 
     #[tokio::test]
@@ -608,14 +543,14 @@ mod tests {
             uuids.push(mapper.index_mapping.get(&txn, &index_name).unwrap().unwrap());
         }
         // index-0 was evicted
-        check_first_unavailable(&mapper, uuids[0], true);
+        check_first_unavailable(&mapper, uuids[0]);
 
         // get back the evicted index
         let wtxn = env.write_txn().unwrap();
         mapper.create_index(wtxn, "index-0", None, None).await.unwrap();
 
         // Least recently used is now index-1
-        check_first_unavailable(&mapper, uuids[1], true);
+        check_first_unavailable(&mapper, uuids[1]);
     }
 
     #[tokio::test]

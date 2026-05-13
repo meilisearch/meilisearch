@@ -12,7 +12,7 @@ use meilisearch_types::milli::update::IndexerConfig;
 use meilisearch_types::milli::{self, CreateOrOpen, FieldDistribution, Index};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::Handle;
 use tracing::error;
 use uuid::Uuid;
 
@@ -22,6 +22,9 @@ use crate::uuid_codec::UuidCodec;
 use crate::{Error, IndexBudget, IndexSchedulerOptions, Result};
 
 mod index_map;
+
+#[cfg(feature = "enterprise")]
+mod enterprise_edition;
 
 /// The number of database used by index mapper
 const NUMBER_OF_DATABASES: u32 = 2;
