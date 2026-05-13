@@ -6305,3 +6305,432 @@ async fn remote_auto_sharding_with_custom_metadata() {
     }
     "###);
 }
+
+#[cfg(feature = "enterprise")]
+#[actix_rt::test]
+async fn remote_auto_sharding_auto_facet_search() {
+    let ms0 = Server::new().await;
+    let ms1 = Server::new().await;
+    let ms2 = Server::new().await;
+
+    // enable feature
+
+    let (response, code) = ms0.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms1.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+    let (response, code) = ms2.set_features(json!({"network": true})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response["network"]), @"true");
+
+    // wrap servers
+    let ms0 = Arc::new(ms0);
+    let ms1 = Arc::new(ms1);
+    let ms2 = Arc::new(ms2);
+
+    let rms0 = LocalMeili::new(ms0.clone()).await;
+    let rms1 = LocalMeili::new(ms1.clone()).await;
+    let rms2 = LocalMeili::new(ms2.clone()).await;
+
+    // set network
+    let network = json!(
+      {
+        "self": "ms0",
+        "leader": "ms0",
+        "remotes": {
+          "ms0": {
+              "url": rms0.url()
+          },
+          "ms1": {
+              "url": rms1.url()
+          },
+          "ms2": {
+              "url": rms2.url()
+          }
+        },
+        "shards": {
+            "a": {
+              "remotes": ["ms0", "ms1"]
+            },
+            "b": {
+              "remotes": ["ms1", "ms2"]
+            },
+            "c": {
+              "remotes": ["ms2", "ms0"]
+            }
+        }
+      }
+    );
+
+    println!("{}", serde_json::to_string_pretty(&network).unwrap());
+
+    let (task, status_code) = ms0.set_network(network.clone()).await;
+    snapshot!(status_code, @"202 Accepted");
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(t0).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (response, status_code) = ms0.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms0",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "a": {
+          "remotes": [
+            "ms0",
+            "ms1"
+          ]
+        },
+        "b": {
+          "remotes": [
+            "ms1",
+            "ms2"
+          ]
+        },
+        "c": {
+          "remotes": [
+            "ms0",
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms1.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms1",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "a": {
+          "remotes": [
+            "ms0",
+            "ms1"
+          ]
+        },
+        "b": {
+          "remotes": [
+            "ms1",
+            "ms2"
+          ]
+        },
+        "c": {
+          "remotes": [
+            "ms0",
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    let (response, status_code) = ms2.get_network().await;
+    snapshot!(status_code, @"200 OK");
+    snapshot!(json_string!(response, {".version" => "[version]", ".remotes.*.url" => "[url]"}), @r###"
+    {
+      "self": "ms2",
+      "remotes": {
+        "ms0": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms1": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        },
+        "ms2": {
+          "url": "[url]",
+          "searchApiKey": null,
+          "writeApiKey": null,
+          "status": "available"
+        }
+      },
+      "shards": {
+        "a": {
+          "remotes": [
+            "ms0",
+            "ms1"
+          ]
+        },
+        "b": {
+          "remotes": [
+            "ms1",
+            "ms2"
+          ]
+        },
+        "c": {
+          "remotes": [
+            "ms0",
+            "ms2"
+          ]
+        }
+      },
+      "leader": "ms0",
+      "version": "[version]"
+    }
+    "###);
+
+    // add documents
+    let documents = json!([
+      {
+        "id": 1,
+        "title": "Carol",
+        "genres": [
+          "Romance",
+          "Drama"
+        ],
+        "color": [
+          "red"
+        ],
+        "platforms": [
+          "MacOS",
+          "Linux",
+          "Windows"
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Wonder Woman",
+        "genres": [
+          "Action",
+          "Adventure"
+        ],
+        "color": [
+          "green"
+        ],
+        "platforms": [
+          "MacOS"
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Life of Pi",
+        "genres": [
+          "Adventure",
+          "Drama"
+        ],
+        "color": [
+          "blue"
+        ],
+        "platforms": [
+          "Windows"
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Mad Max: Fury Road",
+        "genres": [
+          "Adventure",
+          "Science Fiction"
+        ],
+        "color": [
+          "red"
+        ],
+        "platforms": [
+          "MacOS",
+          "Linux"
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Moana",
+        "genres": [
+          "Fantasy",
+          "Action"
+        ],
+        "color": [
+          "red"
+        ],
+        "platforms": [
+          "Windows"
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Philadelphia",
+        "genres": [
+          "Drama"
+        ],
+        "color": [
+          "blue"
+        ],
+        "platforms": [
+          "MacOS",
+          "Linux",
+          "Windows"
+        ]
+      }
+    ]);
+    let index0 = ms0.index("test");
+    let _index1 = ms1.index("test");
+    let _index2 = ms2.index("test");
+
+    let (task, code) = index0.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (task, _status_code) =
+        index0.update_settings_filterable_attributes(json!(["genres", "color", "platforms"])).await;
+
+    let t0 = task.uid();
+    let (t, _) = ms0.get_task(task.uid()).await;
+
+    let t1 = t["network"]["remote_tasks"]["ms1"]["taskUid"].as_u64().unwrap();
+    let t2 = t["network"]["remote_tasks"]["ms2"]["taskUid"].as_u64().unwrap();
+
+    ms0.wait_task(t0).await.succeeded();
+    ms1.wait_task(t1).await.succeeded();
+    ms2.wait_task(t2).await.succeeded();
+
+    let (response, code) = index0.facet_search(json!({"facetName": "platforms"})).await;
+    snapshot!(code, @"200 OK");
+
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "facetHits": [
+        {
+          "value": "Linux",
+          "count": 3
+        },
+        {
+          "value": "MacOS",
+          "count": 4
+        },
+        {
+          "value": "Windows",
+          "count": 4
+        }
+      ],
+      "facetQuery": null,
+      "processingTimeMs": "[time]",
+      "remoteErrors": {}
+    }
+    "###);
+    let (response, code) =
+        index0.facet_search(json!({"facetName": "platforms", "useNetwork": false})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "facetHits": [
+        {
+          "value": "Linux",
+          "count": 2
+        },
+        {
+          "value": "MacOS",
+          "count": 3
+        },
+        {
+          "value": "Windows",
+          "count": 4
+        }
+      ],
+      "facetQuery": null,
+      "processingTimeMs": "[time]"
+    }
+    "###);
+
+    let (response, code) =
+        index0.facet_search(json!({"facetName": "genres", "facetQuery": "A"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "facetHits": [
+        {
+          "value": "Action",
+          "count": 2
+        },
+        {
+          "value": "Adventure",
+          "count": 3
+        }
+      ],
+      "facetQuery": "A",
+      "processingTimeMs": "[time]",
+      "remoteErrors": {}
+    }
+    "###);
+
+    let (response, code) =
+        index0.facet_search(json!({"facetName": "genres", "facetQuery": "A", "filter": "platforms = Linux OR genres = Drama"})).await;
+    snapshot!(code, @"200 OK");
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]" }), @r###"
+    {
+      "facetHits": [
+        {
+          "value": "Adventure",
+          "count": 2
+        }
+      ],
+      "facetQuery": "A",
+      "processingTimeMs": "[time]",
+      "remoteErrors": {}
+    }
+    "###);
+}
