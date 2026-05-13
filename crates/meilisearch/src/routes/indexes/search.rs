@@ -632,7 +632,7 @@ pub(crate) async fn search(
 
         (search_result, deadline)
     } else {
-        let index = index_scheduler.index(&index_uid).map_err(|err| match &err {
+        let index = index_scheduler.index(&index_uid).await.map_err(|err| match &err {
             index_scheduler::Error::IndexNotFound(_) => {
                 let mut err = ResponseError::from(err);
                 err.code = index_not_found_http_code;
