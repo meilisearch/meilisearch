@@ -2,7 +2,7 @@ use actix_web::web::{self, Data, Path};
 use actix_web::{HttpRequest, HttpResponse};
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
-use index_scheduler::IndexScheduler;
+use index_scheduler::{is_reserved_dynamic_search_rule_index_uid, IndexScheduler};
 use meilisearch_types::deserr::DeserrJsonError;
 use meilisearch_types::dynamic_search_rules::{Condition, DynamicSearchRule, RuleAction, RuleUid};
 use meilisearch_types::error::deserr_codes::{
@@ -11,18 +11,19 @@ use meilisearch_types::error::deserr_codes::{
     InvalidDynamicSearchRuleFilter, InvalidDynamicSearchRuleFilterActive,
     InvalidDynamicSearchRuleFilterAttributePatterns, InvalidDynamicSearchRuleLimit,
     InvalidDynamicSearchRuleOffset, InvalidDynamicSearchRulePriority,
+    InvalidDynamicSearchRuleQuery,
 };
 use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::keys::actions;
 use meilisearch_types::milli::update::Setting;
-use meilisearch_types::milli::{AttributePatterns, PatternMatch};
+use meilisearch_types::milli::AttributePatterns;
 use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::analytics::{Aggregate, Analytics};
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::GuardedData;
-use crate::routes::{Pagination, PaginationView, PAGINATION_DEFAULT_LIMIT};
+use crate::routes::{PaginationView, PAGINATION_DEFAULT_LIMIT};
 
 #[routes::routes(
     routes(
@@ -81,6 +82,10 @@ pub struct ListRulesFilter {
 #[derive(Deserr, Debug, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct ListRules {
+    /// Search query used to rank and restrict rules by description, query conditions, and targeted index.
+    #[schema(required = false)]
+    #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleQuery>)]
+    pub q: Option<String>,
     /// Number of rules to skip. Defaults to 0.
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidDynamicSearchRuleOffset>)]
@@ -95,29 +100,6 @@ pub struct ListRules {
     pub filter: Option<ListRulesFilter>,
 }
 
-impl ListRules {
-    fn apply_filter(&self, rule: &DynamicSearchRule) -> bool {
-        if let Some(filter) = &self.filter {
-            if let Some(patterns) = &filter.attribute_patterns {
-                if matches!(
-                    patterns.match_str(&rule.uid),
-                    PatternMatch::NoMatch | PatternMatch::Parent
-                ) {
-                    return false;
-                }
-            }
-
-            if let Some(active) = &filter.active {
-                if *active != rule.active {
-                    return false;
-                }
-            }
-        }
-
-        true
-    }
-}
-
 #[derive(Debug, thiserror::Error)]
 enum DynamicSearchRulesError {
     #[error("Dynamic search rule `{0}` not found.")]
@@ -128,6 +110,10 @@ enum DynamicSearchRulesError {
         "Cannot set an empty list of actions to a dynamic search rule.\n - Note: for rule `{0}`."
     )]
     EmptyActions(RuleUid),
+    #[error(
+        "Invalid value at `.actions[{index}].selector.indexUid`: `{index_uid}` is reserved and cannot be used as an index UID in dynamic search rule actions"
+    )]
+    ReservedActionIndexUid { index: usize, index_uid: String },
 }
 
 impl ErrorCode for DynamicSearchRulesError {
@@ -136,8 +122,25 @@ impl ErrorCode for DynamicSearchRulesError {
             DynamicSearchRulesError::NotFound(_) => Code::DynamicSearchRuleNotFound,
             DynamicSearchRulesError::CannotResetActions(_) => Code::InvalidDynamicSearchRuleActions,
             DynamicSearchRulesError::EmptyActions(_) => Code::InvalidDynamicSearchRuleActions,
+            DynamicSearchRulesError::ReservedActionIndexUid { .. } => {
+                Code::InvalidDynamicSearchRuleActions
+            }
         }
     }
+}
+
+fn validate_actions(actions: &[RuleAction]) -> Result<(), DynamicSearchRulesError> {
+    for (i, action) in actions.iter().enumerate() {
+        let Some(index_uid) = &action.selector.index_uid else { continue };
+        if is_reserved_dynamic_search_rule_index_uid(index_uid) {
+            return Err(DynamicSearchRulesError::ReservedActionIndexUid {
+                index: i,
+                index_uid: index_uid.to_string(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Serialize, Default)]
@@ -240,10 +243,17 @@ async fn list_rules(
         .features()
         .check_dynamic_search_rules("Using the `/dynamic-search-rules` routes")?;
 
-    let rules = index_scheduler.dynamic_search_rules();
-    let pagination = Pagination { offset: body.0.offset, limit: body.0.limit };
-    let pagination_view =
-        pagination.auto_paginate_counting(rules.values().filter(|rule| body.0.apply_filter(rule)));
+    let ListRules { q, offset, limit, filter } = body.0;
+    let active = filter.as_ref().and_then(|filter| filter.active);
+    let attribute_patterns = filter.as_ref().and_then(|filter| filter.attribute_patterns.as_ref());
+    let page = index_scheduler.list_dynamic_search_rules(
+        q.as_deref(),
+        active,
+        attribute_patterns,
+        offset,
+        limit,
+    )?;
+    let pagination_view = PaginationView::new(page.offset, page.limit, page.total, page.results);
 
     Ok(HttpResponse::Ok().json(pagination_view))
 }
@@ -297,7 +307,7 @@ async fn get_rule(
         .check_dynamic_search_rules("Using the `/dynamic-search-rules` routes")?;
 
     let uid = uid.into_inner();
-    let rules = index_scheduler.dynamic_search_rules();
+    let rules = index_scheduler.dynamic_search_rules()?;
     let rule = rules.get(&uid).ok_or(DynamicSearchRulesError::NotFound(uid))?;
 
     Ok(HttpResponse::Ok().json(rule))
@@ -363,7 +373,7 @@ async fn update_or_create_rule(
         actions: new_actions,
     } = body.into_inner();
 
-    let rules = index_scheduler.dynamic_search_rules();
+    let rules = index_scheduler.dynamic_search_rules()?;
     let (mut rule, is_new) = rules
         .get(&uid)
         .cloned()
@@ -401,7 +411,10 @@ async fn update_or_create_rule(
         Setting::Set(new_actions) if new_actions.is_empty() => {
             return Err(DynamicSearchRulesError::EmptyActions(uid).into())
         }
-        Setting::Set(new_actions) => *actions = new_actions,
+        Setting::Set(new_actions) => {
+            validate_actions(&new_actions)?;
+            *actions = new_actions;
+        }
         Setting::Reset => return Err(DynamicSearchRulesError::CannotResetActions(uid).into()),
         Setting::NotSet if is_new => return Err(DynamicSearchRulesError::EmptyActions(uid).into()),
         Setting::NotSet => (),

@@ -9,6 +9,7 @@ use deserr::{
 };
 use milli::update::ChatSettings;
 
+use crate::dynamic_search_rules::ParseIndexFilterError;
 use crate::error::deserr_codes::{self, *};
 use crate::error::{
     Code, DeserrParseBoolError, DeserrParseIntError, ErrorCode, InvalidTaskDateError,
@@ -203,6 +204,7 @@ merge_with_error_impl_take_error_message!(DeserrParseBoolError);
 merge_with_error_impl_take_error_message!(uuid::Error);
 merge_with_error_impl_take_error_message!(InvalidTaskDateError);
 merge_with_error_impl_take_error_message!(ParseOffsetDateTimeError);
+merge_with_error_impl_take_error_message!(ParseIndexFilterError);
 merge_with_error_impl_take_error_message!(ParseTaskKindError);
 merge_with_error_impl_take_error_message!(ParseTaskStatusError);
 merge_with_error_impl_take_error_message!(IndexUidFormatError);

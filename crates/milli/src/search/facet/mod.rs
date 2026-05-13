@@ -6,6 +6,7 @@ use roaring::RoaringBitmap;
 
 pub use self::facet_distribution::{FacetDistribution, OrderBy, DEFAULT_VALUES_PER_FACET};
 pub use self::filter::{
+    condition_to_index_condition, filter_into_index_filter_unchecked, parse_index_filter_unchecked,
     serialize_index_filter_to_filter_string, BadGeoError, Filter, IndexFilter, SHARD_FIELD,
 };
 pub use self::search::{FacetValueHit, SearchForFacetValues};

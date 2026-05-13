@@ -89,9 +89,11 @@ pub use self::search::facet::{FacetValueHit, SearchForFacetValues, SHARD_FIELD};
 pub use self::search::similar::Similar;
 pub use self::search::steps::{FederatingResultsStep, SearchStep, TotalProcessingTimeStep};
 pub use self::search::{
-    merge_positioned_hits_into_page, serialize_index_filter_to_filter_string, FacetDistribution,
-    Filter, FormatOptions, IndexFilter, MatchBounds, MatcherBuilder, MatchingWords, OrderBy,
-    PinDoc, Search, SearchResult, SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
+    condition_to_index_condition, filter_into_index_filter_unchecked,
+    merge_positioned_hits_into_page, parse_index_filter_unchecked,
+    serialize_index_filter_to_filter_string, FacetDistribution, Filter, FormatOptions, IndexFilter,
+    MatchBounds, MatcherBuilder, MatchingWords, OrderBy, PinDoc, Search, SearchResult,
+    SemanticSearch, TermsMatchingStrategy, DEFAULT_VALUES_PER_FACET,
 };
 pub use self::update::{
     ChannelCongestion, FragmentDiff, InnerIndexSettings, InnerIndexSettingsDiff, SettingsDelta,
