@@ -149,6 +149,13 @@ pub mod route {
         PathAndQuery::from_static("/indexes")
     }
 
+    pub fn settings_path(
+        index_uid: &crate::index_uid::IndexUid,
+    ) -> Result<PathAndQuery, HttpError> {
+        // WARNING: if you change this path, you must also change the path in the federated search route macro in the meilisearch crate.
+        Ok(PathAndQuery::try_from(format!("/indexes/{index_uid}/settings"))?)
+    }
+
     pub fn url_from_base_and_route(
         remote_base_url: &str,
         route: PathAndQuery,

@@ -5,7 +5,7 @@ use meilisearch_types::tasks::network::{DbTaskNetwork, TaskNetwork};
 use meilisearch_types::tasks::Task;
 
 use crate::error::MeilisearchHttpError;
-use crate::proxy::Body;
+use crate::proxy::{Body, Endpoint};
 
 pub fn task_network_and_check_leader_and_version(
     _req: &HttpRequest,
@@ -14,10 +14,10 @@ pub fn task_network_and_check_leader_and_version(
     Ok(None)
 }
 
-pub async fn proxy<T, F>(
+pub async fn proxy<T, F, E: Endpoint>(
     _index_scheduler: &IndexScheduler,
     _index_uid: Option<&str>,
-    _req: &HttpRequest,
+    _req: &E,
     _task_network: DbTaskNetwork,
     _network: Network,
     _body: Body<T, F>,
