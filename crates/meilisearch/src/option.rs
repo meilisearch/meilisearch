@@ -1009,7 +1009,7 @@ pub struct S3SnapshotOpts {
     #[serde(default = "default_experimental_s3_snapshot_signature_duration_seconds")]
     pub experimental_s3_signature_duration_seconds: u64,
 
-    /// The size of the the multipart parts.
+    /// The size of the multipart parts.
     ///
     /// Must not be less than 10MiB and larger than 8GiB. Yes,
     /// twice the boundaries of the AWS S3 multipart upload
