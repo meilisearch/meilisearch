@@ -10,7 +10,7 @@ use milli::documents::Error;
 use milli::Object;
 use rustc_hash::FxBuildHasher;
 use serde::de::{SeqAccess, Visitor};
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::error::Category;
 use serde_json::value::RawValue;
 use serde_json::{to_writer, Map, Value};
@@ -149,6 +149,15 @@ fn parse_csv_header(header: &str) -> (&str, AllowedType) {
     }
 }
 
+fn write_ndjson_line<W, T>(output: &mut W, value: &T) -> serde_json::Result<()>
+where
+    W: io::Write,
+    T: Serialize + ?Sized,
+{
+    to_writer(&mut *output, value)?;
+    output.write_all(b"\n").map_err(serde_json::Error::io)
+}
+
 /// Reads CSV from file and write it in NDJSON in a file checking it along the way.
 pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u64> {
     let ptype = PayloadType::Csv { delimiter };
@@ -204,7 +213,8 @@ pub fn read_csv(input: &File, output: impl io::Write, delimiter: u8) -> Result<u
             *object.get_mut(*name).expect("encountered an unknown field") = value;
         }
 
-        to_writer(&mut output, &object).map_err(|e| DocumentFormatError::from((ptype, e)))?;
+        write_ndjson_line(&mut output, &object)
+            .map_err(|e| DocumentFormatError::from((ptype, e)))?;
     }
 
     Ok(line as u64)
@@ -222,7 +232,7 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
     let res = array_each(&mut deserializer, |obj: &RawValue| {
         doc_alloc.reset();
         let map = RawMap::from_raw_value_and_hasher(obj, FxBuildHasher, &doc_alloc)?;
-        to_writer(&mut out, &map)
+        write_ndjson_line(&mut out, &map)
     });
     let count = match res {
         // The json data has been deserialized and does not need to be processed again.
@@ -239,7 +249,7 @@ pub fn read_json(input: &File, output: impl io::Write) -> Result<u64> {
             let content: Object = serde_json::from_slice(&input)
                 .map_err(Error::Json)
                 .map_err(|e| (PayloadType::Json, e))?;
-            to_writer(&mut out, &content)
+            write_ndjson_line(&mut out, &content)
                 .map(|_| 1)
                 .map_err(|e| DocumentFormatError::from((PayloadType::Json, e)))?
         }
@@ -322,4 +332,69 @@ where
     }
     let visitor = SeqVisitor(f, PhantomData);
     deserializer.deserialize_seq(visitor)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Seek, Write};
+
+    use serde_json::Value;
+
+    use super::{read_csv, read_json};
+
+    fn input_file(content: &str) -> tempfile::NamedTempFile {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+        file.as_file_mut().rewind().unwrap();
+        file
+    }
+
+    fn parse_lines(output: &[u8]) -> Vec<Value> {
+        std::str::from_utf8(output)
+            .unwrap()
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn read_json_writes_newline_delimited_documents() {
+        let input = input_file(r#"[{"id":1},{"id":2}]"#);
+        let mut output = Vec::new();
+
+        let count = read_json(input.as_file(), &mut output).unwrap();
+        let documents = parse_lines(&output);
+
+        assert_eq!(count, 2);
+        assert_eq!(documents.len(), 2);
+        assert_eq!(documents[0]["id"], 1);
+        assert_eq!(documents[1]["id"], 2);
+    }
+
+    #[test]
+    fn read_json_writes_single_document_with_trailing_newline() {
+        let input = input_file(r#"{"id":1}"#);
+        let mut output = Vec::new();
+
+        let count = read_json(input.as_file(), &mut output).unwrap();
+
+        assert_eq!(count, 1);
+        assert_eq!(std::str::from_utf8(&output).unwrap(), "{\"id\":1}\n");
+    }
+
+    #[test]
+    fn read_csv_writes_newline_delimited_documents() {
+        let input = input_file("id:number,title\n1,Carol\n2,Dune\n");
+        let mut output = Vec::new();
+
+        let count = read_csv(input.as_file(), &mut output, b',').unwrap();
+        let documents = parse_lines(&output);
+
+        assert_eq!(count, 2);
+        assert_eq!(documents.len(), 2);
+        assert_eq!(documents[0]["id"], 1);
+        assert_eq!(documents[0]["title"], "Carol");
+        assert_eq!(documents[1]["id"], 2);
+        assert_eq!(documents[1]["title"], "Dune");
+    }
 }

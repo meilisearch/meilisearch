@@ -2,11 +2,13 @@ mod deletion;
 mod errors;
 mod webhook;
 
+use actix_web::http::{header, StatusCode};
+use actix_web::test;
 use meili_snap::{json_string, snapshot};
 use time::format_description::well_known::Rfc3339;
 use time::OffsetDateTime;
 
-use crate::common::Server;
+use crate::common::{Server, Value};
 use crate::json;
 
 #[actix_rt::test]
@@ -44,6 +46,40 @@ async fn get_task_status() {
     let (_response, code) = index.get_task(add_task.uid()).await;
     assert_eq!(code, 200);
     // TODO check response format, as per #48
+}
+
+#[actix_rt::test]
+async fn get_task_documents_returns_valid_ndjson_for_json_payload() {
+    let server = Server::new().await;
+    let (_response, code) = server.set_features(json!({ "getTaskDocumentsRoute": true })).await;
+    assert_eq!(code, 200);
+
+    let index = server.index("movies");
+    let (task, code) = index
+        .raw_add_documents(
+            r#"[{"id":1,"title":"Carol"},{"id":2,"title":"Dune"}]"#,
+            vec![("Content-Type", "application/json")],
+            "",
+        )
+        .await;
+    assert_eq!(code, 202);
+
+    let app = server.init_web_app().await;
+    let req =
+        test::TestRequest::get().uri(&format!("/tasks/{}/documents", task.uid())).to_request();
+    let response = test::call_service(&app, req).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers().get(header::CONTENT_TYPE).unwrap(), "application/x-ndjson");
+
+    let body = test::read_body(response).await;
+    let body = std::str::from_utf8(&body).unwrap();
+    let documents =
+        body.lines().map(|line| serde_json::from_str::<Value>(line).unwrap()).collect::<Vec<_>>();
+
+    assert_eq!(documents.len(), 2, "{body}");
+    assert_eq!(documents[0]["id"], 1);
+    assert_eq!(documents[1]["id"], 2);
 }
 
 #[actix_rt::test]
