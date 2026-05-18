@@ -376,11 +376,14 @@ impl BatchKind {
                 deletion_ids.push(id);
                 Continue(BatchKind::DocumentClear { ids: deletion_ids })
             }
-            // we can't autobatch the deletion and import if the document deletion contained a filter
+            // we can autobatch the deletion by filter and import but only if the document addition is *after* the deletion
             (
-                this @ BatchKind::DocumentDeletion { deletion_ids: _, includes_by_filter: true },
-                K::DocumentImport { .. }
-            ) => Break((this, BatchStopReason::DeletionByFilterWithDocumentOperation { id })),
+                BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter: true },
+                K::DocumentImport { allow_index_creation, primary_key }
+            ) => {
+                deletion_ids.push(id);
+                Continue(BatchKind::DocumentOperation { allow_index_creation, primary_key, operation_ids: deletion_ids })
+            },
             // we can autobatch the deletion and import if the index already exists
             (
                 BatchKind::DocumentDeletion { mut deletion_ids, includes_by_filter: false },
