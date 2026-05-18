@@ -42,6 +42,7 @@
 //!
 
 mod condition;
+mod constraint;
 mod error;
 mod value;
 
@@ -51,6 +52,9 @@ pub use condition::{parse_condition, parse_to, Condition};
 use condition::{
     parse_contains, parse_exists, parse_is_empty, parse_is_not_empty, parse_is_not_null,
     parse_is_null, parse_not_contains, parse_not_exists, parse_not_starts_with, parse_starts_with,
+};
+pub use constraint::{
+    ConstraintCondition, ConstraintConditionKind, ConstraintTarget, FilterConstraints,
 };
 use error::{cut_with_err, ExpectedValueKind, NomErrorExt};
 pub use error::{Error, ErrorKind};
@@ -161,6 +165,18 @@ impl PartialEq for Token<'_> {
 
 impl Eq for Token<'_> {}
 
+impl PartialOrd for Token<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Token<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.original_fragment().cmp(other.original_fragment())
+    }
+}
+
 impl<'a> Token<'a> {
     /// Returns the original fragment of the token.
     pub fn original_fragment(&self) -> &str {
@@ -250,15 +266,15 @@ impl<'a> VectorFilter<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IndexFilterCondition<'a> {
-    Not(Box<Self>),
-    Condition { fid: Token<'a>, op: Condition<'a> },
-    In { fid: Token<'a>, els: Vec<Token<'a>> },
-    Or(Vec<Self>),
-    And(Vec<Self>),
-    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> },
-    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> },
-    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] },
-    GeoPolygon { points: Vec<[Token<'a>; 2]> },
+    Not(Box<Self>),                                  // polarity
+    Condition { fid: Token<'a>, op: Condition<'a> }, // add a constraint to active branches depending on current polarity
+    In { fid: Token<'a>, els: Vec<Token<'a>> }, // add a constraint to active branches depending on current polarity
+    Or(Vec<Self>),  // in normal polarity, create a new list of constraints
+    And(Vec<Self>), // in normal polarity, add to active lists of constraints
+    VectorExists { fid: Token<'a>, embedder: Option<Token<'a>>, filter: VectorFilter<'a> }, // constraint on _vectors
+    GeoLowerThan { point: [Token<'a>; 2], radius: Token<'a>, resolution: Option<Token<'a>> }, // contraint on _geo
+    GeoBoundingBox { top_right_point: [Token<'a>; 2], bottom_left_point: [Token<'a>; 2] }, // constraint on _geo
+    GeoPolygon { points: Vec<[Token<'a>; 2]> }, // constraint on _geojson
 }
 
 impl<'a> IndexFilterCondition<'a> {
