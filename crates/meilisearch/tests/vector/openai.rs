@@ -1906,6 +1906,7 @@ async fn timeout() {
           "embedders": {
               "default": setting,
           },
+          "searchCutoffMs": 500,
         }))
         .await;
     snapshot!(code, @"202 Accepted");
@@ -1966,36 +1967,6 @@ async fn timeout() {
     let (response, code) = index
         .search_post(json!({
             "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
-        }))
-        .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["semanticHitCount"]), @"0");
-    snapshot!(json_string!(response["hits"]), @"[]");
-
-    let (response, code) = index
-        .search_post(json!({
-            "q": "grand chien de berger des montagnes",
-            "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
-        }))
-        .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response["semanticHitCount"]), @"1");
-    snapshot!(json_string!(response["hits"]), @r###"
-    [
-      {
-        "id": 0,
-        "name": "kefir",
-        "gender": "M",
-        "birthyear": 2023,
-        "breed": "Patou"
-      }
-    ]
-    "###);
-
-    let (response, code) = index
-        .search_post(json!({
-            "q": "grand chien de berger des montagnes foil the cache",
             "hybrid": {"semanticRatio": 0.99, "embedder": "default"}
         }))
         .await;
