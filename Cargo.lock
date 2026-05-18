@@ -456,7 +456,7 @@ dependencies = [
  "nohash",
  "ordered-float 4.6.0",
  "page_size",
- "rand 0.8.5",
+ "rand 0.8.6",
  "rayon",
  "roaring 0.10.12",
  "tempfile",
@@ -486,7 +486,7 @@ dependencies = [
  "eventsource-stream",
  "futures",
  "http-client",
- "rand 0.8.5",
+ "rand 0.8.6",
  "reqwest-eventsource",
  "secrecy",
  "serde",
@@ -580,7 +580,7 @@ dependencies = [
  "getrandom 0.2.16",
  "instant",
  "pin-project-lite",
- "rand 0.8.5",
+ "rand 0.8.6",
  "tokio",
 ]
 
@@ -643,7 +643,7 @@ dependencies = [
  "memmap2",
  "milli",
  "mimalloc",
- "rand 0.8.5",
+ "rand 0.8.6",
  "rand_chacha 0.3.1",
  "reqwest",
  "roaring 0.10.12",
@@ -3056,7 +3056,7 @@ dependencies = [
  "min-max-heap",
  "page_size",
  "papaya",
- "rand 0.8.5",
+ "rand 0.8.6",
  "rayon",
  "roaring 0.10.12",
  "rustc-hash 2.1.1",
@@ -3192,7 +3192,7 @@ dependencies = [
  "http 1.4.0",
  "indicatif",
  "log",
- "rand 0.8.5",
+ "rand 0.8.6",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -3884,7 +3884,7 @@ dependencies = [
  "p256",
  "p384",
  "pem",
- "rand 0.8.5",
+ "rand 0.8.6",
  "rsa",
  "serde",
  "serde_json",
@@ -4463,7 +4463,7 @@ dependencies = [
  "pin-project-lite",
  "platform-dirs",
  "prometheus",
- "rand 0.8.5",
+ "rand 0.8.6",
  "rayon",
  "regex",
  "reqwest",
@@ -4515,7 +4515,7 @@ dependencies = [
  "hmac",
  "maplit",
  "meilisearch-types",
- "rand 0.8.5",
+ "rand 0.8.6",
  "roaring 0.10.12",
  "serde",
  "serde_json",
@@ -4654,7 +4654,7 @@ dependencies = [
  "obkv",
  "once_cell",
  "ordered-float 5.1.0",
- "rand 0.8.5",
+ "rand 0.8.6",
  "rayon",
  "rhai",
  "roaring 0.10.12",
@@ -4884,7 +4884,7 @@ dependencies = [
  "num-integer",
  "num-iter",
  "num-traits",
- "rand 0.8.5",
+ "rand 0.8.6",
  "smallvec",
  "zeroize",
 ]
@@ -5357,7 +5357,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c80231409c20246a13fddb31776fb942c38553c51e871f8cbd687a4cfb5843d"
 dependencies = [
  "phf_shared 0.11.3",
- "rand 0.8.5",
+ "rand 0.8.6",
 ]
 
 [[package]]
@@ -5805,9 +5805,9 @@ checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
 name = "rand"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
+checksum = "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
 dependencies = [
  "libc",
  "rand_chacha 0.3.1",
@@ -6212,7 +6212,7 @@ dependencies = [
  "num_cpus",
  "parking_lot",
  "pin-project-lite",
- "rand 0.8.5",
+ "rand 0.8.6",
  "ref-cast",
  "rocket_codegen",
  "rocket_http",
@@ -6334,7 +6334,7 @@ dependencies = [
  "borsh",
  "bytes",
  "num-traits",
- "rand 0.8.5",
+ "rand 0.8.6",
  "rkyv",
  "serde",
  "serde_json",
