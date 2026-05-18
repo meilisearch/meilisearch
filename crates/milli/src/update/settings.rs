@@ -1661,8 +1661,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             embedder_settings: _,
             search_cutoff: _,
             localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
-            prefix_search: Setting::NotSet,
-            facet_search: Setting::NotSet,
+            prefix_search: Setting::NotSet,              // TODO continue with this
+            facet_search: _,
             disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
             chat: _,
             vector_store: Setting::NotSet,
@@ -1699,6 +1699,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_pagination_max_total_hits()?;
             self.update_search_cutoff()?;
             self.update_chat_config()?;
+            self.update_facet_search()?;
 
             // Note that we don't need to update the searchables here,
             // as it will be done after the settings update.

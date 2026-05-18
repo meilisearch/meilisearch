@@ -211,8 +211,10 @@ fn compute_facet_search_database(
     let rtxn = index.read_txn()?;
     progress.update_progress(PostProcessingFacets::FacetSearch);
 
-    // if the facet search is not enabled, we can skip the rest of the function
+    // if the facet search is not enabled, we can clear the
+    // facet search data structures and skip the rest of the function
     if !index.facet_search(wtxn)? {
+        index.facet_id_string_fst.clear(wtxn)?;
         return Ok(());
     }
 
