@@ -31,6 +31,7 @@ use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::heed_codec::StrBEU16Codec;
+use crate::index::PrefixSearch;
 use crate::progress::{AtomicDatabaseStep, EmbedderStats, Progress};
 use crate::proximity::ProximityPrecision;
 use crate::update::new::steps::SettingsIndexerStep;
@@ -287,6 +288,12 @@ where
     // TODO delete useless searchable databases
     //      - Clear fid_prefix_* in the post processing
     //      - clear the prefix + fid_prefix if setting `PrefixSearch` is enabled
+    if *settings_delta.new_prefix_search() == PrefixSearch::Disabled {
+        index.word_prefix_docids.clear(wtxn)?;
+        index.word_prefix_fid_docids.clear(wtxn)?;
+        index.word_prefix_position_docids.clear(wtxn)?;
+        index.exact_word_prefix_docids.clear(wtxn)?;
+    }
 
     let mut bbbuffers = Vec::new();
     let finished_extraction = AtomicBool::new(false);

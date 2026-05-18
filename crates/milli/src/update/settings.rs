@@ -1661,7 +1661,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             embedder_settings: _,
             search_cutoff: _,
             localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
-            prefix_search: Setting::NotSet,              // TODO continue with this
+            prefix_search: _,
             facet_search: _,
             disable_on_numbers: _,
             chat: _,
@@ -1700,6 +1700,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_search_cutoff()?;
             self.update_chat_config()?;
             self.update_facet_search()?;
+            self.update_prefix_search()?;
             self.update_exact_words()?;
             self.update_disabled_typos_terms()?;
 
