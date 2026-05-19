@@ -902,9 +902,6 @@ pub enum BatchStopReason {
     DocumentOperationWithDeletionByFilter {
         id: TaskId,
     },
-    DeletionByFilterWithDocumentOperation {
-        id: TaskId,
-    },
     SettingsWithDocumentOperation {
         id: TaskId,
     },
@@ -993,12 +990,6 @@ impl Display for BatchStopReason {
                 write!(
                     f,
                     "stopped before task with id {id} because it is a deletion by filter which cannot be batched with document operations"
-                )
-            }
-            BatchStopReason::DeletionByFilterWithDocumentOperation { id } => {
-                write!(
-                    f,
-                    "stopped before task with id {id} because it is a document operation which cannot be batched with deletions by filter"
                 )
             }
             BatchStopReason::SettingsWithDocumentOperation { id } => {
