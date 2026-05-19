@@ -87,6 +87,49 @@ pub struct Personalize {
     pub user_context: String,
 }
 
+#[derive(Clone, PartialEq, Serialize, ToSchema, Debug)]
+#[serde(untagged)]
+pub enum FilterKind {
+    Global(Value),
+    Index(Value),
+}
+
+impl From<Value> for FilterKind {
+    fn from(value: Value) -> Self {
+        FilterKind::Global(value)
+    }
+}
+
+impl Into<Value> for FilterKind {
+    fn into(self) -> Value {
+        match self {
+            FilterKind::Global(value) => value,
+            FilterKind::Index(value) => value,
+        }
+    }
+}
+
+impl FilterKind {
+    pub fn inner(&self) -> &Value {
+        match self {
+            FilterKind::Global(value) => value,
+            FilterKind::Index(value) => value,
+        }
+    }
+}
+
+impl<E> Deserr<E> for FilterKind
+where
+    E: deserr::DeserializeError,
+{
+    fn deserialize_from_value<V: deserr::IntoValue>(
+        value: deserr::Value<V>,
+        location: deserr::ValuePointerRef,
+    ) -> Result<Self, E> {
+        Value::deserialize_from_value(value, location).map(Self::Global)
+    }
+}
+
 #[derive(Clone, Default, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 #[schema(rename_all = "camelCase")]
@@ -224,7 +267,7 @@ pub struct SearchQuery {
     /// For [geo search](https://www.meilisearch.com/docs/learn/filtering_and_sorting/geosearch), use `_geoRadius(lat, lng, distance_in_meters)`, `_geoBoundingBox([lat,lng],[lat,lng])`, or `_geoPolygon([lat,lng], ...)` (GeoJSON only for polygon).
     #[schema(required = false)]
     #[deserr(default, error = DeserrJsonError<InvalidSearchFilter>)]
-    pub filter: Option<Value>,
+    pub filter: Option<FilterKind>,
     /// Sort results by one or more attributes and their order.
     ///
     /// Use the format `["attribute:asc", "attribute:desc"]`; only attributes in [sortableAttributes](https://www.meilisearch.com/docs/reference/api/settings/update-all-settings#body-sortable-attributes-one-of-0) can be used.
