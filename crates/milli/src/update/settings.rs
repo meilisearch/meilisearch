@@ -1663,7 +1663,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
             prefix_search: Setting::NotSet,              // TODO continue with this
             facet_search: _,
-            disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
+            disable_on_numbers: _,
             chat: _,
             vector_store: Setting::NotSet,
             wtxn: _,
@@ -1700,6 +1700,8 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_search_cutoff()?;
             self.update_chat_config()?;
             self.update_facet_search()?;
+            self.update_exact_words()?;
+            self.update_disabled_typos_terms()?;
 
             // Note that we don't need to update the searchables here,
             // as it will be done after the settings update.
