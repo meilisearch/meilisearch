@@ -336,3 +336,46 @@ async fn binary_quantize_clear_documents() {
     }
     "###);
 }
+
+#[actix_rt::test]
+async fn remove_binary_quantized_embedder() {
+    let server = Server::new().await;
+    let index = server.index("doggo");
+
+    // 1. Insert documents without embeddings
+    let documents = json!([
+      {"id": 0, "name": "kefir", "_vectors": { "default": [1.0, 2.0, 3.0] }},
+      {"id": 1, "name": "echo", "_vectors": { "default": [-1.0, 0.5, -2.0] }},
+    ]);
+    let (value, code) = index.add_documents(documents, None).await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(value.uid()).await.succeeded();
+
+    // 2. Set userProvided embedder with binaryQuantized
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "default": {
+                  "source": "userProvided",
+                  "dimensions": 3,
+                  "binaryQuantized": true
+              }
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response.uid()).await.succeeded();
+
+    // 3. Remove the embedder by setting it to null
+    let (response, code) = index
+        .update_settings(json!({
+          "embedders": {
+              "default": null
+          },
+        }))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    // BUG: this triggers an internal error.
+    // Once the bug is fixed this task should succeed.
+    server.wait_task(response.uid()).await.succeeded();
+}
