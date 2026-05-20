@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet, LinkedList};
+use std::collections::{BTreeMap, BTreeSet, HashSet, LinkedList};
 use std::iter;
-use std::ops::Bound;
+use std::ops::{Bound, Not as _};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Once, RwLock};
 use std::thread::{self, Builder};
@@ -270,6 +270,15 @@ where
     )?;
     delete_old_geo_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
 
+    // Fetch the numbers from the words FST
+    let removed_numbers = if settings_delta.old_disabled_typos_terms().disable_on_numbers
+        && settings_delta.new_disabled_typos_terms().disable_on_numbers.not()
+    {
+        fetch_numbers_from_words_fst(wtxn, index)?
+    } else {
+        Default::default()
+    };
+
     // Clear word_pair_proximity if byWord to byAttribute
     let old_proximity_precision = settings_delta.old_proximity_precision();
     let new_proximity_precision = settings_delta.new_proximity_precision();
@@ -358,8 +367,12 @@ where
 
         indexing_context.progress.update_progress(IndexingStep::WaitingForExtractors);
 
-        let (index_embeddings, word_delta, facet_field_ids_delta) =
+        let (index_embeddings, mut word_delta, facet_field_ids_delta) =
             extractor_handle.join().unwrap()?;
+
+        // Insert the recently removed numbers into deleted words
+        // so that the FST and prefixes are correctly updated
+        word_delta.deleted.extend(removed_numbers);
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -556,6 +569,22 @@ where
     }
 
     Ok(())
+}
+
+pub fn fetch_numbers_from_words_fst(rtxn: &RoTxn<'_>, index: &Index) -> Result<HashSet<String>> {
+    let mut removed_numbers = HashSet::new();
+    let fst = index.words_fst(rtxn)?;
+    let mut stream = fst.stream();
+    // TODO use an automaton to only iterate over strings that are numbers
+    //      (and thus starts with a digit)
+    while let Some(bytes) = stream.next() {
+        if bytes.iter().all(|c| c.is_ascii_digit()) {
+            let number = std::str::from_utf8(bytes)?;
+            removed_numbers.insert(number.to_string());
+        }
+    }
+
+    Ok(removed_numbers)
 }
 
 pub fn delete_old_fid_from_facet_databases<SD, MSP>(
