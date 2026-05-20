@@ -70,6 +70,8 @@ mod multi_search;
 mod multi_search_analytics;
 pub mod network;
 mod open_api_utils;
+pub mod render;
+mod render_analytics;
 mod snapshot;
 mod swap_indexes;
 pub mod tasks;
@@ -99,6 +101,7 @@ mod webhooks;
         "/network"=> sub(network::NetworkApi),
         "/webhooks"=> sub(webhooks::WebhooksApi),
         "/dynamic-search-rules"=> sub(dynamic_search_rules::DynamicSearchRulesApi),
+        "/render-template" => sub(render::RenderApi),
     ),
     tag = "Root",
     tags(

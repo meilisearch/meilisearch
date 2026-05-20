@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use crate::analytics::Aggregate;
-use crate::routes::indexes::render::RenderQuery;
+use crate::routes::render::RenderQuery;
 
 #[derive(Default)]
 pub struct RenderAggregator {
