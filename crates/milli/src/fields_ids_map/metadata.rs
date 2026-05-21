@@ -74,6 +74,14 @@ impl FieldIdMapWithMetadata {
         Self { fields_ids_map: existing_fields_ids_map, builder, metadata }
     }
 
+    pub fn empty() -> Self {
+        Self {
+            fields_ids_map: Default::default(),
+            builder: MetadataBuilder::empty(),
+            metadata: Default::default(),
+        }
+    }
+
     pub fn as_fields_ids_map(&self) -> &FieldsIdsMap {
         &self.fields_ids_map
     }
@@ -358,6 +366,21 @@ impl MetadataBuilder {
             asc_desc_attributes,
             displayed_attributes: None,
             fields_metadata: BTreeMap::default(),
+            order_by_map: OrderByMap::default(),
+        }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            searchable_attributes: None,
+            exact_searchable_attributes: Default::default(),
+            filterable_attributes: Default::default(),
+            sortable_attributes: Default::default(),
+            localized_attributes: None,
+            distinct_attribute: None,
+            asc_desc_attributes: Default::default(),
+            displayed_attributes: None,
+            fields_metadata: Default::default(),
             order_by_map: OrderByMap::default(),
         }
     }

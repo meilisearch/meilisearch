@@ -143,8 +143,13 @@ impl JsonTemplate {
     }
 
     /// The JSON value representing the underlying template
-    pub fn template(&self) -> &Value {
+    pub fn as_template(&self) -> &Value {
         &self.value
+    }
+
+    /// Consumes the instance, returning its underlying template
+    pub fn into_template(self) -> Value {
+        self.value
     }
 }
 

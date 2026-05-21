@@ -1,10 +1,8 @@
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::RwLock;
 
 use super::metadata::{FieldIdMapWithMetadata, Metadata};
 use super::MutFieldIdMapper;
-use crate::documents::FieldIdMapper;
 use crate::FieldId;
 
 /// A fields ids map that can be globally updated to add fields

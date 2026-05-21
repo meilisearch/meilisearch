@@ -172,6 +172,27 @@ impl EmbedderOptions {
             }
         }
     }
+
+    pub fn has_document_template(&self) -> bool {
+        match &self {
+            EmbedderOptions::HuggingFace(_)
+            | EmbedderOptions::OpenAi(_)
+            | EmbedderOptions::Ollama(_) => true,
+            EmbedderOptions::UserProvided(_) => false,
+            EmbedderOptions::Rest(embedder_options) => {
+                embedder_options.indexing_fragments.is_empty()
+            }
+            EmbedderOptions::Composite(embedder_options) => match &embedder_options.index {
+                SubEmbedderOptions::HuggingFace(_)
+                | SubEmbedderOptions::OpenAi(_)
+                | SubEmbedderOptions::Ollama(_) => true,
+                SubEmbedderOptions::UserProvided(_) => false,
+                SubEmbedderOptions::Rest(embedder_options) => {
+                    embedder_options.indexing_fragments.is_empty()
+                }
+            },
+        }
+    }
 }
 
 impl Default for EmbedderOptions {

@@ -4502,7 +4502,6 @@ dependencies = [
  "utoipa",
  "utoipa-scalar",
  "uuid",
- "wip",
  "wiremock",
  "yaup",
  "zip 6.0.0",
@@ -8667,12 +8666,6 @@ checksum = "5a5364e9d77fcdeeaa6062ced926ee3381faa2ee02d3eb83a5c27a8825540829"
 dependencies = [
  "memchr",
 ]
-
-[[package]]
-name = "wip"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9457cb088c359f081591a0783d595a062341b41c7694236c75c040b1da629b2"
 
 [[package]]
 name = "wiremock"

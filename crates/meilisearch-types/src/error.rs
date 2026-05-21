@@ -466,8 +466,6 @@ InvalidRenderTemplate                          , InvalidRequest       , BAD_REQU
 InvalidRenderTemplateId                        , InvalidRequest       , BAD_REQUEST ;
 InvalidRenderTemplateInline                    , InvalidRequest       , BAD_REQUEST ;
 InvalidRenderInput                             , InvalidRequest       , BAD_REQUEST ;
-InvalidRenderInputDocumentId                   , InvalidRequest       , BAD_REQUEST ;
-InvalidRenderInputInline                       , InvalidRequest       , BAD_REQUEST ;
 RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND ;
 TemplateParsingError                           , InvalidRequest       , BAD_REQUEST ;
 TemplateRenderingError                         , InvalidRequest       , BAD_REQUEST ;

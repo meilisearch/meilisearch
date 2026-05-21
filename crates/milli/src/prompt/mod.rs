@@ -1,6 +1,6 @@
 mod context;
 mod document;
-pub(crate) mod error;
+pub mod error;
 mod fields;
 
 use std::cell::RefCell;

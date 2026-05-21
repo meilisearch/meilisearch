@@ -27,9 +27,9 @@ impl RenderAggregator {
         ret.total_received = 1;
 
         ret.template_inline = template.inline.is_some();
-        ret.template_id = template.id.is_some();
+        ret.template_id = template.index_uid.is_some();
         ret.input_inline = input.as_ref().is_some_and(|i| i.inline.is_some());
-        ret.input_id = input.as_ref().is_some_and(|i| i.document_id.is_some());
+        ret.input_id = input.as_ref().is_some_and(|i| i.id.is_some());
         ret.input_omitted = input.as_ref().is_none();
 
         ret

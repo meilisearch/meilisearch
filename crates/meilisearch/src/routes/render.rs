@@ -1,5 +1,6 @@
 use std::cell::RefCell;
-use std::collections::BTreeMap;
+use std::num::NonZeroUsize;
+use std::sync::RwLock;
 
 use actix_web::web::{self, Data};
 use actix_web::{HttpRequest, HttpResponse};
@@ -7,31 +8,22 @@ use bumpalo::Bump;
 use bumparaw_collections::RawMap;
 use deserr::actix_web::AwebJson;
 use deserr::Deserr;
-use index_scheduler::IndexScheduler;
-use liquid::ValueView;
+use index_scheduler::{IndexScheduler, RoFeatures};
 use meilisearch_types::deserr::DeserrJsonError;
-use meilisearch_types::error::deserr_codes::{
-    InvalidRenderInput, InvalidRenderInputDocumentId, InvalidRenderInputInline,
-    InvalidRenderTemplate,
-};
-use meilisearch_types::error::{Code, ResponseError};
+use meilisearch_types::error::deserr_codes::{InvalidRenderInput, InvalidRenderTemplate};
+use meilisearch_types::error::{Code, ErrorCode, ResponseError};
 use meilisearch_types::heed::RoTxn;
 use meilisearch_types::index_uid::IndexUid;
 use meilisearch_types::keys::actions;
-use meilisearch_types::milli::prompt::{
-    build_doc, build_doc_fields, OwnedFields, Prompt, PromptData,
-};
+use meilisearch_types::milli::prompt::{Prompt, PromptData};
 use meilisearch_types::milli::update::new::document::DocumentFromDb;
-use meilisearch_types::milli::vector::db::IndexEmbeddingConfig;
 use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
-use meilisearch_types::milli::vector::EmbedderOptions;
-use meilisearch_types::milli::{FieldsIdsMap, GlobalFieldsIdsMap, Span, Token};
+use meilisearch_types::milli::{FieldIdMapWithMetadata, FieldsIdsMap, GlobalFieldsIdsMap};
 use meilisearch_types::{heed, milli, Index};
 use serde::Serialize;
 use serde_json::Value;
 use tracing::debug;
 use utoipa::ToSchema;
-use wip::{fixme, wip, WipCloneExt, WipOptionExt as _, WipResultExt as _};
 
 use crate::analytics::Analytics;
 use crate::extractors::authentication::policies::DoubleActionPolicy;
@@ -88,13 +80,14 @@ pub async fn render_post(
         DoubleActionPolicy<{ actions::SETTINGS_GET }, { actions::DOCUMENTS_GET }>,
         Data<IndexScheduler>,
     >,
-    index_uid: web::Path<String>,
     params: AwebJson<RenderQuery, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
     let query = params.into_inner();
     debug!(parameters = ?query, "Render document");
+    let mut aggregate = RenderAggregator::from_query(&query);
+    let features = index_scheduler.features();
 
     let RenderQuery { template, input } = query;
 
@@ -103,86 +96,91 @@ pub async fn render_post(
 
     // check index permissions
     {
-        if let Some(index_uid) = template_index_uid {
-            if !index_scheduler.filters().is_index_authorized(index_uid) {
-                return Err(AuthenticationError::InvalidToken.into());
+        match (template_index_uid, input_index_uid) {
+            (None, None) => (),
+            (None, Some(index_uid)) | (Some(index_uid), None) => {
+                if !index_scheduler.filters().is_index_authorized(index_uid) {
+                    return Err(AuthenticationError::InvalidToken.into());
+                }
             }
-        }
-
-        if let Some(index_uid) = input_index_uid {
-            if !index_scheduler.filters().is_index_authorized(index_uid) {
-                return Err(AuthenticationError::InvalidToken.into());
+            (Some(template_index_uid), Some(input_index_uid))
+                if template_index_uid == input_index_uid =>
+            {
+                // can skip second check
+                if !index_scheduler.filters().is_index_authorized(template_index_uid) {
+                    return Err(AuthenticationError::InvalidToken.into());
+                }
+            }
+            (Some(template_index_uid), Some(input_index_uid)) => {
+                // check both indexes
+                if !index_scheduler.filters().is_index_authorized(template_index_uid)
+                    || !index_scheduler.filters().is_index_authorized(input_index_uid)
+                {
+                    return Err(AuthenticationError::InvalidToken.into());
+                }
             }
         }
     }
-    wip::fixme!("document template max bytes");
 
-    let result = tokio::task::spawn_blocking(|| {
-        let template_index = if let Some(index_uid) = template_index_uid {
-            Some(index_scheduler.index(index_uid))
-        } else {
-            None
-        }
-        .transpose()?;
+    let result: Result<(RenderingTemplate, Option<Value>), Error> =
+        tokio::task::spawn_blocking(move || {
+            let template_index_uid = template.index_uid.as_deref();
+            let input_index_uid = input.as_ref().and_then(|input| input.index_uid.as_deref());
 
-        let template_index_rtxn =
-            template_index.as_ref().map(|index| index.read_txn()).transpose()?;
+            let doc_alloc = Bump::new();
 
-        let template =
-            fetch_template(&template, template_index.as_ref(), template_index_rtxn.as_ref())?;
+            let (template, template_index_rtxn) =
+                fetch_template(&index_scheduler, features, &template)?;
 
-        let rendered = if let Some(input) = input {
-            let input_index;
-            let (input_index, input_index_rtxn, fields_ids_map) =
-                match (input_index_uid, template_index_uid) {
+            let rendered = if let Some(input) = &input {
+                let input_index;
+                let input_index_rtxn_fidmap = match (input_index_uid, template_index_uid) {
                     (None, _) => {
-                        // avoid simultaneously opening several indexes
+                        // close index that will not longer be in used
                         drop(template_index_rtxn);
-                        drop(template_index);
-                        (None, None, Default::default())
+                        None
                     }
                     (Some(input_index_uid), Some(template_index_uid))
                         if input_index_uid == template_index_uid =>
                     {
-                        let fidmap = template_index
-                            .as_ref()
-                            .unwrap()
-                            .fields_ids_map(template_index_rtxn.as_ref().unwrap())
-                            .wip();
-                        // reuse previous index and txn
-                        (template_index, template_index_rtxn, fidmap)
+                        // unwrap: template_index_uid => template_index_rtxn
+                        let (index, rtxn) = template_index_rtxn.unwrap();
+                        input_index = index;
+                        let fidmap = input_index.fields_ids_map_with_metadata(&rtxn)?;
+                        Some((&input_index, rtxn, fidmap))
                     }
                     (Some(index_uid), _) => {
                         // avoid simultaneously opening several indexes
                         drop(template_index_rtxn);
-                        drop(template_index);
-                        input_index = index_scheduler.index(index_uid)?;
-                        let input_index_rtxn = input_index.read_txn()?;
-                        let fidmap = input_index.fields_ids_map(&input_index_rtxn).wip();
-                        (Some(input_index), Some(input_index_rtxn), fidmap)
+                        input_index = index_scheduler.index(index_uid).map_err(|error| {
+                            Error::CannotOpenIndex { error, index: index_uid.to_string() }
+                        })?;
+                        let input_index_rtxn =
+                            input_index.read_txn().map_err(milli::Error::from)?;
+                        let fidmap = input_index.fields_ids_map_with_metadata(&input_index_rtxn)?;
+                        Some((&input_index, input_index_rtxn, fidmap))
                     }
                 };
 
-            let input = fetch_input(
-                &input,
-                input_index.as_ref(),
-                input_index_rtxn.as_ref(),
-                &fields_ids_map,
-            )?;
+                let input = fetch_input(
+                    input,
+                    features,
+                    input_index_rtxn_fidmap
+                        .as_ref()
+                        .map(|(index, rtxn, fidmap)| (*index, rtxn, fidmap.as_fields_ids_map())),
+                    &doc_alloc,
+                )?;
 
-            drop(input_index_rtxn);
-            drop(input_index);
+                let fields_ids_map = input_index_rtxn_fidmap.as_ref().map(|(_, _, fidmap)| fidmap);
 
-            Some(render_template(&template, &input)?)
-        } else {
-            None
-        };
+                Some(render_template(&template, &input, fields_ids_map, &doc_alloc)?)
+            } else {
+                None
+            };
 
-        Ok((template, rendered))
-    })
-    .await?;
-
-    let mut aggregate = RenderAggregator::from_query(&query);
+            Ok((template, rendered))
+        })
+        .await?;
 
     if result.is_ok() {
         aggregate.succeed();
@@ -199,31 +197,178 @@ pub async fn render_post(
     Ok(HttpResponse::Ok().json(result))
 }
 
+#[derive(Debug, thiserror::Error)]
+enum Error {
+    #[error("error while fetch template: {0}")]
+    Template(#[from] FetchTemplateError),
+    #[error("error while fetching input: {0}")]
+    Input(#[from] FetchInputError),
+    #[error("error while rendering template: {0}")]
+    Render(#[from] RenderError),
+    #[error("internal error: {0}")]
+    Milli(#[from] milli::Error),
+    #[error("Cannot open index `{index}`: {error}")]
+    CannotOpenIndex { error: index_scheduler::Error, index: String },
+}
+
+impl ErrorCode for Error {
+    fn error_code(&self) -> Code {
+        match self {
+            Error::Template(error) => error.error_code(),
+            Error::Input(error) => error.error_code(),
+            Error::Render(error) => error.error_code(),
+            Error::Milli(error) => error.error_code(),
+            Error::CannotOpenIndex { error, index: _ } => error.error_code(),
+        }
+    }
+}
+
 fn render_template(
     template: &RenderingTemplate,
     input: &RenderableInput,
+    field_id_map: Option<&FieldIdMapWithMetadata>,
+    doc_alloc: &Bump,
 ) -> Result<Value, RenderError> {
-    template.render(input, field_id_map, doc_alloc)
+    let field_id_map = field_id_map.cloned().unwrap_or_else(FieldIdMapWithMetadata::empty);
+    let field_id_map = RwLock::new(field_id_map);
+    let field_id_map = RefCell::new(GlobalFieldsIdsMap::new(&field_id_map));
+
+    template.render(input, &field_id_map, doc_alloc)
+}
+
+#[derive(Debug, thiserror::Error)]
+enum FetchInputError {
+    #[error("parameter `{disallowed_param}` disallowed for kind `{kind}`")]
+    DisallowedParameterForKind { kind: RenderQueryInputKind, disallowed_param: &'static str },
+    #[error("parameter `{missing_param}` missing for kind `{kind}`")]
+    MissingParameterForKind { kind: RenderQueryInputKind, missing_param: &'static str },
+    #[error("internal error: {0}")]
+    Heed(#[from] heed::Error),
+    #[error("internal error: {0}")]
+    Milli(#[from] Box<milli::Error>),
+    #[error("document `{docid}` not found in `{index_uid}`")]
+    DocumentNotFound { index_uid: String, docid: String },
+    #[error("parsing inline document: {error}")]
+    ParseInlineDocument { error: serde_json::Error },
+    #[error("parsing inline search: {error}")]
+    ParseInlineSearch { error: serde_json::Error },
+    #[error("{error}")]
+    Features { error: Box<index_scheduler::Error> },
+}
+
+impl ErrorCode for FetchInputError {
+    fn error_code(&self) -> Code {
+        match self {
+            FetchInputError::DisallowedParameterForKind { .. }
+            | FetchInputError::ParseInlineDocument { .. }
+            | FetchInputError::ParseInlineSearch { .. }
+            | FetchInputError::MissingParameterForKind { .. } => Code::InvalidRenderInput,
+            FetchInputError::Heed(_) | FetchInputError::Milli(_) => Code::Internal,
+            FetchInputError::DocumentNotFound { .. } => Code::RenderDocumentNotFound,
+            FetchInputError::Features { error } => error.error_code(),
+        }
+    }
 }
 
 fn fetch_input<'doc>(
-    RenderQueryInput { index_uid, document_id, inline_document, inline_query }: &RenderQueryInput,
-    input_index: Option<&Index>,
-    input_index_rtxn: Option<&RoTxn<'_, heed::WithoutTls>>,
-    field_id_map: &FieldsIdsMap,
-) -> Result<RenderableInput<'doc>, RenderError> {
-    let index_rtxn = input_index.zip(input_index_rtxn);
-    Ok(match (index_rtxn, document_id, inline_document, inline_query) {
-        (None, None, Some(q), None) => RenderableInput::Search(q.clone_fixme()),
-        (None, None, None, Some(d)) => RenderableInput::InlineDocument(d.clone_fixme()),
-        (Some((index, rtxn)), Some(external_docid), None, None) => {
+    RenderQueryInput { kind, index_uid, id, inline }: &'doc RenderQueryInput,
+    features: RoFeatures,
+    index_rtxn_fidmap: Option<(
+        &'doc Index,
+        &'doc RoTxn<'doc, heed::WithoutTls>,
+        &'doc FieldsIdsMap,
+    )>,
+    doc_alloc: &'doc Bump,
+) -> Result<RenderableInput<'doc>, FetchInputError> {
+    let kind = *kind;
+    Ok(match kind {
+        RenderQueryInputKind::IndexDocument => {
+            let index_uid =
+                index_uid.as_deref().ok_or(FetchInputError::MissingParameterForKind {
+                    kind,
+                    missing_param: "index_uid",
+                })?;
+
+            let id = id
+                .as_deref()
+                .ok_or(FetchInputError::MissingParameterForKind { kind, missing_param: "id" })?;
+
+            if inline.is_some() {
+                return Err(FetchInputError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "inline",
+                });
+            }
+
+            // unwrap: always some when there is an index_uid
+            let (index, rtxn, field_id_map) = index_rtxn_fidmap.unwrap();
             let internal_docid =
-                index.external_documents_ids().get(rtxn, external_docid).wip().wip();
-            let doc = DocumentFromDb::new(internal_docid, rtxn, index, field_id_map).wip().wip();
+                index.external_documents_ids().get(rtxn, id)?.ok_or_else(|| {
+                    FetchInputError::DocumentNotFound {
+                        index_uid: index_uid.to_string(),
+                        docid: id.to_string(),
+                    }
+                })?;
+            // unwrap: DB is corrupted if the external id points to an internal id that is not found in the DB.
+            let doc = DocumentFromDb::new(internal_docid, rtxn, index, field_id_map)
+                .map_err(|err| FetchInputError::Milli(Box::new(err)))?
+                .unwrap();
 
             RenderableInput::IndexDocument(doc)
         }
-        _ => wip!(),
+        RenderQueryInputKind::InlineDocument => {
+            if index_uid.is_some() {
+                return Err(FetchInputError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "index_uid",
+                });
+            }
+
+            if id.is_some() {
+                return Err(FetchInputError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "id",
+                });
+            }
+
+            let inline = inline.as_ref().ok_or(FetchInputError::MissingParameterForKind {
+                kind,
+                missing_param: "inline",
+            })?;
+
+            let doc = RawMap::from_deserializer(inline, doc_alloc)
+                .map_err(|error| FetchInputError::ParseInlineDocument { error })?;
+
+            RenderableInput::InlineDocument(doc)
+        }
+        RenderQueryInputKind::InlineSearch => {
+            features
+                .check_multimodal("rendering search")
+                .map_err(|error| FetchInputError::Features { error: error.into() })?;
+
+            if index_uid.is_some() {
+                return Err(FetchInputError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "index_uid",
+                });
+            }
+
+            if id.is_some() {
+                return Err(FetchInputError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "id",
+                });
+            }
+
+            let inline = inline.as_ref().ok_or(FetchInputError::MissingParameterForKind {
+                kind,
+                missing_param: "inline",
+            })?;
+
+            let search = RawMap::from_deserializer(inline, doc_alloc)
+                .map_err(|error| FetchInputError::ParseInlineSearch { error })?;
+            RenderableInput::Search(search)
+        }
     })
 }
 
@@ -233,78 +378,483 @@ enum RenderableInput<'doc> {
     IndexDocument(DocumentFromDb<'doc, FieldsIdsMap>),
 }
 
-fn fetch_template(
-    template: &RenderQueryTemplate,
-    template_index: Option<&Index>,
-    template_index_rtxn: Option<&RoTxn<'_, heed::WithoutTls>>,
-) -> Result<RenderingTemplate, RenderError> {
-    Ok(match template.kind {
+#[derive(Debug, thiserror::Error)]
+enum FetchTemplateError {
+    #[error("parameter `{disallowed_param}` disallowed for kind `{kind}`")]
+    DisallowedParameterForKind { kind: RenderQueryTemplateKind, disallowed_param: &'static str },
+    #[error("parameter `{missing_param}` missing for kind `{kind}`")]
+    MissingParameterForKind { kind: RenderQueryTemplateKind, missing_param: &'static str },
+    #[error("cannot find embedder `{embedder}` in index `{index_uid}`")]
+    MissingEmbedder { index_uid: String, embedder: String },
+    #[error("cannot find {fragment_kind} fragment `{fragment}` for embedder `{embedder}` in index `{index_uid}`")]
+    MissingFragment {
+        index_uid: String,
+        embedder: String,
+        fragment: String,
+        fragment_kind: FragmentKind,
+    },
+    #[error("embedder `{embedder}` in index `{index_uid}` does not use fragments.")]
+    NotAFragmentEmbedder { index_uid: String, embedder: String },
+    #[error("embedder `{embedder}` in index `{index_uid}` does not use a document template.")]
+    NotADocumentTemplateEmbedder { index_uid: String, embedder: String },
+    #[error("{0}")]
+    InlineTemplateParsing(#[from] milli::prompt::error::NewPromptError),
+    #[error("inline document templates must be strings")]
+    InlineTemplateNotAString,
+    #[error("{}", error.parsing_error(""))]
+    InlineFragmentParsing { error: json_template::Error },
+    #[error("internal error: {0}")]
+    Heed(#[from] heed::Error),
+    #[error("{error}")]
+    Features { error: Box<index_scheduler::Error> },
+    #[error("cannot open index `{index}`: {error}")]
+    CannotOpenIndex { error: Box<index_scheduler::Error>, index: String },
+}
+
+impl ErrorCode for FetchTemplateError {
+    fn error_code(&self) -> Code {
+        match self {
+            FetchTemplateError::DisallowedParameterForKind { .. }
+            | FetchTemplateError::MissingParameterForKind { .. }
+            | FetchTemplateError::MissingEmbedder { .. }
+            | FetchTemplateError::MissingFragment { .. }
+            | FetchTemplateError::NotAFragmentEmbedder { .. }
+            | FetchTemplateError::InlineTemplateNotAString
+            | FetchTemplateError::NotADocumentTemplateEmbedder { .. }
+            | FetchTemplateError::InlineTemplateParsing(_)
+            | FetchTemplateError::InlineFragmentParsing { .. } => Code::InvalidRenderTemplate,
+            FetchTemplateError::Heed(_) => Code::Internal,
+            FetchTemplateError::Features { error } => error.error_code(),
+            FetchTemplateError::CannotOpenIndex { .. } => Code::IndexNotFound,
+        }
+    }
+}
+
+enum RenderQueryTemplateView<'a> {
+    DocumentTemplate {
+        index_uid: &'a str,
+        index: Index,
+        rtxn: RoTxn<'static, heed::WithoutTls>,
+        embedder: &'a str,
+        document_template_max_bytes: Option<NonZeroUsize>,
+    },
+    ChatDocumentTemplate {
+        index: Index,
+        rtxn: RoTxn<'static, heed::WithoutTls>,
+        document_template_max_bytes: Option<NonZeroUsize>,
+    },
+    IndexingFragment {
+        index_uid: &'a str,
+        index: Index,
+        rtxn: RoTxn<'static, heed::WithoutTls>,
+        embedder: &'a str,
+        fragment: &'a str,
+    },
+    SearchFragment {
+        index_uid: &'a str,
+        index: Index,
+        rtxn: RoTxn<'static, heed::WithoutTls>,
+        embedder: &'a str,
+        fragment: &'a str,
+    },
+    InlineDocumentTemplate {
+        inline: &'a Value,
+        document_template_max_bytes: Option<NonZeroUsize>,
+    },
+    InlineFragment {
+        inline: &'a Value,
+    },
+}
+
+impl<'a> RenderQueryTemplateView<'a> {
+    #[allow(clippy::type_complexity)]
+    pub fn fetch(
+        self,
+    ) -> Result<
+        (RenderingTemplate, Option<(Index, RoTxn<'static, heed::WithoutTls>)>),
+        FetchTemplateError,
+    > {
+        use RenderQueryTemplateView::*;
+        Ok(match self {
+            DocumentTemplate { index_uid, index, rtxn, embedder, document_template_max_bytes } => {
+                let configs = index.embedding_configs().embedding_configs(&rtxn)?;
+                let config = configs
+                    .into_iter()
+                    .find(|config| config.name == embedder)
+                    .ok_or_else(|| FetchTemplateError::MissingEmbedder {
+                        index_uid: index_uid.to_string(),
+                        embedder: embedder.to_string(),
+                    })?;
+
+                if !config.config.embedder_options.has_document_template() {
+                    return Err(FetchTemplateError::NotADocumentTemplateEmbedder {
+                        index_uid: index_uid.to_string(),
+                        embedder: embedder.to_string(),
+                    });
+                }
+
+                let mut prompt = config.config.prompt;
+                if let Some(document_template_max_bytes) = document_template_max_bytes {
+                    prompt.max_bytes = Some(document_template_max_bytes);
+                }
+
+                // unwrap: template was validated when sending the settings
+                (RenderingTemplate::Template(prompt.try_into().unwrap()), Some((index, rtxn)))
+            }
+            ChatDocumentTemplate { index, rtxn, document_template_max_bytes } => {
+                let chat = index.chat_config(&rtxn)?;
+
+                let mut prompt = chat.prompt;
+                if let Some(document_template_max_bytes) = document_template_max_bytes {
+                    prompt.max_bytes = Some(document_template_max_bytes);
+                }
+
+                // unwrap: template was validated when sending the settings
+                (RenderingTemplate::Template(prompt.try_into().unwrap()), Some((index, rtxn)))
+            }
+            IndexingFragment { index_uid, index, rtxn, embedder, fragment } => {
+                let configs = index.embedding_configs().embedding_configs(&rtxn)?;
+                let config = configs
+                    .into_iter()
+                    .find(|config| config.name == embedder)
+                    .ok_or_else(|| FetchTemplateError::MissingEmbedder {
+                        index_uid: index_uid.to_string(),
+                        embedder: embedder.to_string(),
+                    })?;
+
+                if !config.config.embedder_options.has_fragments() {
+                    return Err(FetchTemplateError::NotAFragmentEmbedder {
+                        index_uid: index_uid.to_string(),
+                        embedder: embedder.to_string(),
+                    });
+                }
+
+                let fragment =
+                    config.config.embedder_options.indexing_fragment(fragment).ok_or_else(
+                        || FetchTemplateError::MissingFragment {
+                            index_uid: index_uid.to_string(),
+                            embedder: embedder.to_string(),
+                            fragment: fragment.to_string(),
+                            fragment_kind: FragmentKind::Indexing,
+                        },
+                    )?;
+
+                (
+                    // unwrap: validated in configuration
+                    RenderingTemplate::Fragment(JsonTemplate::new(fragment.clone()).unwrap()),
+                    Some((index, rtxn)),
+                )
+            }
+            SearchFragment { index_uid, index, rtxn, embedder, fragment } => {
+                let configs = index.embedding_configs().embedding_configs(&rtxn)?;
+                let config = configs
+                    .into_iter()
+                    .find(|config| config.name == embedder)
+                    .ok_or_else(|| FetchTemplateError::MissingFragment {
+                        index_uid: index_uid.to_string(),
+                        embedder: embedder.to_string(),
+                        fragment: fragment.to_string(),
+                        fragment_kind: FragmentKind::Indexing,
+                    })?;
+
+                if !config.config.embedder_options.has_fragments() {
+                    return Err(FetchTemplateError::NotAFragmentEmbedder {
+                        index_uid: index_uid.to_string(),
+                        embedder: embedder.to_string(),
+                    });
+                }
+
+                let fragment =
+                    config.config.embedder_options.search_fragment(fragment).ok_or_else(|| {
+                        FetchTemplateError::MissingFragment {
+                            index_uid: index_uid.to_string(),
+                            embedder: embedder.to_string(),
+                            fragment: fragment.to_string(),
+                            fragment_kind: FragmentKind::Search,
+                        }
+                    })?;
+
+                (
+                    // unwrap: validated in configuration
+                    RenderingTemplate::Fragment(JsonTemplate::new(fragment.clone()).unwrap()),
+                    Some((index, rtxn)),
+                )
+            }
+            InlineDocumentTemplate { inline, document_template_max_bytes } => {
+                let inline = inline.as_str().ok_or(FetchTemplateError::InlineTemplateNotAString)?;
+
+                (
+                    RenderingTemplate::Template(Prompt::new(
+                        inline.to_owned(),
+                        document_template_max_bytes,
+                    )?),
+                    None,
+                )
+            }
+            InlineFragment { inline } => (
+                RenderingTemplate::Fragment(
+                    JsonTemplate::new(inline.clone())
+                        .map_err(|error| FetchTemplateError::InlineFragmentParsing { error })?,
+                ),
+                None,
+            ),
+        })
+    }
+}
+
+#[allow(clippy::type_complexity)] // the return type is no very beautiful but I don't see any point in hiding it
+fn fetch_template<'a>(
+    index_scheduler: &'a IndexScheduler,
+    features: RoFeatures,
+    template: &'a RenderQueryTemplate,
+) -> Result<
+    (RenderingTemplate, Option<(Index, RoTxn<'static, heed::WithoutTls>)>),
+    FetchTemplateError,
+> {
+    let RenderQueryTemplate {
+        kind,
+        index_uid,
+        embedder,
+        fragment,
+        inline,
+        document_template_max_bytes,
+    } = template;
+    let kind = *kind;
+    let document_template_max_bytes = *document_template_max_bytes;
+
+    let template = match kind {
         RenderQueryTemplateKind::DocumentTemplate => {
-            let index = template_index.wip();
-            let rtxn = template_index_rtxn.wip();
-            let embedder = template.embedder.as_deref().wip();
+            let index_uid =
+                index_uid.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "index_uid",
+                })?;
+            let index = index_scheduler.index(index_uid).map_err(|error| {
+                FetchTemplateError::CannotOpenIndex {
+                    error: error.into(),
+                    index: index_uid.to_string(),
+                }
+            })?;
+            let rtxn = index.static_read_txn()?;
+            let embedder =
+                embedder.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "embedder",
+                })?;
+            if fragment.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "fragment",
+                });
+            }
+            if inline.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "inline",
+                });
+            }
 
-            let configs = index.embedding_configs().embedding_configs(rtxn).wip();
-            let config = configs.into_iter().find(|config| config.name == embedder).wip();
-
-            fixme!("error if embedder is not document template");
-            fixme!("errors if too many parameters");
-
-            RenderingTemplate::Template(config.config.prompt.try_into().wip())
+            RenderQueryTemplateView::DocumentTemplate {
+                index_uid,
+                index,
+                rtxn,
+                embedder,
+                document_template_max_bytes,
+            }
         }
         RenderQueryTemplateKind::ChatDocumentTemplate => {
-            fixme!("require chat feature");
-            let index = template_index.wip();
-            let rtxn = template_index_rtxn.wip();
+            features
+                .check_chat_completions("accessing chat settings")
+                .map_err(|error| FetchTemplateError::Features { error: error.into() })?;
+            let index_uid =
+                index_uid.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "index_uid",
+                })?;
+            let index = index_scheduler.index(index_uid).map_err(|error| {
+                FetchTemplateError::CannotOpenIndex {
+                    error: error.into(),
+                    index: index_uid.to_string(),
+                }
+            })?;
+            let rtxn = index.static_read_txn()?;
 
-            let chat = index.chat_config(rtxn).wip();
+            if embedder.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "embedder",
+                });
+            }
+            if fragment.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "fragment",
+                });
+            }
+            if inline.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "inline",
+                });
+            }
 
-            RenderingTemplate::Template(chat.prompt.try_into().wip())
+            RenderQueryTemplateView::ChatDocumentTemplate {
+                index,
+                rtxn,
+                document_template_max_bytes,
+            }
         }
         RenderQueryTemplateKind::IndexingFragment => {
-            let index = template_index.wip();
-            let rtxn = template_index_rtxn.wip();
-            let embedder = template.embedder.as_deref().wip();
-            let fragment = template.fragment.as_deref().wip();
+            features
+                .check_multimodal("accessing fragments")
+                .map_err(|error| FetchTemplateError::Features { error: error.into() })?;
+            let index_uid =
+                index_uid.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "index_uid",
+                })?;
+            let index = index_scheduler.index(index_uid).map_err(|error| {
+                FetchTemplateError::CannotOpenIndex {
+                    error: error.into(),
+                    index: index_uid.to_string(),
+                }
+            })?;
+            let rtxn = index.static_read_txn()?;
 
-            let configs = index.embedding_configs().embedding_configs(rtxn).wip();
-            let config = configs.into_iter().find(|config| config.name == embedder).wip();
+            let embedder =
+                embedder.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "embedder",
+                })?;
 
-            fixme!("error if embedder is document template");
+            let fragment =
+                fragment.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "fragment",
+                })?;
 
-            let fragment = config.config.embedder_options.indexing_fragment(fragment).wip();
+            if inline.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "inline",
+                });
+            }
 
-            RenderingTemplate::Fragment(JsonTemplate::new(fragment.clone_fixme()).wip())
+            if document_template_max_bytes.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "document_template_max_bytes",
+                });
+            }
+
+            RenderQueryTemplateView::IndexingFragment { index_uid, index, rtxn, embedder, fragment }
         }
         RenderQueryTemplateKind::SearchFragment => {
-            let index = template_index.wip();
-            let rtxn = template_index_rtxn.wip();
-            let embedder = template.embedder.as_deref().wip();
-            let fragment = template.fragment.as_deref().wip();
+            features
+                .check_multimodal("accessing fragments")
+                .map_err(|error| FetchTemplateError::Features { error: error.into() })?;
+            let index_uid =
+                index_uid.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "index_uid",
+                })?;
+            let index = index_scheduler.index(index_uid).map_err(|error| {
+                FetchTemplateError::CannotOpenIndex {
+                    error: error.into(),
+                    index: index_uid.to_string(),
+                }
+            })?;
+            let rtxn = index.static_read_txn()?;
+            let embedder =
+                embedder.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "embedder",
+                })?;
+            let fragment =
+                fragment.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "fragment",
+                })?;
+            if inline.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "inline",
+                });
+            }
+            if document_template_max_bytes.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "document_template_max_bytes",
+                });
+            }
 
-            let configs = index.embedding_configs().embedding_configs(rtxn).wip();
-            let config = configs.into_iter().find(|config| config.name == embedder).wip();
-
-            fixme!("error if embedder is document template");
-
-            let fragment = config.config.embedder_options.search_fragment(fragment).wip();
-
-            RenderingTemplate::Fragment(JsonTemplate::new(fragment.clone_fixme()).wip())
+            RenderQueryTemplateView::SearchFragment { index_uid, index, rtxn, embedder, fragment }
         }
         RenderQueryTemplateKind::InlineDocumentTemplate => {
-            let inline = template.inline.as_ref().wip();
-            let inline = inline.as_str().wip();
+            if index_uid.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "index_uid",
+                });
+            }
+            if embedder.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "embedder",
+                });
+            }
+            if fragment.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "fragment",
+                });
+            }
+            let inline = inline.as_ref().ok_or(FetchTemplateError::MissingParameterForKind {
+                kind,
+                missing_param: "inline",
+            })?;
 
-            fixme!("inject max_bytes");
-
-            fixme!("remove to_owned");
-            RenderingTemplate::Template(Prompt::new(inline.to_owned(), None).wip())
+            RenderQueryTemplateView::InlineDocumentTemplate { inline, document_template_max_bytes }
         }
         RenderQueryTemplateKind::InlineFragment => {
-            let inline = template.inline.as_ref().wip();
-            RenderingTemplate::Fragment(JsonTemplate::new(inline.clone_fixme()).wip())
+            features
+                .check_multimodal("rendering an inline fragment")
+                .map_err(|error| FetchTemplateError::Features { error: error.into() })?;
+            if index_uid.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "index_uid",
+                });
+            }
+            if embedder.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "embedder",
+                });
+            }
+            if fragment.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "fragment",
+                });
+            }
+
+            let inline = inline.as_ref().ok_or(FetchTemplateError::MissingParameterForKind {
+                kind,
+                missing_param: "inline",
+            })?;
+            if document_template_max_bytes.is_some() {
+                return Err(FetchTemplateError::DisallowedParameterForKind {
+                    kind,
+                    disallowed_param: "document_template_max_bytes",
+                });
+            }
+
+            RenderQueryTemplateView::InlineFragment { inline }
         }
-    })
+    };
+
+    template.fetch()
 }
 
 enum RenderingTemplate {
@@ -313,28 +863,45 @@ enum RenderingTemplate {
 }
 
 impl RenderingTemplate {
+    // panics if input is IndexDocument and field_id_map is None
     pub fn render<'doc>(
         &self,
-        input: RenderableInput<'doc>,
+        input: &RenderableInput<'doc>,
         field_id_map: &RefCell<GlobalFieldsIdsMap>,
         doc_alloc: &'doc Bump,
     ) -> Result<Value, RenderError> {
         Ok(match (input, self) {
-            (RenderableInput::IndexDocument(doc), RenderingTemplate::Template(prompt)) => wip!(),
-            (RenderableInput::Search(_), RenderingTemplate::Template(_)) => wip!(),
-            (RenderableInput::Search(q), RenderingTemplate::Fragment(fragment)) => {
-                fragment.render(&q).wip()
+            (RenderableInput::IndexDocument(doc), RenderingTemplate::Template(prompt)) => {
+                Value::String(
+                    prompt
+                        .render_document(None, doc, field_id_map, doc_alloc)
+                        .map_err(RenderError::Prompt)?
+                        .into(),
+                )
             }
+            (RenderableInput::Search(_), RenderingTemplate::Template(_)) => {
+                return Err(RenderError::CannotRenderTemplateForSearch)
+            }
+            (RenderableInput::Search(q), RenderingTemplate::Fragment(fragment)) => fragment
+                .render_document(q, doc_alloc)
+                .map_err(|error| RenderError::Fragment { error })?,
             (RenderableInput::InlineDocument(doc), RenderingTemplate::Template(prompt)) => {
                 Value::String(
-                    prompt.render_document(None, &doc, field_id_map, doc_alloc).wip().into(),
+                    prompt
+                        .render_document(None, doc, field_id_map, doc_alloc)
+                        .map_err(RenderError::Prompt)?
+                        .into(),
                 )
             }
             (RenderableInput::InlineDocument(doc), RenderingTemplate::Fragment(fragment)) => {
-                fragment.render_document(&doc, doc_alloc).wip()
+                fragment
+                    .render_document(doc, doc_alloc)
+                    .map_err(|error| RenderError::Fragment { error })?
             }
             (RenderableInput::IndexDocument(doc), RenderingTemplate::Fragment(fragment)) => {
-                fragment.render_document(&doc, doc_alloc).wip()
+                fragment
+                    .render_document(doc, doc_alloc)
+                    .map_err(|error| RenderError::Fragment { error })?
             }
         })
     }
@@ -345,267 +912,40 @@ impl RenderingTemplate {
                 let data: PromptData = prompt.into();
                 Value::String(data.template)
             }
-            RenderingTemplate::Fragment(json_template) => json_template.template().clone_fixme(),
+            RenderingTemplate::Fragment(json_template) => json_template.into_template(),
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum FragmentKind {
     Indexing,
     Search,
 }
 
-impl FragmentKind {
-    fn as_str(&self) -> &'static str {
+impl std::fmt::Display for FragmentKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FragmentKind::Indexing => "indexing",
-            FragmentKind::Search => "search",
-        }
-    }
-
-    fn capitalized(&self) -> &'static str {
-        match self {
-            FragmentKind::Indexing => "Indexing",
-            FragmentKind::Search => "Search",
+            FragmentKind::Indexing => f.write_str("indexing"),
+            FragmentKind::Search => f.write_str("search"),
         }
     }
 }
 
+#[derive(Debug, thiserror::Error)]
 enum RenderError {
-    MultipleTemplates,
-    MissingTemplate,
-    EmptyTemplateId,
-    MissingEmbedderName {
-        available: Vec<String>,
-    },
-    EmbedderDoesNotExist {
-        embedder: String,
-        available: Vec<String>,
-    },
-    EmbedderUsesFragments {
-        embedder: String,
-    },
-    ReponseError(ResponseError),
-    MissingFragment {
-        embedder: String,
-        kind: FragmentKind,
-        available: Vec<String>,
-    },
-    FragmentDoesNotExist {
-        embedder: String,
-        fragment: String,
-        kind: FragmentKind,
-        available: Vec<String>,
-    },
-    MissingChatCompletionTemplate,
-    UnknownChatCompletionTemplate(String),
-
-    DocumentNotFound(String),
-    DocumentMustBeMap,
-    BothInlineDocAndDocId,
-    TemplateParsing(json_template::Error),
-    TemplateRendering(json_template::Error),
-    InputConversion(liquid::Error),
+    #[error("{0}")]
+    Prompt(#[from] milli::prompt::error::RenderPromptError),
+    #[error("{}", error.rendering_error(""))]
+    Fragment { error: json_template::Error },
+    #[error("cannot render a document template with a search query")]
+    CannotRenderTemplateForSearch,
 }
 
-impl From<heed::Error> for RenderError {
-    fn from(error: heed::Error) -> Self {
-        RenderError::ReponseError(error.into())
+impl ErrorCode for RenderError {
+    fn error_code(&self) -> Code {
+        Code::TemplateRenderingError
     }
-}
-
-impl From<milli::Error> for RenderError {
-    fn from(error: milli::Error) -> Self {
-        RenderError::ReponseError(error.into())
-    }
-}
-
-use RenderError::*;
-
-impl From<RenderError> for ResponseError {
-    fn from(error: RenderError) -> Self {
-        fn format_span(span: &Span<'_>) -> String {
-            let base_column = span.get_utf8_column();
-            let size = span.fragment().chars().count();
-            format!("`{}` (cols {}:{})", span.fragment(), base_column, base_column + size)
-        }
-
-        fn format_token(token: &Token<'_>) -> String {
-            if let Some(base_column) = token.get_utf8_column() {
-                let size = token.fragment().chars().count();
-                format!("`{}` (cols {}:{})", token.fragment(), base_column, base_column + size)
-            } else {
-                format!("`{}`", token.fragment())
-            }
-        }
-
-        match error {
-            MultipleTemplates => ResponseError::from_msg(
-                String::from("Cannot provide both an inline template and a template ID."),
-                Code::InvalidRenderTemplate,
-            ),
-            MissingTemplate => ResponseError::from_msg(
-                String::from("No template provided. Please provide either an inline template or a template ID."),
-                Code::InvalidRenderTemplate,
-            ),
-            EmptyTemplateId => ResponseError::from_msg(
-                String::from("The template ID is empty.\n  Hint: Valid prefixes are `embedders` or `chatCompletions`."),
-                Code::InvalidRenderTemplateId,
-            ),
-            MissingEmbedderName { mut available } => {
-                available.sort_unstable();
-                ResponseError::from_msg(
-                    format!("Template ID configured with `embedders` but no embedder name provided.\n  Hint: Available embedders are {}.",
-                        available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
-                    Code::InvalidRenderTemplateId,
-                )
-            },
-            EmbedderDoesNotExist { embedder, mut available } => {
-                available.sort_unstable();
-                ResponseError::from_msg(
-                    format!("Embedder `{}` does not exist.\n  Hint: Available embedders are {}.",
-                        &embedder,
-                        available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
-                    Code::InvalidRenderTemplateId,
-                )
-            },
-            EmbedderUsesFragments { embedder } => ResponseError::from_msg(
-                format!("Requested document template for embedder `{}` but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead.", embedder),
-                Code::InvalidRenderTemplateId,
-            ),
-            ReponseError(response_error) => response_error,
-            MissingFragment { embedder, kind, mut available } => {
-                available.sort_unstable();
-                ResponseError::from_msg(
-                    format!("{} fragment name was not provided.\n  Hint: Available {} fragments for embedder `{}` are {}.",
-                        kind.capitalized(),
-                        kind.as_str(),
-                        &embedder,
-                        available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
-                    Code::InvalidRenderTemplateId,
-                )
-            },
-            FragmentDoesNotExist { embedder, fragment, kind, mut available } => {
-                available.sort_unstable();
-                ResponseError::from_msg(
-                    format!("{} fragment `{}` does not exist for embedder `{}`.\n  Hint: Available {} fragments are {}.",
-                        kind.capitalized(),
-                        &fragment,
-                        &embedder,
-                        kind.as_str(),
-                        available.iter().map(|s| format!("`{s}`")).collect::<Vec<_>>().join(", ")),
-                    Code::InvalidRenderTemplateId,
-                )
-            },
-            MissingChatCompletionTemplate => ResponseError::from_msg(
-                String::from("Missing chat completion template ID. The only available template is `documentTemplate`."),
-                Code::InvalidRenderTemplateId,
-            ),
-            UnknownChatCompletionTemplate(id) => ResponseError::from_msg(
-                format!("Unknown chat completion template ID {}. The only available template is `documentTemplate`.", &id),
-                Code::InvalidRenderTemplateId,
-            ),
-            DocumentNotFound(doc_id) => ResponseError::from_msg(
-                format!("Document with ID `{doc_id}` not found."),
-                Code::RenderDocumentNotFound,
-            ),
-            DocumentMustBeMap => ResponseError::from_msg(
-                String::from("The `doc` field must be a map."),
-                Code::InvalidRenderInput,
-            ),
-            BothInlineDocAndDocId => ResponseError::from_msg(
-                String::from("A document id was provided but adding it to the input would overwrite the `doc` field that you already defined inline."),
-                Code::InvalidRenderInput,
-            ),
-            TemplateParsing(err) => ResponseError::from_msg(
-                format!("Error parsing template: {}", err.parsing_error("input")),
-                Code::TemplateParsingError,
-            ),
-            TemplateRendering(err) => ResponseError::from_msg(
-                format!("Error rendering template: {}", err.rendering_error("input")),
-                Code::TemplateRenderingError,
-            ),
-            InputConversion(err) => ResponseError::from_msg(
-                format!("Error converting input to a liquid object: {err}"),
-                Code::InvalidRenderInput,
-            ),
-        }
-    }
-}
-
-#[allow(clippy::result_large_err)]
-async fn render(index: Index, query: RenderQuery) -> Result<RenderResult, ResponseError> {
-    let RenderQuery { template, input } = query;
-    let rtxn = index.read_txn()?;
-    let (template, fields_available) = match (template.inline, template.id) {
-        (Some(inline), None) => (inline, true),
-        (None, Some(id)) => parse_template_id(&index, &rtxn, &id)?,
-        (Some(_), Some(_)) => return Err(MultipleTemplates.into()),
-        (None, None) => return Err(MissingTemplate.into()),
-    };
-    let fields_already_present = input
-        .as_ref()
-        .is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("fields").is_some()));
-    let fields_unused = match template.as_str() {
-        Some(template) => {
-            // might be a false positive if fields appear as a non-variable
-            // it is OK to be over-eager here, it will just translate to more work
-            !template.contains("fields")
-        }
-        None => true, // non-text templates cannot use `fields`
-    };
-    let has_inline_doc =
-        input.as_ref().is_some_and(|i| i.inline.as_ref().is_some_and(|i| i.get("doc").is_some()));
-    let has_document_id = input.as_ref().is_some_and(|i| i.document_id.is_some());
-    let has_doc = has_inline_doc || has_document_id;
-    let insert_fields = fields_available && has_doc && !fields_unused && !fields_already_present;
-    if has_inline_doc && has_document_id {
-        return Err(BothInlineDocAndDocId.into());
-    }
-
-    let mut rendered = Value::Null;
-    if let Some(input) = input {
-        let inline = input.inline.unwrap_or_default();
-        let mut object = liquid::to_object(&inline).map_err(InputConversion)?;
-
-        let doc = match object.get_mut("doc") {
-            Some(liquid::model::Value::Object(doc)) => Some(doc),
-            Some(liquid::model::Value::Nil) => None,
-            None => None,
-            _ => return Err(DocumentMustBeMap.into()),
-        };
-        if insert_fields {
-            if let Some(doc) = doc {
-                let doc = doc.clone();
-                let fid_map_with_meta = index.fields_ids_map_with_metadata(&rtxn)?;
-                let fields = OwnedFields::new(&doc, &fid_map_with_meta);
-                object.insert("fields".into(), fields.to_value());
-            }
-        }
-
-        if let Some(document_id) = input.document_id {
-            if insert_fields {
-                let fid_map_with_meta = index.fields_ids_map_with_metadata(&rtxn)?;
-                let (document, fields) =
-                    build_doc_fields(&index, &rtxn, &document_id, &fid_map_with_meta)?
-                        .ok_or_else(|| DocumentNotFound(document_id))?;
-                object.insert("doc".into(), document);
-                object.insert("fields".into(), fields);
-            } else {
-                let fid_map = index.fields_ids_map(&rtxn)?;
-                let document = build_doc(&index, &rtxn, &document_id, &fid_map)?
-                    .ok_or_else(|| DocumentNotFound(document_id))?;
-                object.insert("doc".into(), document);
-            }
-        }
-
-        let json_template = JsonTemplate::new(template.clone()).map_err(TemplateParsing)?;
-
-        rendered = json_template.render(&object).map_err(TemplateRendering)?;
-    }
-
-    Ok(RenderResult { template, rendered })
 }
 
 #[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
@@ -628,14 +968,12 @@ pub struct RenderQueryTemplate {
     pub kind: RenderQueryTemplateKind,
     /// Index to fetch the template or fragment from.
     ///
-    /// - Mandatory for `kind`s: `documentTemplate`, `chatDocumentTemplate`,
-    ///  `indexingFragment` and `searchFragment`.
+    /// - Mandatory for `kind`s: `documentTemplate`, `chatDocumentTemplate`, `indexingFragment` and `searchFragment`.
     #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub index_uid: Option<IndexUid>,
     /// Embedder to fetch the template or fragment from.
     ///
-    /// - Mandatory for `kind`s: `documentTemplate`, `chatDocumentTemplate`,
-    ///  `indexingFragment` and `searchFragment`.
+    /// - Mandatory for `kind`s: `documentTemplate`, `chatDocumentTemplate`, `indexingFragment` and `searchFragment`.
     #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub embedder: Option<String>,
     /// Name of the fragment to fetch.
@@ -648,6 +986,15 @@ pub struct RenderQueryTemplate {
     /// - Mandatory for `kind`s: `inlineDocumentTemplate` and `inlineFragment`.
     #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
     pub inline: Option<Value>,
+    /// If present, truncate document template rendering to the specified number of bytes.
+    ///
+    /// - Available for `kind`s: `documentTemplate`, `inlineDocumentTemplate` and `chatDocumentTemplate`
+    /// - If present for `documentTemplate` overrides the setting of the index.
+    /// - If missing for `documentTemplate`, the setting of the index is used.
+    /// - If missing for `inlineDocumentTemplate`, the default value of 400 bytes is used.
+    #[deserr(default, error = DeserrJsonError<InvalidRenderTemplate>)]
+    #[schema(value_type = Option<u64>)]
+    pub document_template_max_bytes: Option<NonZeroUsize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema)]
@@ -683,17 +1030,59 @@ pub enum RenderQueryTemplateKind {
     InlineFragment,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Deserr, ToSchema)]
+impl std::fmt::Display for RenderQueryTemplateKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RenderQueryTemplateKind::DocumentTemplate => f.write_str("documentTemplate"),
+            RenderQueryTemplateKind::ChatDocumentTemplate => f.write_str("chatDocumentTemplate"),
+            RenderQueryTemplateKind::IndexingFragment => f.write_str("indexingFragment"),
+            RenderQueryTemplateKind::SearchFragment => f.write_str("searchFragment"),
+            RenderQueryTemplateKind::InlineDocumentTemplate => {
+                f.write_str("inlineDocumentTemplate")
+            }
+            RenderQueryTemplateKind::InlineFragment => f.write_str("inlineFragment"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError<InvalidRenderInput>, rename_all = camelCase, deny_unknown_fields)]
 pub struct RenderQueryInput {
+    #[deserr(error = DeserrJsonError<InvalidRenderInput>)]
+    pub kind: RenderQueryInputKind,
     #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
     pub index_uid: Option<IndexUid>,
-    #[deserr(default, error = DeserrJsonError<InvalidRenderInputDocumentId>)]
-    pub document_id: Option<String>,
-    #[deserr(default, error = DeserrJsonError<InvalidRenderInputInline>)]
-    pub inline_document: Option<BTreeMap<String, Value>>,
-    #[deserr(default, error = DeserrJsonError<InvalidRenderInputInline>)]
-    pub inline_query: Option<BTreeMap<String, Value>>,
+    #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
+    pub id: Option<String>,
+    #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
+    pub inline: Option<Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Deserr, ToSchema)]
+#[deserr(error = DeserrJsonError<InvalidRenderInput>, rename_all = camelCase, deny_unknown_fields)]
+pub enum RenderQueryInputKind {
+    /// Fetches the document associated with the `id` setting of the specified index
+    ///
+    /// - Requires `indexUid`, `id` to be present and not `null`
+    IndexDocument,
+    /// Uses the document specified inline as a JSON object.
+    ///
+    /// - Requires `inline` to be present.
+    InlineDocument,
+    /// Uses the search query specified inline as a JSON object.
+    ///
+    /// - Requires `inline` to be present.
+    InlineSearch,
+}
+
+impl std::fmt::Display for RenderQueryInputKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RenderQueryInputKind::IndexDocument => f.write_str("indexDocument"),
+            RenderQueryInputKind::InlineDocument => f.write_str("inlineDocument"),
+            RenderQueryInputKind::InlineSearch => f.write_str("inlineSearch"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
