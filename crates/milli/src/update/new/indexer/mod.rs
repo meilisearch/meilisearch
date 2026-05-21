@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet, HashSet, LinkedList};
 use std::iter;
 use std::ops::{Bound, Not as _};
@@ -10,7 +9,7 @@ use big_s::S;
 use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{IndexOperations, PayloadStats};
-use fst::{IntoStreamer, Set, Streamer as _};
+use fst::Streamer as _;
 use hashbrown::HashMap;
 use heed::types::{Bytes, DecodeIgnore, Unit};
 use heed::{BytesDecode, Database, RoTxn, RwTxn};
@@ -280,10 +279,6 @@ where
         Default::default()
     };
 
-    // TODO Can't I do that another way? With the SettingsDelta maybe?
-    //      Is it correct to touch the FST like that after the indexing is done?
-    let (to_remove_exact_words, to_add_exact_words) = extract_exact_words_from_fst(wtxn, index)?;
-
     // Clear word_pair_proximity if byWord to byAttribute
     let old_proximity_precision = settings_delta.old_proximity_precision();
     let new_proximity_precision = settings_delta.new_proximity_precision();
@@ -378,12 +373,6 @@ where
         // Insert the recently removed numbers into deleted words
         // so that the FST and prefixes are correctly updated
         word_delta.deleted.extend(removed_numbers);
-
-        // Insert the words to add and remove from the FST based on the exact words settings.
-        // TODO this is probably incorrect to do that this way as there could be common
-        //      words between the added and removed sets. What should I do in this case?
-        word_delta.added.extend(to_remove_exact_words);
-        word_delta.deleted.extend(to_add_exact_words);
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -596,50 +585,6 @@ pub fn extract_numbers_from_words_fst(rtxn: &RoTxn<'_>, index: &Index) -> Result
     }
 
     Ok(removed_numbers)
-}
-
-fn extract_exact_words_from_fst(
-    new_rtxn: &RoTxn<'_>,
-    index: &Index,
-) -> Result<(HashSet<String>, HashSet<String>)> {
-    let mut to_remove_exact_words = HashSet::new();
-    let mut to_add_exact_words = HashSet::new();
-
-    let old_rtxn = index.read_txn()?;
-    let old_exact_words = index.exact_words(&old_rtxn)?;
-    let new_exact_words = index.exact_words(new_rtxn)?;
-
-    if old_exact_words.as_ref().map(|f| f.as_fst().as_bytes())
-        == new_exact_words.as_ref().map(|f| f.as_fst().as_bytes())
-    {
-        return Ok(Default::default());
-    }
-
-    let fst = index.words_fst(&old_rtxn)?;
-
-    let old_exact_words =
-        old_exact_words.unwrap_or_else(|| Set::default().map_data(Cow::Owned).unwrap());
-    let new_exact_words =
-        new_exact_words.unwrap_or_else(|| Set::default().map_data(Cow::Owned).unwrap());
-
-    let added_exact_words = new_exact_words.op().add(old_exact_words.stream()).difference();
-    let removed_exact_words = old_exact_words.op().add(new_exact_words.stream()).difference();
-
-    // Yes, that's in the reverse order because we want exact words not to be included in the words fst
-    let mut words_to_remove_stream = fst.op().add(added_exact_words).intersection().into_stream();
-    let mut words_to_add_stream = fst.op().add(removed_exact_words).intersection().into_stream();
-
-    while let Some(bytes) = words_to_remove_stream.next() {
-        let word = std::str::from_utf8(bytes)?;
-        to_remove_exact_words.insert(word.to_string());
-    }
-
-    while let Some(bytes) = words_to_add_stream.next() {
-        let word = std::str::from_utf8(bytes)?;
-        to_add_exact_words.insert(word.to_string());
-    }
-
-    Ok((to_remove_exact_words, to_add_exact_words))
 }
 
 pub fn delete_old_fid_from_facet_databases<SD, MSP>(
