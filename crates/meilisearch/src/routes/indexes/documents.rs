@@ -568,7 +568,7 @@ pub async fn documents_by_query_post(
         &req,
     );
 
-    documents_by_query(&index_scheduler, index_uid, body)
+    documents_by_query(index_scheduler.clone(), index_uid, body).await
 }
 
 /// List documents with GET
@@ -670,11 +670,11 @@ pub async fn get_documents(
         &req,
     );
 
-    documents_by_query(&index_scheduler, index_uid, query)
+    documents_by_query(index_scheduler.clone(), index_uid, query).await
 }
 
-fn documents_by_query(
-    index_scheduler: &IndexScheduler,
+async fn documents_by_query(
+    index_scheduler: Data<IndexScheduler>,
     index_uid: web::Path<String>,
     query: BrowseQuery,
 ) -> Result<HttpResponse, ResponseError> {
@@ -683,60 +683,71 @@ fn documents_by_query(
 
     let retrieve_vectors = RetrieveVectors::new(retrieve_vectors);
 
-    let ids = if let Some(ids) = ids {
-        let mut parsed_ids = Vec::with_capacity(ids.len());
-        for (index, id) in ids.into_iter().enumerate() {
-            let id = id.try_into().map_err(|error| {
-                let msg = format!("In `.ids[{index}]`: {error}");
-                ResponseError::from_msg(msg, Code::InvalidDocumentIds)
-            })?;
-            parsed_ids.push(id)
-        }
-        Some(parsed_ids)
-    } else {
-        None
-    };
-
-    let sort_criteria = if let Some(sort) = &sort {
-        let sorts: Vec<_> = match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
-            Ok(sorts) => sorts,
-            Err(asc_desc_error) => {
-                return Err(milli::SortError::from(asc_desc_error).into_document_error().into())
+    let ret = tokio::task::spawn_blocking(move || -> Result<_, ResponseError> {
+        let ids = if let Some(ids) = ids {
+            let mut parsed_ids = Vec::with_capacity(ids.len());
+            for (index, id) in ids.into_iter().enumerate() {
+                let id = id.try_into().map_err(|error| {
+                    let msg = format!("In `.ids[{index}]`: {error}");
+                    ResponseError::from_msg(msg, Code::InvalidDocumentIds)
+                })?;
+                parsed_ids.push(id)
             }
+            Some(parsed_ids)
+        } else {
+            None
         };
-        Some(sorts)
-    } else {
-        None
-    };
 
-    let index = index_scheduler.index(&index_uid)?;
-    let rtxn = index.read_txn()?;
-    let progress = Progress::default();
+        let sort_criteria = if let Some(sort) = &sort {
+            let sorts: Vec<_> = match sort.iter().map(|s| milli::AscDesc::from_str(s)).collect() {
+                Ok(sorts) => sorts,
+                Err(asc_desc_error) => {
+                    return Err(milli::SortError::from(asc_desc_error).into_document_error().into())
+                }
+            };
+            Some(sorts)
+        } else {
+            None
+        };
 
-    let filter = &filter;
-    let filter = if let Some(filter) = filter {
-        let filter = parse_filter(filter, Code::InvalidDocumentFilter, index_scheduler.features())?;
-        filter
-            .map(|f| {
-                filter_into_index_filter(f, &index, &rtxn, index_scheduler, &progress, &index_uid)
-            })
-            .transpose()?
-    } else {
-        None
-    };
-    let (total, documents) = retrieve_documents(
-        &index,
-        &rtxn,
-        offset,
-        limit,
-        ids,
-        filter,
-        fields,
-        retrieve_vectors,
-        sort_criteria,
-    )?;
+        let index = index_scheduler.index(&index_uid)?;
+        let rtxn = index.read_txn()?;
+        let progress = Progress::default();
 
-    let ret = PaginationView::new(offset, limit, total as usize, documents);
+        let filter = &filter;
+        let filter = if let Some(filter) = filter {
+            let filter =
+                parse_filter(filter, Code::InvalidDocumentFilter, index_scheduler.features())?;
+            filter
+                .map(|f| {
+                    filter_into_index_filter(
+                        f,
+                        &index,
+                        &rtxn,
+                        &index_scheduler,
+                        &progress,
+                        &index_uid,
+                    )
+                })
+                .transpose()?
+        } else {
+            None
+        };
+        let (total, documents) = retrieve_documents(
+            &index,
+            &rtxn,
+            offset,
+            limit,
+            ids,
+            filter,
+            fields,
+            retrieve_vectors,
+            sort_criteria,
+        )?;
+        Ok(PaginationView::new(offset, limit, total as usize, documents))
+    })
+    .await
+    .unwrap()?;
 
     Ok(HttpResponse::Ok().json(ret))
 }
