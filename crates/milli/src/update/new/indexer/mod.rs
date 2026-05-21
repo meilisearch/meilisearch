@@ -305,8 +305,12 @@ where
             DisabledTyposTerms { disable_on_numbers: false },
         ) => {
             // We disable disableOnNumbers so we need to add those words to the words FST
-            numbers_to_add_to_words_fst =
-                extract_numbers_from_words_fst(wtxn, index, new_disabled_typos_terms)?;
+            numbers_to_add_to_words_fst = extract_numbers_from_word_fid_docids(
+                wtxn,
+                index,
+                settings_delta.old_fields_ids_map(),
+                old_disabled_typos_terms,
+            )?;
             let rtxn = index.read_txn()?;
             migrate_word_docids(
                 &rtxn,
@@ -637,6 +641,23 @@ pub fn extract_numbers_from_words_fst(
     }
 
     Ok(removed_numbers)
+}
+
+pub fn extract_numbers_from_word_fid_docids(
+    rtxn: &RoTxn<'_>,
+    index: &Index,
+    exact_attributes: &FieldIdMapWithMetadata,
+    disabled_typos_terms: &DisabledTyposTerms,
+) -> Result<BTreeSet<String>> {
+    let mut numbers = BTreeSet::new();
+    for result in index.word_fid_docids.remap_data_type::<DecodeIgnore>().iter(rtxn)? {
+        let ((word, fid), _) = result?;
+        let Some(metadata) = exact_attributes.metadata(fid) else { continue };
+        if metadata.exact == PatternMatch::Match && disabled_typos_terms.is_exact(word) {
+            numbers.insert(word.to_string());
+        }
+    }
+    Ok(numbers)
 }
 
 pub fn migrate_word_docids(
