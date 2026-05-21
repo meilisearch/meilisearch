@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet, LinkedList};
+use std::collections::{BTreeMap, BTreeSet, LinkedList};
 use std::iter;
-use std::ops::{Bound, Not as _};
+use std::ops::Bound;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Once, RwLock};
 use std::thread::{self, Builder};
@@ -11,7 +11,7 @@ pub use document_deletion::DocumentDeletion;
 pub use document_operation::{IndexOperations, PayloadStats};
 use fst::Streamer as _;
 use hashbrown::HashMap;
-use heed::types::{Bytes, DecodeIgnore, Unit};
+use heed::types::{Bytes, DecodeIgnore, Str, Unit};
 use heed::{BytesDecode, Database, RoTxn, RwTxn};
 pub use mini_string::MiniString;
 pub use partial_dump::PartialDump;
@@ -39,8 +39,8 @@ use crate::update::GrenadParameters;
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
 use crate::{
-    Error, FieldsIdsMap, FilterFeatures, FilterableAttributesFeatures, GlobalFieldsIdsMap, Index,
-    InternalError, PatternMatch, Result, ThreadPoolNoAbort,
+    CboRoaringBitmapCodec, Error, FieldsIdsMap, FilterFeatures, FilterableAttributesFeatures,
+    GlobalFieldsIdsMap, Index, InternalError, PatternMatch, Result, ThreadPoolNoAbort,
 };
 
 pub(crate) mod de;
@@ -272,13 +272,58 @@ where
     delete_old_geo_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
 
     // Fetch the numbers from the words FST
+    let mut numbers_to_delete_from_words_fst = BTreeSet::new();
+    let mut numbers_to_add_to_words_fst = BTreeSet::new();
+    let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
     let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
-    let removed_numbers = if settings_delta.old_disabled_typos_terms().disable_on_numbers.not()
-        && new_disabled_typos_terms.disable_on_numbers
-    {
-        extract_numbers_from_words_fst(wtxn, index, new_disabled_typos_terms)?
-    } else {
-        Default::default()
+    match (old_disabled_typos_terms, new_disabled_typos_terms) {
+        (
+            DisabledTyposTerms { disable_on_numbers: false },
+            DisabledTyposTerms { disable_on_numbers: true },
+        ) => {
+            // We enable disableOnNumbers so we need to remove those from the words FST
+            numbers_to_delete_from_words_fst =
+                extract_numbers_from_words_fst(wtxn, index, new_disabled_typos_terms)?;
+            let rtxn = index.read_txn()?;
+            migrate_word_docids(
+                &rtxn,
+                index.word_docids,
+                wtxn,
+                index.exact_word_docids,
+                &numbers_to_delete_from_words_fst,
+            )?;
+            migrate_word_docids(
+                &rtxn,
+                index.word_prefix_docids,
+                wtxn,
+                index.exact_word_prefix_docids,
+                &numbers_to_delete_from_words_fst,
+            )?;
+        }
+        (
+            DisabledTyposTerms { disable_on_numbers: true },
+            DisabledTyposTerms { disable_on_numbers: false },
+        ) => {
+            // We disable disableOnNumbers so we need to add those words to the words FST
+            numbers_to_add_to_words_fst =
+                extract_numbers_from_words_fst(wtxn, index, new_disabled_typos_terms)?;
+            let rtxn = index.read_txn()?;
+            migrate_word_docids(
+                &rtxn,
+                index.exact_word_docids,
+                wtxn,
+                index.word_docids,
+                &numbers_to_add_to_words_fst,
+            )?;
+            migrate_word_docids(
+                &rtxn,
+                index.exact_word_prefix_docids,
+                wtxn,
+                index.word_prefix_docids,
+                &numbers_to_add_to_words_fst,
+            )?;
+        }
+        _ => (),
     };
 
     // Clear word_pair_proximity if byWord to byAttribute
@@ -372,9 +417,10 @@ where
         let (index_embeddings, mut word_delta, facet_field_ids_delta) =
             extractor_handle.join().unwrap()?;
 
+        // Insert the recently added numbers into the added words
+        word_delta.added.extend(numbers_to_add_to_words_fst);
         // Insert the recently removed numbers into deleted words
-        // so that the FST and prefixes are correctly updated
-        word_delta.deleted.extend(removed_numbers);
+        word_delta.deleted.extend(numbers_to_delete_from_words_fst);
 
         indexing_context.progress.update_progress(IndexingStep::WritingEmbeddingsToDatabase);
 
@@ -577,8 +623,8 @@ pub fn extract_numbers_from_words_fst(
     rtxn: &RoTxn<'_>,
     index: &Index,
     disabled_typos_terms: &DisabledTyposTerms,
-) -> Result<HashSet<String>> {
-    let mut removed_numbers = HashSet::new();
+) -> Result<BTreeSet<String>> {
+    let mut removed_numbers = BTreeSet::new();
     let fst = index.words_fst(rtxn)?;
     let mut stream = fst.stream();
     // TODO use an automaton to only iterate over strings that are numbers
@@ -591,6 +637,25 @@ pub fn extract_numbers_from_words_fst(
     }
 
     Ok(removed_numbers)
+}
+
+pub fn migrate_word_docids(
+    rtxn: &RoTxn<'_>,
+    src: Database<Str, CboRoaringBitmapCodec>,
+    wtxn: &mut RwTxn<'_>,
+    dst: Database<Str, CboRoaringBitmapCodec>,
+    words: &BTreeSet<String>,
+) -> Result<()> {
+    let src = src.remap_data_type::<Bytes>();
+    let dst = dst.remap_data_type::<Bytes>();
+
+    for word in words {
+        let Some(docids_bytes) = src.get(rtxn, word)? else { continue };
+        dst.put(wtxn, word, docids_bytes)?;
+        src.delete(wtxn, word)?;
+    }
+
+    Ok(())
 }
 
 pub fn delete_old_fid_from_facet_databases<SD, MSP>(
