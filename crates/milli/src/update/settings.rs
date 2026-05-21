@@ -1637,7 +1637,7 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
         // only use the new indexer when only the embedder possibly changed
         if let Self {
             searchable_fields: _,
-            displayed_fields: Setting::NotSet,
+            displayed_fields: _,
             filterable_fields: _,
             sortable_fields: _,
             foreign_keys: _,
@@ -1647,24 +1647,24 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             separator_tokens: Setting::NotSet, // TODO (require force reindexing of searchables)
             dictionary: Setting::NotSet, // TODO (require force reindexing of searchables)
             distinct_field: _,
-            synonyms: Setting::NotSet,
-            primary_key: Setting::NotSet,
-            authorize_typos: Setting::NotSet,
-            min_word_len_two_typos: Setting::NotSet,
-            min_word_len_one_typo: Setting::NotSet,
-            exact_words: Setting::NotSet, // TODO (require force reindexing of searchables)
+            synonyms: _,
+            primary_key: _,
+            authorize_typos: _,
+            min_word_len_two_typos: _,
+            min_word_len_one_typo: _,
+            exact_words: _,
             exact_attributes: _,
-            max_values_per_facet: Setting::NotSet,
-            sort_facet_values_by: Setting::NotSet,
-            pagination_max_total_hits: Setting::NotSet,
+            max_values_per_facet: _,
+            sort_facet_values_by: _,
+            pagination_max_total_hits: _,
             proximity_precision: _,
             embedder_settings: _,
-            search_cutoff: Setting::NotSet,
+            search_cutoff: _,
             localized_attributes_rules: Setting::NotSet, // TODO (require force reindexing of searchables)
-            prefix_search: Setting::NotSet,              // TODO continue with this
+            prefix_search: Setting::NotSet,
             facet_search: Setting::NotSet,
             disable_on_numbers: Setting::NotSet, // TODO (require force reindexing of searchables)
-            chat: Setting::NotSet,
+            chat: _,
             vector_store: Setting::NotSet,
             wtxn: _,
             index: _,
@@ -1688,6 +1688,17 @@ impl<'a, 't, 'i> Settings<'a, 't, 'i> {
             self.update_distinct_attribute()?;
             self.update_foreign_keys()?;
             self.update_criteria()?;
+            self.update_displayed()?;
+            self.update_synonyms()?;
+            self.update_primary_key()?;
+            self.update_authorize_typos()?;
+            self.update_min_typo_word_len()?;
+            self.update_exact_words()?;
+            self.update_max_values_per_facet()?;
+            self.update_sort_facet_values_by()?;
+            self.update_pagination_max_total_hits()?;
+            self.update_search_cutoff()?;
+            self.update_chat_config()?;
 
             // Note that we don't need to update the searchables here,
             // as it will be done after the settings update.
@@ -2658,6 +2669,9 @@ pub trait SettingsDelta {
     fn old_proximity_precision(&self) -> &ProximityPrecision;
     fn new_proximity_precision(&self) -> &ProximityPrecision;
 
+    fn old_prefix_search(&self) -> &PrefixSearch;
+    fn new_prefix_search(&self) -> &PrefixSearch;
+
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
 
@@ -2705,6 +2719,13 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_proximity_precision(&self) -> &ProximityPrecision {
         &self.new.proximity_precision
+    }
+
+    fn old_prefix_search(&self) -> &PrefixSearch {
+        &self.old.prefix_search
+    }
+    fn new_prefix_search(&self) -> &PrefixSearch {
+        &self.new.prefix_search
     }
 
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule] {
