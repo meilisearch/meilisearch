@@ -58,4 +58,4 @@ jobs:
       # Lints the OpenAPI file for best practices (descriptions, examples, naming conventions, etc.)
       # Ruleset is defined in crates/openapi-generator/.spectral.yaml
       - name: Lint OpenAPI specification
-        run: spectral lint /tmp/meilisearch-openapi.json --ruleset crates/openapi-generator/.spectral.yaml
+        run: spectral lint /tmp/meilisearch-openapi.json --verbose --ruleset crates/openapi-generator/.spectral.yaml
