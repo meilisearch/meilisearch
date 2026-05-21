@@ -215,6 +215,7 @@ fn compute_facet_search_database(
     // facet search data structures and skip the rest of the function
     if !index.facet_search(wtxn)? {
         index.facet_id_string_fst.clear(wtxn)?;
+        index.facet_id_normalized_string_strings.clear(wtxn)?;
         return Ok(());
     }
 
