@@ -211,8 +211,11 @@ fn compute_facet_search_database(
     let rtxn = index.read_txn()?;
     progress.update_progress(PostProcessingFacets::FacetSearch);
 
-    // if the facet search is not enabled, we can skip the rest of the function
+    // if the facet search is not enabled, we can clear the
+    // facet search data structures and skip the rest of the function
     if !index.facet_search(wtxn)? {
+        index.facet_id_string_fst.clear(wtxn)?;
+        index.facet_id_normalized_string_strings.clear(wtxn)?;
         return Ok(());
     }
 
@@ -231,6 +234,16 @@ fn compute_facet_search_database(
         }
     });
 
+    // We make sure that the list of filterable attributes is empty
+    // if the facet search was disabled before this change.
+    let empty_facet_searchable_fids;
+    let old_facet_searchable_fids = if index.facet_search(&rtxn)? {
+        &facet_searchable_fids
+    } else {
+        empty_facet_searchable_fids = BTreeSet::new();
+        &empty_facet_searchable_fids
+    };
+
     fn level_0_searchable_facets<'a>(
         txn: &'a RoTxn,
         index: &'a Index,
@@ -248,7 +261,8 @@ fn compute_facet_search_database(
         })
     }
 
-    let previous_facet_id_string = level_0_searchable_facets(&rtxn, index, &facet_searchable_fids);
+    let previous_facet_id_string =
+        level_0_searchable_facets(&rtxn, index, old_facet_searchable_fids);
     let current_facet_id_string = level_0_searchable_facets(wtxn, index, &facet_searchable_fids);
 
     let mut facet_search_builder = FacetSearchBuilder::new(

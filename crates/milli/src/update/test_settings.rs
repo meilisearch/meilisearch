@@ -107,9 +107,11 @@ fn mixup_searchable_with_displayed_fields() {
             ]),
         )
         .unwrap();
+    wtxn.commit().unwrap();
 
-    // In the same transaction we change the displayed fields to be only the "age".
+    // We change the displayed fields to be only the "age".
     // We also change the searchable fields to be the "name" field only.
+    let mut wtxn = index.write_txn().unwrap();
     index
         .update_settings_using_wtxn(&mut wtxn, |settings| {
             settings.set_displayed_fields(vec!["age".into()]);
@@ -171,6 +173,9 @@ fn set_and_reset_displayed_field() {
             ]),
         )
         .unwrap();
+    wtxn.commit().unwrap();
+
+    let mut wtxn = index.write_txn().unwrap();
     index
         .update_settings_using_wtxn(&mut wtxn, |settings| {
             settings.set_displayed_fields(vec!["age".into()]);
@@ -531,8 +536,10 @@ fn set_and_reset_synonyms() {
             ]),
         )
         .unwrap();
+    wtxn.commit().unwrap();
 
     // In the same transaction provide some synonyms
+    let mut wtxn = index.write_txn().unwrap();
     index
         .update_settings_using_wtxn(&mut wtxn, |settings| {
             settings.set_synonyms(btreemap! {
@@ -593,8 +600,10 @@ fn thai_synonyms() {
             ]),
         )
         .unwrap();
+    wtxn.commit().unwrap();
 
     // In the same transaction provide some synonyms
+    let mut wtxn = index.write_txn().unwrap();
     index
         .update_settings_using_wtxn(&mut wtxn, |settings| {
             settings.set_synonyms(btreemap! {
