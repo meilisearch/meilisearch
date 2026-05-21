@@ -27,6 +27,7 @@ use super::channel::*;
 use super::steps::IndexingStep;
 use super::thread_local::ThreadLocal;
 use crate::constants::{RESERVED_GEOJSON_FIELD_NAME, RESERVED_GEO_FIELD_NAME};
+use crate::disabled_typos_terms::DisabledTyposTerms;
 use crate::documents::PrimaryKey;
 use crate::fields_ids_map::metadata::{FieldIdMapWithMetadata, MetadataBuilder};
 use crate::heed_codec::StrBEU16Codec;
@@ -271,10 +272,11 @@ where
     delete_old_geo_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
 
     // Fetch the numbers from the words FST
-    let removed_numbers = if settings_delta.old_disabled_typos_terms().disable_on_numbers
-        && settings_delta.new_disabled_typos_terms().disable_on_numbers.not()
+    let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
+    let removed_numbers = if settings_delta.old_disabled_typos_terms().disable_on_numbers.not()
+        && new_disabled_typos_terms.disable_on_numbers
     {
-        extract_numbers_from_words_fst(wtxn, index)?
+        extract_numbers_from_words_fst(wtxn, index, new_disabled_typos_terms)?
     } else {
         Default::default()
     };
@@ -571,16 +573,20 @@ where
     Ok(())
 }
 
-pub fn extract_numbers_from_words_fst(rtxn: &RoTxn<'_>, index: &Index) -> Result<HashSet<String>> {
+pub fn extract_numbers_from_words_fst(
+    rtxn: &RoTxn<'_>,
+    index: &Index,
+    disabled_typos_terms: &DisabledTyposTerms,
+) -> Result<HashSet<String>> {
     let mut removed_numbers = HashSet::new();
     let fst = index.words_fst(rtxn)?;
     let mut stream = fst.stream();
     // TODO use an automaton to only iterate over strings that are numbers
     //      (and thus starts with a digit)
     while let Some(bytes) = stream.next() {
-        if bytes.iter().all(|c| c.is_ascii_digit()) {
-            let number = std::str::from_utf8(bytes)?;
-            removed_numbers.insert(number.to_string());
+        let word = std::str::from_utf8(bytes)?;
+        if disabled_typos_terms.is_exact(word) {
+            removed_numbers.insert(word.to_string());
         }
     }
 
