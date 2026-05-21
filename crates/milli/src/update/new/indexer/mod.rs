@@ -272,63 +272,8 @@ where
     delete_old_geo_databases(wtxn, index, settings_delta, must_stop_processing, progress)?;
 
     // Fetch the numbers from the words FST
-    let mut numbers_to_delete_from_words_fst = BTreeSet::new();
-    let mut numbers_to_add_to_words_fst = BTreeSet::new();
-    let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
-    let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
-    match (old_disabled_typos_terms, new_disabled_typos_terms) {
-        (
-            DisabledTyposTerms { disable_on_numbers: false },
-            DisabledTyposTerms { disable_on_numbers: true },
-        ) => {
-            // We enable disableOnNumbers so we need to remove those from the words FST
-            numbers_to_delete_from_words_fst =
-                extract_numbers_from_words_fst(wtxn, index, new_disabled_typos_terms)?;
-            let rtxn = index.read_txn()?;
-            migrate_word_docids(
-                &rtxn,
-                index.word_docids,
-                wtxn,
-                index.exact_word_docids,
-                &numbers_to_delete_from_words_fst,
-            )?;
-            migrate_word_docids(
-                &rtxn,
-                index.word_prefix_docids,
-                wtxn,
-                index.exact_word_prefix_docids,
-                &numbers_to_delete_from_words_fst,
-            )?;
-        }
-        (
-            DisabledTyposTerms { disable_on_numbers: true },
-            DisabledTyposTerms { disable_on_numbers: false },
-        ) => {
-            // We disable disableOnNumbers so we need to add those words to the words FST
-            numbers_to_add_to_words_fst = extract_numbers_from_word_fid_docids(
-                wtxn,
-                index,
-                settings_delta.old_fields_ids_map(),
-                old_disabled_typos_terms,
-            )?;
-            let rtxn = index.read_txn()?;
-            migrate_word_docids(
-                &rtxn,
-                index.exact_word_docids,
-                wtxn,
-                index.word_docids,
-                &numbers_to_add_to_words_fst,
-            )?;
-            migrate_word_docids(
-                &rtxn,
-                index.exact_word_prefix_docids,
-                wtxn,
-                index.word_prefix_docids,
-                &numbers_to_add_to_words_fst,
-            )?;
-        }
-        _ => (),
-    };
+    let (numbers_to_delete_from_words_fst, numbers_to_add_to_words_fst) =
+        migrate_numbers(wtxn, index, settings_delta)?;
 
     // Clear word_pair_proximity if byWord to byAttribute
     let old_proximity_precision = settings_delta.old_proximity_precision();
@@ -623,6 +568,76 @@ where
     Ok(())
 }
 
+pub fn migrate_numbers<SD>(
+    wtxn: &mut RwTxn<'_>,
+    index: &Index,
+    settings_delta: &SD,
+) -> Result<(BTreeSet<String>, BTreeSet<String>)>
+where
+    SD: SettingsDelta + Sync,
+{
+    let mut numbers_to_delete_from_words_fst = BTreeSet::new();
+    let mut numbers_to_add_to_words_fst = BTreeSet::new();
+
+    let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
+    let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
+    match (old_disabled_typos_terms, new_disabled_typos_terms) {
+        (
+            DisabledTyposTerms { disable_on_numbers: false },
+            DisabledTyposTerms { disable_on_numbers: true },
+        ) => {
+            // We enable disableOnNumbers so we need to remove those from the words FST
+            numbers_to_delete_from_words_fst =
+                extract_numbers_from_words_fst(wtxn, index, new_disabled_typos_terms)?;
+            let rtxn = index.read_txn()?;
+            migrate_word_docids(
+                &rtxn,
+                index.word_docids,
+                wtxn,
+                index.exact_word_docids,
+                &numbers_to_delete_from_words_fst,
+            )?;
+            migrate_word_docids(
+                &rtxn,
+                index.word_prefix_docids,
+                wtxn,
+                index.exact_word_prefix_docids,
+                &numbers_to_delete_from_words_fst,
+            )?;
+        }
+        (
+            DisabledTyposTerms { disable_on_numbers: true },
+            DisabledTyposTerms { disable_on_numbers: false },
+        ) => {
+            // We disable disableOnNumbers so we need to add those words to the words FST
+            numbers_to_add_to_words_fst = extract_numbers_from_non_exact_searchable_attributes(
+                wtxn,
+                index,
+                settings_delta.old_fields_ids_map(),
+                old_disabled_typos_terms,
+            )?;
+            let rtxn = index.read_txn()?;
+            migrate_word_docids(
+                &rtxn,
+                index.exact_word_docids,
+                wtxn,
+                index.word_docids,
+                &numbers_to_add_to_words_fst,
+            )?;
+            migrate_word_docids(
+                &rtxn,
+                index.exact_word_prefix_docids,
+                wtxn,
+                index.word_prefix_docids,
+                &numbers_to_add_to_words_fst,
+            )?;
+        }
+        _ => (),
+    }
+
+    Ok((numbers_to_delete_from_words_fst, numbers_to_add_to_words_fst))
+}
+
 pub fn extract_numbers_from_words_fst(
     rtxn: &RoTxn<'_>,
     index: &Index,
@@ -643,7 +658,7 @@ pub fn extract_numbers_from_words_fst(
     Ok(removed_numbers)
 }
 
-pub fn extract_numbers_from_word_fid_docids(
+pub fn extract_numbers_from_non_exact_searchable_attributes(
     rtxn: &RoTxn<'_>,
     index: &Index,
     exact_attributes: &FieldIdMapWithMetadata,
@@ -653,7 +668,7 @@ pub fn extract_numbers_from_word_fid_docids(
     for result in index.word_fid_docids.remap_data_type::<DecodeIgnore>().iter(rtxn)? {
         let ((word, fid), _) = result?;
         let Some(metadata) = exact_attributes.metadata(fid) else { continue };
-        if metadata.exact == PatternMatch::Match && disabled_typos_terms.is_exact(word) {
+        if metadata.exact != PatternMatch::Match && disabled_typos_terms.is_exact(word) {
             numbers.insert(word.to_string());
         }
     }
