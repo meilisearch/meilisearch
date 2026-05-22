@@ -371,6 +371,16 @@ where
     Ok(())
 }
 
+/// S3's hard minimum size for any non-last part in a multipart upload.
+///
+/// See <https://docs.aws.amazon.com/AmazonS3/latest/userguide/qfacts.html>.
+const S3_MIN_PART_SIZE: usize = 5 * 1024 * 1024;
+
+/// Extra slack above [`S3_MIN_PART_SIZE`] to absorb the overshoot of a single
+/// `try_read_buf` call (typically a 16–64 KiB kernel pipe chunk). Without this,
+/// a flush at exactly the 5 MiB boundary could land just below.
+const S3_PART_SIZE_HEADROOM: usize = 64 * 1024;
+
 /// Streams the content read from the given reader to S3.
 #[allow(clippy::too_many_arguments)]
 async fn multipart_stream_to_s3(
@@ -439,7 +449,12 @@ async fn multipart_stream_to_s3(
 
     let multipart =
         CreateMultipartUpload::parse_response(&body).map_err(|e| Error::S3XmlError(Box::new(e)))?;
-    tracing::debug!("Starting the upload of the snapshot to {object}");
+    tracing::debug!(
+        object = %object,
+        part_size = s3_multipart_part_size,
+        max_in_flight = s3_max_in_flight_parts.get(),
+        "Starting multipart upload of snapshot"
+    );
 
     // We use this bumpalo for etags strings.
     let bump = bumpalo::Bump::new();
@@ -475,9 +490,25 @@ async fn multipart_stream_to_s3(
             BytesMut::with_capacity(s3_multipart_part_size as usize)
         };
 
+        // S3 requires every non-last multipart part to be at least 5 MiB.
+        // The configured `s3_multipart_part_size / 2` heuristic can fall below
+        // that floor when users set a small part size, so we clamp it.
+        let flush_threshold = std::cmp::max(
+            S3_MIN_PART_SIZE + S3_PART_SIZE_HEADROOM,
+            s3_multipart_part_size as usize / 2,
+        );
+        if part_number == 1 {
+            tracing::debug!(
+                flush_threshold,
+                half_part_size = s3_multipart_part_size as usize / 2,
+                s3_min_part_size = S3_MIN_PART_SIZE,
+                "Resolved multipart flush threshold"
+            );
+        }
+
         // If we successfully read enough bytes,
         // we can continue and send the buffer/part
-        while buffer.len() < (s3_multipart_part_size as usize / 2) {
+        while buffer.len() < flush_threshold {
             // Wait for the pipe to be readable
 
             reader.readable().await?;
@@ -499,7 +530,7 @@ async fn multipart_stream_to_s3(
         }
 
         let body = buffer.freeze();
-        tracing::trace!("Sending part {part_number}");
+        tracing::trace!(part_number, size = body.len(), "Uploading part");
         let task = tokio::spawn({
             let client = client.clone();
             let body = body.clone();
@@ -527,7 +558,7 @@ async fn multipart_stream_to_s3(
         extract_and_append_etag(&bump, &mut etags, resp.headers())?;
     }
 
-    tracing::debug!("Finalizing the multipart upload");
+    tracing::debug!(total_parts = etags.len(), "Finalizing the multipart upload");
 
     let action = bucket.complete_multipart_upload(
         Some(&credential),
