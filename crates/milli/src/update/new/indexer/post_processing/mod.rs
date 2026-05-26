@@ -81,17 +81,35 @@ fn compute_prefix_database(
     let modified = compute_prefixes(&prefix_fst, word_delta.added_or_modified_words())?;
     let deleted = compute_prefixes(&prefix_fst, word_delta.deleted_words())?;
 
+    compute_prefix_database_from_sources(index, wtxn, &modified, &deleted, progress)
+}
+
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::post_processing",
+    name = "prefix_from_sources"
+)]
+pub(crate) fn compute_prefix_database_from_sources(
+    index: &Index,
+    wtxn: &mut RwTxn,
+    modified: &BTreeSet<MiniString>,
+    deleted: &BTreeSet<MiniString>,
+    progress: &Progress,
+) -> Result<()> {
     progress.update_progress(PostProcessingWords::WordPrefixDocids);
-    compute_word_prefix_docids(wtxn, index, &modified, &deleted)?;
+    compute_word_prefix_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::ExactWordPrefixDocids);
-    compute_exact_word_prefix_docids(wtxn, index, &modified, &deleted)?;
+    compute_exact_word_prefix_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixFieldIdDocids);
-    compute_word_prefix_fid_docids(wtxn, index, &modified, &deleted)?;
+    compute_word_prefix_fid_docids(wtxn, index, modified, deleted)?;
 
     progress.update_progress(PostProcessingWords::WordPrefixPositionDocids);
-    compute_word_prefix_position_docids(wtxn, index, &modified, &deleted)
+    compute_word_prefix_position_docids(wtxn, index, modified, deleted)?;
+
+    Ok(())
 }
 
 /// The words must be sorted.

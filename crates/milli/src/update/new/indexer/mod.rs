@@ -9,7 +9,7 @@ use big_s::S;
 use document_changes::{DocumentChanges, IndexingContext};
 pub use document_deletion::DocumentDeletion;
 pub use document_operation::{IndexOperations, PayloadStats};
-use fst::Streamer as _;
+use fst::{IntoStreamer, Streamer as _};
 use hashbrown::HashMap;
 use heed::types::{Bytes, DecodeIgnore, Str, Unit};
 use heed::{BytesDecode, Database, RoTxn, RwTxn};
@@ -34,9 +34,9 @@ use crate::heed_codec::StrBEU16Codec;
 use crate::index::PrefixSearch;
 use crate::progress::{AtomicDatabaseStep, EmbedderStats, Progress};
 use crate::proximity::ProximityPrecision;
-use crate::update::new::steps::SettingsIndexerStep;
+use crate::update::new::steps::{PostProcessingWords, SettingsIndexerStep};
 use crate::update::settings::SettingsDelta;
-use crate::update::GrenadParameters;
+use crate::update::{GrenadParameters, WordsPrefixesFst};
 use crate::vector::settings::{EmbedderAction, RemoveFragments, WriteBackToDocuments};
 use crate::vector::{Embedder, RuntimeEmbedders, VectorStore};
 use crate::{
@@ -393,13 +393,42 @@ where
         .unwrap()?;
 
         pool.install(|| {
+            // This method writes an empty prefix FST when the prefix search is
+            // disabled because it is based on the modified words during the process
+            // and we have not necessarily modified any word during a settings change.
             post_processing::post_process(
                 indexing_context,
                 wtxn,
                 global_fields_ids_map,
                 &word_delta,
                 facet_field_ids_delta,
-            )
+            )?;
+
+            // When the prefix search was disabled and is enabled we need to call the
+            // WordsPrefixesFst::execute to generate and write the words FST from scratch
+            // and call the compute_prefix_database_from_sources a second time to correctly
+            // generate the prefixes databases.
+            if *settings_delta.old_prefix_search() == PrefixSearch::Disabled
+                && *settings_delta.new_prefix_search() == PrefixSearch::IndexingTime
+            {
+                indexing_context.progress.update_progress(PostProcessingWords::ComputePrefixFst);
+                WordsPrefixesFst::new(wtxn, index).execute()?;
+                let prefixes_fst = index.words_prefixes_fst(wtxn)?;
+
+                let mut modified = BTreeSet::new();
+                let deleted = BTreeSet::new();
+                let mut prefix_stream = prefixes_fst.into_stream();
+                while let Some(prefix) = prefix_stream.next() {
+                    let Ok(prefix) = std::str::from_utf8(prefix) else { continue };
+                    let Some(prefix) = MiniString::new(prefix) else { continue };
+                    modified.insert(prefix);
+                }
+                post_processing::compute_prefix_database_from_sources(
+                    index, wtxn, &modified, &deleted, progress,
+                )?;
+            }
+
+            Ok(()) as Result<_>
         })
         .unwrap()?;
 
