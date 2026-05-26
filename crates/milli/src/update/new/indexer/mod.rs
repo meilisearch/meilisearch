@@ -285,10 +285,8 @@ where
         index.word_pair_proximity_docids.clear(wtxn)?;
     }
 
-    // TODO delete useless searchable databases
-    //      - Clear fid_prefix_* in the post processing
-    //      - clear the prefix + fid_prefix if setting `PrefixSearch` is enabled
     if *settings_delta.new_prefix_search() == PrefixSearch::Disabled {
+        index.delete_words_prefixes_fst(wtxn)?;
         index.word_prefix_docids.clear(wtxn)?;
         index.word_prefix_fid_docids.clear(wtxn)?;
         index.word_prefix_position_docids.clear(wtxn)?;
