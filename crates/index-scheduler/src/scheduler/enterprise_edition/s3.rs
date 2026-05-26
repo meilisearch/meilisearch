@@ -395,7 +395,7 @@ async fn multipart_stream_to_s3(
     use std::os::fd::OwnedFd;
     use std::path::PathBuf;
 
-    use bytes::{Bytes, BytesMut};
+    use bytes::{BufMut as _, Bytes, BytesMut};
     use http_client::reqwest::{Client, Response};
     use rusty_s3::actions::CreateMultipartUpload;
     use rusty_s3::{Bucket, BucketError, Credentials, S3Action as _, UrlStyle};
@@ -477,10 +477,13 @@ async fn multipart_stream_to_s3(
 
         // If we successfully read enough bytes,
         // we can continue and send the buffer/part
-        while buffer.len() < (s3_multipart_part_size as usize / 2) {
+        while buffer.len() < s3_multipart_part_size as usize {
             // Wait for the pipe to be readable
-
             reader.readable().await?;
+
+            // Make sure the multipart buffer is limited to the defined multipart size
+            let remaining = s3_multipart_part_size as usize - buffer.len();
+            let mut buffer = (&mut buffer).limit(remaining);
 
             match reader.try_read_buf(&mut buffer) {
                 Ok(0) => break,
