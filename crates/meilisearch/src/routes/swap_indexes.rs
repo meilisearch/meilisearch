@@ -66,7 +66,7 @@ impl Aggregate for IndexSwappedAnalytics {
 
 /// Swap indexes
 ///
-/// Swap the documents, settings, and task history of two or more indexes.
+/// Swap the documents, primary key, settings, and task history of two or more indexes.
 ///
 /// Indexes are swapped in pairs; a single request can include multiple pairs.
 /// The operation is atomic: either all swaps succeed or none do. In the task history, every mention of one index uid is replaced by the other and vice versa.
