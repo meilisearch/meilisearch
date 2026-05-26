@@ -2593,6 +2593,18 @@ pub trait SettingsDelta {
     fn old_prefix_search(&self) -> &PrefixSearch;
     fn new_prefix_search(&self) -> &PrefixSearch;
 
+    fn old_stop_words(&self) -> &Option<fst::Set<Vec<u8>>>;
+    fn new_stop_words(&self) -> &Option<fst::Set<Vec<u8>>>;
+
+    fn old_dictionary(&self) -> &Option<BTreeSet<String>>;
+    fn new_dictionary(&self) -> &Option<BTreeSet<String>>;
+
+    fn old_allowed_separators(&self) -> &Option<BTreeSet<String>>;
+    fn new_allowed_separators(&self) -> &Option<BTreeSet<String>>;
+
+    fn old_localized_attributes_rules(&self) -> &[LocalizedAttributesRule];
+    fn new_localized_attributes_rules(&self) -> &[LocalizedAttributesRule];
+
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule];
     fn new_filterable_rules(&self) -> &[FilterableAttributesRule];
 
@@ -2647,6 +2659,34 @@ impl SettingsDelta for InnerIndexSettingsDiff {
     }
     fn new_prefix_search(&self) -> &PrefixSearch {
         &self.new.prefix_search
+    }
+
+    fn old_stop_words(&self) -> &Option<fst::Set<Vec<u8>>> {
+        &self.old.stop_words
+    }
+    fn new_stop_words(&self) -> &Option<fst::Set<Vec<u8>>> {
+        &self.new.stop_words
+    }
+
+    fn old_dictionary(&self) -> &Option<BTreeSet<String>> {
+        &self.old.dictionary
+    }
+    fn new_dictionary(&self) -> &Option<BTreeSet<String>> {
+        &self.new.dictionary
+    }
+
+    fn old_allowed_separators(&self) -> &Option<BTreeSet<String>> {
+        &self.old.allowed_separators
+    }
+    fn new_allowed_separators(&self) -> &Option<BTreeSet<String>> {
+        &self.new.allowed_separators
+    }
+
+    fn old_localized_attributes_rules(&self) -> &[LocalizedAttributesRule] {
+        &self.old.localized_attributes_rules
+    }
+    fn new_localized_attributes_rules(&self) -> &[LocalizedAttributesRule] {
+        &self.new.localized_attributes_rules
     }
 
     fn old_filterable_rules(&self) -> &[FilterableAttributesRule] {
