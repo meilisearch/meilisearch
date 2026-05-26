@@ -870,7 +870,7 @@ impl<Method: AggregateMethod> Aggregate for DocumentsAggregator<Method> {
 ///
 /// If the provided index does not exist, it will be created.
 ///
-/// For a partial update of the document see [add or update documents route](/reference/api/documents/add-or-update-documents).
+/// For a partial update of the document see [add or update documents route](/docs/reference/api/documents/add-or-update-documents).
 ///
 /// > Use the reserved `_geo` object to add geo coordinates to a document.
 /// > `_geo` is an object made of `lat` and `lng` field.
@@ -982,7 +982,7 @@ pub async fn replace_documents(
 ///
 /// If the provided index does not exist, it will be created.
 ///
-/// To completely overwrite a document, see [add or replace documents route](/reference/api/documents/add-or-replace-documents).
+/// To completely overwrite a document, see [add or replace documents route](/docs/reference/api/documents/add-or-replace-documents).
 ///
 /// > Use the reserved `_geo` object to add geo coordinates to a document.
 /// > `_geo` is an object made of `lat` and `lng` field.
