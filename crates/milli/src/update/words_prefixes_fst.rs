@@ -22,8 +22,7 @@ impl<'t, 'i> WordsPrefixesFst<'t, 'i> {
     /// database. If a word prefix is supposed to match more than this number of words in the
     /// dictionary, therefore this prefix is added to the words prefixes datastructures.
     ///
-    /// Default value is 100. This value must be higher than 50 and will be clamped
-    /// to this bound otherwise.
+    /// Default value is 100.
     pub fn threshold(&mut self, value: usize) -> &mut Self {
         self.threshold = value;
         self
