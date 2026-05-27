@@ -597,60 +597,68 @@ impl WordDocidsExtractors {
         }
 
         let mut action = ActionToOperate::SkipDocument;
-        // Here we do a preliminary check to determine the action to take.
-        // This check doesn't trigger the tokenizer as we never return
-        // PatternMatch::Match.
-        document_tokenizer.tokenize_document(
-            current_document,
-            &mut |field_name| {
-                let fid = match new_fields_ids_map.id(field_name) {
-                    Some(field_id) => field_id,
-                    None => panic!("Expected field `{field_name}` in the fields IDs map"),
-                };
 
-                // If the document must be reindexed, early return NoMatch to stop the scanning process.
-                if action == ActionToOperate::ReindexAllFields {
-                    return Ok((fid, PatternMatch::NoMatch));
-                }
+        match document_tokenizers {
+            OneOrTwoTokenizers::OneTokenizer(document_tokenizer) => {
+                // Here we do a preliminary check to determine the action to take.
+                // This check doesn't trigger the tokenizer as we never return
+                // PatternMatch::Match.
+                document_tokenizer.tokenize_document(
+                    current_document,
+                    &mut |field_name| {
+                        let fid = match new_fields_ids_map.id(field_name) {
+                            Some(field_id) => field_id,
+                            None => panic!("Expected field `{field_name}` in the fields IDs map"),
+                        };
 
-                let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
-                let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
+                        // If the document must be reindexed, early return NoMatch to stop the scanning process.
+                        if action == ActionToOperate::ReindexAllFields {
+                            return Ok((fid, PatternMatch::NoMatch));
+                        }
 
-                action = match (old_field_metadata, new_field_metadata) {
-                    // At least one field is added or removed from the exact fields => ReindexAllFields
-                    (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. })
-                        if old_exact != new_exact =>
-                    {
-                        ActionToOperate::ReindexAllFields
-                    }
-                    // At least one field is removed from the searchable fields => ReindexAllFields
-                    (
-                        Metadata { searchable: (PatternMatch::Match, _), .. },
-                        Metadata { searchable: (PatternMatch::NoMatch, _), .. },
-                    )
-                    | (
-                        Metadata { searchable: (PatternMatch::Match, _), .. },
-                        Metadata { searchable: (PatternMatch::Parent, _), .. },
-                    ) => ActionToOperate::ReindexAllFields,
-                    // At least one field is added in the searchable fields => IndexAddedFields
-                    (
-                        Metadata { searchable: (PatternMatch::NoMatch, _), .. },
-                        Metadata { searchable: (PatternMatch::Match, _), .. },
-                    )
-                    | (
-                        Metadata { searchable: (PatternMatch::Parent, _), .. },
-                        Metadata { searchable: (PatternMatch::Match, _), .. },
-                    ) => {
-                        // We can safely overwrite the action, because we early return when action is ReindexAllFields.
-                        ActionToOperate::IndexAddedFields
-                    }
-                    _ => action,
-                };
+                        let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
+                        let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
 
-                Ok((fid, PatternMatch::Parent))
-            },
-            &mut |_, _, _, _| Ok(()),
-        )?;
+                        action = match (old_field_metadata, new_field_metadata) {
+                            // At least one field is added or removed from the exact fields => ReindexAllFields
+                            (
+                                Metadata { exact: old_exact, .. },
+                                Metadata { exact: new_exact, .. },
+                            ) if old_exact != new_exact => ActionToOperate::ReindexAllFields,
+                            // At least one field is removed from the searchable fields => ReindexAllFields
+                            (
+                                Metadata { searchable: (PatternMatch::Match, _), .. },
+                                Metadata { searchable: (PatternMatch::NoMatch, _), .. },
+                            )
+                            | (
+                                Metadata { searchable: (PatternMatch::Match, _), .. },
+                                Metadata { searchable: (PatternMatch::Parent, _), .. },
+                            ) => ActionToOperate::ReindexAllFields,
+                            // At least one field is added in the searchable fields => IndexAddedFields
+                            (
+                                Metadata { searchable: (PatternMatch::NoMatch, _), .. },
+                                Metadata { searchable: (PatternMatch::Match, _), .. },
+                            )
+                            | (
+                                Metadata { searchable: (PatternMatch::Parent, _), .. },
+                                Metadata { searchable: (PatternMatch::Match, _), .. },
+                            ) => {
+                                // We can safely overwrite the action, because we early return when action is ReindexAllFields.
+                                ActionToOperate::IndexAddedFields
+                            }
+                            _ => action,
+                        };
+
+                        Ok((fid, PatternMatch::Parent))
+                    },
+                    &mut |_, _, _, _| Ok(()),
+                )?;
+            }
+            OneOrTwoTokenizers::TwoTokenizer { old: _, new: _ } => {
+                // If the tokenizer changed, we need to reindex the whole document.
+                action = ActionToOperate::ReindexAllFields;
+            }
+        }
 
         // Early return when we don't need to index the document
         if action == ActionToOperate::SkipDocument {
@@ -698,85 +706,194 @@ impl WordDocidsExtractors {
 
         let old_disabled_typos_terms = settings_delta.old_disabled_typos_terms();
         let new_disabled_typos_terms = settings_delta.new_disabled_typos_terms();
-        let mut token_fn = |_field_name: &str, field_id, pos, word: &str| {
-            let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
-            let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
 
-            match (old_field_metadata, new_field_metadata) {
-                (
-                    Metadata { searchable: (PatternMatch::Match, _), exact: old_exact, .. },
-                    Metadata { searchable: (PatternMatch::NoMatch, _), .. },
-                )
-                | (
-                    Metadata { searchable: (PatternMatch::Match, _), exact: old_exact, .. },
-                    Metadata { searchable: (PatternMatch::Parent, _), .. },
-                ) => cached_sorter.insert_del_u32(
-                    field_id,
-                    pos,
-                    word,
-                    old_exact == PatternMatch::Match || old_disabled_typos_terms.is_exact(word),
-                    // We deleted the field globally
-                    FieldDbExtraction::Skip,
-                    document.docid(),
-                    doc_alloc,
-                ),
-                (
-                    Metadata { searchable: (PatternMatch::NoMatch, _), .. },
-                    Metadata { searchable: (PatternMatch::Match, _), exact: new_exact, .. },
-                )
-                | (
-                    Metadata { searchable: (PatternMatch::Parent, _), .. },
-                    Metadata { searchable: (PatternMatch::Match, _), exact: new_exact, .. },
-                ) => cached_sorter.insert_add_u32(
-                    field_id,
-                    pos,
-                    word,
-                    new_exact == PatternMatch::Match || new_disabled_typos_terms.is_exact(word),
-                    FieldDbExtraction::Extract,
-                    document.docid(),
-                    doc_alloc,
-                ),
-                (
-                    Metadata { searchable: (PatternMatch::NoMatch, _), .. },
-                    Metadata { searchable: (PatternMatch::NoMatch, _), .. },
-                ) => {
-                    unreachable!()
-                }
-                (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. }) => {
-                    cached_sorter.insert_del_u32(
-                        field_id,
-                        pos,
-                        word,
-                        old_exact == PatternMatch::Match || old_disabled_typos_terms.is_exact(word),
-                        // The field has already been extracted
-                        FieldDbExtraction::Skip,
-                        document.docid(),
-                        doc_alloc,
-                    )?;
-                    cached_sorter.insert_add_u32(
-                        field_id,
-                        pos,
-                        word,
-                        new_exact == PatternMatch::Match || new_disabled_typos_terms.is_exact(word),
-                        // The field has already been extracted
-                        FieldDbExtraction::Skip,
-                        document.docid(),
-                        doc_alloc,
-                    )
-                }
+        // we must tokenize twice when we change global parameters like stop words,
+        // the language settings, dictionary, separators, non-separators...
+        match document_tokenizers {
+            OneOrTwoTokenizers::OneTokenizer(document_tokenizer) => {
+                let mut token_fn = |_field_name: &str, field_id, pos, word: &str| {
+                    use PatternMatch::{Match, NoMatch, Parent};
+
+                    let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
+                    let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
+
+                    match (old_field_metadata, new_field_metadata) {
+                        (
+                            Metadata { searchable: (Match, _), exact: old_exact, .. },
+                            Metadata { searchable: (NoMatch, _), .. },
+                        )
+                        | (
+                            Metadata { searchable: (Match, _), exact: old_exact, .. },
+                            Metadata { searchable: (Parent, _), .. },
+                        ) => cached_sorter.insert_del_u32(
+                            field_id,
+                            pos,
+                            word,
+                            old_exact == Match || old_disabled_typos_terms.is_exact(word),
+                            // We deleted the field globally
+                            FieldDbExtraction::Skip,
+                            document.docid(),
+                            doc_alloc,
+                        ),
+                        (
+                            Metadata { searchable: (NoMatch, _), .. },
+                            Metadata { searchable: (Match, _), exact: new_exact, .. },
+                        )
+                        | (
+                            Metadata { searchable: (Parent, _), .. },
+                            Metadata { searchable: (Match, _), exact: new_exact, .. },
+                        ) => cached_sorter.insert_add_u32(
+                            field_id,
+                            pos,
+                            word,
+                            new_exact == Match || new_disabled_typos_terms.is_exact(word),
+                            FieldDbExtraction::Extract,
+                            document.docid(),
+                            doc_alloc,
+                        ),
+                        (
+                            Metadata { searchable: (NoMatch, _), .. },
+                            Metadata { searchable: (NoMatch, _), .. },
+                        ) => {
+                            unreachable!()
+                        }
+                        (Metadata { exact: old_exact, .. }, Metadata { exact: new_exact, .. }) => {
+                            cached_sorter.insert_del_u32(
+                                field_id,
+                                pos,
+                                word,
+                                old_exact == Match || old_disabled_typos_terms.is_exact(word),
+                                // The field has already been extracted
+                                FieldDbExtraction::Skip,
+                                document.docid(),
+                                doc_alloc,
+                            )?;
+                            cached_sorter.insert_add_u32(
+                                field_id,
+                                pos,
+                                word,
+                                new_exact == Match || new_disabled_typos_terms.is_exact(word),
+                                // The field has already been extracted
+                                FieldDbExtraction::Skip,
+                                document.docid(),
+                                doc_alloc,
+                            )
+                        }
+                    }
+                };
+
+                document_tokenizer.tokenize_document(
+                    current_document,
+                    &mut should_tokenize,
+                    &mut token_fn,
+                )?;
             }
-        };
+            OneOrTwoTokenizers::TwoTokenizer {
+                old: old_document_tokenizer,
+                new: new_document_tokenizer,
+            } => {
+                let mut old_token_fn = |_field_name: &str, field_id, pos, word: &str| {
+                    use PatternMatch::{Match, NoMatch, Parent};
 
-        // TODO we must tokenize twice when we change global parameters like stop words,
-        //      the language settings, dictionary, separators, non-separators...
-        //
-        //      We now have access to both tokenizers, the old and the new one. How can I
-        //      make it so we tokenize the document twice with both tokenizers, now?
-        document_tokenizer.tokenize_document(
-            current_document,
-            &mut should_tokenize,
-            &mut token_fn,
-        )?;
+                    let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
+                    let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
+
+                    match (old_field_metadata, new_field_metadata) {
+                        (
+                            Metadata { searchable: (Match, _), exact: old_exact, .. },
+                            Metadata { searchable: (NoMatch, _), .. },
+                        )
+                        | (
+                            Metadata { searchable: (Match, _), exact: old_exact, .. },
+                            Metadata { searchable: (Parent, _), .. },
+                        ) => cached_sorter.insert_del_u32(
+                            field_id,
+                            pos,
+                            word,
+                            old_exact == Match || old_disabled_typos_terms.is_exact(word),
+                            // We deleted the field globally
+                            FieldDbExtraction::Skip,
+                            document.docid(),
+                            doc_alloc,
+                        ),
+                        (
+                            Metadata { searchable: (NoMatch, _), .. },
+                            Metadata { searchable: (NoMatch, _), .. },
+                        ) => {
+                            unreachable!()
+                        }
+                        (Metadata { exact: old_exact, .. }, Metadata { .. }) => {
+                            cached_sorter.insert_del_u32(
+                                field_id,
+                                pos,
+                                word,
+                                old_exact == Match || old_disabled_typos_terms.is_exact(word),
+                                // The field has already been extracted
+                                FieldDbExtraction::Skip,
+                                document.docid(),
+                                doc_alloc,
+                            )
+                        }
+                    }
+                };
+
+                old_document_tokenizer.tokenize_document(
+                    current_document,
+                    &mut should_tokenize,
+                    &mut old_token_fn,
+                )?;
+
+                let mut new_token_fn = |_field_name: &str, field_id, pos, word: &str| {
+                    use PatternMatch::{Match, NoMatch, Parent};
+
+                    let old_field_metadata = old_fields_ids_map.metadata(field_id).unwrap();
+                    let new_field_metadata = new_fields_ids_map.metadata(field_id).unwrap();
+
+                    match (old_field_metadata, new_field_metadata) {
+                        (
+                            Metadata { searchable: (NoMatch, _), .. },
+                            Metadata { searchable: (Match, _), exact: new_exact, .. },
+                        )
+                        | (
+                            Metadata { searchable: (Parent, _), .. },
+                            Metadata { searchable: (Match, _), exact: new_exact, .. },
+                        ) => cached_sorter.insert_add_u32(
+                            field_id,
+                            pos,
+                            word,
+                            new_exact == Match || new_disabled_typos_terms.is_exact(word),
+                            FieldDbExtraction::Extract,
+                            document.docid(),
+                            doc_alloc,
+                        ),
+                        (
+                            Metadata { searchable: (NoMatch, _), .. },
+                            Metadata { searchable: (NoMatch, _), .. },
+                        ) => {
+                            unreachable!()
+                        }
+                        (Metadata { .. }, Metadata { exact: new_exact, .. }) => {
+                            cached_sorter.insert_add_u32(
+                                field_id,
+                                pos,
+                                word,
+                                new_exact == Match || new_disabled_typos_terms.is_exact(word),
+                                // The field has already been extracted
+                                FieldDbExtraction::Skip,
+                                document.docid(),
+                                doc_alloc,
+                            )
+                        }
+                    }
+                };
+
+                new_document_tokenizer.tokenize_document(
+                    current_document,
+                    &mut should_tokenize,
+                    &mut new_token_fn,
+                )?;
+            }
+        }
 
         Ok(())
     }

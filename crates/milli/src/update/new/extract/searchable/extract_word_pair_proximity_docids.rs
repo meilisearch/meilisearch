@@ -374,44 +374,54 @@ impl WordPairProximityDocidsExtractor {
             (_, _) => ActionToOperate::SkipDocument,
         };
 
-        // Here we do a preliminary check to determine the action to take.
-        // This check doesn't trigger the tokenizer as we never return
-        // PatternMatch::Match.
         if action != ActionToOperate::ReindexAllFields {
-            document_tokenizer.tokenize_document(
-                current_document,
-                &mut |field_name| {
-                    let fid = match new_fields_ids_map.id(field_name) {
-                        Some(field_id) => field_id,
-                        None => panic!("Expected field `{field_name}` in the fields IDs map"),
-                    };
+            match tokenizers {
+                OneOrTwoTokenizers::OneTokenizer(document_tokenizer) => {
+                    // Here we do a preliminary check to determine the action to take.
+                    // This check doesn't trigger the tokenizer as we never return
+                    // PatternMatch::Match.
+                    document_tokenizer.tokenize_document(
+                        current_document,
+                        &mut |field_name| {
+                            let fid = match new_fields_ids_map.id(field_name) {
+                                Some(field_id) => field_id,
+                                None => {
+                                    panic!("Expected field `{field_name}` in the fields IDs map")
+                                }
+                            };
 
-                    // If the document must be reindexed, early return NoMatch to stop the scanning process.
-                    if action == ActionToOperate::ReindexAllFields {
-                        return Ok((fid, PatternMatch::NoMatch));
-                    }
+                            // If the document must be reindexed, early return NoMatch to stop the scanning process.
+                            if action == ActionToOperate::ReindexAllFields {
+                                return Ok((fid, PatternMatch::NoMatch));
+                            }
 
-                    let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
-                    let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
+                            let old_field_metadata = old_fields_ids_map.metadata(fid).unwrap();
+                            let new_field_metadata = new_fields_ids_map.metadata(fid).unwrap();
 
-                    action = match (old_field_metadata, new_field_metadata) {
-                        // At least one field is removed or added from the searchable fields
-                        (
-                            Metadata { searchable: (was_matching, _), .. },
-                            Metadata { searchable: (is_matching, _), .. },
-                        ) if was_matching != is_matching
-                            && (was_matching == PatternMatch::Match
-                                || is_matching == PatternMatch::Match) =>
-                        {
-                            ActionToOperate::ReindexAllFields
-                        }
-                        _ => action,
-                    };
+                            action = match (old_field_metadata, new_field_metadata) {
+                                // At least one field is removed or added from the searchable fields
+                                (
+                                    Metadata { searchable: (was_matching, _), .. },
+                                    Metadata { searchable: (is_matching, _), .. },
+                                ) if was_matching != is_matching
+                                    && (was_matching == PatternMatch::Match
+                                        || is_matching == PatternMatch::Match) =>
+                                {
+                                    ActionToOperate::ReindexAllFields
+                                }
+                                _ => action,
+                            };
 
-                    Ok((fid, PatternMatch::Parent))
-                },
-                &mut |_, _, _, _| Ok(()),
-            )?;
+                            Ok((fid, PatternMatch::Parent))
+                        },
+                        &mut |_, _, _, _| Ok(()),
+                    )?;
+                }
+                OneOrTwoTokenizers::TwoTokenizer { old: _, new: _ } => {
+                    // If the tokenizer changed, we need to reindex the whole document.
+                    action = ActionToOperate::ReindexAllFields;
+                }
+            }
         }
 
         // Early return when we don't need to index the document
@@ -426,9 +436,15 @@ impl WordPairProximityDocidsExtractor {
         let mut word_positions: VecDeque<(Rc<str>, u16)> =
             VecDeque::with_capacity(MAX_DISTANCE as usize);
 
+        let (old_document_tokenizer, new_document_tokenizer) = match tokenizers {
+            OneOrTwoTokenizers::OneTokenizer(old) => (old, None),
+            OneOrTwoTokenizers::TwoTokenizer { old, new } => (old, Some(new)),
+        };
+
+        // TODO we use a match to check if we have one or two tokenizers and call once or twice the functions
         process_document_tokens(
             current_document,
-            old_document_tokenizer,
+            &old_document_tokenizer,
             &mut word_positions,
             &mut |field_name| match old_fields_ids_map.id_with_metadata(field_name) {
                 Some(field_id) => Ok(field_id),
@@ -439,18 +455,20 @@ impl WordPairProximityDocidsExtractor {
             },
         )?;
 
-        process_document_tokens(
-            current_document,
-            new_document_tokenizer,
-            &mut word_positions,
-            &mut |field_name| match new_fields_ids_map.id_with_metadata(field_name) {
-                Some(field_id) => Ok(field_id),
-                None => panic!("Expected field `{field_name}` in the fields IDs map"),
-            },
-            &mut |(w1, w2), prox| {
-                add_word_pair_proximity.push(((w1, w2), prox));
-            },
-        )?;
+        if let Some(new_document_tokenizer) = new_document_tokenizer {
+            process_document_tokens(
+                current_document,
+                &new_document_tokenizer,
+                &mut word_positions,
+                &mut |field_name| match new_fields_ids_map.id_with_metadata(field_name) {
+                    Some(field_id) => Ok(field_id),
+                    None => panic!("Expected field `{field_name}` in the fields IDs map"),
+                },
+                &mut |(w1, w2), prox| {
+                    add_word_pair_proximity.push(((w1, w2), prox));
+                },
+            )?;
+        }
 
         let mut key_buffer = bumpalo::collections::Vec::new_in(doc_alloc);
 
