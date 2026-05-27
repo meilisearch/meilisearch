@@ -11,6 +11,7 @@ use crate::proximity::ProximityPrecision::*;
 use crate::proximity::{index_proximity, MAX_DISTANCE};
 use crate::update::new::document::{Document, DocumentContext};
 use crate::update::new::extract::cache::BalancedCaches;
+use crate::update::new::extract::searchable::OneOrTwoTokenizers;
 use crate::update::new::indexer::document_changes::{
     extract, DocumentChanges, Extractor, IndexingContext,
 };
@@ -249,52 +250,75 @@ impl WordPairProximityDocidsExtractor {
     {
         // Warning: this is highly inspired code from extract_word_docids.rs so if you
         //          change something here consider modifying the original place if necessary.
+        let old_stop_words = settings_delta.old_stop_words();
+        let old_dictionary = settings_delta.old_dictionary();
+        let old_allowed_separators = settings_delta.old_allowed_separators();
+        let old_localized_attributes_rules = settings_delta.old_localized_attributes_rules();
+
+        let new_stop_words = settings_delta.new_stop_words();
+        let new_dictionary = settings_delta.new_dictionary();
+        let new_allowed_separators = settings_delta.new_allowed_separators();
+        let new_localized_attributes_rules = settings_delta.new_localized_attributes_rules();
 
         // old tokenizer
         let mut tokenizer_builder = charabia::TokenizerBuilder::new();
-        if let Some(stop_words) = settings_delta.old_stop_words() {
+        if let Some(stop_words) = old_stop_words {
             tokenizer_builder.stop_words(stop_words);
         }
         let dictionary_vec: Vec<_>;
-        if let Some(dictionary) = settings_delta.old_dictionary() {
+        if let Some(dictionary) = old_dictionary {
             dictionary_vec = dictionary.iter().map(String::as_ref).collect();
             tokenizer_builder.words_dict(&dictionary_vec);
         }
         let separators_vec: Vec<_>;
-        if let Some(separators) = settings_delta.old_allowed_separators() {
+        if let Some(separators) = old_allowed_separators {
             separators_vec = separators.iter().map(String::as_ref).collect();
             tokenizer_builder.separators(&separators_vec);
         }
         let old_document_tokenizer = DocumentTokenizer {
             tokenizer: &tokenizer_builder.build(),
-            localized_attributes_rules: settings_delta.old_localized_attributes_rules(),
+            localized_attributes_rules: old_localized_attributes_rules,
             max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
         };
 
-        // new tokenizer
-        let mut tokenizer_builder = charabia::TokenizerBuilder::new();
-        if let Some(stop_words) = settings_delta.new_stop_words() {
-            tokenizer_builder.stop_words(stop_words);
-        }
-        let dictionary_vec: Vec<_>;
-        if let Some(dictionary) = settings_delta.new_dictionary() {
-            dictionary_vec = dictionary.iter().map(String::as_ref).collect();
-            tokenizer_builder.words_dict(&dictionary_vec);
-        }
-        let separators_vec: Vec<_>;
-        if let Some(separators) = settings_delta.new_allowed_separators() {
-            separators_vec = separators.iter().map(String::as_ref).collect();
-            tokenizer_builder.separators(&separators_vec);
-        }
-        let new_document_tokenizer = DocumentTokenizer {
-            tokenizer: &tokenizer_builder.build(),
-            localized_attributes_rules: settings_delta.new_localized_attributes_rules(),
-            max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
+        let mut new_tokenizer_builder = charabia::TokenizerBuilder::new();
+        let new_dictionary_vec: Vec<_>;
+        let new_separators_vec: Vec<_>;
+        let new_tokenizer;
+        let tokenizers = if old_stop_words.as_ref().map(|f| f.as_fst().as_bytes())
+            == new_stop_words.as_ref().map(|f| f.as_fst().as_bytes())
+            && old_dictionary == new_dictionary
+            && old_allowed_separators == new_allowed_separators
+            && old_localized_attributes_rules == new_localized_attributes_rules
+        {
+            OneOrTwoTokenizers::OneTokenizer(old_document_tokenizer)
+        } else {
+            // new tokenizer
+            if let Some(stop_words) = new_stop_words {
+                new_tokenizer_builder.stop_words(stop_words);
+            }
+            if let Some(dictionary) = new_dictionary {
+                new_dictionary_vec = dictionary.iter().map(String::as_ref).collect();
+                new_tokenizer_builder.words_dict(&new_dictionary_vec);
+            }
+            if let Some(separators) = new_allowed_separators {
+                new_separators_vec = separators.iter().map(String::as_ref).collect();
+                new_tokenizer_builder.separators(&new_separators_vec);
+            }
+            new_tokenizer = new_tokenizer_builder.build();
+            let new_document_tokenizer = DocumentTokenizer {
+                tokenizer: &new_tokenizer,
+                localized_attributes_rules: new_localized_attributes_rules,
+                max_positions_per_attributes: MAX_POSITION_PER_ATTRIBUTE,
+            };
+            OneOrTwoTokenizers::TwoTokenizer {
+                old: old_document_tokenizer,
+                new: new_document_tokenizer,
+            }
         };
 
         let extractor_data = WordPairProximityDocidsSettingsExtractorData {
-            old_tokenizer: old_document_tokenizer,
-            new_tokenizer: new_document_tokenizer,
+            tokenizers,
             max_memory_by_thread: indexing_context.grenad_parameters.max_memory_by_thread(),
             buckets: rayon::current_num_threads(),
             settings_delta,
@@ -321,8 +345,7 @@ impl WordPairProximityDocidsExtractor {
     fn extract_document_from_settings_change<SD: SettingsDelta>(
         document: DocumentIdentifiers<'_>,
         context: &DocumentContext<RefCell<BalancedCaches<'_>>>,
-        old_document_tokenizer: &DocumentTokenizer,
-        new_document_tokenizer: &DocumentTokenizer,
+        tokenizers: OneOrTwoTokenizers<'_>,
         settings_delta: &SD,
     ) -> Result<()> {
         let mut cached_sorter = context.data.borrow_mut_or_yield();
@@ -532,8 +555,7 @@ fn process_document_tokens<'doc>(
 }
 
 pub struct WordPairProximityDocidsSettingsExtractorData<'a, SD> {
-    old_tokenizer: DocumentTokenizer<'a>,
-    new_tokenizer: DocumentTokenizer<'a>,
+    tokenizers: OneOrTwoTokenizers<'a>,
     max_memory_by_thread: Option<usize>,
     buckets: usize,
     settings_delta: &'a SD,
@@ -562,8 +584,7 @@ impl<'extractor, SD: SettingsDelta + Sync> SettingsChangeExtractor<'extractor>
             WordPairProximityDocidsExtractor::extract_document_from_settings_change(
                 document,
                 context,
-                &self.old_tokenizer,
-                &self.new_tokenizer,
+                self.tokenizers,
                 self.settings_delta,
             )?;
         }
