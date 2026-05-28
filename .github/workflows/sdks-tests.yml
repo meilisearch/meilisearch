@@ -214,6 +214,8 @@ jobs:
     needs: define-docker-image
     name: Python SDK tests
     runs-on: ubuntu-latest
+    env:
+      UV_LOCKED: 1
     services:
       meilisearch:
         image: getmeili/meilisearch-enterprise:${{ needs.define-docker-image.outputs.docker-image }}
@@ -228,13 +230,15 @@ jobs:
         with:
           repository: meilisearch/meilisearch-python
       - name: Set up Python
-        uses: actions/setup-python@v6
-      - name: Install pipenv
-        uses: dschep/install-pipenv-action@v1
-      - name: Install dependencies
-        run: pipenv install --dev --python=${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        with:
+          version: "0.11.16"
       - name: Test with pytest
-        run: pipenv run pytest
+        run: uv run pytest
 
   meilisearch-ruby-tests:
     needs: define-docker-image
