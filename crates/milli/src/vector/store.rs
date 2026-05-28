@@ -149,6 +149,9 @@ impl VectorStore {
         }
     }
 
+    /// Converts the vector store from arroy to hannoy and the other way around.
+    ///
+    /// Note that when changing the backend the miss-configured quantization stores are simply deleted.
     pub fn change_backend<MSP>(
         self,
         rtxn: &RoTxn,
@@ -679,6 +682,7 @@ impl VectorStore {
             .map_err(Into::into)
         }
     }
+
     pub fn item_vectors(&self, rtxn: &RoTxn, item_id: u32) -> crate::Result<Vec<Vec<f32>>> {
         let mut vectors = Vec::new();
 
@@ -1133,6 +1137,13 @@ impl VectorStore {
                 match arroy::Reader::open(arroy_rtxn, index, self.database.remap_types()) {
                     Ok(reader) => reader,
                     Err(arroy::Error::MissingMetadata(_)) => continue,
+                    Err(arroy::Error::UnmatchingDistance { .. }) => {
+                        // TODO it's ugly
+                        // TODO explain why AD while it must not
+                        arroy::Writer::<AD>::new(self.database.remap_types(), index, 0)
+                            .clear(hannoy_wtxn)?;
+                        continue;
+                    }
                     Err(err) => return Err(err.into()),
                 };
             let dimensions = arroy_reader.dimensions();
