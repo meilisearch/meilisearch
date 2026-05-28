@@ -196,20 +196,19 @@ fn autobatch_simple_operation_together() {
     debug_snapshot!(autobatch_from(false, None, [doc_imp(UpdateDocuments, true, Some("catto")), doc_del_fil()]), @r###"Some((DocumentOperation { allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0] }, true, Some(DocumentOperationWithDeletionByFilter { id: 1 })))"###);
     debug_snapshot!(autobatch_from(false, None, [doc_imp(ReplaceDocuments, false, Some("catto")), doc_del_fil()]), @r###"Some((DocumentOperation { allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0] }, false, Some(DocumentOperationWithDeletionByFilter { id: 1 })))"###);
     debug_snapshot!(autobatch_from(false, None, [doc_imp(UpdateDocuments, false, Some("catto")), doc_del_fil()]), @r###"Some((DocumentOperation { allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0] }, false, Some(DocumentOperationWithDeletionByFilter { id: 1 })))"###);
-
-    // But we can do that the other way around: deletions by filter followed by additions
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false, None))");
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false, None))");
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false, None))");
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false, None))");
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, true, Some("catto"))]), @r###"Some((DocumentOperation { allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, false, None))"###);
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, true, Some("catto"))]), @r###"Some((DocumentOperation { allow_index_creation: true, primary_key: Some("catto"), operation_ids: [0, 1] }, false, None))"###);
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false, None))"###);
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false, None))"###);
-    debug_snapshot!(autobatch_from(false, None, [doc_del_fil(), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentOperation { allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false, None))");
-    debug_snapshot!(autobatch_from(false, None, [doc_del_fil(), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentOperation { allow_index_creation: false, primary_key: None, operation_ids: [0, 1] }, false, None))");
-    debug_snapshot!(autobatch_from(false, None, [doc_del_fil(), doc_imp(ReplaceDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false, None))"###);
-    debug_snapshot!(autobatch_from(false, None, [doc_del_fil(), doc_imp(UpdateDocuments, false, Some("catto"))]), @r###"Some((DocumentOperation { allow_index_creation: false, primary_key: Some("catto"), operation_ids: [0, 1] }, false, None))"###);
+    // And the other way around
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, true, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, true, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, false, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, false, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(false, None, [doc_del_fil(), doc_imp(ReplaceDocuments, false, None)]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(false, None, [doc_del_fil(), doc_imp(UpdateDocuments, false, None)]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(false, None, [doc_del_fil(), doc_imp(ReplaceDocuments, false, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(false, None, [doc_del_fil(), doc_imp(UpdateDocuments, false, Some("catto"))]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
 }
 
 #[test]
@@ -219,10 +218,8 @@ fn simple_different_document_operations_autobatch_together() {
     debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, true, None))");
     debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), doc_del_fil()]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0] }, true, Some(DocumentOperationWithDeletionByFilter { id: 1 })))");
     debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), doc_del_fil()]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0] }, true, Some(DocumentOperationWithDeletionByFilter { id: 1 })))");
-
-    // only if the deletions by filter are at the begining of the batch
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false, None))");
-    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0, 1] }, false, None))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(UpdateDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
+    debug_snapshot!(autobatch_from(true, None, [doc_del_fil(), doc_imp(ReplaceDocuments, true, None)]), @"Some((DocumentDeletion { deletion_ids: [0], includes_by_filter: true }, false, Some(DeletionByFilterWithDocumentOperation { id: 1 })))");
 
     debug_snapshot!(autobatch_from(true, None, [doc_imp(ReplaceDocuments, true, None), idx_create()]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0] }, true, Some(TaskCannotBeBatched { kind: IndexCreation, id: 1 })))");
     debug_snapshot!(autobatch_from(true, None, [doc_imp(UpdateDocuments, true, None), idx_create()]), @"Some((DocumentOperation { allow_index_creation: true, primary_key: None, operation_ids: [0] }, true, Some(TaskCannotBeBatched { kind: IndexCreation, id: 1 })))");
