@@ -13,6 +13,7 @@ use indexmap::IndexMap;
 use memmap2::Mmap;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use rayon::slice::{ParallelSlice, ParallelSliceMut as _};
+use roaring::RoaringBitmap;
 use rustc_hash::FxBuildHasher;
 use serde_json::value::RawValue;
 use serde_json::Deserializer;
@@ -21,6 +22,7 @@ use thread_local::ThreadLocal;
 use super::super::document_change::DocumentChange;
 use super::document_changes::DocumentChanges;
 use super::guess_primary_key::retrieve_or_guess_primary_key;
+use crate::documents::Error::InvalidDocumentFormat;
 use crate::documents::PrimaryKey;
 use crate::progress::{AtomicPayloadStep, Progress};
 use crate::sharding::{Shard, Shards};
@@ -75,7 +77,10 @@ impl<'pl> IndexOperations<'pl> {
     pub fn delete_documents_by_external_ids(&mut self, to_delete: &'pl [&'pl str]) {
         self.operations.push(Payload::DeletionByExternalIds(to_delete))
     }
-        self.operations.push(Payload::Deletion(to_delete))
+
+    /// Append a deletion of documents by internal IDs.
+    pub fn delete_documents_by_internal_ids(&mut self, to_delete: RoaringBitmap) {
+        self.operations.push(Payload::DeletionByInternalIds(to_delete))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -96,6 +101,8 @@ impl<'pl> IndexOperations<'pl> {
     {
         progress.update_progress(IndexingStep::PreparingPayloads);
         let Self { operations } = self;
+
+        let db_fields_ids_map = index.fields_ids_map(rtxn)?;
 
         // We first fetch the primary key from the index...
         let primary_key = retrieve_or_guess_primary_key(
@@ -150,7 +157,13 @@ impl<'pl> IndexOperations<'pl> {
                         return Err(InternalError::AbortedIndexation.into());
                     }
                     step.fetch_add(1, Ordering::Relaxed);
-                    IndexedPayloadOperations::from_payload(payload, &primary_key, shards)
+                    IndexedPayloadOperations::from_payload(
+                        payload,
+                        index,
+                        &db_fields_ids_map,
+                        &primary_key,
+                        shards,
+                    )
                 })
                 .try_reduce(IndexedPayloadOperations::default, |lhs, rhs| lhs | rhs)?;
 
@@ -284,7 +297,7 @@ fn fetch_primary_and_ignore_payloads<'pl>(
                     },
                 }
             }
-            Payload::Deletion(_) => {
+            Payload::DeletionByExternalIds(_) | Payload::DeletionByInternalIds(_) => {
                 // We reach this when we don't have a primary key so it's impossible to delete documents.
                 PayloadStats { bytes: 0, document_count: 0, error: None }
             }
@@ -319,6 +332,8 @@ struct IndexedPayloadOperations<'pl> {
 impl<'pl> IndexedPayloadOperations<'pl> {
     fn from_payload(
         payload_operation: Payload<'pl>,
+        index: &Index,
+        fields_ids_map: &FieldsIdsMap,
         primary_key: &PrimaryKey<'_>,
         shards: Option<&'pl Shards>,
     ) -> Result<Self> {
@@ -344,6 +359,14 @@ impl<'pl> IndexedPayloadOperations<'pl> {
                     extract_payload_deletions_by_external_ids(docids, shards);
                 (document_operations, stats, FieldsIdsMap::default())
             }
+            Payload::DeletionByInternalIds(docids) => {
+                let (document_operations, stats) = extract_payload_deletions_by_internal_ids(
+                    &docids,
+                    index,
+                    fields_ids_map,
+                    primary_key,
+                    shards,
+                )?;
                 (document_operations, stats, FieldsIdsMap::default())
             }
         };
@@ -534,6 +557,10 @@ impl<'pl> DocumentOperations<'pl> {
 
         self.operations.push(operation);
     }
+
+    fn push_deletion(&mut self) {
+        self.operations.push(DocumentOperation::Deletion);
+    }
 }
 
 impl<'pl> IntoIterator for DocumentOperations<'pl> {
@@ -641,6 +668,43 @@ fn extract_payload_deletions_by_external_ids<'pl>(
     (docops, payload_stats)
 }
 
+fn extract_payload_deletions_by_internal_ids<'pl>(
+    internal_document_ids: &RoaringBitmap,
+    index: &Index,
+    fields_ids_map: &FieldsIdsMap,
+    primary_key: &PrimaryKey<'_>,
+    shards: Option<&'pl Shards>,
+) -> Result<(IndexMap<String, DocumentOperations<'pl>>, PayloadStats)> {
+    let rtxn = index.read_txn()?;
+    let mut new_docids_version_offsets = IndexMap::<_, DocumentOperations>::new();
+    for internal_id in internal_document_ids {
+        let document = index.document(&rtxn, internal_id)?;
+        let external_document_id = match primary_key.document_id(document, &fields_ids_map)? {
+            Ok(document_id) => document_id,
+            Err(_) => return Err(InternalError::DocumentsError(InvalidDocumentFormat).into()),
+        };
+
+        let shard = shards.and_then(|shards| shards.processing_shard(&external_document_id));
+
+        if let Some(shard) = shard {
+            if !shard.is_own {
+                continue;
+            }
+        }
+
+        match new_docids_version_offsets.entry(external_document_id.to_owned()) {
+            Entry::Occupied(mut occupied_entry) => occupied_entry.get_mut().push_deletion(),
+            Entry::Vacant(vacant_entry) => {
+                vacant_entry.insert(DocumentOperations::one_deletion(shard));
+            }
+        }
+    }
+
+    let payload_stats =
+        PayloadStats { bytes: 0, document_count: internal_document_ids.len(), error: None };
+    Ok((new_docids_version_offsets, payload_stats))
+}
+
 impl<'pl> DocumentChanges<'pl> for DocumentOperationChanges<'pl> {
     type Item = (&'pl str, PayloadOperations<'pl>);
 
@@ -697,6 +761,7 @@ pub enum Payload<'pl> {
     Replace { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
     Update { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
     DeletionByExternalIds(&'pl [&'pl str]),
+    DeletionByInternalIds(RoaringBitmap),
 }
 
 pub struct PayloadStats {

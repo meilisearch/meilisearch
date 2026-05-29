@@ -121,6 +121,19 @@ impl IndexScheduler {
                             indexer
                                 .delete_documents_by_external_ids(document_ids.into_bump_slice());
                         }
+                        DocumentOperation::DeleteByFilter { filter } => {
+                            let filter = Filter::from_json(&filter)
+                                .map_err(|e| Error::from_milli(e, Some(index_uid.clone())))?;
+                            if let Some(filter) = filter {
+                                let filter = filter_into_index_filter(
+                                    filter, index, index_wtxn, self, progress, &index_uid,
+                                )?;
+                                let candidates =
+                                    filter.evaluate(index_wtxn, index).map_err(|err| {
+                                        Error::from_milli(err, Some(index_uid.clone()))
+                                    })?;
+                                indexer.delete_documents_by_internal_ids(candidates);
+                            }
                         }
                     }
                 }
@@ -164,6 +177,12 @@ impl IndexScheduler {
                         Some(Details::DocumentDeletion { provided_ids, .. }) => {
                             Some(Details::DocumentDeletion {
                                 provided_ids,
+                                deleted_documents: Some(stats.document_count),
+                            })
+                        }
+                        Some(Details::DocumentDeletionByFilter { ref original_filter, .. }) => {
+                            Some(Details::DocumentDeletionByFilter {
+                                original_filter: original_filter.clone(),
                                 deleted_documents: Some(stats.document_count),
                             })
                         }
