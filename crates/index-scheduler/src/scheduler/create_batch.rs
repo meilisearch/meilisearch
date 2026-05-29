@@ -7,6 +7,7 @@ use meilisearch_types::settings::{Settings, Unchecked};
 use meilisearch_types::tasks::network::{DbTaskNetwork, NetworkTopologyState, Origin};
 use meilisearch_types::tasks::{BatchStopReason, Kind, KindWithContent, Status, Task};
 use roaring::RoaringBitmap;
+use serde_json::Value;
 use uuid::Uuid;
 
 use super::autobatcher::{self, BatchKind};
@@ -75,6 +76,7 @@ pub(crate) enum DocumentOperation {
     Replace { content_file: Uuid, on_missing_document: MissingDocumentPolicy },
     Update { content_file: Uuid, on_missing_document: MissingDocumentPolicy },
     Delete(Vec<String>),
+    DeleteByFilter { filter: Value },
 }
 
 /// A [batch](Batch) that combines multiple tasks operating on an index.
@@ -301,7 +303,8 @@ impl IndexScheduler {
                             // we want to stop on the first document addition
                             Some(primary_key.clone())
                         }
-                        KindWithContent::DocumentDeletion { .. } => None,
+                        KindWithContent::DocumentDeletion { .. }
+                        | KindWithContent::DocumentDeletionByFilter { .. } => None,
                         _ => unreachable!(),
                     })
                     .flatten();
@@ -332,6 +335,11 @@ impl IndexScheduler {
                         },
                         KindWithContent::DocumentDeletion { ref documents_ids, .. } => {
                             operations.push(DocumentOperation::Delete(documents_ids.clone()));
+                        }
+                        KindWithContent::DocumentDeletionByFilter { ref filter_expr, .. } => {
+                            operations.push(DocumentOperation::DeleteByFilter {
+                                filter: filter_expr.clone(),
+                            });
                         }
                         _ => unreachable!(),
                     }
