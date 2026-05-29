@@ -71,10 +71,10 @@ impl<'pl> IndexOperations<'pl> {
         Ok(())
     }
 
-    /// Append a deletion of documents IDs.
-    ///
-    /// The list is a set of external documents IDs.
-    pub fn delete_documents(&mut self, to_delete: &'pl [&'pl str]) {
+    /// Append a deletion of documents by external IDs.
+    pub fn delete_documents_by_external_ids(&mut self, to_delete: &'pl [&'pl str]) {
+        self.operations.push(Payload::DeletionByExternalIds(to_delete))
+    }
         self.operations.push(Payload::Deletion(to_delete))
     }
 
@@ -339,8 +339,11 @@ impl<'pl> IndexedPayloadOperations<'pl> {
                 UpdateDocuments,
                 shards,
             )?,
-            Payload::Deletion(docids) => {
-                let (document_operations, stats) = extract_payload_deletions(docids, shards);
+            Payload::DeletionByExternalIds(docids) => {
+                let (document_operations, stats) =
+                    extract_payload_deletions_by_external_ids(docids, shards);
+                (document_operations, stats, FieldsIdsMap::default())
+            }
                 (document_operations, stats, FieldsIdsMap::default())
             }
         };
@@ -617,7 +620,7 @@ fn extract_payload_changes<'pl>(
     Ok((new_docids_version_offsets, payload_stats, fids_map))
 }
 
-fn extract_payload_deletions<'pl>(
+fn extract_payload_deletions_by_external_ids<'pl>(
     external_document_ids: &[&str],
     shards: Option<&'pl Shards>,
 ) -> (IndexMap<String, DocumentOperations<'pl>>, PayloadStats) {
@@ -693,7 +696,7 @@ pub struct DocumentOperationChanges<'pl> {
 pub enum Payload<'pl> {
     Replace { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
     Update { payload: &'pl [u8], on_missing_document: MissingDocumentPolicy },
-    Deletion(&'pl [&'pl str]),
+    DeletionByExternalIds(&'pl [&'pl str]),
 }
 
 pub struct PayloadStats {

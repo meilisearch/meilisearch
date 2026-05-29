@@ -118,7 +118,9 @@ impl IndexScheduler {
                                 .iter()
                                 .map(|s| &*indexer_alloc.alloc_str(s))
                                 .collect_in(&indexer_alloc);
-                            indexer.delete_documents(document_ids.into_bump_slice());
+                            indexer
+                                .delete_documents_by_external_ids(document_ids.into_bump_slice());
+                        }
                         }
                     }
                 }

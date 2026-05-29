@@ -2340,7 +2340,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
         indexer.replace_documents(&documents, MissingDocumentPolicy::default()).unwrap();
-        indexer.delete_documents(&["2"]);
+        indexer.delete_documents_by_external_ids(&["2"]);
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
                 &indexer_alloc,
@@ -2403,7 +2403,7 @@ mod tests {
             { "id": 3, "legs": 4 },
         ]);
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
-        indexer.delete_documents(&["1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2"]);
 
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
@@ -2518,7 +2518,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
-        indexer.delete_documents(&["1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2570,7 +2570,7 @@ mod tests {
         let indexer_alloc = Bump::new();
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
-        indexer.delete_documents(&["1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2"]);
 
         let documents = documents!([
             { "id": 2, "doggo": { "name": "jean", "age": 20 } },
@@ -2630,7 +2630,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
 
-        indexer.delete_documents(&["1", "2", "1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2", "1", "2"]);
 
         let documents = documents!([
             { "id": 1, "doggo": "kevin" },
@@ -2639,7 +2639,7 @@ mod tests {
         ]);
         indexer.update_documents(&documents, MissingDocumentPolicy::default()).unwrap();
 
-        indexer.delete_documents(&["1", "2", "1", "2"]);
+        indexer.delete_documents_by_external_ids(&["1", "2", "1", "2"]);
 
         let (document_changes, _operation_stats, primary_key) = indexer
             .into_changes(
@@ -2745,7 +2745,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
 
-        indexer.delete_documents(&["1"]);
+        indexer.delete_documents_by_external_ids(&["1"]);
 
         let documents = documents!([
             { "id": 1, "catto": "jorts" },
@@ -3029,7 +3029,7 @@ mod tests {
         let embedders = RuntimeEmbedders::default();
         let mut indexer = indexer::IndexOperations::new();
 
-        indexer.delete_documents(&["1"]);
+        indexer.delete_documents_by_external_ids(&["1"]);
 
         let documents = documents!([
             { "id": 0, "catto": "jorts" },

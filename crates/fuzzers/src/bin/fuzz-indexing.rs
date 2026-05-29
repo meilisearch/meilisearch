@@ -121,7 +121,9 @@ fn main() {
                                             MissingDocumentPolicy::default(),
                                         )
                                         .unwrap(),
-                                    Either::Right(ids) => indexer.delete_documents(ids),
+                                    Either::Right(ids) => {
+                                        indexer.delete_documents_by_external_ids(ids)
+                                    }
                                 }
                             }
 
