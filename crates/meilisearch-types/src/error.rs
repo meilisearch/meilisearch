@@ -463,8 +463,6 @@ InvalidIndexFieldsFilterFilterable             , InvalidRequest       , BAD_REQU
 RequiresEnterpriseEdition                      , InvalidRequest       , UNAVAILABLE_FOR_LEGAL_REASONS ;
 // Render
 InvalidRenderTemplate                          , InvalidRequest       , BAD_REQUEST ;
-InvalidRenderTemplateId                        , InvalidRequest       , BAD_REQUEST ;
-InvalidRenderTemplateInline                    , InvalidRequest       , BAD_REQUEST ;
 InvalidRenderInput                             , InvalidRequest       , BAD_REQUEST ;
 RenderDocumentNotFound                         , InvalidRequest       , NOT_FOUND ;
 TemplateParsingError                           , InvalidRequest       , BAD_REQUEST ;
