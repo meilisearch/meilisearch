@@ -576,6 +576,11 @@ pub async fn shared_index_geojson_documents() -> &'static Index<'static, Shared>
 }
 
 pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
+    shared_server_and_index_for_fragments().await.1
+}
+
+pub async fn shared_server_and_index_for_fragments(
+) -> (&'static Server<Shared>, Index<'static, Shared>) {
     static INDEX: OnceCell<(Server<Shared>, String)> = OnceCell::const_new();
     let (server, uid) = INDEX
         .get_or_init(|| async {
@@ -583,10 +588,10 @@ pub async fn shared_index_for_fragments() -> Index<'static, Shared> {
             (server.into_shared(), uid)
         })
         .await;
-    server._index(uid).to_shared()
+    (server, server._index(uid).to_shared())
 }
 
-async fn fragment_mock_server() -> String {
+pub async fn fragment_mock_server() -> String {
     let text_to_embedding: BTreeMap<_, _> = vec![
         ("kefir", [0.5, -0.5, 0.0]),
         ("intel", [1.0, 1.0, 0.0]),
