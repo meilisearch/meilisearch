@@ -1,234 +1,266 @@
-use crate::common::{shared_empty_index, shared_index_for_fragments, Server};
-use crate::json;
 use meili_snap::{json_string, snapshot};
 
-#[actix_rt::test]
-async fn empty_id() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) = index.render(json! {{ "template": { "id": "" }}}).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "The template ID is empty.\n  Hint: Valid prefixes are `embedders` or `chatCompletions`.",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
-}
+use crate::common::{shared_server_and_index_for_fragments, Server};
+use crate::json;
 
 #[actix_rt::test]
-async fn wrong_id_prefix() {
-    let index = shared_index_for_fragments().await;
+async fn wrong_params() {
+    let server = Server::new_shared();
 
-    let (value, code) = index.render(json! {{ "template": { "id": "wrong.disregarded" }}}).await;
+    let (value, code) = server.render_template(json! {{}}).await;
+
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Template ID must start with `embedders` or `chatCompletions`, but found `wrong` (cols 1:6).",
-      "code": "invalid_render_template_id",
+      "message": "Missing field `template`",
+      "code": "bad_request",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+      "link": "https://docs.meilisearch.com/errors#bad_request"
     }
-    "#);
-}
+    "###);
 
-#[actix_rt::test]
-async fn missing_embedder() {
-    let index = shared_index_for_fragments().await;
+    let (value, code) = server.render_template(json! {{"template":{}}}).await;
 
-    let (value, code) = index.render(json! {{ "template": { "id": "embedders" }}}).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Template ID configured with `embedders` but no embedder name provided.\n  Hint: Available embedders are `rest`.",
-      "code": "invalid_render_template_id",
+      "message": "Missing field `kind` inside `.template`",
+      "code": "invalid_render_template",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
     }
-    "#);
+    "###);
+
+    let (value, code) = server.render_template(json! {{"template":{"kind": "bad"}}}).await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "Unknown value `bad` at `.template.kind`: expected one of `documentTemplate`, `chatDocumentTemplate`, `indexingFragment`, `searchFragment`, `inlineDocumentTemplate`, `inlineFragment`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
+
+    let (value, code) =
+        server.render_template(json! {{"template":{"kind": "documentTemplate"}}}).await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching template: parameter `index_uid` missing for kind `documentTemplate`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
+
+    let (value, code) = server
+        .render_template(json! {{"template":{"kind": "documentTemplate", "embedder": "test"}}})
+        .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching template: parameter `index_uid` missing for kind `documentTemplate`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
+
+    let (value, code) = server.render_template(json! {{"template":{"kind": "documentTemplate", "indexUid": "test", "embedder": "test", "fragment": "bad"}}}).await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching template: parameter `fragment` disallowed for kind `documentTemplate`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
+
+    let (value, code) = server.render_template(json! {{"template":{"kind": "documentTemplate", "indexUid": "test", "embedder": "test", "inline": "bad"}}}).await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching template: parameter `inline` disallowed for kind `documentTemplate`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
+
+    let (value, code) =
+        server.render_template(json! {{"template":{"kind": "inlineDocumentTemplate"}}}).await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching template: parameter `inline` missing for kind `inlineDocumentTemplate`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
+
+    let (value, code) = server
+        .render_template(
+            json! {{"template":{"kind": "inlineDocumentTemplate", "indexUid": "test"}}},
+        )
+        .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching template: parameter `index_uid` disallowed for kind `inlineDocumentTemplate`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
+
+    let (value, code) = server
+        .render_template(
+            json! {{"template":{"kind": "inlineDocumentTemplate", "embedder": "test"}}},
+        )
+        .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching template: parameter `embedder` disallowed for kind `inlineDocumentTemplate`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
+
+    let (value, code) = server
+        .render_template(
+            json! {{"template":{"kind": "inlineDocumentTemplate", "fragment": "test"}}},
+        )
+        .await;
+
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching template: parameter `fragment` disallowed for kind `inlineDocumentTemplate`",
+      "code": "invalid_render_template",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
+    }
+    "###);
 }
 
 #[actix_rt::test]
 async fn wrong_embedder() {
-    let index = shared_index_for_fragments().await;
+    let (server, index) = shared_server_and_index_for_fragments().await;
 
     let (value, code) =
-        index.render(json! {{ "template": { "id": "embedders.wrong.disregarded" }}}).await;
+        server.render_template(json! {{ "template": { "kind": "documentTemplate", "indexUid": index.uid, "embedder": "wrong" }}}).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Embedder `wrong` (cols 11:16) does not exist.\n  Hint: Available embedders are `rest`.",
-      "code": "invalid_render_template_id",
+      "message": "error while fetching template: cannot find embedder `wrong` in index `[uuid]`",
+      "code": "invalid_render_template",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
-async fn missing_template_kind() {
-    let index = shared_index_for_fragments().await;
+async fn document_template_on_fragmented_embedder() {
+    let (server, index) = shared_server_and_index_for_fragments().await;
 
-    let (value, code) = index.render(json! {{ "template": { "id": "embedders.rest" }}}).await;
+    let (value, code) =
+        server.render_template(json! {{ "template": { "kind": "documentTemplate", "indexUid": index.uid, "embedder": "rest" }}}).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Template ID configured with embedder `rest` (cols 11:15) but no template kind provided.\n  Hint: Available fragments are `indexingFragments.basic`, `indexingFragments.withBreed`, `searchFragments.justBreed`, `searchFragments.justName`, `searchFragments.query`.",
-      "code": "invalid_render_template_id",
+      "message": "error while fetching template: embedder `rest` in index `[uuid]` does not use a document template.",
+      "code": "invalid_render_template",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
-async fn wrong_template_kind() {
-    let index = shared_index_for_fragments().await;
+async fn fragment_on_document_template_embedder() {
+    let server = Server::new().await;
+    let index = server.unique_index();
+    let (_response, _code) = server.set_features(json!({"multimodal": true})).await;
+
+    let (response, code) = index
+        .update_settings(json!(
+        {
+            "embedders": {
+                "doggo_embedder": {
+                    "source": "huggingFace",
+                    "model": "sentence-transformers/all-MiniLM-L6-v2",
+                    "revision": "e4ce9877abf3edfe10b0d82785e83bdcb973e22e",
+                    "documentTemplate": "This is a document template {{doc.doggo}}",
+                }
+            }
+        }
+        ))
+        .await;
+    snapshot!(code, @"202 Accepted");
+    server.wait_task(response).await.succeeded();
 
     let (value, code) =
-        index.render(json! {{ "template": { "id": "embedders.rest.wrong.disregarded" }}}).await;
+        server.render_template(json! {{ "template": { "kind": "indexingFragment", "indexUid": index.uid, "embedder": "doggo_embedder", "fragment": "bad" }}}).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Wrong template `wrong` (cols 16:21) after embedder `rest` (cols 11:15).\n  Hint: Available fragments are `indexingFragments.basic`, `indexingFragments.withBreed`, `searchFragments.justBreed`, `searchFragments.justName`, `searchFragments.query`.",
-      "code": "invalid_render_template_id",
+      "message": "error while fetching template: embedder `doggo_embedder` in index `[uuid]` does not use fragments.",
+      "code": "invalid_render_template",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
     }
-    "#);
-}
-
-#[actix_rt::test]
-async fn document_template_on_fragmented_index() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) =
-        index.render(json! {{ "template": { "id": "embedders.rest.documentTemplate" }}}).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Requested document template for embedder `rest` (cols 11:15) but it uses fragments.\n  Hint: Use `indexingFragments` or `searchFragments` instead.",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
-}
-
-#[actix_rt::test]
-async fn missing_fragment_name() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) =
-        index.render(json! {{ "template": { "id": "embedders.rest.indexingFragments" }}}).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Indexing fragment name was not provided.\n  Hint: Available indexing fragments for embedder `rest` (cols 11:15) are `basic`, `withBreed`.",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
-
-    let (value, code) =
-        index.render(json! {{ "template": { "id": "embedders.rest.searchFragments" }}}).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Search fragment name was not provided.\n  Hint: Available search fragments for embedder `rest` (cols 11:15) are `justBreed`, `justName`, `query`.",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
 async fn wrong_fragment_name() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) = index
-        .render(json! {{ "template": { "id": "embedders.rest.indexingFragments.wrong" }}})
-        .await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Indexing fragment `wrong` (cols 34:39) does not exist for embedder `rest` (cols 11:15).\n  Hint: Available indexing fragments are `basic`, `withBreed`.",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
+    let (server, index) = shared_server_and_index_for_fragments().await;
 
     let (value, code) =
-        index.render(json! {{ "template": { "id": "embedders.rest.searchFragments.wrong" }}}).await;
+        server.render_template(json! {{ "template": { "kind": "indexingFragment", "indexUid": index.uid, "embedder": "rest", "fragment": "bad" }}}).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Search fragment `wrong` (cols 32:37) does not exist for embedder `rest` (cols 11:15).\n  Hint: Available search fragments are `justBreed`, `justName`, `query`.",
-      "code": "invalid_render_template_id",
+      "message": "error while fetching template: cannot find indexing fragment `bad` for embedder `rest` in index `[uuid]`",
+      "code": "invalid_render_template",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
     }
-    "#);
-}
+    "###);
 
-#[actix_rt::test]
-async fn leftover_tokens() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) = index
-        .render(
-            json! {{ "template": { "id": "embedders.rest.indexingFragments.withBreed.leftover" }}},
-        )
-        .await;
+    let (value, code) =
+        server.render_template(json! {{ "template": { "kind": "searchFragment", "indexUid": index.uid, "embedder": "rest", "fragment": "bad" }}}).await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Leftover token `leftover` (cols 44:52) after parsing template ID",
-      "code": "invalid_render_template_id",
+      "message": "error while fetching template: cannot find search fragment `bad` for embedder `rest` in index `[uuid]`",
+      "code": "invalid_render_template",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
+      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
     }
-    "#);
-
-    let (value, code) = index
-        .render(json! {{"template": { "id": "embedders.rest.searchFragments.justBreed.leftover" }}})
-        .await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Leftover token `leftover` (cols 42:50) after parsing template ID",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
-
-    let (value, code) = index
-        .render(json! {{"template": { "id": "chatCompletions.documentTemplate.leftover" }}})
-        .await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Leftover token `leftover` (cols 34:42) after parsing template ID",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
 async fn fragment_retrieval() {
-    let index = shared_index_for_fragments().await;
+    let (server, index) = shared_server_and_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{ "template": { "id": "embedders.rest.indexingFragments.withBreed" }}})
-        .await;
+    let (value, code) =
+        server.render_template(json! {{ "template": { "kind": "indexingFragment", "indexUid": index.uid, "embedder": "rest", "fragment": "withBreed" }}}).await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -237,9 +269,8 @@ async fn fragment_retrieval() {
     }
     "#);
 
-    let (value, code) = index
-        .render(json! {{ "template": { "id": "embedders.rest.searchFragments.justBreed" }}})
-        .await;
+    let (value, code) =
+        server.render_template(json! {{ "template": { "kind": "searchFragment", "indexUid": index.uid, "embedder": "rest", "fragment": "justBreed" }}}).await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -250,44 +281,19 @@ async fn fragment_retrieval() {
 }
 
 #[actix_rt::test]
-async fn missing_chat_completions_template() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) = index.render(json! {{ "template": { "id": "chatCompletions" }}}).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Missing chat completion template ID. The only available template is `documentTemplate`.",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
-}
-
-#[actix_rt::test]
-async fn wrong_chat_completions_template() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) =
-        index.render(json! {{ "template": { "id": "chatCompletions.wrong" }}}).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Unknown chat completion template ID `wrong` (cols 17:22). The only available template is `documentTemplate`.",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
-    }
-    "#);
-}
-
-#[actix_rt::test]
 async fn chat_completions_template_retrieval() {
-    let index = shared_index_for_fragments().await;
+    let server = Server::new().await;
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task).await.succeeded();
 
-    let (value, code) =
-        index.render(json! {{ "template": { "id": "chatCompletions.documentTemplate" }}}).await;
+    let (_response, _code) = server.set_features(json!({"chatCompletions": true})).await;
+
+    let (value, code) = server
+        .render_template(
+            json! {{ "template": { "kind": "chatDocumentTemplate", "indexUid": index.uid}}},
+        )
+        .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -317,10 +323,10 @@ async fn retrieve_document_template() {
         ))
         .await;
     snapshot!(code, @"202 Accepted");
-    server.wait_task(response["taskUid"].as_u64().unwrap()).await;
+    server.wait_task(response).await.succeeded();
 
-    let (value, code) = index
-        .render(json! {{ "template": { "id": "embedders.doggo_embedder.documentTemplate" }}})
+    let (value, code) = server
+        .render_template(json! {{ "template": { "kind": "documentTemplate", "indexUid": index.uid, "embedder": "doggo_embedder" }}})
         .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
@@ -333,12 +339,12 @@ async fn retrieve_document_template() {
 
 #[actix_rt::test]
 async fn render_document_kefir() {
-    let index = shared_index_for_fragments().await;
+    let (server, index) = shared_server_and_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "embedders.rest.indexingFragments.basic" },
-            "input": { "documentId": "0" },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "indexingFragment", "indexUid": index.uid, "embedder": "rest", "fragment":"basic" },
+            "input": { "kind": "indexDocument", "indexUid": index.uid, "id": "0" },
         }})
         .await;
     snapshot!(code, @"200 OK");
@@ -349,10 +355,10 @@ async fn render_document_kefir() {
     }
     "#);
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "embedders.rest.indexingFragments.withBreed" },
-            "input": { "documentId": "0" },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "indexingFragment", "indexUid": index.uid, "embedder": "rest", "fragment":"withBreed" },
+            "input": { "kind": "indexDocument", "indexUid": index.uid, "id": "0" },
         }})
         .await;
     snapshot!(code, @"400 Bad Request");
@@ -368,12 +374,12 @@ async fn render_document_kefir() {
 
 #[actix_rt::test]
 async fn render_inline_document_iko() {
-    let index = shared_index_for_fragments().await;
+    let (server, index) = shared_server_and_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "embedders.rest.indexingFragments.basic" },
-            "input": { "inline": { "doc": { "name": "iko", "breed": "jack russell" } } },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "indexingFragment", "indexUid": index.uid, "embedder": "rest", "fragment": "basic" },
+            "input": { "kind": "inlineDocument", "inline": {"name": "iko", "breed": "jack russell" } },
         }})
         .await;
     snapshot!(code, @"200 OK");
@@ -384,10 +390,10 @@ async fn render_inline_document_iko() {
     }
     "#);
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "embedders.rest.indexingFragments.withBreed" },
-            "input": { "inline": { "doc": { "name": "iko", "breed": "jack russell" } } },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "indexingFragment", "indexUid": index.uid, "embedder": "rest", "fragment": "withBreed" },
+            "input": { "kind": "inlineDocument", "inline": {"name": "iko", "breed": "jack russell" } },
         }})
         .await;
     snapshot!(code, @"200 OK");
@@ -398,12 +404,13 @@ async fn render_inline_document_iko() {
     }
     "#);
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "embedders.rest.searchFragments.justBreed" },
-            "input": { "inline": { "media": { "name": "iko", "breed": "jack russell" } } },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "searchFragment", "indexUid": index.uid, "embedder": "rest", "fragment": "justBreed" },
+            "input": { "kind": "inlineSearch", "inline": {"media": {"name":"iko","breed":"jack russell"}, "filter": "ignored", "q": "unused" } },
         }})
         .await;
+
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
@@ -415,47 +422,95 @@ async fn render_inline_document_iko() {
 
 #[actix_rt::test]
 async fn render_doc_not_object() {
-    let index = shared_empty_index().await;
+    let server = Server::new_shared();
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "inline": "{{ doc }}" },
-            "input": { "inline": { "doc": "that's not an object, that's a string" } },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "inlineDocumentTemplate", "inline": "{{ doc }}" },
+            "input": { "kind": "inlineDocument", "inline":  "that's not an object, that's a string" },
         }})
         .await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "The `doc` field must be a map.",
+      "message": "error while fetching input: parsing inline document: invalid type: string \"that's not an object, that's a string\", expected a map at line 1 column 39\n  - Note: the inline document must be a JSON map",
       "code": "invalid_render_input",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_render_input"
     }
-    "#);
+    "###);
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "inline": "default" },
-            "input": { "inline": { "doc": null } },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "inlineDocumentTemplate", "inline": "nothing to render" },
+            "input": { "kind": "inlineDocument", "inline":  null },
         }})
         .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
     {
-      "template": "default",
-      "rendered": "default"
+      "message": "error while fetching input: parameter `inline` missing for kind `inlineDocument`",
+      "code": "invalid_render_input",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_input"
     }
-    "#);
+    "###);
+}
+
+#[actix_rt::test]
+async fn render_search_not_object() {
+    let server = Server::new().await;
+    let (_response, _code) = server.set_features(json!({"multimodal": true})).await;
+
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "inlineFragment", "inline": "{{ q }}: {{ media }}" },
+            "input": { "kind": "inlineSearch", "inline":  "that's not an object, that's a string" },
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching input: parsing inline search: invalid type: string \"that's not an object, that's a string\", expected a map at line 1 column 39\n  - Note: the inline search query must be a JSON map containing `q` and/or `media`",
+      "code": "invalid_render_input",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_input"
+    }
+    "###);
+
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "inlineFragment", "inline": "default" },
+            "input": { "kind": "inlineSearch", "inline":  null },
+        }})
+        .await;
+    snapshot!(code, @"400 Bad Request");
+    snapshot!(value, @r###"
+    {
+      "message": "error while fetching input: parameter `inline` missing for kind `inlineSearch`",
+      "code": "invalid_render_input",
+      "type": "invalid_request",
+      "link": "https://docs.meilisearch.com/errors#invalid_render_input"
+    }
+    "###);
 }
 
 #[actix_rt::test]
 async fn chat_completions() {
-    let index = shared_index_for_fragments().await;
+    let server = Server::new().await;
+    let index = server.unique_index();
+    let (task, _code) = index.create(None).await;
+    server.wait_task(task).await.succeeded();
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "chatCompletions.documentTemplate" },
-            "input": { "documentId": "0" },
+    let (task, _code) = index.add_documents(json!([{"id": "0", "name": "kefir"}]), None).await;
+    server.wait_task(task).await.succeeded();
+
+    let (_response, _code) = server.set_features(json!({"chatCompletions": true})).await;
+
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "chatDocumentTemplate", "indexUid": index.uid },
+            "input": { "kind": "indexDocument", "id": "0", "indexUid": index.uid },
         }})
         .await;
     snapshot!(code, @"200 OK");
@@ -466,10 +521,10 @@ async fn chat_completions() {
     }
     "#);
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "chatCompletions.documentTemplate" },
-            "input": { "inline": { "doc": { "name": "iko", "breed": "jack russell" } } },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "chatDocumentTemplate", "indexUid": index.uid },
+            "input": { "kind": "inlineDocument", "inline": { "name": "iko", "breed": "jack russell" } },
         }})
         .await;
     snapshot!(code, @"200 OK");
@@ -482,110 +537,53 @@ async fn chat_completions() {
 }
 
 #[actix_rt::test]
-async fn both_document_id_and_inline() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) = index
-        .render(json! {{
-            "template": { "inline": "{{ doc.name }} compared to {{ media.name }}" },
-            "input": { "documentId": "0", "inline": { "media": { "name": "iko" } } },
-        }})
-        .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
-    {
-      "template": "{{ doc.name }} compared to {{ media.name }}",
-      "rendered": "kefir compared to iko"
-    }
-    "#);
-}
-
-#[actix_rt::test]
-async fn multiple_templates_or_docs() {
-    let index = shared_index_for_fragments().await;
-
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "whatever", "inline": "whatever" }
-        }})
-        .await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Cannot provide both an inline template and a template ID.",
-      "code": "invalid_render_template",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template"
-    }
-    "#);
-
-    let (value, code) = index
-        .render(json! {{
-            "template": { "inline": "whatever" },
-            "input": { "documentId": "0", "inline": { "doc": { "name": "iko" } } }
-        }})
-        .await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "A document id was provided but adding it to the input would overwrite the `doc` field that you already defined inline.",
-      "code": "invalid_render_input",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_input"
-    }
-    "#);
-}
-
-#[actix_rt::test]
 async fn document_not_found() {
-    let index = shared_index_for_fragments().await;
+    let (server, index) = shared_server_and_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "embedders.rest.indexingFragments.basic" },
-            "input": { "documentId": "9999" }
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "indexingFragment", "indexUid": index.uid, "embedder": "rest", "fragment": "basic" },
+            "input": { "kind": "indexDocument", "indexUid": index.uid, "id": "9999" }
         }})
         .await;
     snapshot!(code, @"404 Not Found");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Document with ID `9999` not found.",
+      "message": "error while fetching input: document `9999` not found in `[uuid]`",
       "code": "render_document_not_found",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#render_document_not_found"
     }
-    "#);
+    "###);
 }
-
 #[actix_rt::test]
 async fn bad_template() {
-    let index = shared_index_for_fragments().await;
+    let (server, index) = shared_server_and_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "inline": "{{ doc.name" },
-            "input": { "documentId": "0" }
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "inlineDocumentTemplate", "inline": "{{ doc.name" },
+            "input": { "kind": "indexDocument", "indexUid": index.uid, "id": "0" }
         }})
         .await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Error parsing template: error while parsing template: liquid:  --> 1:4\n  |\n1 | {{ doc.name\n  |    ^---\n  |\n  = expected Literal\n",
+      "message": "error while fetching template: user error: cannot parse template: liquid:  --> 1:4\n  |\n1 | {{ doc.name\n  |    ^---\n  |\n  = expected Literal\n",
       "code": "template_parsing_error",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#template_parsing_error"
     }
-    "#);
+    "###);
 }
-
 #[actix_rt::test]
 async fn inline_nested() {
-    let index = shared_index_for_fragments().await;
+    let (server, _index) = shared_server_and_index_for_fragments().await;
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "inline": "{{ doc.name }} is a {{ doc.breed.name }} ({{ doc.breed.kind }})" },
-            "input": { "inline": { "doc": { "name": "iko", "breed": { "name": "jack russell", "kind": "terrier" } } } }
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "inlineDocumentTemplate", "inline": "{{ doc.name }} is a {{ doc.breed.name }} ({{ doc.breed.kind }})" },
+            "input": { "kind": "inlineDocument", "inline": { "name": "iko", "breed": { "name": "jack russell", "kind": "terrier" } } }
         }})
         .await;
     snapshot!(code, @"200 OK");
@@ -619,10 +617,10 @@ async fn embedder_document_template() {
     snapshot!(code, @"202 Accepted");
     server.wait_task(value.uid()).await.succeeded();
 
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": "embedders.rest.documentTemplate" },
-            "input": { "documentId": "0" }
+    let (value, code) = server
+        .render_template(json! {{
+            "template": { "kind": "documentTemplate", "indexUid": index.uid, "embedder": "rest" },
+            "input": { "kind": "indexDocument", "indexUid": index.uid, "id": "0" }
         }})
         .await;
     snapshot!(code, @"200 OK");
@@ -630,18 +628,6 @@ async fn embedder_document_template() {
     {
       "template": "{{doc.name}}",
       "rendered": "kefir"
-    }
-    "#);
-
-    let (value, code) =
-        index.render(json! {{ "template": { "id": "embedders.rest.wrong.disregarded" }}}).await;
-    snapshot!(code, @"400 Bad Request");
-    snapshot!(value, @r#"
-    {
-      "message": "Wrong template `wrong` (cols 16:21) after embedder `rest` (cols 11:15).\n  Hint: Available template: `documentTemplate`.",
-      "code": "invalid_render_template_id",
-      "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
     }
     "#);
 }
@@ -690,9 +676,14 @@ async fn ugly_embedder_and_fragment_names() {
     server.wait_task(response.uid()).await.succeeded();
 
     // Test retrieving indexing fragment template with ugly name
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": r#"embedders."Open AI \"3.1\"".indexingFragments."ugly fragment \"name\".""# },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": {
+                "kind": "indexingFragment",
+                "indexUid": index.uid,
+                "embedder": "Open AI \"3.1\"",
+                "fragment": "ugly fragment \"name\"."
+            },
         }})
         .await;
     snapshot!(code, @"200 OK");
@@ -704,29 +695,20 @@ async fn ugly_embedder_and_fragment_names() {
     "#);
 
     // Test retrieving search fragment template with ugly name
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": r#"embedders."Open AI \"3.1\"".searchFragments."search with [brackets]""# },
+    let (value, code) = server
+        .render_template(json! {{
+            "template": {
+                "kind": "searchFragment",
+                "indexUid": index.uid,
+                "embedder": "Open AI \"3.1\"",
+                "fragment": "search with [brackets]"
+            },
         }})
         .await;
     snapshot!(code, @"200 OK");
     snapshot!(value, @r#"
     {
       "template": "It's a {{ media.breed }}",
-      "rendered": null
-    }
-    "#);
-
-    // Test quoting normal parts of the template ID
-    let (value, code) = index
-        .render(json! {{
-            "template": { "id": r#""embedders"."Open AI \"3.1\""."indexingFragments"."ugly fragment \"name\".""# }
-        }})
-        .await;
-    snapshot!(code, @"200 OK");
-    snapshot!(value, @r#"
-    {
-      "template": "{{ doc.name }} processed by AI",
       "rendered": null
     }
     "#);
