@@ -21,6 +21,7 @@ use meilisearch_types::milli::vector::json_template::{self, JsonTemplate};
 use meilisearch_types::milli::{FieldIdMapWithMetadata, FieldsIdsMap, GlobalFieldsIdsMap};
 use meilisearch_types::{heed, milli, Index};
 use serde::Serialize;
+use serde_json::value::RawValue;
 use serde_json::Value;
 use tracing::debug;
 use utoipa::ToSchema;
@@ -336,7 +337,7 @@ fn fetch_input<'doc>(
                 missing_param: "inline",
             })?;
 
-            let doc = RawMap::from_deserializer(inline, doc_alloc)
+            let doc = to_raw_map(inline, doc_alloc)
                 .map_err(|error| FetchInputError::ParseInlineDocument { error })?;
 
             RenderableInput::InlineDocument(doc)
@@ -365,15 +366,37 @@ fn fetch_input<'doc>(
                 missing_param: "inline",
             })?;
 
-            let search = RawMap::from_deserializer(inline, doc_alloc)
+            let search = to_raw_map(inline, doc_alloc)
                 .map_err(|error| FetchInputError::ParseInlineSearch { error })?;
-            RenderableInput::Search(search)
+
+            let q = if let Some(q) = search.get("q") {
+                let bumparaw_collections::Value::String(q) =
+                    bumparaw_collections::Value::from_raw_value(q, doc_alloc)
+                        .map_err(|error| FetchInputError::ParseInlineSearch { error })?
+                else {
+                    return Err(FetchInputError::ParseInlineSearchQ);
+                };
+                Some(q)
+            } else {
+                None
+            };
+
+            RenderableInput::Search { q, media: search.get("media") }
         }
     })
 }
 
+fn to_raw_map<'doc>(
+    inline: &Value,
+    doc_alloc: &'doc Bump,
+) -> Result<RawMap<'doc>, serde_json::Error> {
+    let inline = doc_alloc.alloc_str(&serde_json::to_string(&inline)?);
+    let inline: &RawValue = serde_json::from_slice(inline.as_bytes())?;
+    RawMap::from_raw_value(inline, doc_alloc)
+}
+
 enum RenderableInput<'doc> {
-    Search(RawMap<'doc>),
+    Search { q: Option<&'doc str>, media: Option<&'doc RawValue> },
     InlineDocument(RawMap<'doc>),
     IndexDocument(DocumentFromDb<'doc, FieldsIdsMap>),
 }
@@ -879,12 +902,19 @@ impl RenderingTemplate {
                         .into(),
                 )
             }
-            (RenderableInput::Search(_), RenderingTemplate::Template(_)) => {
+            (RenderableInput::Search { .. }, RenderingTemplate::Template(_)) => {
                 return Err(RenderError::CannotRenderTemplateForSearch)
             }
-            (RenderableInput::Search(q), RenderingTemplate::Fragment(fragment)) => fragment
-                .render_document(q, doc_alloc)
-                .map_err(|error| RenderError::Fragment { error })?,
+            (RenderableInput::Search { q, media }, RenderingTemplate::Fragment(fragment)) => {
+                let media = media
+                    .map(|media| serde_json::to_value(media))
+                    .transpose()
+                    // unwrap: "media" was already parsed as JSON as part of `inline`
+                    .unwrap();
+                fragment
+                    .render_search(*q, media.as_ref())
+                    .map_err(|error| RenderError::Fragment { error })?
+            }
             (RenderableInput::InlineDocument(doc), RenderingTemplate::Template(prompt)) => {
                 Value::String(
                     prompt
