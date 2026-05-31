@@ -74,6 +74,14 @@ pub fn configure(cfg: &mut web::ServiceConfig) {
                 "link": "https://docs.meilisearch.com/errors#invalid_render_template_id"
             }
         )),
+        (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
+            {
+                "message": "The Authorization header is missing. It must use the bearer authorization method.",
+                "code": "missing_authorization_header",
+                "type": "auth",
+                "link": "https://docs.meilisearch.com/errors#missing_authorization_header"
+            }
+        ))
     )
 )]
 pub async fn render_post(
@@ -991,9 +999,21 @@ impl ErrorCode for RenderError {
 #[derive(Debug, Clone, PartialEq, Deserr, ToSchema)]
 #[deserr(error = DeserrJsonError, rename_all = camelCase, deny_unknown_fields)]
 pub struct RenderQuery {
+    /// Template/fragment to fetch for rendering.
+    ///
+    /// Use its `kind` parameter to determine the type of template or fragment to fetch.
     #[deserr(error = DeserrJsonError<InvalidRenderTemplate>)]
+    #[schema(required = true)]
     pub template: RenderQueryTemplate,
+    /// Input for the template to fetch.
+    ///
+    /// Input is injected in the template to render the final string/JSON object.
+    ///
+    /// If `null` or missing, the template will not be rendered.
+    ///
+    /// Use its `kind` parameter to determine the type of document to fetch.
     #[deserr(default, error = DeserrJsonError<InvalidRenderInput>)]
+    #[schema(required = false)]
     pub input: Option<RenderQueryInput>,
 }
 
@@ -1127,6 +1147,10 @@ impl std::fmt::Display for RenderQueryInputKind {
 
 #[derive(Debug, Clone, Serialize, PartialEq, ToSchema)]
 pub struct RenderResult {
+    /// **Un**rendered template or fragment, fetched in index or echoed back from inline template in request.
     template: Value,
+    /// Result of rendering the template by injecting the `input` to the template.
+    ///
+    /// `null` if `input` was `null` or missing in the request.
     rendered: Option<Value>,
 }
