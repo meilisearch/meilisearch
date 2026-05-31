@@ -38,6 +38,7 @@ pub static AUTHORIZATIONS: Lazy<
 > = Lazy::new(|| {
     let authorizations = hashmap! {
         ("POST",    "/multi-search") =>                                    hashset!{"search", "*"},
+        ("POST",    "/render-template") =>                                 hashset!{["settings.get", "documents.get"], ["documents.*", "settings.get"], ["settings.*", "documents.get"], "*"},
         ("POST",    "/indexes/products/search") =>                         hashset!{"search", "*"},
         ("GET",     "/indexes/products/search") =>                         hashset!{"search", "*"},
         ("POST",    "/indexes/products/documents") =>                      hashset!{"documents.add", "documents.*", "*"},
@@ -47,7 +48,6 @@ pub static AUTHORIZATIONS: Lazy<
         ("DELETE",  "/indexes/products/documents/0") =>                    hashset!{"documents.delete", "documents.*", "*"},
         ("POST",    "/indexes/products/documents/delete-batch") =>         hashset!{"documents.delete", "documents.*", "*"},
         ("POST",    "/indexes/products/documents/delete") =>               hashset!{"documents.delete", "documents.*", "*"},
-        ("POST",    "/indexes/products/render") =>                         hashset!{["settings.get", "documents.get"], ["documents.*", "settings.get"], ["settings.*", "documents.get"], "*"},
         ("GET",     "/tasks") =>                                           hashset!{"tasks.get", "tasks.*", "*"},
         ("DELETE",  "/tasks") =>                                           hashset!{"tasks.delete", "tasks.*", "*"},
         ("GET",     "/tasks?indexUid=products") =>                         hashset!{"tasks.get", "tasks.*", "*"},
