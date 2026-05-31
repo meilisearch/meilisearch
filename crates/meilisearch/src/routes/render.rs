@@ -200,7 +200,7 @@ pub async fn render_post(
 
 #[derive(Debug, thiserror::Error)]
 enum Error {
-    #[error("error while fetch template: {0}")]
+    #[error("error while fetching template: {0}")]
     Template(#[from] FetchTemplateError),
     #[error("error while fetching input: {0}")]
     Input(#[from] FetchInputError),
@@ -249,12 +249,14 @@ enum FetchInputError {
     Milli(#[from] Box<milli::Error>),
     #[error("document `{docid}` not found in `{index_uid}`")]
     DocumentNotFound { index_uid: String, docid: String },
-    #[error("parsing inline document: {error}")]
+    #[error("parsing inline document: {error}\n  - Note: the inline document must be a JSON map")]
     ParseInlineDocument { error: serde_json::Error },
-    #[error("parsing inline search: {error}")]
+    #[error("parsing inline search: {error}\n  - Note: the inline search query must be a JSON map containing `q` and/or `media`")]
     ParseInlineSearch { error: serde_json::Error },
     #[error("{error}")]
     Features { error: Box<index_scheduler::Error> },
+    #[error("`q` is not a string")]
+    ParseInlineSearchQ,
 }
 
 impl ErrorCode for FetchInputError {
@@ -263,6 +265,7 @@ impl ErrorCode for FetchInputError {
             FetchInputError::DisallowedParameterForKind { .. }
             | FetchInputError::ParseInlineDocument { .. }
             | FetchInputError::ParseInlineSearch { .. }
+            | FetchInputError::ParseInlineSearchQ
             | FetchInputError::MissingParameterForKind { .. } => Code::InvalidRenderInput,
             FetchInputError::Heed(_) | FetchInputError::Milli(_) => Code::Internal,
             FetchInputError::DocumentNotFound { .. } => Code::RenderDocumentNotFound,
@@ -287,7 +290,7 @@ fn fetch_input<'doc>(
             let index_uid =
                 index_uid.as_deref().ok_or(FetchInputError::MissingParameterForKind {
                     kind,
-                    missing_param: "index_uid",
+                    missing_param: "indexUid",
                 })?;
 
             let id = id
@@ -443,9 +446,11 @@ impl ErrorCode for FetchTemplateError {
             | FetchTemplateError::MissingFragment { .. }
             | FetchTemplateError::NotAFragmentEmbedder { .. }
             | FetchTemplateError::InlineTemplateNotAString
-            | FetchTemplateError::NotADocumentTemplateEmbedder { .. }
-            | FetchTemplateError::InlineTemplateParsing(_)
-            | FetchTemplateError::InlineFragmentParsing { .. } => Code::InvalidRenderTemplate,
+            | FetchTemplateError::NotADocumentTemplateEmbedder { .. } => {
+                Code::InvalidRenderTemplate
+            }
+            FetchTemplateError::InlineTemplateParsing(_)
+            | FetchTemplateError::InlineFragmentParsing { .. } => Code::TemplateParsingError,
             FetchTemplateError::Heed(_) => Code::Internal,
             FetchTemplateError::Features { error } => error.error_code(),
             FetchTemplateError::CannotOpenIndex { .. } => Code::IndexNotFound,
@@ -647,23 +652,6 @@ fn fetch_template<'a>(
 
     let template = match kind {
         RenderQueryTemplateKind::DocumentTemplate => {
-            let index_uid =
-                index_uid.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
-                    kind,
-                    missing_param: "index_uid",
-                })?;
-            let index = index_scheduler.index(index_uid).map_err(|error| {
-                FetchTemplateError::CannotOpenIndex {
-                    error: error.into(),
-                    index: index_uid.to_string(),
-                }
-            })?;
-            let rtxn = index.static_read_txn()?;
-            let embedder =
-                embedder.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
-                    kind,
-                    missing_param: "embedder",
-                })?;
             if fragment.is_some() {
                 return Err(FetchTemplateError::DisallowedParameterForKind {
                     kind,
@@ -676,6 +664,24 @@ fn fetch_template<'a>(
                     disallowed_param: "inline",
                 });
             }
+            let index_uid =
+                index_uid.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "index_uid",
+                })?;
+
+            let embedder =
+                embedder.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
+                    kind,
+                    missing_param: "embedder",
+                })?;
+            let index = index_scheduler.index(index_uid).map_err(|error| {
+                FetchTemplateError::CannotOpenIndex {
+                    error: error.into(),
+                    index: index_uid.to_string(),
+                }
+            })?;
+            let rtxn = index.static_read_txn()?;
 
             RenderQueryTemplateView::DocumentTemplate {
                 index_uid,
@@ -694,13 +700,6 @@ fn fetch_template<'a>(
                     kind,
                     missing_param: "index_uid",
                 })?;
-            let index = index_scheduler.index(index_uid).map_err(|error| {
-                FetchTemplateError::CannotOpenIndex {
-                    error: error.into(),
-                    index: index_uid.to_string(),
-                }
-            })?;
-            let rtxn = index.static_read_txn()?;
 
             if embedder.is_some() {
                 return Err(FetchTemplateError::DisallowedParameterForKind {
@@ -721,6 +720,14 @@ fn fetch_template<'a>(
                 });
             }
 
+            let index = index_scheduler.index(index_uid).map_err(|error| {
+                FetchTemplateError::CannotOpenIndex {
+                    error: error.into(),
+                    index: index_uid.to_string(),
+                }
+            })?;
+            let rtxn = index.static_read_txn()?;
+
             RenderQueryTemplateView::ChatDocumentTemplate {
                 index,
                 rtxn,
@@ -736,13 +743,6 @@ fn fetch_template<'a>(
                     kind,
                     missing_param: "index_uid",
                 })?;
-            let index = index_scheduler.index(index_uid).map_err(|error| {
-                FetchTemplateError::CannotOpenIndex {
-                    error: error.into(),
-                    index: index_uid.to_string(),
-                }
-            })?;
-            let rtxn = index.static_read_txn()?;
 
             let embedder =
                 embedder.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
@@ -769,6 +769,14 @@ fn fetch_template<'a>(
                     disallowed_param: "document_template_max_bytes",
                 });
             }
+
+            let index = index_scheduler.index(index_uid).map_err(|error| {
+                FetchTemplateError::CannotOpenIndex {
+                    error: error.into(),
+                    index: index_uid.to_string(),
+                }
+            })?;
+            let rtxn = index.static_read_txn()?;
 
             RenderQueryTemplateView::IndexingFragment { index_uid, index, rtxn, embedder, fragment }
         }
@@ -781,13 +789,7 @@ fn fetch_template<'a>(
                     kind,
                     missing_param: "index_uid",
                 })?;
-            let index = index_scheduler.index(index_uid).map_err(|error| {
-                FetchTemplateError::CannotOpenIndex {
-                    error: error.into(),
-                    index: index_uid.to_string(),
-                }
-            })?;
-            let rtxn = index.static_read_txn()?;
+
             let embedder =
                 embedder.as_deref().ok_or(FetchTemplateError::MissingParameterForKind {
                     kind,
@@ -810,6 +812,14 @@ fn fetch_template<'a>(
                     disallowed_param: "document_template_max_bytes",
                 });
             }
+
+            let index = index_scheduler.index(index_uid).map_err(|error| {
+                FetchTemplateError::CannotOpenIndex {
+                    error: error.into(),
+                    index: index_uid.to_string(),
+                }
+            })?;
+            let rtxn = index.static_read_txn()?;
 
             RenderQueryTemplateView::SearchFragment { index_uid, index, rtxn, embedder, fragment }
         }
