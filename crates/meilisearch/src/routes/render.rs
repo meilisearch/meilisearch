@@ -917,7 +917,7 @@ impl RenderingTemplate {
             }
             (RenderableInput::Search { q, media }, RenderingTemplate::Fragment(fragment)) => {
                 let media = media
-                    .map(|media| serde_json::to_value(media))
+                    .map(serde_json::to_value)
                     .transpose()
                     // unwrap: "media" was already parsed as JSON as part of `inline`
                     .unwrap();
