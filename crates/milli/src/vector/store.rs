@@ -1216,6 +1216,159 @@ impl VectorStore {
         }
         Ok(())
     }
+
+    /// Returns the `true` if the stores are quantized, `false` otherwise.
+    pub fn clean_stores(self, wtxn: &mut RwTxn) -> crate::Result<Option<QuantizationStatus>> {
+        let mut store_indexes = vector_store_range_for_embedder(self.embedder_index);
+
+        match self.backend {
+            VectorStoreBackend::Arroy => {
+                use arroy::distances::{BinaryQuantizedCosine, Cosine};
+
+                let store_action = loop {
+                    match store_indexes.next() {
+                        Some(index) => {
+                            match arroy::Reader::<BinaryQuantizedCosine>::open(
+                                wtxn,
+                                index,
+                                self.database.remap_types(),
+                            ) {
+                                Ok(_) => break QuantizationStatus::Quantized,
+                                Err(arroy::Error::MissingMetadata(_)) => continue,
+                                Err(arroy::Error::UnmatchingDistance { .. }) => {
+                                    break QuantizationStatus::NonQuantized
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
+                        None => return Ok(None),
+                    }
+                };
+
+                for index in store_indexes {
+                    match store_action {
+                        QuantizationStatus::Quantized => {
+                            match arroy::Reader::<BinaryQuantizedCosine>::open(
+                                wtxn,
+                                index,
+                                self.database.remap_types(),
+                            ) {
+                                Ok(_) => (),
+                                Err(arroy::Error::MissingMetadata(_)) => (),
+                                Err(arroy::Error::UnmatchingDistance { .. }) => {
+                                    clear_arroy_store(wtxn, self.database.remap_types(), index)?;
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
+                        QuantizationStatus::NonQuantized => {
+                            match arroy::Reader::<Cosine>::open(
+                                wtxn,
+                                index,
+                                self.database.remap_types(),
+                            ) {
+                                Ok(_) => (),
+                                Err(arroy::Error::MissingMetadata(_)) => (),
+                                Err(arroy::Error::UnmatchingDistance { .. }) => {
+                                    clear_arroy_store(wtxn, self.database.remap_types(), index)?;
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
+                    }
+                }
+
+                Ok(Some(store_action))
+            }
+            VectorStoreBackend::Hannoy => {
+                use hannoy::distances::{Cosine, Hamming};
+
+                let store_action = loop {
+                    match store_indexes.next() {
+                        Some(index) => {
+                            match hannoy::Reader::<Hamming>::open(
+                                wtxn,
+                                index,
+                                self.database.remap_types(),
+                            ) {
+                                Ok(_) => break QuantizationStatus::Quantized,
+                                Err(hannoy::Error::MissingMetadata(_)) => continue,
+                                Err(hannoy::Error::UnmatchingDistance { .. }) => {
+                                    break QuantizationStatus::NonQuantized
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
+                        None => return Ok(None),
+                    }
+                };
+
+                for index in store_indexes {
+                    match store_action {
+                        QuantizationStatus::Quantized => {
+                            match hannoy::Reader::<Hamming>::open(
+                                wtxn,
+                                index,
+                                self.database.remap_types(),
+                            ) {
+                                Ok(_) => (),
+                                Err(hannoy::Error::MissingMetadata(_)) => (),
+                                Err(hannoy::Error::UnmatchingDistance { .. }) => {
+                                    clear_hannoy_store(wtxn, self.database, index)?;
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
+                        QuantizationStatus::NonQuantized => {
+                            match hannoy::Reader::<Cosine>::open(
+                                wtxn,
+                                index,
+                                self.database.remap_types(),
+                            ) {
+                                Ok(_) => (),
+                                Err(hannoy::Error::MissingMetadata(_)) => (),
+                                Err(hannoy::Error::UnmatchingDistance { .. }) => {
+                                    clear_hannoy_store(wtxn, self.database, index)?;
+                                }
+                                Err(err) => return Err(err.into()),
+                            }
+                        }
+                    }
+                }
+
+                Ok(Some(store_action))
+            }
+        }
+    }
+}
+
+pub enum QuantizationStatus {
+    Quantized,
+    NonQuantized,
+}
+
+fn clear_arroy_store(
+    wtxn: &mut RwTxn<'_>,
+    database: arroy::Database<Unspecified>,
+    index: u16,
+) -> arroy::Result<()> {
+    use arroy::distances::Cosine;
+
+    // The metadata are not checked when opening a writer so we can use Cosine
+    // or anything as a Distance, same thing for the dimensions.
+    arroy::Writer::<Cosine>::new(database.remap_types(), index, 0).clear(wtxn)
+}
+
+fn clear_hannoy_store(
+    wtxn: &mut RwTxn<'_>,
+    database: hannoy::Database<Unspecified>,
+    index: u16,
+) -> hannoy::Result<()> {
+    use hannoy::distances::Cosine;
+
+    // The metadata are not checked when opening a writer so we can use Cosine
+    // or anything as a Distance, same thing for the dimensions.
+    hannoy::Writer::<Cosine>::new(database.remap_types(), index, 0).clear(wtxn)
 }
 
 fn arroy_build<R, D>(
