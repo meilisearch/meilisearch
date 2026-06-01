@@ -191,7 +191,7 @@ impl TempIndex {
         let mut indexer = indexer::IndexOperations::new();
         let external_document_ids: Vec<_> =
             external_document_ids.iter().map(AsRef::as_ref).collect();
-        indexer.delete_documents(external_document_ids.as_slice());
+        indexer.delete_documents_by_external_ids(external_document_ids.as_slice());
 
         let indexer_alloc = Bump::new();
         let (document_changes, operation_stats, primary_key) = indexer.into_changes(

@@ -2,6 +2,7 @@ use meili_snap::snapshot;
 use meilisearch_auth::AuthFilter;
 use meilisearch_types::index_uid_pattern::IndexUidPattern;
 use meilisearch_types::milli::update::MissingDocumentPolicy;
+use meilisearch_types::milli::FilterableAttributesRule;
 use meilisearch_types::tasks::{IndexSwap, KindWithContent, Status};
 use time::{Duration, OffsetDateTime};
 
@@ -622,6 +623,79 @@ fn batch_deletion_nothing_and_add_documents_no_guess_pk() {
     );
     index_scheduler.register(kind, None, false).unwrap();
 
+    handle.advance_one_successful_batch();
+
+    snapshot!(snapshot_index_scheduler(&index_scheduler));
+
+    let index = index_scheduler.index("docs").unwrap();
+    let rtxn = index.read_txn().unwrap();
+    snapshot!(snapshot_bitmap(&index.documents_ids(&rtxn).unwrap()));
+}
+
+#[test]
+fn batch_deletion_by_filter_and_addition() {
+    let (index_scheduler, mut handle) = IndexScheduler::test(true, vec![]);
+    let kind = index_creation_task("docs", "id");
+    let _task = index_scheduler.register(kind, None, false).unwrap();
+
+    handle.advance_one_successful_batch();
+
+    index_scheduler
+        .register(
+            KindWithContent::SettingsUpdate {
+                index_uid: "docs".to_string(),
+                new_settings: Box::new(meilisearch_types::settings::Settings {
+                    filterable_attributes: meilisearch_types::milli::update::Setting::Set(vec![
+                        FilterableAttributesRule::Field("id".to_string()),
+                    ]),
+                    _kind: std::marker::PhantomData,
+                    ..Default::default()
+                }),
+                is_deletion: false,
+                allow_index_creation: true,
+            },
+            None,
+            false,
+        )
+        .unwrap();
+    handle.advance_one_successful_batch();
+
+    let (file0, documents_count0) = sample_documents(&index_scheduler, 1, 1);
+    let (file1, documents_count1) = sample_documents(&index_scheduler, 2, 1);
+    file0.persist().unwrap();
+    file1.persist().unwrap();
+    let kind = replace_document_import_task("docs", Some("id"), 1, documents_count0);
+    index_scheduler.register(kind, None, false).unwrap();
+    index_scheduler
+        .register(
+            KindWithContent::DocumentDeletionByFilter {
+                index_uid: "docs".to_string(),
+                filter_expr: serde_json::json!("id = 1"),
+            },
+            None,
+            false,
+        )
+        .unwrap();
+    index_scheduler
+        .register(
+            KindWithContent::DocumentDeletionByFilter {
+                index_uid: "docs".to_string(),
+                filter_expr: serde_json::json!("NOT id = 3"),
+            },
+            None,
+            false,
+        )
+        .unwrap();
+    let kind = replace_document_import_task_with_opts(
+        "docs",
+        Some("id"),
+        2,
+        documents_count1,
+        MissingDocumentPolicy::Skip,
+    );
+    index_scheduler.register(kind, None, false).unwrap();
+
+    handle.advance_one_successful_batch();
     handle.advance_one_successful_batch();
 
     snapshot!(snapshot_index_scheduler(&index_scheduler));
