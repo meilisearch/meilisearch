@@ -151,7 +151,7 @@ impl VectorStore {
 
     /// Converts the vector store from arroy to hannoy and the other way around.
     ///
-    /// Note that when changing the backend the miss-configured quantization stores are simply deleted.
+    /// Note that when changing the backend the misconfigured quantization stores are simply deleted.
     pub fn change_backend<MSP>(
         self,
         rtxn: &RoTxn,
@@ -1145,10 +1145,7 @@ impl VectorStore {
                     Ok(reader) => reader,
                     Err(arroy::Error::MissingMetadata(_)) => continue,
                     Err(arroy::Error::UnmatchingDistance { .. }) => {
-                        // TODO it's ugly
-                        // TODO explain why AD while it must not
-                        arroy::Writer::<AD>::new(self.database.remap_types(), index, 0)
-                            .clear(hannoy_wtxn)?;
+                        clear_arroy_store(hannoy_wtxn, self.database.remap_types(), index)?;
                         continue;
                     }
                     Err(err) => return Err(err.into()),
@@ -1224,7 +1221,7 @@ impl VectorStore {
         Ok(())
     }
 
-    /// Returns the `true` if the stores are quantized, `false` otherwise.
+    /// Returns the quantization status as known to the store.
     pub fn clean_stores(self, wtxn: &mut RwTxn) -> crate::Result<Option<QuantizationStatus>> {
         let mut store_indexes = vector_store_range_for_embedder(self.embedder_index);
 
