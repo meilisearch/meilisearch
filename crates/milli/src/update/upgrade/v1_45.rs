@@ -29,11 +29,16 @@ impl UpgradeIndex for FixVectorStoreConfig {
 
             // Read the dimensions to be able to know the real quantization
             // parameter, it corresponds to the quantization of the first store.
-            config.config.quantized = match vector_store.clean_stores(wtxn)? {
-                Some(QuantizationStatus::Quantized) => Some(true),
-                Some(QuantizationStatus::NonQuantized) => Some(false),
-                None => config.config.quantized,
-            };
+            config.config.quantized =
+                match (config.config.quantized, vector_store.clean_stores(wtxn)?) {
+                    (None, None) => None,
+                    (None, Some(QuantizationStatus::NonQuantized)) => None, // None defaults to false
+                    (None, Some(QuantizationStatus::Quantized)) => Some(true),
+                    (Some(value), None) => Some(value),
+                    (Some(true), Some(QuantizationStatus::NonQuantized)) => Some(false),
+                    (Some(false), Some(QuantizationStatus::Quantized)) => Some(true),
+                    (Some(value), Some(_)) => Some(value),
+                };
         }
 
         embedders.put_embedding_configs(wtxn, configs)?;
