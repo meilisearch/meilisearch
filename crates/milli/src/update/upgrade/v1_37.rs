@@ -1,11 +1,11 @@
+use arroy::Error::UnmatchingDistance as ArroyUnmatchingDistance;
+use hannoy::Error::UnmatchingDistance as HannoyUnmatchingDistance;
 use heed::RwTxn;
 
 use super::UpgradeIndex;
 use crate::update::upgrade::UpgradeParams;
-use crate::vector::{VectorStore, VectorStoreBackend};
+use crate::vector::{QuantizationStatus, VectorStore, VectorStoreBackend};
 use crate::{Error, Index, InternalError, Result};
-use arroy::Error::UnmatchingDistance as ArroyUnmatchingDistance;
-use hannoy::Error::UnmatchingDistance as HannoyUnmatchingDistance;
 
 /// Convert old Annoy vector stores to Hannoy ones
 pub(super) struct ConvertArroyToHannoy();
@@ -51,18 +51,31 @@ impl UpgradeIndex for ConvertArroyToHannoy {
                 Ok(_) => vector_store,
             };
 
-            // We make sure to only do the backend conversion when using arroy
-            // TODO what happen for unmatching distances when using hannoy
-            if backend == VectorStoreBackend::Arroy {
-                // Continue the hannoy conversion with the right quantization. Note that when changing
-                // the backend the miss-configured quantization stores are simply deleted.
-                vector_store.change_backend(
-                    &rtxn,
-                    wtxn,
-                    progress.clone(),
-                    &|| must_stop_processing.get(),
-                    None,
-                )?;
+            match backend {
+                VectorStoreBackend::Arroy => {
+                    // We make sure to only do the backend conversion when using arroy.
+                    //
+                    // Continue the hannoy conversion with the right quantization. Note that
+                    // when changing the backend the misconfigured quantization stores are
+                    // simply deleted.
+                    vector_store.change_backend(
+                        &rtxn,
+                        wtxn,
+                        progress.clone(),
+                        &|| must_stop_processing.get(),
+                        None,
+                    )?;
+                }
+                VectorStoreBackend::Hannoy => {
+                    // If the store is hannoy we clean the stores in case some were misconfigured.
+                    // Note that we never experienced an issue with hannoy stores but we are not sure
+                    // they are affected too.
+                    config.config.quantized = match vector_store.clean_stores(wtxn)? {
+                        Some(QuantizationStatus::Quantized) => Some(true),
+                        Some(QuantizationStatus::NonQuantized) => Some(false),
+                        None => None,
+                    };
+                }
             }
         }
 
