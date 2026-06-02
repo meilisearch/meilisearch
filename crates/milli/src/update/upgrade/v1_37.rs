@@ -73,7 +73,7 @@ impl UpgradeIndex for ConvertArroyToHannoy {
                     config.config.quantized = match vector_store.clean_stores(wtxn)? {
                         Some(QuantizationStatus::Quantized) => Some(true),
                         Some(QuantizationStatus::NonQuantized) => Some(false),
-                        None => None,
+                        None => config.config.quantized,
                     };
                 }
             }
