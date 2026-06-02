@@ -70,16 +70,9 @@ impl UpgradeIndex for ConvertArroyToHannoy {
                     // If the store is hannoy we clean the stores in case some were misconfigured.
                     // Note that we never experienced an issue with hannoy stores but we are not sure
                     // they are affected too.
+                    let detected = vector_store.clean_stores(wtxn)?;
                     config.config.quantized =
-                        match (config.config.quantized, vector_store.clean_stores(wtxn)?) {
-                            (None, None) => None,
-                            (None, Some(QuantizationStatus::NonQuantized)) => None, // None defaults to false
-                            (None, Some(QuantizationStatus::Quantized)) => Some(true),
-                            (Some(value), None) => Some(value),
-                            (Some(true), Some(QuantizationStatus::NonQuantized)) => Some(false),
-                            (Some(false), Some(QuantizationStatus::Quantized)) => Some(true),
-                            (Some(value), Some(_)) => Some(value),
-                        };
+                        change_quantized_config(config.config.quantized, detected);
                 }
             }
         }
@@ -135,5 +128,23 @@ impl super::UpgradeIndex for AddShards {
 
     fn description(&self) -> &'static str {
         "adding shards to network objects"
+    }
+}
+
+pub fn change_quantized_config(
+    config: Option<bool>,
+    detected: Option<QuantizationStatus>,
+) -> Option<bool> {
+    match (config, detected) {
+        // empty store, listen to config
+        (config, None) => config,
+
+        // conflicts, change to detected
+        (Some(false) | None, Some(QuantizationStatus::Quantized)) => Some(true),
+        (Some(true), Some(QuantizationStatus::NonQuantized)) => Some(false),
+
+        // no conflict, retain config
+        (config @ (Some(false) | None), Some(QuantizationStatus::NonQuantized))
+        | (config @ Some(true), Some(QuantizationStatus::Quantized)) => config,
     }
 }

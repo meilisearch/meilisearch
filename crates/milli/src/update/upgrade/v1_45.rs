@@ -2,10 +2,10 @@ use std::ops::Not as _;
 
 use heed::RwTxn;
 
-use super::v1_37::ConvertArroyToHannoy;
+use super::v1_37::{change_quantized_config, ConvertArroyToHannoy};
 use super::UpgradeIndex;
 use crate::update::upgrade::UpgradeParams;
-use crate::vector::{QuantizationStatus, VectorStore};
+use crate::vector::VectorStore;
 use crate::{Index, Result};
 
 /// Fix the desync of internal Arroy and Hannoy vector stores
@@ -27,18 +27,8 @@ impl UpgradeIndex for FixVectorStoreConfig {
                 config.config.quantized(),
             );
 
-            // Read the dimensions to be able to know the real quantization
-            // parameter, it corresponds to the quantization of the first store.
-            config.config.quantized =
-                match (config.config.quantized, vector_store.clean_stores(wtxn)?) {
-                    (None, None) => None,
-                    (None, Some(QuantizationStatus::NonQuantized)) => None, // None defaults to false
-                    (None, Some(QuantizationStatus::Quantized)) => Some(true),
-                    (Some(value), None) => Some(value),
-                    (Some(true), Some(QuantizationStatus::NonQuantized)) => Some(false),
-                    (Some(false), Some(QuantizationStatus::Quantized)) => Some(true),
-                    (Some(value), Some(_)) => Some(value),
-                };
+            let detected = vector_store.clean_stores(wtxn)?;
+            config.config.quantized = change_quantized_config(config.config.quantized, detected);
         }
 
         embedders.put_embedding_configs(wtxn, configs)?;
