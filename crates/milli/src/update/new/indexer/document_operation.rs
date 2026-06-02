@@ -32,7 +32,9 @@ use crate::update::new::steps::IndexingStep;
 use crate::update::new::thread_local::MostlySend;
 use crate::update::new::{DocumentIdentifiers, Insertion, Update};
 use crate::update::{AvailableIds, IndexDocumentsMethod, MissingDocumentPolicy};
-use crate::{DocumentId, Error, FieldsIdsMap, Index, InternalError, Result, UserError};
+use crate::{
+    DocumentId, Error, FieldsIdsMap, Index, InternalError, MustStopProcessing, Result, UserError,
+};
 
 /// The set of operations to be applied to multiple documents in an index.
 #[derive(Default)]
@@ -85,20 +87,17 @@ impl<'pl> IndexOperations<'pl> {
 
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(level = "trace", skip_all, target = "indexing::document_operation")]
-    pub fn into_changes<MSP>(
+    pub fn into_changes(
         self,
         indexer: &'pl Bump,
         index: &Index,
         rtxn: &'pl RoTxn<'pl>,
         primary_key_from_op: Option<&'pl str>,
         new_fields_ids_map: &mut FieldsIdsMap,
-        must_stop_processing: &MSP,
+        must_stop_processing: &MustStopProcessing,
         progress: Progress,
         shards: Option<&'pl Shards>,
-    ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<(DocumentOperationChanges<'pl>, Vec<PayloadStats>, Option<PrimaryKey<'pl>>)> {
         progress.update_progress(IndexingStep::PreparingPayloads);
         let Self { operations } = self;
 
@@ -153,7 +152,7 @@ impl<'pl> IndexOperations<'pl> {
             remaining_operations
                 .into_par_iter()
                 .map(|payload| {
-                    if must_stop_processing() {
+                    if must_stop_processing.get() {
                         return Err(InternalError::AbortedIndexation.into());
                     }
                     step.fetch_add(1, Ordering::Relaxed);

@@ -7,7 +7,10 @@ use milli::progress::Progress;
 use milli::update::new::indexer;
 use milli::update::{IndexerConfig, MissingDocumentPolicy, Settings};
 use milli::vector::RuntimeEmbedders;
-use milli::{CreateOrOpen, FacetDistribution, FilterableAttributesRule, Index, Object, OrderBy};
+use milli::{
+    CreateOrOpen, FacetDistribution, FilterableAttributesRule, Index, MustStopProcessing, Object,
+    OrderBy,
+};
 use serde_json::{from_value, json};
 
 #[test]
@@ -28,7 +31,7 @@ fn test_facet_distribution_with_no_facet_values() {
     ]);
     builder
         .execute(
-            &|| false,
+            &MustStopProcessing::default(),
             &Progress::default(),
             // NO DANGER: test
             &IpPolicy::danger_always_allow(),
@@ -66,7 +69,7 @@ fn test_facet_distribution_with_no_facet_values() {
             &rtxn,
             None,
             &mut new_fields_ids_map,
-            &|| false,
+            &MustStopProcessing::default(),
             Progress::default(),
             None,
         )
@@ -82,7 +85,7 @@ fn test_facet_distribution_with_no_facet_values() {
         primary_key,
         &document_changes,
         embedders,
-        &|| false,
+        &MustStopProcessing::default(),
         &Progress::default(),
         // NO DANGER: test
         &IpPolicy::danger_always_allow(),

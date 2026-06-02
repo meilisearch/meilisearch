@@ -298,9 +298,13 @@ impl UpgradeIndex for RebuildHannoyGraph {
 
             let seed = rand::random();
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-            vector_store.rebuild_graph(wtxn, progress.clone(), &mut rng, dimensions, &|| {
-                must_stop_processing.get()
-            })?;
+            vector_store.rebuild_graph(
+                wtxn,
+                progress.clone(),
+                &mut rng,
+                dimensions,
+                must_stop_processing,
+            )?;
         }
 
         Ok(false)

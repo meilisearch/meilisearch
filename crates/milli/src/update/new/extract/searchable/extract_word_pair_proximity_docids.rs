@@ -64,15 +64,12 @@ impl<'extractor> Extractor<'extractor> for WordPairProximityDocidsExtractorData<
 pub struct WordPairProximityDocidsExtractor;
 
 impl WordPairProximityDocidsExtractor {
-    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         step: IndexingStep,
-    ) -> Result<Vec<BalancedCaches<'extractor>>>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<Vec<BalancedCaches<'extractor>>> {
         // Warning: this is duplicated code from extract_word_docids.rs
         let rtxn = indexing_context.index.read_txn()?;
         let stop_words = indexing_context.index.stop_words(&rtxn)?;
@@ -240,16 +237,15 @@ impl WordPairProximityDocidsExtractor {
         Ok(())
     }
 
-    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         step: IndexingStep,
     ) -> Result<Vec<BalancedCaches<'extractor>>>
     where
         SD: SettingsDelta + Sync,
-        MSP: Fn() -> bool + Sync,
     {
         // Warning: this is duplicated code from extract_word_docids.rs
         let rtxn = indexing_context.index.read_txn()?;

@@ -149,7 +149,7 @@ impl IndexScheduler {
                         &rtxn,
                         primary_key.as_deref(),
                         &mut new_fields_ids_map,
-                        &|| must_stop_processing.get(),
+                        &must_stop_processing,
                         progress.clone(),
                         shards.as_ref(),
                     )
@@ -208,7 +208,7 @@ impl IndexScheduler {
                             primary_key,
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -328,7 +328,7 @@ impl IndexScheduler {
                             None, // cannot change primary key in DocumentEdition
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -482,7 +482,7 @@ impl IndexScheduler {
                             None, // document deletion never changes primary key
                             &document_changes,
                             embedders,
-                            &|| must_stop_processing.get(),
+                            &must_stop_processing,
                             progress,
                             self.ip_policy(),
                             &embedder_stats,
@@ -519,12 +519,7 @@ impl IndexScheduler {
 
                 progress.update_progress(SettingsProgress::ApplyTheSettings);
                 let congestion = builder
-                    .execute(
-                        &|| must_stop_processing.get(),
-                        progress,
-                        self.ip_policy(),
-                        embedder_stats,
-                    )
+                    .execute(&must_stop_processing, progress, self.ip_policy(), embedder_stats)
                     .map_err(|err| Error::from_milli(err, Some(index_uid.clone())))?;
 
                 Ok((tasks, congestion))

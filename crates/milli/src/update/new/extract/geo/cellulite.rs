@@ -33,17 +33,16 @@ impl<'a, 'b> GeoJsonExtractor<'a, 'b> {
         }
     }
 
-    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         geojson_sender: GeoJsonSender<'_, '_>,
         step: IndexingStep,
     ) -> Result<()>
     where
         SD: SettingsDelta + Sync,
-        MSP: Fn() -> bool + Sync,
     {
         let datastore = ThreadLocal::new();
         let extractor_data = GeoJsonSettingsExtractor { settings_delta, geojson_sender };

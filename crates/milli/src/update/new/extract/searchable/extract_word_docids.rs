@@ -275,15 +275,12 @@ impl<'extractor> Extractor<'extractor> for WordDocidsExtractorData<'_> {
 pub struct WordDocidsExtractors;
 
 impl WordDocidsExtractors {
-    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>, MSP>(
+    pub fn run_extraction<'pl, 'fid, 'indexer, 'index, 'extractor, DC: DocumentChanges<'pl>>(
         document_changes: &DC,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         step: IndexingStep,
-    ) -> Result<WordDocidsCaches<'extractor>>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<WordDocidsCaches<'extractor>> {
         // Warning: this is duplicated code from extract_word_pair_proximity_docids.rs
         let rtxn = indexing_context.index.read_txn()?;
         let stop_words = indexing_context.index.stop_words(&rtxn)?;
@@ -463,16 +460,15 @@ impl WordDocidsExtractors {
         cached_sorter.flush_fid_word_count(&mut buffer)
     }
 
-    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, SD>(
         settings_delta: &SD,
         documents: &'indexer DocumentsIndentifiers<'indexer>,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         step: IndexingStep,
     ) -> Result<WordDocidsCaches<'extractor>>
     where
         SD: SettingsDelta + Sync,
-        MSP: Fn() -> bool + Sync,
     {
         // Warning: this is duplicated code from extract_word_pair_proximity_docids.rs
         // TODO we need to read the new AND old settings to support changing global parameters

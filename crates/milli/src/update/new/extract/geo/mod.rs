@@ -71,15 +71,12 @@ impl GeoExtractor {
         Ok(())
     }
 
-    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor, MSP>(
+    pub fn run_extraction_from_settings<'fid, 'indexer, 'index, 'extractor>(
         documents: &'indexer DocumentsIndentifiers<'indexer>,
-        indexing_context: IndexingContext<'fid, 'indexer, 'index, MSP>,
+        indexing_context: IndexingContext<'fid, 'indexer, 'index>,
         extractor_allocs: &'extractor mut ThreadLocal<FullySend<Bump>>,
         step: IndexingStep,
-    ) -> Result<Vec<RefCell<GeoExtractorData<'extractor>>>>
-    where
-        MSP: Fn() -> bool + Sync,
-    {
+    ) -> Result<Vec<RefCell<GeoExtractorData<'extractor>>>> {
         let datastore = ThreadLocal::new();
         let extractor_data = GeoSettingExtractor;
 

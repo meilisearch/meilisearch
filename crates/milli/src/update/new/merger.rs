@@ -14,24 +14,23 @@ use super::extract::{
     FacetKind, GeoExtractorData,
 };
 use crate::update::facet::new_incremental::FacetFieldIdChange;
-use crate::{CboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, Result};
+use crate::{
+    CboRoaringBitmapCodec, FieldId, GeoPoint, Index, InternalError, MustStopProcessing, Result,
+};
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_rtree<'extractor, MSP>(
+pub fn merge_and_send_rtree<'extractor>(
     datastore: impl IntoIterator<Item = RefCell<GeoExtractorData<'extractor>>>,
     rtxn: &RoTxn,
     index: &Index,
     geo_sender: GeoSender<'_, '_>,
-    must_stop_processing: &MSP,
-) -> Result<()>
-where
-    MSP: Fn() -> bool + Sync,
-{
+    must_stop_processing: &MustStopProcessing,
+) -> Result<()> {
     let mut rtree = index.geo_rtree(rtxn)?.unwrap_or_default();
     let mut faceted = index.geo_faceted_documents_ids(rtxn)?;
 
     for data in datastore {
-        if must_stop_processing() {
+        if must_stop_processing.get() {
             return Err(InternalError::AbortedIndexation.into());
         }
 
@@ -64,15 +63,14 @@ where
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_and_send_docids<MSP, D>(
+pub fn merge_and_send_docids<D>(
     caches: Vec<BalancedCaches<'_>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
     docids_sender: WordDocidsSender<D>,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
 ) -> Result<()>
 where
-    MSP: Fn() -> bool + Sync,
     D: DatabaseType + Sync,
 {
     merge_scan_and_send_docids(
@@ -88,16 +86,15 @@ where
 }
 
 #[tracing::instrument(level = "trace", skip_all, target = "indexing::merge")]
-pub fn merge_scan_and_send_docids<MSP, D, CP, St>(
+pub fn merge_scan_and_send_docids<D, CP, St>(
     mut caches: Vec<BalancedCaches<'_>>,
     database: Database<Bytes, Bytes>,
     index: &Index,
     docids_sender: WordDocidsSender<D>,
     scan: CP,
-    must_stop_processing: &MSP,
+    must_stop_processing: &MustStopProcessing,
 ) -> Result<St>
 where
-    MSP: Fn() -> bool + Sync,
     D: DatabaseType + Sync,
     St: Default + BitOr<Output = St> + Sync + Send,
     CP: Fn(&mut St, &[u8], &Operation) -> Result<()> + Sync + Send,
@@ -106,7 +103,7 @@ where
         .into_par_iter()
         .map(|frozen| -> Result<_> {
             let rtxn = index.read_txn()?;
-            if must_stop_processing() {
+            if must_stop_processing.get() {
                 return Err(InternalError::AbortedIndexation.into());
             }
 
