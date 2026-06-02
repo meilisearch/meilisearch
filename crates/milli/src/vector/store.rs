@@ -180,7 +180,14 @@ impl VectorStore {
                     let writer = hannoy::Writer::new(self._hannoy_angular_db(), index, dimensions);
                     let mut builder = writer.builder(&mut rng).progress(progress.clone());
                     builder.cancel(must_stop_processing);
-                    builder.prepare_arroy_conversion(wtxn)?;
+                    match builder.prepare_arroy_conversion(wtxn) {
+                        Ok(()) => (),
+                        // When converting from arroy to hannoy we decide to delete stores
+                        // that are corrupted due to misconfigured quantization that results
+                        // in valid embeddings.
+                        Err(hannoy::Error::InvalidVecDimension { .. }) => writer.clear(wtxn)?,
+                        Err(err) => return Err(err.into()),
+                    }
                     builder.build::<HANNOY_M, HANNOY_M0>(wtxn)?;
                 }
 
