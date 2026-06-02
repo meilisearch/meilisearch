@@ -94,6 +94,7 @@ pub enum ErrorKind<'a> {
     InvalidPrimary,
     InvalidEscapedNumber,
     ExpectedEof,
+    Incomplete(nom::Needed),
     ExpectedValue(ExpectedValueKind),
     MalformedValue,
     InOpeningBracket,
@@ -201,6 +202,9 @@ impl Display for Error<'_> {
             }
             ErrorKind::ExpectedEof => {
                 writeln!(f, "Found unexpected characters at the end of the filter: `{}`. You probably forgot an `OR` or an `AND` rule.", escaped_input)?
+            }
+            ErrorKind::Incomplete(needed) => {
+                writeln!(f, "The filter is incomplete and requires {needed:?} additional bytes to be parsed.")?
             }
             ErrorKind::GeoRadius => {
                 writeln!(f, "The `_geoRadius` filter must be in the form: `_geoRadius(latitude, longitude, radius, optionalResolution)`.")?
