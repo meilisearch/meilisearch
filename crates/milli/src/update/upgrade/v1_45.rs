@@ -2,12 +2,11 @@ use std::ops::Not as _;
 
 use heed::RwTxn;
 
+use super::v1_37::ConvertArroyToHannoy;
 use super::UpgradeIndex;
 use crate::update::upgrade::UpgradeParams;
 use crate::vector::{QuantizationStatus, VectorStore};
 use crate::{Index, Result};
-
-use super::v1_37::ConvertArroyToHannoy;
 
 /// Fix the desync of internal Arroy and Hannoy vector stores
 pub(super) struct FixVectorStoreConfig();
@@ -33,7 +32,7 @@ impl UpgradeIndex for FixVectorStoreConfig {
             config.config.quantized = match vector_store.clean_stores(wtxn)? {
                 Some(QuantizationStatus::Quantized) => Some(true),
                 Some(QuantizationStatus::NonQuantized) => Some(false),
-                None => None,
+                None => config.config.quantized,
             };
         }
 
