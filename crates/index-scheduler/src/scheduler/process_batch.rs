@@ -576,7 +576,7 @@ impl IndexScheduler {
         let src_path = index.path().join("data.mdb");
         let pre_size = std::fs::metadata(&src_path)?.len();
 
-        let dst_path = TempPath::from_path(index.path().join(DATA_MDB_COPY_NAME));
+        let dst_path = TempPath::try_from_path(index.path().join(DATA_MDB_COPY_NAME))?;
         let file = File::create(&dst_path)?;
         let mut file = tempfile::NamedTempFile::from_parts(file, dst_path);
 
