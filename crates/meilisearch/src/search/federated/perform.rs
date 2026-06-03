@@ -215,6 +215,7 @@ pub async fn perform_federated_search(
         federation,
         partitioned_queries.local_queries_by_index.len(),
         params.has_remote,
+        show_federation_info,
     );
 
     let mut deadline = Deadline::never();
@@ -242,6 +243,7 @@ pub async fn perform_federated_search(
 
     let SearchByIndex {
         federation,
+        show_federation_info: _,
         mut semantic_hit_count,
         mut results_by_index,
         mut query_vectors,
@@ -1305,6 +1307,7 @@ struct SearchByIndexParams {
 
 struct SearchByIndex {
     federation: Federation,
+    show_federation_info: ShowFederationInfo,
     // During search by index, semantic_hit_count will be set to Some(0) if any search kind uses semantic
     // Then when merging, we'll update its value if there is any semantic hit
     semantic_hit_count: Option<u32>,
@@ -1317,7 +1320,12 @@ struct SearchByIndex {
 }
 
 impl SearchByIndex {
-    fn new(federation: Federation, index_count: usize, has_remote: bool) -> Self {
+    fn new(
+        federation: Federation,
+        index_count: usize,
+        has_remote: bool,
+        show_federation_info: ShowFederationInfo,
+    ) -> Self {
         SearchByIndex {
             facet_order: match (federation.merge_facets, has_remote) {
                 (None, true) => FacetOrder::ByIndex(Default::default()),
@@ -1325,6 +1333,7 @@ impl SearchByIndex {
                 (Some(_), _) => FacetOrder::ByFacet(Default::default()),
             },
             federation,
+            show_federation_info,
             semantic_hit_count: None,
             results_by_index: Vec::with_capacity(index_count),
             query_vectors: BTreeMap::new(),
@@ -1376,7 +1385,9 @@ impl SearchByIndex {
         if let Err(mut error) =
             self.facet_order.check_facet_order(&index_uid, &facets_by_index, &index, &rtxn)
         {
-            error.message = format!("Inside `.federation.facetsByIndex.{index_uid}`: {error}");
+            if self.show_federation_info == ShowFederationInfo::Always {
+                error.message = format!("Inside `.federation.facetsByIndex.{index_uid}`: {error}");
+            }
             return Err((error, first_query_index));
         }
         let mut results_by_query = Vec::with_capacity(queries.len());
@@ -1668,8 +1679,12 @@ impl SearchByIndex {
             })
             .transpose()
             .map_err(|mut error| {
-                error.message =
-                    format!("Inside `.federation.facetsByIndex.{index_uid}`: {}", error.message);
+                if self.show_federation_info == ShowFederationInfo::Always {
+                    error.message = format!(
+                        "Inside `.federation.facetsByIndex.{index_uid}`: {}",
+                        error.message
+                    );
+                }
                 (error, first_query_index)
             })?;
 
@@ -1697,10 +1712,12 @@ impl SearchByIndex {
                     // Patch the HTTP status code to 400 as it defaults to 404 for `index_not_found`, but
                     // here the resource not found is not part of the URL.
                     err.code = StatusCode::BAD_REQUEST;
-                    err.message = format!(
-                        "Inside `.federation.facetsByIndex.{index_uid}`: {}\n - Note: index `{index_uid}` is not used in queries",
-                        err.message
-                    );
+                    if self.show_federation_info == ShowFederationInfo::Always {
+                        err.message = format!(
+                            "Inside `.federation.facetsByIndex.{index_uid}`: {}\n - Note: index `{index_uid}` is not used in queries",
+                            err.message
+                        );
+                    }
                     return Err(err);
                 }
             };
@@ -1711,9 +1728,11 @@ impl SearchByIndex {
             if let Err(mut error) =
                 self.facet_order.check_facet_order(&index_uid, &facets, &index, &rtxn)
             {
-                error.message = format!(
-                    "Inside `.federation.facetsByIndex.{index_uid}`: {error}\n - Note: index `{index_uid}` is not used in queries",
-                );
+                if self.show_federation_info == ShowFederationInfo::Always {
+                    error.message = format!(
+                        "Inside `.federation.facetsByIndex.{index_uid}`: {error}\n - Note: index `{index_uid}` is not used in queries",
+                    );
+                }
                 return Err(error);
             }
 
@@ -1725,10 +1744,12 @@ impl SearchByIndex {
                     Default::default(),
                     super::super::Route::MultiSearch,
                 ) {
-                    error.message = format!(
-                        "Inside `.federation.facetsByIndex.{index_uid}`: {}\n - Note: index `{index_uid}` is not used in queries",
-                        error.message
-                    );
+                    if self.show_federation_info == ShowFederationInfo::Always {
+                        error.message = format!(
+                            "Inside `.federation.facetsByIndex.{index_uid}`: {}\n - Note: index `{index_uid}` is not used in queries",
+                            error.message
+                        );
+                    }
                     return Err(error);
                 }
             }

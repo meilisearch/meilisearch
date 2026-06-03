@@ -539,7 +539,7 @@ async fn remote_sharding_auto_search() {
           "id": "C",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.8317901234567902,
             "remote": "ms1"
           }
@@ -569,7 +569,7 @@ async fn remote_sharding_auto_search() {
           "id": "E",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.5,
             "remote": "ms2"
           }
@@ -579,7 +579,7 @@ async fn remote_sharding_auto_search() {
           "id": "D",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 2,
+            "queriesPosition": 0,
             "weightedRankingScore": 0.23106060606060605,
             "remote": "ms2"
           }
@@ -1218,7 +1218,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
         }))
         .await;
     snapshot!(code, @"200 OK");
-    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".**.weightedRankingScore" => "[score]" }), @r#"
+    snapshot!(json_string!(response, { ".processingTimeMs" => "[time]", ".requestUid" => "[uuid]", ".**.weightedRankingScore" => "[score]" }), @r###"
     {
       "hits": [
         {
@@ -1226,7 +1226,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
           "title": "The Matrix",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": "[score]",
             "remote": "ms1"
           }
@@ -1236,7 +1236,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
           "title": "Superman",
           "_federation": {
             "indexUid": "test",
-            "queriesPosition": 1,
+            "queriesPosition": 0,
             "weightedRankingScore": "[score]",
             "remote": "ms1"
           }
@@ -1250,7 +1250,7 @@ async fn remote_search_pumps_pins_when_organic_results_run_out() {
       "requestUid": "[uuid]",
       "remoteErrors": {}
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -3186,7 +3186,7 @@ async fn error_bad_request_facets_by_index_facet() {
       "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
-          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.queries[1]`: Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\",\"code\":\"invalid_multi_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_multi_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
+          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.queries[1]`: Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\",\"code\":\"invalid_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
           "code": "remote_bad_request",
           "type": "invalid_request",
           "link": "https://docs.meilisearch.com/errors#remote_bad_request"

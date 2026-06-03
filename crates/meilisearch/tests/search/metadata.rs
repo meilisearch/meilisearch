@@ -69,6 +69,7 @@ async fn search_with_metadata_header() {
       "estimatedTotalHits": 1,
       "requestUid": "[uuid]",
       "metadata": {
+        "query": "glass",
         "queryUid": "[uuid]",
         "indexUid": "[uuid]",
         "primaryKey": "id"

@@ -34,7 +34,6 @@ pub struct DocumentSearch {
     pub request_uid: Uuid,
 }
 
-// TODO: don't make a builder but force the manual construction at each search
 impl DocumentSearch {
     pub async fn execute<const P: u8>(
         mut self,

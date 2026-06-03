@@ -884,14 +884,14 @@ async fn vector_filter_all_embedders_user_provided() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n10:22 _vectors.userProvided EXISTS",
+      "message": "Index `[uuid]`: The embedder `userProvided` does not exist. Available embedders are: `rest`.\n_vectors.userProvided EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
