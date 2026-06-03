@@ -6274,7 +6274,10 @@ version = "1.46.1"
 dependencies = [
  "actix-web",
  "routes-macros",
+ "serde_json",
+ "time",
  "utoipa",
+ "uuid",
 ]
 
 [[package]]
