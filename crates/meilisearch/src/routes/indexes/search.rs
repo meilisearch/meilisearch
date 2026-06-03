@@ -18,6 +18,7 @@ use utoipa::IntoParams;
 use uuid::Uuid;
 
 use crate::analytics::Analytics;
+use crate::documents_retrieval::{DocumentSearch, DocumentSearchResult};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::*;
 use crate::extractors::authentication::GuardedData;
@@ -27,9 +28,10 @@ use crate::routes::parse_include_metadata_header;
 use crate::search::{
     add_search_rules, perform_federated_search, perform_search, Federation, HybridQuery,
     MatchingStrategy, NetworkableQuery as _, Partition, Personalize, RankingScoreThreshold,
-    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchResult, SemanticRatio,
-    DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER, DEFAULT_HIGHLIGHT_POST_TAG,
-    DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT, DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
+    RetrieveVectors, SearchKind, SearchParams, SearchQuery, SearchQueryWithIndex, SearchResult,
+    SemanticRatio, ShowFederationInfo, DEFAULT_CROP_LENGTH, DEFAULT_CROP_MARKER,
+    DEFAULT_HIGHLIGHT_POST_TAG, DEFAULT_HIGHLIGHT_PRE_TAG, DEFAULT_SEARCH_LIMIT,
+    DEFAULT_SEARCH_OFFSET, DEFAULT_SEMANTIC_RATIO,
 };
 use crate::search_queue::SearchQueue;
 
@@ -562,17 +564,47 @@ pub async fn search_with_url_query(
 
     let include_metadata = parse_include_metadata_header(&req);
 
-    let search_result = search(
-        query,
-        index_scheduler.clone(),
-        index_uid,
-        request_uid,
-        include_metadata,
-        &progress,
-        &personalization_service,
-        StatusCode::NOT_FOUND,
-    )
-    .await;
+    let use_documents_retrieval = !matches!(std::env::var_os("MEILI_NO_DOCUMENTS_RETRIEVAL"), Some(x) if x != "false" && x != "0");
+    let search_result = if use_documents_retrieval {
+        let is_proxy = false;
+        let document_retrieval = DocumentSearch {
+            request_uid,
+            queries: vec![SearchQueryWithIndex::from_index_query_federation(
+                index_uid.clone(),
+                query,
+                None,
+            )],
+            federation: None,
+            is_proxy,
+            include_metadata,
+        };
+
+        document_retrieval
+            .execute(index_scheduler, &progress)
+            .await
+            .map(|result| {
+                let DocumentSearchResult::Multi(mut search_results) = result else {
+                    unreachable!()
+                };
+
+                search_results.pop().unwrap().result
+            })
+            .map_err(|(err, _)| err)
+    } else {
+        let search_result = search(
+            query,
+            index_scheduler.clone(),
+            index_uid,
+            request_uid,
+            include_metadata,
+            &progress,
+            &personalization_service,
+            StatusCode::NOT_FOUND,
+        )
+        .await;
+
+        search_result
+    };
 
     permit.drop().await;
 
@@ -622,11 +654,20 @@ pub(crate) async fn search(
             false,
             request_uid,
             include_metadata,
+            ShowFederationInfo::OnNetworkOnly,
             progress,
         )
         .await;
 
-        let (search_result, deadline) = search_result?;
+        let (search_result, deadline) = search_result.map_err(|(mut err, query_index)| {
+            // Add the query index that failed as context for the error message.
+            // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+            // of result and we can benefit from static typing.
+            if let Some(query_index) = query_index {
+                err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
+            }
+            err
+        })?;
         let search_result =
             search_result.into_search_result(query.q.unwrap_or_default(), index_uid.as_str());
 
