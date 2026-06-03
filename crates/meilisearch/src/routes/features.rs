@@ -206,6 +206,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
 /// Enable or disable experimental features at runtime.
 #[routes::path(
     security(("Bearer" = ["experimental_features.update", "experimental_features.*", "*"])),
+    request_body = RuntimeTogglableFeatures,
     responses(
         (status = OK, description = "Experimental features are returned.", body = RuntimeTogglableFeatures, content_type = "application/json", example = json!(RuntimeTogglableFeatures {
             metrics: Some(true),

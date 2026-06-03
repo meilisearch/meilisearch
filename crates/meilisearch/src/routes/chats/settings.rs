@@ -86,6 +86,7 @@ pub async fn get_settings(
 /// Update settings of a chat workspace
 #[routes::path(
     security(("Bearer" = ["chats.settings.update", "*"])),
+    request_body = ChatWorkspaceSettings,
     params(
         ("workspace_uid" = String, Path, example = "my-workspace", description = "The unique identifier of the chat workspace.", nullable = false),
     ),
