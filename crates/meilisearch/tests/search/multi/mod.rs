@@ -1010,7 +1010,7 @@ async fn federation_multiple_query_errors() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[0]`: Index `SHARED_DOCUMENTS`: Attribute `color` is not filterable. Available filterable attribute patterns are: `id`, `title`.\n1:6 color = toto",
+      "message": "Inside `.queries[0]`: Index `SHARED_DOCUMENTS`: Attribute `color` is not filterable. Available filterable attribute patterns are: `id`, `title`.\ncolor = toto",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -1057,7 +1057,7 @@ async fn federation_multiple_query_errors_interleaved() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `mother` is not filterable. Available filterable attribute patterns are: `cattos`, `doggos`, `father`.\n1:7 mother IN [intel, kefir]",
+      "message": "Inside `.queries[1]`: Index `SHARED_NESTED_DOCUMENTS`: Attribute `mother` is not filterable. Available filterable attribute patterns are: `cattos`, `doggos`, `father`.\nmother IN [intel, kefir]",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -3552,7 +3552,7 @@ async fn federation_federated_contains_pagination() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `limit` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
+      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `limit` from the query or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
@@ -3568,7 +3568,7 @@ async fn federation_federated_contains_pagination() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `offset` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
+      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `offset` from the query or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
@@ -3584,7 +3584,7 @@ async fn federation_federated_contains_pagination() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `page` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
+      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `page` from the query or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
@@ -3600,7 +3600,7 @@ async fn federation_federated_contains_pagination() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `hitsPerPage` from query #1 or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
+      "message": "Inside `.queries[1]`: Using pagination options is not allowed in federated queries.\n - Hint: remove `hitsPerPage` from the query or remove `federation` from the request\n - Hint: pass `federation.limit` and `federation.offset` for pagination in federated search",
       "code": "invalid_multi_search_query_pagination",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_pagination"
@@ -3685,7 +3685,7 @@ async fn federation_federated_contains_facets() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from query #1 or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.fruits-[uuid]: [\"BOOSTED\"]` for facets in federated search",
+      "message": "Inside `.queries[1]`: Using facet options is not allowed in federated queries.\n - Hint: remove `facets` from the query or remove `federation` from the request\n - Hint: pass `federation.facetsByIndex.fruits-[uuid]: [\"BOOSTED\"]` for facets in federated search",
       "code": "invalid_multi_search_query_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_query_facets"
@@ -3721,7 +3721,7 @@ async fn federation_contains_two_distincts() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.queries[1]`: Using `distinct` options is not allowed in federated queries when it also appears in `.federation.distinct`.\n - Hint: remove `distinct` from query #1 or remove `federation` from the request\n  - Note: `distinct` at the query level is discouraged in federated search.",
+      "message": "Inside `.queries[1]`: Using `distinct` options is not allowed in federated queries when it also appears in `.federation.distinct`.\n - Hint: remove `distinct` from the query or remove `federation` from the request\n  - Note: `distinct` at the query level is discouraged in federated search.",
       "code": "invalid_multi_search_distinct",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_distinct"
@@ -3820,7 +3820,7 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.fruits-no-name-[uuid]`: Invalid facet distribution: Attribute `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.\n - Note: index `fruits-no-name-[uuid]` used in `.queries[1]`",
+      "message": "Inside `.queries[1]`: Inside `.federation.facetsByIndex.fruits-no-name-[uuid]`: Invalid facet distribution: Attribute `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.",
       "code": "invalid_multi_search_facets",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
@@ -3915,7 +3915,7 @@ async fn federation_non_federated_contains_federation_option() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(response, @r###"
     {
-      "message": "Inside `.queries[1]`: Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from query #1 or add `federation` to the request.",
+      "message": "Inside `.queries[1]`: Using `federationOptions` is not allowed in a non-federated search.\n - Hint: remove `federationOptions` from the query or add `federation` to the request.",
       "code": "invalid_multi_search_federation_options",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_federation_options"
@@ -6009,7 +6009,7 @@ async fn federation_inconsistent_merge_order() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Inside `.federation.facetsByIndex.movies_2-[uuid]`: Inconsistent order for values in facet `color`: index `movies-[uuid]` orders alphabetically, but index `movies_2-[uuid]` orders by count.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.\n - Note: index `movies_2-[uuid]` used in `.queries[2]`",
+      "message": "Inside `.queries[2]`: Inside `.federation.facetsByIndex.movies_2-[uuid]`: Inconsistent order for values in facet `color`: index `movies-[uuid]` orders alphabetically, but index `movies_2-[uuid]` orders by count.\n - Hint: Remove `federation.mergeFacets` or change `faceting.sortFacetValuesBy` to be consistent in settings.",
       "code": "invalid_multi_search_facet_order",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facet_order"

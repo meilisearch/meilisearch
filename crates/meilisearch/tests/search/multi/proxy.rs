@@ -27,7 +27,7 @@ async fn error_feature() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Performing a remote federated search requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
+      "message": "Inside `.queries[0]`: Performing a remote federated search requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -49,7 +49,7 @@ async fn error_feature() {
     snapshot!(code, @"400 Bad Request");
     snapshot!(json_string!(response), @r###"
     {
-      "message": "Using `federationOptions.queryPosition` requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
+      "message": "Inside `.queries[0]`: Using `federationOptions.queryPosition` requires enabling the `network` experimental feature. See https://github.com/orgs/meilisearch/discussions/805",
       "code": "feature_not_enabled",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#feature_not_enabled"
@@ -2453,7 +2453,7 @@ async fn error_unregistered_remote() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
     {
-      "message": "Invalid `queries[2].federation_options.remote`: remote `ms2` is not registered",
+      "message": "Inside `.queries[2]`: Invalid `.federation_options.remote`: remote `ms2` is not registered",
       "code": "invalid_multi_search_remote",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_remote"
@@ -2463,7 +2463,7 @@ async fn error_unregistered_remote() {
     snapshot!(code, @"200 OK");
     snapshot!(json_string!(response, { ".processingTimeMs" => "[time]" }), @r###"
     {
-      "message": "Invalid `queries[2].federation_options.remote`: remote `ms2` is not registered",
+      "message": "Inside `.queries[2]`: Invalid `.federation_options.remote`: remote `ms2` is not registered",
       "code": "invalid_multi_search_remote",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_multi_search_remote"
@@ -3186,7 +3186,7 @@ async fn error_bad_request_facets_by_index_facet() {
       "requestUid": "[uuid]",
       "remoteErrors": {
         "ms1": {
-          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\\n - Note: index `test` used in `.queries[1]`\",\"code\":\"invalid_multi_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_multi_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
+          "message": "remote host responded with code 400:\n  - response from remote: {\"message\":\"Inside `.queries[1]`: Inside `.federation.facetsByIndex.test`: Invalid facet distribution: Attribute `id` is not filterable. This index does not have configured filterable attributes.\",\"code\":\"invalid_multi_search_facets\",\"type\":\"invalid_request\",\"link\":\"https://docs.meilisearch.com/errors#invalid_multi_search_facets\"}\n  - hint: check that the remote instance has the correct index configuration for that request\n  - hint: check that the `network` experimental feature is enabled on the remote instance",
           "code": "remote_bad_request",
           "type": "invalid_request",
           "link": "https://docs.meilisearch.com/errors#remote_bad_request"
