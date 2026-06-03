@@ -84,10 +84,12 @@ pub fn routes(attr: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// ## `request_body`
 ///
-/// We only support the parenthesized version of `request_body`, in other words:
+/// `request_body` is proxied to `utoipa::path`, and is also mandatory for handlers with methods POST, PUT or PATCH.
 ///
-/// - ✅ `request_body(content = MyType<WithGenerics>)`
-/// - ❌ `request_body = MyType<WithGenerics>`
+/// The targeted type must implement the `routes::RequestBody` trait (see [`request`] for a macro to implement this trait).
+///
+/// For handlers with methods POST, PUT, or PATCH **that don't have a body**, use `no_request_body`.
+/// Note that bodiless handlers with these methods are discouraged, as a body cannot be added later in a backward-compatible fashion.
 ///
 /// ## method and `path`
 ///
