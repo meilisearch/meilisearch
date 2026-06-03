@@ -111,6 +111,7 @@ async fn search_with_metadata_header_and_primary_key() {
       "estimatedTotalHits": 1,
       "requestUid": "[uuid]",
       "metadata": {
+        "query": "glass",
         "queryUid": "[uuid]",
         "indexUid": "[uuid]",
         "primaryKey": "id"
@@ -230,6 +231,7 @@ async fn multi_search_with_metadata_header() {
           "estimatedTotalHits": 1,
           "requestUid": "[uuid]",
           "metadata": {
+            "query": "glass",
             "queryUid": "[uuid]",
             "indexUid": "[uuid]",
             "primaryKey": "id"
@@ -254,6 +256,7 @@ async fn multi_search_with_metadata_header() {
           "estimatedTotalHits": 1,
           "requestUid": "[uuid]",
           "metadata": {
+            "query": "dragon",
             "queryUid": "[uuid]",
             "indexUid": "[uuid]",
             "primaryKey": "id"
@@ -334,6 +337,7 @@ async fn search_metadata_uuid_format() {
       "estimatedTotalHits": 1,
       "requestUid": "[uuid]",
       "metadata": {
+        "query": "glass",
         "queryUid": "[uuid]",
         "indexUid": "[uuid]",
         "primaryKey": "id"
@@ -377,6 +381,7 @@ async fn search_metadata_consistency_across_requests() {
           "estimatedTotalHits": 1,
           "requestUid": "[uuid]",
           "metadata": {
+            "query": "glass",
             "queryUid": "[uuid]",
             "indexUid": "[uuid]",
             "primaryKey": "id"

@@ -555,11 +555,6 @@ pub async fn search_with_url_query(
 
     let mut query: SearchQuery = params.into_inner().try_into()?;
 
-    // Tenant token search_rules.
-    if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
-        add_search_rules(&mut query.filter, search_rules);
-    }
-
     let mut aggregate = SearchAggregator::<SearchGET>::from_query(&query);
 
     let include_metadata = parse_include_metadata_header(&req);
@@ -592,6 +587,11 @@ pub async fn search_with_url_query(
             })
             .map_err(|(err, _)| err)
     } else {
+        // Tenant token search_rules.
+        if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
+            add_search_rules(&mut query.filter, search_rules);
+        }
+
         let search_result = search(
             query,
             index_scheduler.clone(),
@@ -800,26 +800,54 @@ pub async fn search_with_post(
     let mut query = params.into_inner();
     debug!(request_uid = ?request_uid, parameters = ?query, "Search post");
 
-    // Tenant token search_rules.
-    if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
-        add_search_rules(&mut query.filter, search_rules);
-    }
-
     let mut aggregate = SearchAggregator::<SearchPOST>::from_query(&query);
 
     let include_metadata = parse_include_metadata_header(&req);
+    let use_documents_retrieval = !matches!(std::env::var_os("MEILI_NO_DOCUMENTS_RETRIEVAL"), Some(x) if x != "false" && x != "0");
+    let search_result = if use_documents_retrieval {
+        let is_proxy = false;
+        let document_retrieval = DocumentSearch {
+            request_uid,
+            queries: vec![SearchQueryWithIndex::from_index_query_federation(
+                index_uid.clone(),
+                query,
+                None,
+            )],
+            federation: None,
+            is_proxy,
+            include_metadata,
+            personalization_service: (*personalization_service).clone(),
+        };
 
-    let search_result = search(
-        query,
-        index_scheduler.clone(),
-        index_uid,
-        request_uid,
-        include_metadata,
-        &progress,
-        &personalization_service,
-        StatusCode::NOT_FOUND,
-    )
-    .await;
+        document_retrieval
+            .execute(index_scheduler, &progress)
+            .await
+            .map(|result| {
+                let DocumentSearchResult::Multi(mut search_results) = result else {
+                    unreachable!()
+                };
+
+                search_results.pop().unwrap().result
+            })
+            .map_err(|(err, _)| err)
+    } else {
+        // Tenant token search_rules.
+        if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(&index_uid) {
+            add_search_rules(&mut query.filter, search_rules);
+        }
+
+        search(
+            query,
+            index_scheduler.clone(),
+            index_uid,
+            request_uid,
+            include_metadata,
+            &progress,
+            &personalization_service,
+            StatusCode::NOT_FOUND,
+        )
+        .await
+    };
 
     permit.drop().await;
 

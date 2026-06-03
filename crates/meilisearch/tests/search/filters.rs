@@ -785,7 +785,7 @@ async fn test_filterable_attributes_priority() {
             snapshot!(code, @"400 Bad Request");
             snapshot!(json_string!(response), @r###"
             {
-              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\n1:7 doggos EXISTS",
+              "message": "Index `[uuid]`: Attribute `doggos` is not filterable. Available filterable attribute patterns are: `doggos.*`.\ndoggos EXISTS",
               "code": "invalid_search_filter",
               "type": "invalid_request",
               "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
@@ -862,14 +862,14 @@ async fn vector_filter_nonexistent_embedder() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n10:15 _vectors.other EXISTS",
+      "message": "Index `[uuid]`: The embedder `other` does not exist. Available embedders are: `rest`.\n_vectors.other EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
@@ -1025,14 +1025,14 @@ async fn vector_filter_non_existant_fragment() {
             "attributesToRetrieve": ["name"]
         }))
         .await;
-    snapshot!(value, @r#"
+    snapshot!(value, @r###"
     {
-      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n25:33 _vectors.rest.fragments.withBred EXISTS",
+      "message": "Index `[uuid]`: The fragment `withBred` does not exist on embedder `rest`. Available fragments on this embedder are: `basic`, `withBreed`. Did you mean `withBreed`?\n_vectors.rest.fragments.withBred EXISTS",
       "code": "invalid_search_filter",
       "type": "invalid_request",
       "link": "https://docs.meilisearch.com/errors#invalid_search_filter"
     }
-    "#);
+    "###);
 }
 
 #[actix_rt::test]
