@@ -88,6 +88,23 @@ lazy_static! {
             &["batch_uid", "step_name"]
         )
         .expect("Can't create a metric");
+    pub static ref MEILISEARCH_LAST_INDEXED_DOCUMENTS_COUNT: IntGaugeVec = register_int_gauge_vec!(
+        opts!(
+            "meilisearch_last_indexed_documents_count",
+            "The last number of indexed documents in a batch"
+        ),
+        &["batch_uid", "index"]
+    )
+    .expect("Can't create a metric");
+    pub static ref MEILISEARCH_LAST_INDEXED_DOCUMENTS_DURATION_MS: IntGaugeVec =
+        register_int_gauge_vec!(
+            opts!(
+                "meilisearch_last_indexed_documents_duration_ms",
+                "The duration in ms of the last batch that indexed documents"
+            ),
+            &["batch_uid", "index"]
+        )
+        .expect("Can't create a metric");
     pub static ref MEILISEARCH_LAST_UPDATE: IntGauge =
         register_int_gauge!(opts!("meilisearch_last_update", "Meilisearch Last Update"))
             .expect("Can't create a metric");
