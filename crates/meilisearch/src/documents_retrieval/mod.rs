@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use actix_web::web::Data;
 use index_scheduler::IndexScheduler;
 use meilisearch_types::{error::ResponseError, milli::progress::Progress};
@@ -6,6 +8,7 @@ use uuid::Uuid;
 use crate::{
     error::MeilisearchHttpError,
     extractors::authentication::{policies::ActionPolicy, AuthenticationError, GuardedData},
+    personalization::PersonalizationService,
     search::{
         add_search_rules, perform_federated_search, FederatedSearchResult, Federation,
         SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
@@ -25,6 +28,7 @@ pub trait DocumentRetrieval {
 pub struct DocumentSearch {
     pub queries: Vec<SearchQueryWithIndex>,
     pub federation: Option<Federation>,
+    pub personalization_service: Arc<PersonalizationService>,
     pub is_proxy: bool,
     pub include_metadata: bool,
     pub request_uid: Uuid,
@@ -68,6 +72,7 @@ impl DocumentSearch {
                 self.request_uid,
                 self.include_metadata,
                 ShowFederationInfo::Always,
+                &self.personalization_service,
                 progress,
             )
             .await?;
@@ -97,6 +102,7 @@ impl DocumentSearch {
                     self.request_uid,
                     self.include_metadata,
                     ShowFederationInfo::OnNetworkOnly,
+                    &self.personalization_service,
                     progress,
                 )
                 .await
@@ -155,7 +161,7 @@ fn fixup_query_federation(query: &SearchQueryWithIndex) -> (SearchQueryWithIndex
         attributes_to_search_on: _,
         ranking_score_threshold: _,
         locales: _,
-        personalize: _,
+        personalize,
         federation_options: _,
     } = &mut query;
 
@@ -169,6 +175,7 @@ fn fixup_query_federation(query: &SearchQueryWithIndex) -> (SearchQueryWithIndex
         merge_facets: _,
         show_performance_details: federation_show_performance_details,
         distinct: federation_distinct,
+        personalize: federation_personalize,
     } = &mut federation;
 
     if let Some(limit) = limit.take() {
@@ -189,6 +196,10 @@ fn fixup_query_federation(query: &SearchQueryWithIndex) -> (SearchQueryWithIndex
 
     if let Some(show_performance_details) = show_performance_details.take() {
         *federation_show_performance_details = show_performance_details;
+    }
+
+    if let Some(personalize) = personalize.take() {
+        *federation_personalize = Some(personalize);
     }
 
     'facets: {

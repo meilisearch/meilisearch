@@ -46,6 +46,7 @@ use super::types::{
 use super::weighted_scores;
 use crate::documents_retrieval::WithIndex;
 use crate::error::MeilisearchHttpError;
+use crate::personalization::PersonalizationService;
 use crate::routes::indexes::search::search_kind;
 use crate::search::federated::types::{
     FEDERATION_EXTRA_DOCUMENT, INDEX_UID, QUERIES_POSITION, WEIGHTED_RANKING_SCORE,
@@ -65,6 +66,7 @@ pub async fn perform_federated_search(
     request_uid: Uuid,
     include_metadata: bool,
     show_federation_info: ShowFederationInfo,
+    personalization_service: &PersonalizationService,
     progress: &Progress,
 ) -> Result<(FederatedSearchResult, Deadline), (ResponseError, Option<usize>)> {
     if is_proxy {
@@ -94,7 +96,7 @@ pub async fn perform_federated_search(
     let dynamic_search_rules = index_scheduler.dynamic_search_rules();
 
     // Preconstruct metadata keeping the original queries order for later metadata building
-    let precomputed_query_metadata: Option<Vec<_>> = include_metadata.then(|| {
+    let precomputed_query_metadata: Vec<_> = {
         queries
             .iter()
             .map(|q| {
@@ -105,7 +107,7 @@ pub async fn perform_federated_search(
                 )
             })
             .collect()
-    });
+    };
 
     // Document join: list of indexes in the order of the queries
     // only create the hydration cache if the foreign keys feature is enabled
@@ -258,7 +260,7 @@ pub async fn perform_federated_search(
     // 3. merge hits and metadata across indexes and hosts
     progress.update_progress(FederatingResultsStep::MergeResults);
     // 3.1. Build metadata in the same order as the original queries
-    let query_metadata = precomputed_query_metadata.map(|precomputed_query_metadata| {
+    let query_metadata = {
         // If a remote is present, set the local remote name
         let local_remote_name = network.local.clone().filter(|_| partitioned_queries.has_remote);
 
@@ -268,7 +270,7 @@ pub async fn perform_federated_search(
             &remote_results,
             &results_by_index,
         )
-    });
+    };
 
     // 3.2. merge federation metadata
     let (mut hit_number, degraded, used_negative_operator, facets, max_remote_duration) =
@@ -370,6 +372,22 @@ pub async fn perform_federated_search(
         drop(hit_it);
     }
 
+    // Run personalization before merging pinned hits
+    if let Some(personalize) = federation.personalize.as_ref() {
+        // Merge queries into a single string to pass to the personalization service
+        let query = query_metadata.iter().filter_map(|metadata| metadata.query.as_ref()).join(", ");
+        merged_hits = personalization_service
+            .rerank_search_results(
+                std::mem::take(&mut merged_hits),
+                personalize,
+                Some(&query),
+                &deadline,
+                progress,
+            )
+            .await
+            .without_index()?;
+    }
+
     merged_hits = merge_pinned_hits_into_page(pins, skip, take, merged_hits);
 
     // 3.3.1. hydrate documents based on the hydration points
@@ -467,7 +485,7 @@ pub async fn perform_federated_search(
             facets_by_index,
             remote_errors,
             request_uid: Some(request_uid),
-            metadata: query_metadata,
+            metadata: include_metadata.then_some(query_metadata),
             performance_details,
         },
         deadline,

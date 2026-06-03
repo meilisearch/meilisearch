@@ -539,7 +539,7 @@ pub fn fix_sort_query_parameters(sort_query: &str) -> Vec<String> {
 pub async fn search_with_url_query(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: web::Data<SearchQueue>,
-    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    personalization_service: web::Data<PersonalizationService>,
     index_uid: web::Path<String>,
     params: AwebQueryParameter<SearchQueryGet, DeserrQueryParamError>,
     req: HttpRequest,
@@ -577,6 +577,7 @@ pub async fn search_with_url_query(
             federation: None,
             is_proxy,
             include_metadata,
+            personalization_service: (*personalization_service).clone(),
         };
 
         document_retrieval
@@ -655,6 +656,7 @@ pub(crate) async fn search(
             request_uid,
             include_metadata,
             ShowFederationInfo::OnNetworkOnly,
+            service,
             progress,
         )
         .await;
@@ -714,7 +716,7 @@ pub(crate) async fn search(
                 std::mem::take(&mut search_result.hits),
                 &personalize,
                 personalize_query.as_deref(),
-                deadline,
+                &deadline,
                 progress,
             )
             .await?;

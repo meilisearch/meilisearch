@@ -19,6 +19,7 @@ use crate::documents_retrieval::{DocumentSearch, DocumentSearchResult};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
+use crate::personalization::PersonalizationService;
 use crate::routes::parse_include_metadata_header;
 use crate::search::proxy::{PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE};
 use crate::search::{
@@ -145,7 +146,7 @@ pub struct SearchResults {
 pub async fn multi_search_with_post(
     index_scheduler: GuardedData<ActionPolicy<{ actions::SEARCH }>, Data<IndexScheduler>>,
     search_queue: Data<SearchQueue>,
-    personalization_service: web::Data<crate::personalization::PersonalizationService>,
+    personalization_service: Data<PersonalizationService>,
     params: AwebJson<FederatedSearch, DeserrJsonError>,
     req: HttpRequest,
     analytics: web::Data<Analytics>,
@@ -175,8 +176,14 @@ pub async fn multi_search_with_post(
     let use_documents_retrieval = !matches!(std::env::var_os("MEILI_NO_DOCUMENTS_RETRIEVAL"), Some(x) if x != "false" && x != "0");
 
     let response = if use_documents_retrieval {
-        let document_retrieval =
-            DocumentSearch { request_uid, queries, federation, is_proxy, include_metadata };
+        let document_retrieval = DocumentSearch {
+            request_uid,
+            queries,
+            federation,
+            is_proxy,
+            include_metadata,
+            personalization_service: (*personalization_service).clone(),
+        };
 
         let search_results = document_retrieval.execute(index_scheduler, &progress).await;
 
@@ -251,6 +258,7 @@ pub async fn multi_search_with_post(
                     request_uid,
                     include_metadata,
                     ShowFederationInfo::Always,
+                    &personalization_service,
                     &progress,
                 )
                 .await;
