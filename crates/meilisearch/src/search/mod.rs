@@ -1900,7 +1900,7 @@ pub fn perform_search(
     let (facet_distribution, facet_stats) = facets
         .map(move |facets| {
             let _step = progress.update_progress_scoped(SearchStep::FacetDistribution);
-            compute_facet_distribution_stats(&facets, index, &rtxn, candidates, Route::Search)
+            compute_facet_distribution_stats(&facets, index, &rtxn, candidates)
         })
         .transpose()?
         .map(|ComputedFacets { distribution, stats }| (distribution, stats))
@@ -2000,7 +2000,6 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
     index: &Index,
     rtxn: &RoTxn,
     candidates: roaring::RoaringBitmap,
-    route: Route,
 ) -> Result<ComputedFacets, ResponseError> {
     let mut facet_distribution = index.facets_distribution(rtxn);
 
@@ -2024,16 +2023,7 @@ fn compute_facet_distribution_stats<S: AsRef<str>>(
     let distribution = facet_distribution
         .candidates(candidates)
         .default_order_by(sort_facet_values_by.get("*"))
-        .execute()
-        .map_err(|error| match (error, route) {
-            (
-                error @ milli::Error::UserError(milli::UserError::InvalidFacetsDistribution {
-                    ..
-                }),
-                Route::MultiSearch,
-            ) => ResponseError::from_msg(error.to_string(), Code::InvalidMultiSearchFacets),
-            (error, _) => error.into(),
-        })?;
+        .execute()?;
     let stats = facet_distribution.compute_stats()?;
     let stats = stats.into_iter().map(|(k, (min, max))| (k, FacetStats { min, max })).collect();
     Ok(ComputedFacets { distribution, stats })

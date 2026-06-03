@@ -3821,9 +3821,9 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Inside `.queries[1]`: Inside `.federation.facetsByIndex.fruits-no-name-[uuid]`: Invalid facet distribution: Attribute `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.",
-      "code": "invalid_multi_search_facets",
+      "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
     }
     "###);
 
@@ -3843,9 +3843,9 @@ async fn federation_non_faceted_for_an_index() {
     snapshot!(json_string!(response), @r###"
     {
       "message": "Inside `.federation.facetsByIndex.fruits-no-name-[uuid]`: Invalid facet distribution: Attribute `name` is not filterable. Available filterable attributes patterns are: `BOOST, id`.\n - Note: index `fruits-no-name-[uuid]` is not used in queries",
-      "code": "invalid_multi_search_facets",
+      "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
     }
     "###);
 
@@ -3863,14 +3863,14 @@ async fn federation_non_faceted_for_an_index() {
         ]}))
         .await;
     snapshot!(code, @"400 Bad Request");
-    snapshot!(json_string!(response), @r#"
+    snapshot!(json_string!(response), @r###"
     {
       "message": "Inside `.federation.facetsByIndex.fruits-no-facets-[uuid]`: Invalid facet distribution: Attributes `BOOST, id` are not filterable. This index does not have configured filterable attributes.\n - Note: index `fruits-no-facets-[uuid]` is not used in queries",
-      "code": "invalid_multi_search_facets",
+      "code": "invalid_search_facets",
       "type": "invalid_request",
-      "link": "https://docs.meilisearch.com/errors#invalid_multi_search_facets"
+      "link": "https://docs.meilisearch.com/errors#invalid_search_facets"
     }
-    "#);
+    "###);
 
     // also fails
     let (response, code) = server
