@@ -21,6 +21,12 @@ use crate::{CboRoaringBitmapCodec, FieldId, Index};
 /// The function will generate all the group levels from
 /// the group 1 to the level n until the number of group
 /// is smaller than the minimum required size.
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::post_processing::facet_bulk",
+    fields(%field_id, ?facet_type)
+)]
 pub fn generate_facet_levels(
     index: &Index,
     wtxn: &mut RwTxn,
@@ -69,6 +75,12 @@ pub fn generate_facet_levels(
 
 /// Compute the groups of facets from the provided base level
 /// and write the content into different grenad files.
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::post_processing::facet_bulk",
+    fields(%field_id, %base_level)
+)]
 fn compute_level(
     wtxn: &heed::RwTxn,
     db: Database<FacetGroupKeyCodec<BytesRefCodec>, LazyDecode<FacetGroupValueCodec>>,
@@ -151,6 +163,12 @@ fn compute_level(
 }
 
 /// Clears all the levels and only keeps the level 0 of the specified field id.
+#[tracing::instrument(
+    level = "trace",
+    skip_all,
+    target = "indexing::post_processing::facet_bulk",
+    fields(%field_id)
+)]
 fn clear_levels(
     db: Database<FacetGroupKeyCodec<BytesRefCodec>, LazyDecode<FacetGroupValueCodec>>,
     wtxn: &mut RwTxn<'_>,
