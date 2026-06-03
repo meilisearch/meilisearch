@@ -9,7 +9,7 @@ pub trait Routes: utoipa::OpenApi {
     fn configure(cfg: &mut actix_web::web::ServiceConfig);
 }
 
-pub use routes_macros::{path, routes};
+pub use routes_macros::{path, request, routes};
 
 #[diagnostic::on_unimplemented(
     message = "use #[routes::path] on the handler function to implement this trait"

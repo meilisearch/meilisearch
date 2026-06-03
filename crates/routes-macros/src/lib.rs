@@ -1,8 +1,10 @@
 mod path;
+mod request;
 mod routes;
 
 use path::try_path;
 use proc_macro::TokenStream;
+use request::try_request;
 use routes::try_routes;
 
 /// Configure routes and implement `utoipa::OpenApi` and `routes::Routes` for this struct.
@@ -102,6 +104,50 @@ pub fn routes(attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
     match try_path(attr, item) {
+        Ok(stream) => stream,
+        Err(diag) => diag.emit_as_item_tokens().into(),
+    }
+}
+
+/// Configure a type to be used as a Meilisearch request type, wrapping deserr, serde and utoipa ToSchema.
+///
+/// Applying this macro to the struct or enum used as the `request_body` type for PATCH/PUT/POST handlers is mandatory.
+///
+/// By default, this macro has the following effects:
+///
+/// - Derives deserr with `error = DeserrJsonError`, `deny_unknown_fields` and `rename_all = camelCase`
+/// - Derives ToSchema with `rename_all = "camelCase"`
+///
+/// Additionally, each parameter must specify its error code, whether it is default or required
+///
+/// # Item parameters
+///
+/// ## `sharded`
+///
+/// Set to `true` if the request body is used in sharding. This will make the type `serde::Serialize`, so that sharding code
+/// can send these types easily.
+///
+/// Additionally, a `serde` attribute will be applied to the item, with `rename_all = "camelCase"` and `deny_unknown_fields`.
+///
+/// Optional. Defaults to `false`.
+///
+/// # Variant parameters
+///
+/// # Field parameters
+///
+/// ## `default`
+///
+/// Forwarded to `deserr`. If provided, then the field is optional and assumes its default value, or a specified default value according
+/// to the syntax supported by `deserr`.
+///
+/// Exactly one of `default` or `required` must be present for each field.
+///
+/// ## `required`
+///
+/// If provided, then the field is mandatory and assumes no default value.
+#[proc_macro_attribute]
+pub fn request(attr: TokenStream, item: TokenStream) -> TokenStream {
+    match try_request(attr, item) {
         Ok(stream) => stream,
         Err(diag) => diag.emit_as_item_tokens().into(),
     }
