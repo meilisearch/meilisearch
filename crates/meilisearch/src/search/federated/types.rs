@@ -464,3 +464,9 @@ impl FederatedFacets {
         }
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShowFederationInfo {
+    OnNetworkOnly,
+    Always,
+}

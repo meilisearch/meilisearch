@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 use super::multi_search_analytics::MultiSearchAggregator;
 use crate::analytics::Analytics;
+use crate::documents_retrieval::{DocumentSearch, DocumentSearchResult};
 use crate::error::MeilisearchHttpError;
 use crate::extractors::authentication::policies::ActionPolicy;
 use crate::extractors::authentication::{AuthenticationError, GuardedData};
@@ -22,7 +23,7 @@ use crate::routes::parse_include_metadata_header;
 use crate::search::proxy::{PROXY_SEARCH_HEADER, PROXY_SEARCH_HEADER_VALUE};
 use crate::search::{
     add_search_rules, perform_federated_search, FederatedSearch, FederatedSearchResult,
-    SearchQueryWithIndex, SearchResultWithIndex,
+    SearchQueryWithIndex, SearchResultWithIndex, ShowFederationInfo,
 };
 use crate::search_queue::SearchQueue;
 
@@ -163,150 +164,192 @@ pub async fn multi_search_with_post(
 
     let FederatedSearch { mut queries, federation } = federated_search;
 
-    let features = index_scheduler.features();
-
-    // regardless of federation, check authorization and apply search rules
-    let auth = 'check_authorization: {
-        for (query_index, federated_query) in queries.iter_mut().enumerate() {
-            let index_uid = federated_query.index_uid.as_str();
-            // Check index from API key
-            if !index_scheduler.filters().is_index_authorized(index_uid) {
-                break 'check_authorization Err(AuthenticationError::InvalidToken)
-                    .with_index(query_index);
-            }
-            // Apply search rules from tenant token
-            if let Some(search_rules) = index_scheduler.filters().get_index_search_rules(index_uid)
-            {
-                add_search_rules(&mut federated_query.filter, search_rules);
-            }
-        }
-        Ok(())
-    };
-
-    auth.map_err(|(mut err, query_index)| {
-        // Add the query index that failed as context for the error message.
-        // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
-        // of result and we can benefit from static typing.
-        err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
-        err
-    })?;
+    // check remote header
+    let is_proxy = req
+        .headers()
+        .get(PROXY_SEARCH_HEADER)
+        .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
 
     let include_metadata = parse_include_metadata_header(&req);
-    let response = match federation {
-        Some(federation) => {
-            debug!(
-                request_uid = ?request_uid,
-                federation = ?federation,
-                parameters = ?queries,
-                "Federated-search"
-            );
 
-            // check remote header
-            let is_proxy = req
-                .headers()
-                .get(PROXY_SEARCH_HEADER)
-                .is_some_and(|value| value.as_bytes() == PROXY_SEARCH_HEADER_VALUE.as_bytes());
-            let search_result = perform_federated_search(
-                index_scheduler.clone(),
-                queries,
-                federation,
-                features,
-                is_proxy,
-                request_uid,
-                include_metadata,
-                &progress,
-            )
-            .await;
-            permit.drop().await;
+    let use_documents_retrieval = !matches!(std::env::var_os("MEILI_NO_DOCUMENTS_RETRIEVAL"), Some(x) if x != "false" && x != "0");
 
-            if search_result.is_ok() {
-                multi_aggregate.succeed();
-            }
+    let response = if use_documents_retrieval {
+        let document_retrieval =
+            DocumentSearch { request_uid, queries, federation, is_proxy, include_metadata };
 
-            analytics.publish(multi_aggregate, &req);
+        let search_results = document_retrieval.execute(index_scheduler, &progress).await;
 
-            debug!(
-                request_uid = ?request_uid,
-                returns = ?search_result,
-                progress = ?progress.accumulated_durations(),
-                "Federated-search"
-            );
-
-            let (search_result, _) = search_result?;
-            HttpResponse::Ok().json(search_result)
+        if search_results.is_ok() {
+            multi_aggregate.succeed();
         }
-        None => {
-            // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
-            // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
-            // changes.
-            let search_results: Result<_, (ResponseError, usize)> = async {
-                let mut search_results = Vec::with_capacity(queries.len());
-                for (query_index, (index_uid, query, federation_options)) in queries
-                    .into_iter()
-                    .map(SearchQueryWithIndex::into_index_query_federation)
-                    .enumerate()
-                {
-                    debug!(
-                        request_uid = ?request_uid,
-                        on_index = query_index,
-                        parameters = ?query,
-                        "Multi-search"
-                    );
 
-                    if federation_options.is_some() {
-                        return Err((
-                            MeilisearchHttpError::FederationOptionsInNonFederatedRequest(
-                                query_index,
-                            )
-                            .into(),
-                            query_index,
-                        ));
-                    }
+        permit.drop().await;
+        analytics.publish(multi_aggregate, &req);
 
-                    let search_result = crate::routes::indexes::search::search(
-                        query,
-                        index_scheduler.clone(),
-                        index_uid.clone(),
-                        request_uid,
-                        include_metadata,
-                        &progress,
-                        &personalization_service,
-                        StatusCode::BAD_REQUEST,
-                    )
-                    .await
-                    .with_index(query_index)?;
-
-                    search_results.push(SearchResultWithIndex {
-                        index_uid: index_uid.into_inner(),
-                        result: search_result,
-                    });
-                }
-                Ok(search_results)
-            }
-            .await;
-            permit.drop().await;
-
-            if search_results.is_ok() {
-                multi_aggregate.succeed();
-            }
-            analytics.publish(multi_aggregate, &req);
-
-            let search_results = search_results.map_err(|(mut err, query_index)| {
-                // Add the query index that failed as context for the error message.
-                // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
-                // of result and we can benefit from static typing.
+        let search_results = search_results.map_err(|(mut err, query_index)| {
+            // Add the query index that failed as context for the error message.
+            // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+            // of result and we can benefit from static typing.
+            if let Some(query_index) = query_index {
                 err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
-                err
-            })?;
+            }
+            err
+        })?;
 
-            debug!(
-                request_uid = ?request_uid,
-                returns = ?search_results,
-                progress = ?progress.accumulated_durations(),
-                "Multi-search"
-            );
+        match search_results {
+            DocumentSearchResult::Federated(search_result) => {
+                HttpResponse::Ok().json(search_result)
+            }
+            DocumentSearchResult::Multi(search_results) => {
+                HttpResponse::Ok().json(SearchResults { results: search_results })
+            }
+        }
+    } else {
+        let auth_filter = index_scheduler.filters();
+        // regardless of federation, check authorization and apply search rules
+        let auth = 'check_authorization: {
+            for (query_index, federated_query) in queries.iter_mut().enumerate() {
+                let index_uid = federated_query.index_uid.as_str();
+                // Check index from API key
+                if !auth_filter.is_index_authorized(index_uid) {
+                    break 'check_authorization Err(AuthenticationError::InvalidToken)
+                        .with_index(query_index);
+                }
+                // Apply search rules from tenant token
+                if let Some(search_rules) = auth_filter.get_index_search_rules(index_uid) {
+                    add_search_rules(&mut federated_query.filter, search_rules);
+                }
+            }
+            Ok(())
+        };
 
-            HttpResponse::Ok().json(SearchResults { results: search_results })
+        auth.map_err(|(mut err, query_index)| {
+            // Add the query index that failed as context for the error message.
+            // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+            // of result and we can benefit from static typing.
+            err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
+            err
+        })?;
+
+        let features = index_scheduler.features();
+        match federation {
+            Some(federation) => {
+                debug!(
+                    request_uid = ?request_uid,
+                    federation = ?federation,
+                    parameters = ?queries,
+                    "Federated-search"
+                );
+
+                let search_result = perform_federated_search(
+                    index_scheduler.clone(),
+                    queries,
+                    federation,
+                    features,
+                    is_proxy,
+                    request_uid,
+                    include_metadata,
+                    ShowFederationInfo::Always,
+                    &progress,
+                )
+                .await;
+                permit.drop().await;
+
+                if search_result.is_ok() {
+                    multi_aggregate.succeed();
+                }
+
+                analytics.publish(multi_aggregate, &req);
+
+                debug!(
+                    request_uid = ?request_uid,
+                    returns = ?search_result,
+                    progress = ?progress.accumulated_durations(),
+                    "Federated-search"
+                );
+
+                let (search_result, _) = search_result.map_err(|(mut err, query_index)| {
+                    // Add the query index that failed as context for the error message.
+                    // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+                    // of result and we can benefit from static typing.
+                    if let Some(query_index) = query_index {
+                        err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
+                    }
+                    err
+                })?;
+                HttpResponse::Ok().json(search_result)
+            }
+            None => {
+                // Explicitly expect a `(ResponseError, usize)` for the error type rather than `ResponseError` only,
+                // so that `?` doesn't work if it doesn't use `with_index`, ensuring that it is not forgotten in case of code
+                // changes.
+                let search_results: Result<_, (ResponseError, usize)> = async {
+                    let mut search_results = Vec::with_capacity(queries.len());
+                    for (query_index, (index_uid, query, federation_options)) in queries
+                        .into_iter()
+                        .map(SearchQueryWithIndex::into_index_query_federation)
+                        .enumerate()
+                    {
+                        debug!(
+                            request_uid = ?request_uid,
+                            on_index = query_index,
+                            parameters = ?query,
+                            "Multi-search"
+                        );
+
+                        if federation_options.is_some() {
+                            return Err((
+                                MeilisearchHttpError::FederationOptionsInNonFederatedRequest.into(),
+                                query_index,
+                            ));
+                        }
+
+                        let search_result = crate::routes::indexes::search::search(
+                            query,
+                            index_scheduler.clone(),
+                            index_uid.clone(),
+                            request_uid,
+                            include_metadata,
+                            &progress,
+                            &personalization_service,
+                            StatusCode::BAD_REQUEST,
+                        )
+                        .await
+                        .with_index(query_index)?;
+
+                        search_results.push(SearchResultWithIndex {
+                            index_uid: index_uid.into_inner(),
+                            result: search_result,
+                        });
+                    }
+                    Ok(search_results)
+                }
+                .await;
+                permit.drop().await;
+
+                if search_results.is_ok() {
+                    multi_aggregate.succeed();
+                }
+                analytics.publish(multi_aggregate, &req);
+
+                let search_results = search_results.map_err(|(mut err, query_index)| {
+                    // Add the query index that failed as context for the error message.
+                    // We're doing it only here and not directly in the `WithIndex` trait so that the `with_index` function returns a different type
+                    // of result and we can benefit from static typing.
+                    err.message = format!("Inside `.queries[{query_index}]`: {}", err.message);
+                    err
+                })?;
+
+                debug!(
+                    request_uid = ?request_uid,
+                    returns = ?search_results,
+                    progress = ?progress.accumulated_durations(),
+                    "Multi-search"
+                );
+
+                HttpResponse::Ok().json(SearchResults { results: search_results })
+            }
         }
     };
 
