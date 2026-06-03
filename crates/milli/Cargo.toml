@@ -23,8 +23,7 @@ cellulite = "0.3.2"
 concat-arrays = "0.1.2"
 convert_case = "0.9.0"
 crossbeam-channel = "0.5.15"
-# for compatibility with the ureq of hf-hub
-danger-ureq = { package = "ureq", version = "2.12.1", features = ["json"] }
+ureq = { version = "3.3.0", features = ["json"] }
 deserr = "0.6.4"
 either = { version = "1.15.0", features = ["serde"] }
 flatten-serde-json = { path = "../flatten-serde-json" }
@@ -80,9 +79,7 @@ candle-nn = { version = "0.9.1" }
 tokenizers = { version = "0.22.1", default-features = false, features = [
     "onig",
 ] }
-hf-hub = { git = "https://github.com/dureuill/hf-hub.git", branch = "rust_tls", default-features = false, features = [
-    "online",
-] }
+hf-hub = { version = "0.5.0", default-features = false, features = ["ureq"] }
 safetensors = "0.6.2"
 tiktoken-rs = "0.9.1"
 liquid = "0.26.11"
