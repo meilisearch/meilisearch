@@ -625,8 +625,12 @@ checksum = "55248b47b0caf0546f7988906588779981c43bb1bc9d0c44087278f80cdb44ba"
 
 [[package]]
 name = "bbqueue"
-version = "0.5.1"
-source = "git+https://github.com/meilisearch/bbqueue#e8af4a4bccc8eb36b2b0442c4a9c5cb839d1cea2"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68917624e17aad88607cb5a5936f6da9b607c48c711e4e9ed101e7189aed28c2"
+dependencies = [
+ "const-init",
+]
 
 [[package]]
 name = "big_s"
@@ -1318,6 +1322,12 @@ dependencies = [
  "unicode-width",
  "windows-sys 0.59.0",
 ]
+
+[[package]]
+name = "const-init"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bd422bfb4f24a97243f60b6a4443e63d810c925d8da4bb2d8fde26a7c1d57ec"
 
 [[package]]
 name = "const-oid"
