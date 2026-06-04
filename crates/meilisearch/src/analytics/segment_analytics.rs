@@ -214,6 +214,7 @@ struct Infos {
     experimental_no_edition_2024_for_settings: bool,
     experimental_foreign_keys: bool,
     experimental_queue_documents_fetch: bool,
+    experimental_legacy_search: bool,
     experimental_personalization: bool,
     experimental_allowed_ip_networks: bool,
     gpu_enabled: bool,
@@ -326,6 +327,7 @@ impl Infos {
             multimodal,
             foreign_keys,
             queue_documents_fetch,
+            legacy_search,
         } = features;
 
         // We're going to override every sensible information.
@@ -356,6 +358,7 @@ impl Infos {
             experimental_allowed_ip_networks: !experimental_allowed_ip_networks.is_empty(),
             experimental_foreign_keys: foreign_keys,
             experimental_queue_documents_fetch: queue_documents_fetch,
+            experimental_legacy_search: legacy_search,
             gpu_enabled: meilisearch_types::milli::vector::is_cuda_enabled(),
             db_path: db_path != Path::new("./data.ms"),
             import_dump: import_dump.is_some(),

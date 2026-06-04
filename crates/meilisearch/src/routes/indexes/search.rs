@@ -545,7 +545,7 @@ pub async fn search_with_url_query(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let use_documents_retrieval = !matches!(std::env::var_os("MEILI_NO_DOCUMENTS_RETRIEVAL"), Some(x) if x != "false" && x != "0");
+    let use_documents_retrieval = !index_scheduler.features().runtime_features().legacy_search;
     if use_documents_retrieval {
         let request_uid = Uuid::now_v7();
         debug!(request_uid = ?request_uid, parameters = ?params, "Search get");
@@ -834,7 +834,7 @@ pub async fn search_with_post(
     req: HttpRequest,
     analytics: web::Data<Analytics>,
 ) -> Result<HttpResponse, ResponseError> {
-    let use_documents_retrieval = !matches!(std::env::var_os("MEILI_NO_DOCUMENTS_RETRIEVAL"), Some(x) if x != "false" && x != "0");
+    let use_documents_retrieval = !index_scheduler.features().runtime_features().legacy_search;
     if use_documents_retrieval {
         let index_uid = IndexUid::try_from(index_uid.into_inner())?;
         let request_uid = Uuid::now_v7();

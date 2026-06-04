@@ -46,6 +46,7 @@ pub struct ExperimentalFeaturesApi;
             multimodal: Some(false),
             foreign_keys: Some(false),
             queue_documents_fetch: Some(false),
+            legacy_search: Some(false),
         })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -114,6 +115,9 @@ pub struct RuntimeTogglableFeatures {
     /// Enable queue documents fetch
     #[request(default)]
     pub queue_documents_fetch: Option<bool>,
+    /// Enable legacy search pipeline
+    #[deserr(default)]
+    pub legacy_search: Option<bool>,
 }
 
 impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogglableFeatures {
@@ -132,6 +136,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             multimodal,
             foreign_keys,
             queue_documents_fetch,
+            legacy_search,
         } = value;
 
         Self {
@@ -148,6 +153,7 @@ impl From<meilisearch_types::features::RuntimeTogglableFeatures> for RuntimeTogg
             multimodal: Some(multimodal),
             foreign_keys: Some(foreign_keys),
             queue_documents_fetch: Some(queue_documents_fetch),
+            legacy_search: Some(legacy_search),
         }
     }
 }
@@ -167,6 +173,7 @@ pub struct PatchExperimentalFeatureAnalytics {
     multimodal: bool,
     foreign_keys: bool,
     queue_documents_fetch: bool,
+    legacy_search: bool,
 }
 
 impl Aggregate for PatchExperimentalFeatureAnalytics {
@@ -189,6 +196,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             multimodal: new.multimodal,
             foreign_keys: new.foreign_keys,
             queue_documents_fetch: new.queue_documents_fetch,
+            legacy_search: new.legacy_search,
         })
     }
 
@@ -218,6 +226,7 @@ impl Aggregate for PatchExperimentalFeatureAnalytics {
             multimodal: Some(false),
             foreign_keys: Some(false),
             queue_documents_fetch: Some(false),
+            legacy_search: Some(false),
          })),
         (status = 401, description = "The authorization header is missing.", body = ResponseError, content_type = "application/json", example = json!(
             {
@@ -274,6 +283,7 @@ async fn patch_features(
             .0
             .queue_documents_fetch
             .unwrap_or(old_features.queue_documents_fetch),
+        legacy_search: new_features.0.legacy_search.unwrap_or(old_features.legacy_search),
     };
 
     // explicitly destructure for analytics rather than using the `Serialize` implementation, because
@@ -293,6 +303,7 @@ async fn patch_features(
         multimodal,
         foreign_keys,
         queue_documents_fetch,
+        legacy_search,
     } = new_features;
 
     analytics.publish(
@@ -310,6 +321,7 @@ async fn patch_features(
             multimodal,
             foreign_keys,
             queue_documents_fetch,
+            legacy_search,
         },
         &req,
     );

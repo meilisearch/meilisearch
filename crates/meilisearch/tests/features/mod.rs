@@ -31,6 +31,7 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "queueDocumentsFetch": false
+      "legacySearch": false
     }
     "###);
 
@@ -52,6 +53,7 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "queueDocumentsFetch": false
+      "legacySearch": false
     }
     "###);
 
@@ -73,6 +75,7 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "queueDocumentsFetch": false
+      "legacySearch": false
     }
     "###);
 
@@ -95,6 +98,7 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "queueDocumentsFetch": false
+      "legacySearch": false
     }
     "###);
 
@@ -117,6 +121,7 @@ async fn experimental_features() {
       "multimodal": false,
       "foreignKeys": false,
       "queueDocumentsFetch": false
+      "legacySearch": false
     }
     "###);
 }
@@ -146,6 +151,7 @@ async fn experimental_feature_metrics() {
       "multimodal": false,
       "foreignKeys": false,
       "queueDocumentsFetch": false
+      "legacySearch": false
     }
     "###);
 
