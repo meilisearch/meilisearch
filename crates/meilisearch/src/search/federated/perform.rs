@@ -376,18 +376,22 @@ pub async fn perform_federated_search(
 
     // Run personalization before merging pinned hits
     if let Some(personalize) = federation.personalize.as_ref() {
-        // Merge queries into a single string to pass to the personalization service
-        let query = query_metadata.iter().filter_map(|metadata| metadata.query.as_ref()).join(", ");
-        merged_hits = personalization_service
-            .rerank_search_results(
-                std::mem::take(&mut merged_hits),
-                personalize,
-                Some(&query),
-                &deadline,
-                progress,
-            )
-            .await
-            .without_index()?;
+        // Only the leader node should perform personalization
+        if !is_proxy {
+            // Merge queries into a single string to pass to the personalization service
+            let query =
+                query_metadata.iter().filter_map(|metadata| metadata.query.as_ref()).join(", ");
+            merged_hits = personalization_service
+                .rerank_search_results(
+                    std::mem::take(&mut merged_hits),
+                    personalize,
+                    Some(&query),
+                    &deadline,
+                    progress,
+                )
+                .await
+                .without_index()?;
+        }
     }
 
     merged_hits = merge_pinned_hits_into_page(pins, skip, take, merged_hits);
